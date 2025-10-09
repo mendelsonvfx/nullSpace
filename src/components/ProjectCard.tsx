@@ -38,7 +38,7 @@ export function ProjectCard({ projectPath, thumbnail, isSelected, onContextMenu,
       />
 
       {/* Gray outline overlay on top of background */}
-      <div className="absolute inset-0 border border-zinc-700/50 rounded-lg pointer-events-none z-10" />
+      <div className="absolute inset-0 border border-zinc-700/30 rounded-lg pointer-events-none z-10" />
 
       {/* Content */}
       <div className="relative z-20 p-3">

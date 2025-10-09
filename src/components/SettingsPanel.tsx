@@ -62,17 +62,17 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
     onClose();
   };
 
-  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+  const handleBackdropMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
-      e.currentTarget.dataset.mousedownTarget = 'backdrop';
+      (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
     }
   };
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && e.currentTarget.dataset.mousedownTarget === 'backdrop') {
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget && (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
       onClose();
     }
-    delete e.currentTarget.dataset.mousedownTarget;
+    delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
   };
 
   // Load app version on mount

@@ -41,6 +41,16 @@ export interface TodoItem {
   completed: boolean;
 }
 
+export interface Shot {
+  id: string;
+  number: number;
+  name: string;
+  todos: TodoItem[];
+  notes: Note[];
+  browserTabs: BrowserTab[];
+  links: Link[];
+}
+
 export interface Note {
   id: string;
   content: string;
@@ -91,6 +101,10 @@ export interface Project {
   paymentStatus?: PaymentStatus;
   prepaymentAmount?: number;
   clientId?: string;
+  hasShots?: boolean;
+  shots?: Shot[];
+  currentShotId?: string;
+  category?: string;
 }
 
 // Предустановленные шаблоны структуры папок
@@ -214,6 +228,7 @@ export interface CreateProjectCommand {
   software: SoftwareName[];
   tags: string[];
   deadline?: string; // ISO date string
+  hasShots?: boolean;
 }
 
 export interface LaunchSoftwareCommand {
@@ -221,4 +236,5 @@ export interface LaunchSoftwareCommand {
   software: string;
   executablePath: string;
   projectName: string;
+  shotNumber?: number;
 }
