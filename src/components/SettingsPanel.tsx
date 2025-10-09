@@ -63,12 +63,12 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div data-settings-panel className="bg-zinc-900 rounded-xl max-w-4xl w-full h-[80vh] flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* Sidebar */}
-        <div className="w-48 border-r border-zinc-800 p-4">
+        <div className="w-48 border-r border-zinc-800 p-4 flex flex-col">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold">Settings</h2>
           </div>
 
-          <nav className="space-y-1">
+          <nav className="space-y-1 flex-1">
             <button
               onClick={() => setActiveTab('general')}
               className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
@@ -120,6 +120,13 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
               Finance
             </button>
           </nav>
+
+          {/* Version info at bottom */}
+          <div className="mt-4">
+            <div className="text-xs text-zinc-500 text-center">
+              nullSpace v0.5.0-beta
+            </div>
+          </div>
         </div>
 
         {/* Content */}
