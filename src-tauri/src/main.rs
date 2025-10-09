@@ -4,9 +4,16 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::Duration;
 use chrono::Utc;
 use uuid::Uuid;
 use scraper::{Html, Selector};
+use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode, DebounceEventResult};
+use tauri::Manager;
+use sysinfo::System;
+
+// Embedded After Effects template
+const TEMPLATE_AEP: &[u8] = include_bytes!("../templates/empty.aep");
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Project {
@@ -42,6 +49,12 @@ struct Project {
     #[serde(rename = "prepaymentAmount", alias = "prepayment_amount")]
     prepayment_amount: Option<f64>,
     todos: Option<Vec<TodoItem>>,
+    #[serde(rename = "hasShots", alias = "has_shots")]
+    has_shots: Option<bool>,
+    shots: Option<Vec<Shot>>,
+    #[serde(rename = "currentShotId", alias = "current_shot_id")]
+    current_shot_id: Option<String>,
+    category: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -96,6 +109,18 @@ struct TodoItem {
     completed: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Shot {
+    id: String,
+    number: u32,
+    name: String,
+    todos: Vec<TodoItem>,
+    notes: Vec<Note>,
+    #[serde(rename = "browserTabs")]
+    browser_tabs: Vec<BrowserTab>,
+    links: Vec<Link>,
+}
+
 #[derive(Debug, Deserialize)]
 struct CreateProjectInput {
     name: String,
@@ -112,6 +137,9 @@ struct CreateProjectInput {
     payment_status: Option<String>,
     #[serde(rename = "prepaymentAmount")]
     prepayment_amount: Option<f64>,
+    #[serde(rename = "hasShots")]
+    has_shots: Option<bool>,
+    category: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -123,6 +151,24 @@ struct LaunchSoftwareInput {
     software: String,
     #[serde(rename = "projectName")]
     project_name: String,
+    #[serde(rename = "shotNumber")]
+    shot_number: Option<u32>,
+}
+
+fn get_software_folder_name(software: &str) -> &str {
+    match software.to_lowercase().as_str() {
+        "blender" => "Blender",
+        "houdini" => "Houdini",
+        "maya" => "Maya",
+        "after-effects" | "after effects" => "AfterEffects",
+        "cinema4d" | "cinema 4d" => "Cinema4D",
+        "substance" | "substance painter" => "Substance",
+        "unreal" | "unreal engine" => "Unreal",
+        "unity" => "Unity",
+        "zbrush" => "ZBrush",
+        "marmoset" | "marmoset toolbag" => "Marmoset",
+        _ => software,
+    }
 }
 
 fn get_folder_template(software: &str) -> Vec<FolderItem> {
@@ -284,7 +330,8 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
 
     for software in &input.software {
         let software_folders = get_folder_template(software);
-        let software_path = project_path.join(software);
+        let folder_name = get_software_folder_name(software);
+        let software_path = project_path.join(folder_name);
 
         for folder_item in software_folders {
             create_folder_item(&software_path, &folder_item)?;
@@ -332,6 +379,10 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
         payment_status: input.payment_status,
         prepayment_amount: input.prepayment_amount,
         todos: Some(vec![]),
+        has_shots: input.has_shots,
+        shots: Some(vec![]),
+        current_shot_id: None,
+        category: input.category,
     };
 
     let metadata_path = project_path.join(".project-metadata.json");
@@ -399,6 +450,21 @@ async fn delete_project(project_path: String) -> Result<(), String> {
     Ok(())
 }
 
+// Helper function to find hython.exe from houdinifx.exe path
+fn find_hython_path(houdinifx_path: &str) -> Result<PathBuf, String> {
+    let path = std::path::Path::new(houdinifx_path);
+    let parent = path.parent()
+        .ok_or("Failed to get parent directory of Houdini executable")?;
+
+    let hython = parent.join("hython.exe");
+
+    if hython.exists() {
+        Ok(hython)
+    } else {
+        Err(format!("hython.exe not found in: {}", parent.display()))
+    }
+}
+
 #[tauri::command]
 async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
     let project_path = PathBuf::from(&input.project_path);
@@ -421,8 +487,20 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
     // Software folder path
     let software_path = project_path.join(software_folder);
 
-    // Find the highest existing version number or create V0001
+    // Ensure software directory exists
+    if !software_path.exists() {
+        fs::create_dir_all(&software_path)
+            .map_err(|e| format!("Failed to create software directory: {}", e))?;
+    }
+
+    // Build base name with optional shot number
     let base_name = input.project_name.replace(" ", "");
+    let base_name_with_shot = if let Some(shot_num) = input.shot_number {
+        format!("{}_Shot{:03}", base_name, shot_num)
+    } else {
+        base_name.clone()
+    };
+
     let mut highest_version = 0;
     let mut latest_file: Option<PathBuf> = None;
 
@@ -430,11 +508,11 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
     if let Ok(entries) = fs::read_dir(&software_path) {
         for entry in entries.flatten() {
             if let Ok(file_name) = entry.file_name().into_string() {
-                // Check if file matches pattern: BaseName_V####.ext
-                if file_name.starts_with(&base_name) && file_name.contains("_V") {
+                // Check if file matches pattern: BaseName[_Shot###]_v###.ext
+                if file_name.starts_with(&base_name_with_shot) && file_name.contains("_v") {
                     // Extract version number
-                    if let Some(version_str) = file_name.strip_prefix(&format!("{}_V", base_name)) {
-                        if let Some(version_num_str) = version_str.get(0..4) {
+                    if let Some(version_str) = file_name.strip_prefix(&format!("{}_v", base_name_with_shot)) {
+                        if let Some(version_num_str) = version_str.get(0..3) {
                             if let Ok(version_num) = version_num_str.parse::<u32>() {
                                 if version_num > highest_version {
                                     highest_version = version_num;
@@ -448,7 +526,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
         }
     }
 
-    // If file exists, open it. Otherwise create new V0001
+    // If file exists, open it. Otherwise create new v001
     let (file_path, file_name) = if let Some(existing_file) = latest_file {
         let file_name = existing_file.file_name()
             .and_then(|n| n.to_str())
@@ -456,8 +534,8 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
             .to_string();
         (existing_file, file_name)
     } else {
-        // Create new file with V0001
-        let file_name = format!("{}_V001{}", base_name, file_extension);
+        // Create new file with v001
+        let file_name = format!("{}_v001{}", base_name_with_shot, file_extension);
         let file_path = software_path.join(&file_name);
         (file_path, file_name)
     };
@@ -465,23 +543,60 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
     // Launch software
     #[cfg(target_os = "windows")]
     {
-        // Check if we need to create file before launching
-        let needs_file = match input.software.to_lowercase().as_str() {
-            "after effects" | "substance" | "substance painter" => true,
-            _ => false,
-        };
+        let software_lower = input.software.to_lowercase();
 
-        if needs_file && !file_path.exists() {
-            // Create empty file for software that requires it
-            fs::write(&file_path, "")
-                .map_err(|e| format!("Failed to create project file: {}", e))?;
+        // For After Effects, create project from template if it doesn't exist
+        if (software_lower == "after effects" || software_lower == "after-effects") && !file_path.exists() {
+            fs::write(&file_path, TEMPLATE_AEP)
+                .map_err(|e| format!("Failed to create After Effects project from template: {}", e))?;
         }
 
-        Command::new(&input.executable_path)
-            .arg(&file_path)
-            .current_dir(&project_path)
-            .spawn()
-            .map_err(|e| format!("Failed to launch software: {}", e))?;
+        // For Houdini, create project using hython if it doesn't exist
+        if software_lower == "houdini" && !file_path.exists() {
+            let hython_path = find_hython_path(&input.executable_path)?;
+
+            // Create Python script to save empty hip file
+            let file_path_str = file_path.to_str()
+                .ok_or("Invalid file path encoding")?
+                .replace("\\", "\\\\"); // Escape backslashes for Python
+
+            let python_script = format!("import hou; hou.hipFile.save(r'{}')", file_path_str);
+
+            // Execute hython to create the file
+            let output = Command::new(&hython_path)
+                .arg("-c")
+                .arg(&python_script)
+                .output()
+                .map_err(|e| format!("Failed to execute hython: {}", e))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(format!("hython failed to create project: {}", stderr));
+            }
+        }
+
+        // For Houdini on Windows, open the file through Windows Explorer
+        // This mimics double-clicking the file in Explorer and preserves all environment variables
+        #[cfg(target_os = "windows")]
+        if software_lower == "houdini" {
+            Command::new("explorer")
+                .arg(file_path.to_str().unwrap())
+                .spawn()
+                .map_err(|e| format!("Failed to open Houdini file: {}", e))?;
+        } else {
+            let mut cmd = Command::new(&input.executable_path);
+            cmd.arg(&file_path);
+            cmd.spawn()
+                .map_err(|e| format!("Failed to launch software: {}", e))?;
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let mut cmd = Command::new(&input.executable_path);
+            cmd.arg(&file_path);
+            cmd.spawn()
+                .map_err(|e| format!("Failed to launch software: {}", e))?;
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -672,6 +787,7 @@ struct ProjectVersion {
     name: String,
     path: String,
     software: Vec<String>,
+    created_at: u64, // Unix timestamp in seconds
 }
 
 #[tauri::command]
@@ -713,14 +829,19 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                         let file_name = entry.file_name();
                         let file_name_str = file_name.to_string_lossy();
 
-                        // Check if file matches pattern: BaseName_V####.ext
-                        if file_name_str.starts_with(&base_name) && file_name_str.contains("_V") {
+                        // Check if file matches pattern: BaseName_v###.ext
+                        if file_name_str.starts_with(&base_name) && file_name_str.contains("_v") {
                             let file_path = entry.path();
 
                             // Determine software by extension
                             let extension = file_path.extension()
                                 .and_then(|e| e.to_str())
                                 .unwrap_or("");
+
+                            // Skip .blend1 backup files
+                            if extension == "blend1" {
+                                continue;
+                            }
 
                             let software_name = match extension {
                                 "blend" => "Blender",
@@ -736,10 +857,24 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                                 _ => "Unknown",
                             };
 
+                            // Get file creation time
+                            let created_at = if let Ok(metadata) = entry.metadata() {
+                                if let Ok(created) = metadata.created() {
+                                    created.duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs()
+                                } else {
+                                    0
+                                }
+                            } else {
+                                0
+                            };
+
                             versions.push(ProjectVersion {
                                 name: file_name_str.to_string(),
                                 path: file_path.to_string_lossy().to_string(),
                                 software: vec![software_name.to_string()],
+                                created_at,
                             });
                         }
                     }
@@ -752,6 +887,49 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
     versions.sort_by(|a, b| a.name.cmp(&b.name));
 
     Ok(versions)
+}
+
+#[tauri::command]
+async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
+    let project_dir = PathBuf::from(&project_path);
+    let mut deleted_count = 0u32;
+
+    // List of software folders to search
+    let software_folders = vec![
+        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
+        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+    ];
+
+    // Search in each software folder
+    for software_folder in software_folders {
+        let software_dir = project_dir.join(software_folder);
+        if !software_dir.exists() {
+            continue;
+        }
+
+        if let Ok(entries) = fs::read_dir(&software_dir) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        let file_path = entry.path();
+                        let extension = file_path.extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("");
+
+                        // Delete .blend1 backup files
+                        if extension == "blend1" {
+                            if fs::remove_file(&file_path).is_ok() {
+                                deleted_count += 1;
+                                println!("Deleted backup file: {:?}", file_path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(deleted_count)
 }
 
 #[tauri::command]
@@ -884,6 +1062,187 @@ fn extract_domain_name(url: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
+#[tauri::command]
+async fn start_watching_project(app_handle: tauri::AppHandle, project_path: String) -> Result<(), String> {
+    let project_dir = PathBuf::from(&project_path);
+
+    // List of software folders to watch
+    let software_folders = vec![
+        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
+        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+    ];
+
+    // Clone app_handle for the closure
+    let app = app_handle.clone();
+    let project_path_clone = project_path.clone();
+
+    // Spawn a new thread for the watcher
+    std::thread::spawn(move || {
+        // Create debouncer with 500ms delay
+        let mut debouncer = match new_debouncer(
+            Duration::from_millis(500),
+            move |res: DebounceEventResult| {
+                match res {
+                    Ok(events) => {
+                        for event in events {
+                            if let Some(path) = event.path.to_str() {
+                                // Check if it's a version file (not .blend1)
+                                if path.contains("_v") && !path.ends_with(".blend1") {
+                                    println!("Version file changed: {}", path);
+
+                                    // Clean up backup files
+                                    let _ = std::process::Command::new("cmd")
+                                        .args(&["/C", &format!("del /S /Q \"{}\\*.blend1\"", project_path_clone)])
+                                        .output();
+
+                                    // Emit event to frontend
+                                    let _ = app.emit_all("version-changed", ());
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => println!("Watch error: {:?}", e),
+                }
+            },
+        ) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("Failed to create debouncer: {}", e);
+                return;
+            }
+        };
+
+        // Watch each software folder
+        for software_folder in software_folders {
+            let software_dir = project_dir.join(software_folder);
+            if software_dir.exists() {
+                if let Err(e) = debouncer.watcher().watch(&software_dir, RecursiveMode::Recursive) {
+                    eprintln!("Failed to watch {}: {}", software_folder, e);
+                } else {
+                    println!("Watching: {:?}", software_dir);
+                }
+            }
+        }
+
+        // Keep the watcher alive
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn stop_watching_project() -> Result<(), String> {
+    // Watcher will be stopped when thread is dropped
+    Ok(())
+}
+
+#[tauri::command]
+fn save_feedback(feedback: String) -> Result<(), String> {
+    // Get app data directory
+    let app_dir = tauri::api::path::app_data_dir(&tauri::Config::default())
+        .ok_or_else(|| "Failed to get app data directory".to_string())?;
+
+    // Create directory if it doesn't exist
+    fs::create_dir_all(&app_dir)
+        .map_err(|e| format!("Failed to create app directory: {}", e))?;
+
+    let feedback_path = app_dir.join("feedback.txt");
+
+    // Collect system information
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    let os_version = System::long_os_version().unwrap_or_else(|| "Unknown".to_string());
+    let kernel_version = System::kernel_version().unwrap_or_else(|| "Unknown".to_string());
+    let hostname = System::host_name().unwrap_or_else(|| "Unknown".to_string());
+    let total_memory = sys.total_memory() / 1024 / 1024; // Convert to MB
+    let used_memory = sys.used_memory() / 1024 / 1024;
+    let cpu_count = sys.cpus().len();
+    let cpu_brand = sys.cpus().first().map(|cpu| cpu.brand()).unwrap_or("Unknown");
+
+    // Read existing feedback
+    let existing = fs::read_to_string(&feedback_path).unwrap_or_default();
+
+    // Append new feedback with timestamp and system info
+    let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let metadata = format!(
+        "Timestamp: {}\n\
+        App Version: nullSpace v0.6.0-beta\n\
+        OS: {}\n\
+        Kernel: {}\n\
+        Hostname: {}\n\
+        CPU: {} ({} cores)\n\
+        Memory: {} MB / {} MB\n",
+        timestamp,
+        os_version,
+        kernel_version,
+        hostname,
+        cpu_brand,
+        cpu_count,
+        used_memory,
+        total_memory
+    );
+
+    let new_entry = format!(
+        "\n================================================================================\n\
+        USER FEEDBACK:\n{}\n\n\
+        SYSTEM METADATA:\n{}\
+        ================================================================================\n",
+        feedback,
+        metadata
+    );
+    let updated = existing + &new_entry;
+
+    // Write back to file
+    fs::write(&feedback_path, updated)
+        .map_err(|e| format!("Failed to write feedback: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn read_feedback() -> Result<String, String> {
+    // Get app data directory
+    let app_dir = tauri::api::path::app_data_dir(&tauri::Config::default())
+        .ok_or_else(|| "Failed to get app data directory".to_string())?;
+
+    let feedback_path = app_dir.join("feedback.txt");
+
+    // Read feedback file
+    let content = fs::read_to_string(&feedback_path)
+        .unwrap_or_default();
+
+    // Extract only user feedback text (everything between "USER FEEDBACK:" and "SYSTEM METADATA:")
+    let mut user_feedbacks = Vec::new();
+    for section in content.split("================================================================================") {
+        if section.contains("USER FEEDBACK:") {
+            if let Some(user_part) = section.split("USER FEEDBACK:").nth(1) {
+                if let Some(feedback_text) = user_part.split("SYSTEM METADATA:").next() {
+                    user_feedbacks.push(feedback_text.trim());
+                }
+            }
+        }
+    }
+
+    Ok(user_feedbacks.join("\n\n---\n\n"))
+}
+
+#[tauri::command]
+fn read_feedback_full() -> Result<String, String> {
+    // Get app data directory
+    let app_dir = tauri::api::path::app_data_dir(&tauri::Config::default())
+        .ok_or_else(|| "Failed to get app data directory".to_string())?;
+
+    let feedback_path = app_dir.join("feedback.txt");
+
+    // Read full feedback file with all metadata
+    fs::read_to_string(&feedback_path)
+        .or_else(|_| Ok::<String, String>(String::new()))
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -897,9 +1256,15 @@ fn main() {
             get_folder_structure,
             set_project_thumbnail,
             get_project_versions,
+            cleanup_backup_files,
             get_directory_size,
             open_url,
             fetch_page_title,
+            start_watching_project,
+            stop_watching_project,
+            save_feedback,
+            read_feedback,
+            read_feedback_full,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,9 +1,11 @@
 // src/components/SettingsPanel.tsx
 import { useProjectStore } from '../store/projectStore';
 import { useState, useEffect } from 'react';
-import { X, FolderOpen, Check, AlertCircle, Plus, Settings } from 'lucide-react';
+import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw } from 'lucide-react';
 import { selectProjectDirectory, selectExecutable, getSoftwarePaths } from '../utils/tauri';
 import type { SoftwareName } from '../types/project';
+import { useThumbnailCache } from '../hooks/useThumbnailCache';
+import { getVersion } from '@tauri-apps/api/app';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -20,19 +22,20 @@ interface SoftwarePathConfig {
 const DEFAULT_SOFTWARE: Array<{ name: SoftwareName; displayName: string }> = [
   { name: 'blender', displayName: 'Blender' },
   { name: 'houdini', displayName: 'Houdini' },
-  { name: 'maya', displayName: 'Maya' },
+  // { name: 'maya', displayName: 'Maya' },
   { name: 'after-effects', displayName: 'After Effects' },
-  { name: 'cinema4d', displayName: 'Cinema 4D' },
-  { name: 'substance', displayName: 'Substance Painter' },
-  { name: 'unreal', displayName: 'Unreal Engine' },
-  { name: 'unity', displayName: 'Unity' },
-  { name: 'zbrush', displayName: 'ZBrush' },
-  { name: 'marmoset', displayName: 'Marmoset Toolbag' },
+  // { name: 'cinema4d', displayName: 'Cinema 4D' },
+  // { name: 'substance', displayName: 'Substance Painter' },
+  // { name: 'unreal', displayName: 'Unreal Engine' },
+  // { name: 'unity', displayName: 'Unity' },
+  // { name: 'zbrush', displayName: 'ZBrush' },
+  // { name: 'marmoset', displayName: 'Marmoset Toolbag' },
 ];
 
 export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState<'general' | 'software' | 'appearance' | 'clients' | 'finance'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'software' | 'appearance' | 'clients' | 'finance' | 'categories'>('general');
   const [softwarePaths, setSoftwarePaths] = useState<SoftwarePathConfig[]>([]);
+  const [appVersion, setAppVersion] = useState<string>('');
   const [showTagIcons, setShowTagIcons] = useState(() => {
     const saved = localStorage.getItem('showTagIcons');
     return saved !== null ? JSON.parse(saved) : true;
@@ -59,8 +62,35 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
     onClose();
   };
 
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      e.currentTarget.dataset.mousedownTarget = 'backdrop';
+    }
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && e.currentTarget.dataset.mousedownTarget === 'backdrop') {
+      onClose();
+    }
+    delete e.currentTarget.dataset.mousedownTarget;
+  };
+
+  // Load app version on mount
+  useEffect(() => {
+    getVersion().then(version => {
+      setAppVersion(version);
+    }).catch(err => {
+      console.error('Failed to get app version:', err);
+      setAppVersion('0.6.0');
+    });
+  }, []);
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
+    >
       <div data-settings-panel className="bg-zinc-900 rounded-xl max-w-4xl w-full h-[80vh] flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* Sidebar */}
         <div className="w-48 border-r border-zinc-800 p-4 flex flex-col">
@@ -119,12 +149,22 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
             >
               Finance
             </button>
+            <button
+              onClick={() => setActiveTab('categories')}
+              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                activeTab === 'categories'
+                  ? 'bg-accent'
+                  : 'hover:bg-zinc-800'
+              }`}
+            >
+              Categories
+            </button>
           </nav>
 
           {/* Version info at bottom */}
           <div className="mt-4">
             <div className="text-xs text-zinc-500 text-center">
-              nullSpace v0.5.0-beta
+              nullSpace v{appVersion || '0.6.0'}-beta
             </div>
           </div>
         </div>
@@ -132,11 +172,12 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
         {/* Content */}
         <div className="flex-1 flex flex-col">
           {/* Header */}
-          <div className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
+          <div className="px-6 py-4 flex items-center justify-between flex-shrink-0 border-b border-zinc-800">
             <h3 className="text-xl font-semibold">
               {activeTab === 'general' && 'General Settings'}
               {activeTab === 'software' && 'Software Paths'}
               {activeTab === 'appearance' && 'Appearance'}
+              {activeTab === 'categories' && 'Categories'}
               {activeTab === 'clients' && 'Clients'}
               {activeTab === 'finance' && 'Finance Settings'}
             </h3>
@@ -149,22 +190,17 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
           </div>
 
           {/* Content Area */}
-          <div className="flex-1 overflow-auto p-6">
+          <div className="flex-1 overflow-y-auto p-6">
             {activeTab === 'general' && <GeneralSettings />}
             {activeTab === 'software' && <SoftwareSettings softwarePaths={softwarePaths} setSoftwarePaths={setSoftwarePaths} />}
             {activeTab === 'appearance' && <AppearanceSettings showTagIcons={showTagIcons} setShowTagIcons={setShowTagIcons} />}
             {activeTab === 'clients' && <ClientsSettings onDeleteClient={onDeleteClient} />}
             {activeTab === 'finance' && <FinanceSettings />}
+            {activeTab === 'categories' && <CategoriesSettings />}
           </div>
 
           {/* Footer */}
-          <div className="border-t border-zinc-800 px-6 py-4 flex justify-end gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
-            >
-              Close
-            </button>
+          <div className="border-t border-zinc-800 px-6 py-4 flex justify-end gap-3 flex-shrink-0">
             <button
               onClick={handleSave}
               className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium"
@@ -180,8 +216,10 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
 
 function GeneralSettings() {
   const { defaultProjectsPath, setDefaultProjectsPath, loadProjects } = useProjectStore();
+  const { clearAllThumbnails, getCacheSize } = useThumbnailCache();
   const [projectsDir, setProjectsDir] = useState(defaultProjectsPath);
   const [autoSave, setAutoSave] = useState(true);
+  const [cacheCleared, setCacheCleared] = useState(false);
   const [notifications, setNotifications] = useState(() => {
     const saved = localStorage.getItem('deadlineNotifications');
     return saved !== null ? JSON.parse(saved) : true;
@@ -204,6 +242,18 @@ function GeneralSettings() {
     setTimeout(() => {
       loadProjects();
     }, 100);
+  };
+
+  const handleClearCache = () => {
+    const cacheSize = getCacheSize();
+    if (cacheSize === 0) {
+      return;
+    }
+    clearAllThumbnails();
+    setCacheCleared(true);
+    setTimeout(() => setCacheCleared(false), 3000);
+    // Reload projects to force thumbnails reload
+    loadProjects();
   };
 
   return (
@@ -284,6 +334,32 @@ function GeneralSettings() {
             }`}
           />
         </button>
+      </div>
+
+      {/* Thumbnail Cache */}
+      <div className="border-t border-zinc-800 pt-6">
+        <div className="mb-3">
+          <div className="font-medium mb-1">Thumbnail Cache</div>
+          <p className="text-sm text-zinc-400">
+            Clear cached thumbnails to force reload. Useful if thumbnails appear outdated.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleClearCache}
+            disabled={getCacheSize() === 0}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Clear Cache ({getCacheSize()} thumbnails)
+          </button>
+          {cacheCleared && (
+            <div className="flex items-center gap-2 text-green-500 text-sm">
+              <Check className="w-4 h-4" />
+              Cache cleared
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Clear Cache */}
@@ -835,6 +911,111 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
   );
 }
 
+function CategoriesSettings() {
+  const { categories, removeCategory, addCategory } = useProjectStore();
+  const defaultCategories = ['Commercial', 'Personal'];
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+
+  const handleDeleteCategory = (categoryName: string) => {
+    if (defaultCategories.includes(categoryName)) {
+      return; // Don't delete default categories
+    }
+
+    if (window.confirm(`Are you sure you want to delete the "${categoryName}" category? Projects in this category will be moved to "Personal".`)) {
+      removeCategory(categoryName);
+    }
+  };
+
+  const handleAddCategory = () => {
+    if (newCategoryName.trim()) {
+      addCategory(newCategoryName.trim());
+      setNewCategoryName('');
+      setShowAddCategory(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-zinc-400">
+          Manage your project categories. Default categories (Commercial, Personal) cannot be deleted.
+        </p>
+        <button
+          onClick={() => setShowAddCategory(!showAddCategory)}
+          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Category
+        </button>
+      </div>
+
+      {showAddCategory && (
+        <div className="bg-zinc-800 rounded-lg p-4">
+          <label className="block text-sm font-medium mb-2">Category Name</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+              placeholder="Enter category name..."
+              className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+              autoFocus
+            />
+            <button
+              onClick={handleAddCategory}
+              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium"
+            >
+              Add
+            </button>
+            <button
+              onClick={() => {
+                setShowAddCategory(false);
+                setNewCategoryName('');
+              }}
+              className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {categories.map((category) => {
+          const isDefault = defaultCategories.includes(category);
+          return (
+            <div
+              key={category}
+              className="flex items-center justify-between bg-zinc-800 rounded-lg px-4 py-3"
+            >
+              <div className="flex items-center gap-3">
+                <span className="font-medium">{category}</span>
+                {isDefault && (
+                  <span className="text-xs bg-zinc-700 text-zinc-400 px-2 py-1 rounded">
+                    Default
+                  </span>
+                )}
+              </div>
+              {!isDefault && (
+                <button
+                  onClick={() => handleDeleteCategory(category)}
+                  className="p-2 hover:bg-red-600/20 rounded-lg transition-colors text-red-400 hover:text-red-300"
+                  title="Delete category"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+    </div>
+  );
+}
+
 function FinanceSettings() {
   const [baseCurrency, setBaseCurrency] = useState(() => {
     const saved = localStorage.getItem('baseCurrency');
@@ -844,12 +1025,22 @@ function FinanceSettings() {
     const saved = localStorage.getItem('convertToBaseCurrency');
     return saved ? JSON.parse(saved) : false;
   });
-
-  const exchangeRates: Record<string, Record<string, number>> = {
-    USD: { USD: 1, RUB: 90, EUR: 0.92 },
-    RUB: { USD: 0.011, RUB: 1, EUR: 0.01 },
-    EUR: { USD: 1.09, RUB: 100, EUR: 1 }
-  };
+  const [rateMode, setRateMode] = useState<'auto' | 'manual'>(() => {
+    const saved = localStorage.getItem('exchangeRateMode');
+    return (saved as 'auto' | 'manual') || 'auto';
+  });
+  const [exchangeRates, setExchangeRates] = useState<Record<string, Record<string, number>>>(() => {
+    const saved = localStorage.getItem('manualExchangeRates');
+    return saved ? JSON.parse(saved) : {
+      USD: { USD: 1, RUB: 90, EUR: 0.92 },
+      RUB: { USD: 0.011, RUB: 1, EUR: 0.01 },
+      EUR: { USD: 1.09, RUB: 100, EUR: 1 }
+    };
+  });
+  const [autoRates, setAutoRates] = useState<Record<string, number> | null>(null);
+  const [isLoadingRates, setIsLoadingRates] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [editingRate, setEditingRate] = useState<{ from: string; to: string } | null>(null);
 
   const currencySymbols: Record<string, string> = {
     USD: '$',
@@ -861,6 +1052,11 @@ function FinanceSettings() {
     setBaseCurrency(currency);
     localStorage.setItem('baseCurrency', currency);
     window.dispatchEvent(new Event('storage'));
+
+    // Если режим авто, обновить курсы для новой валюты
+    if (rateMode === 'auto') {
+      fetchAutoRates(currency);
+    }
   };
 
   const handleConvertToggle = () => {
@@ -869,6 +1065,72 @@ function FinanceSettings() {
     localStorage.setItem('convertToBaseCurrency', JSON.stringify(newValue));
     window.dispatchEvent(new Event('storage'));
   };
+
+  const handleRateModeChange = (mode: 'auto' | 'manual') => {
+    setRateMode(mode);
+    localStorage.setItem('exchangeRateMode', mode);
+
+    if (mode === 'auto') {
+      fetchAutoRates(baseCurrency);
+    }
+  };
+
+  const fetchAutoRates = async (currency: string) => {
+    let loadingTimeout: number | null = null;
+
+    try {
+      // Устанавливаем состояние загрузки только если запрос занимает больше 200мс
+      loadingTimeout = window.setTimeout(() => {
+        setIsLoadingRates(true);
+      }, 200);
+
+      const response = await fetch(`https://api.exchangerate-api.com/v4/latest/${currency}`);
+      if (!response.ok) throw new Error('Failed to fetch rates');
+
+      const data = await response.json();
+      setAutoRates(data.rates);
+      setLastUpdated(new Date().toISOString());
+    } catch (error) {
+      console.error('Failed to fetch exchange rates:', error);
+      // Использовать дефолтные курсы при ошибке
+      setAutoRates(exchangeRates[currency]);
+    } finally {
+      // Отменяем таймер, если запрос завершился быстро
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+      }
+      setIsLoadingRates(false);
+    }
+  };
+
+  const handleManualRateChange = (from: string, to: string, newRate: number) => {
+    setExchangeRates(prev => {
+      const updated = { ...prev };
+      if (!updated[from]) {
+        updated[from] = {};
+      }
+      updated[from][to] = newRate;
+
+      // Также обновить обратный курс
+      if (!updated[to]) {
+        updated[to] = {};
+      }
+      updated[to][from] = 1 / newRate;
+
+      localStorage.setItem('manualExchangeRates', JSON.stringify(updated));
+      return updated;
+    });
+    setEditingRate(null);
+  };
+
+  const getCurrentRates = () => {
+    if (rateMode === 'auto' && autoRates) {
+      return autoRates;
+    }
+    return exchangeRates[baseCurrency] || exchangeRates.USD;
+  };
+
+  const currentRates = getCurrentRates();
 
   return (
     <div className="space-y-6">
@@ -911,22 +1173,114 @@ function FinanceSettings() {
         </button>
       </div>
 
-      {/* Exchange Rates */}
+      {/* Exchange Rate Mode */}
       {convertToBaseCurrency && (
-        <div>
-          <label className="block text-sm font-medium mb-2">Exchange Rates</label>
-          <div className="space-y-2 text-sm text-zinc-400">
-            {Object.keys(exchangeRates).map(from => {
+        <div className="border-t border-zinc-800 pt-6">
+          <label className="block text-sm font-medium mb-3">Exchange Rate Source</label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => handleRateModeChange('auto')}
+              className={`p-4 rounded-lg border-2 transition-colors text-left ${
+                rateMode === 'auto'
+                  ? 'border-accent bg-accent/10'
+                  : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
+              }`}
+            >
+              <div className="font-medium mb-1">Automatic</div>
+              <p className="text-xs text-zinc-400">
+                Get real-time rates from the internet
+              </p>
+            </button>
+            <button
+              onClick={() => handleRateModeChange('manual')}
+              className={`p-4 rounded-lg border-2 transition-colors text-left ${
+                rateMode === 'manual'
+                  ? 'border-accent bg-accent/10'
+                  : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
+              }`}
+            >
+              <div className="font-medium mb-1">Manual</div>
+              <p className="text-xs text-zinc-400">
+                Set custom exchange rates
+              </p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Exchange Rates Display */}
+      {convertToBaseCurrency && (
+        <div className="border-t border-zinc-800 pt-6">
+          <div className="flex items-center justify-between mb-3">
+            <label className="block text-sm font-medium">Exchange Rates</label>
+            {rateMode === 'auto' && (
+              <button
+                onClick={() => fetchAutoRates(baseCurrency)}
+                disabled={isLoadingRates}
+                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 rounded-lg transition-colors text-sm flex items-center gap-2"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRates ? 'animate-spin' : ''}`} />
+                {isLoadingRates ? 'Updating...' : 'Update'}
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {Object.keys(currencySymbols).map(from => {
               if (from === baseCurrency) return null;
-              const rate = exchangeRates[from][baseCurrency];
+              const rate = currentRates[from] || 0;
+              const isEditing = editingRate?.from === baseCurrency && editingRate?.to === from;
+
               return (
-                <div key={from} className="flex justify-between py-1">
-                  <span>1 {currencySymbols[from]}</span>
-                  <span>= {rate.toFixed(2)} {currencySymbols[baseCurrency]}</span>
+                <div key={from} className="flex items-center justify-between bg-zinc-800 rounded-lg px-4 py-3">
+                  <span className="text-sm">
+                    1 {currencySymbols[from]} ({from})
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {rateMode === 'manual' && isEditing ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        defaultValue={rate.toFixed(4)}
+                        onBlur={(e) => handleManualRateChange(baseCurrency, from, parseFloat(e.target.value) || rate)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleManualRateChange(baseCurrency, from, parseFloat(e.currentTarget.value) || rate);
+                          }
+                        }}
+                        className="w-24 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-accent text-right"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="text-sm font-medium">
+                        {rate.toFixed(4)} {currencySymbols[baseCurrency]}
+                      </span>
+                    )}
+                    {rateMode === 'manual' && (
+                      <button
+                        onClick={() => setEditingRate(isEditing ? null : { from: baseCurrency, to: from })}
+                        className="p-1.5 hover:bg-zinc-700 rounded transition-colors"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
+
+          {lastUpdated && rateMode === 'auto' && (
+            <p className="text-xs text-zinc-500 mt-3">
+              Last updated: {new Date(lastUpdated).toLocaleString()}
+            </p>
+          )}
+
+          {rateMode === 'manual' && (
+            <p className="text-xs text-zinc-500 mt-3">
+              Click the settings icon to edit exchange rates
+            </p>
+          )}
         </div>
       )}
     </div>
