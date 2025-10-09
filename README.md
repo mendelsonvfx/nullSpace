@@ -4,7 +4,7 @@
 
 **Desktop Project Manager for VFX Artists & 3D Designers**
 
-![Version](https://img.shields.io/badge/version-0.5.0--beta-blue)
+![Version](https://img.shields.io/badge/version-0.7.0--beta-blue)
 ![Tauri](https://img.shields.io/badge/Tauri-1.6-orange)
 ![React](https://img.shields.io/badge/React-19-61dafb)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)
