@@ -2001,10 +2001,18 @@ function App() {
     const saved = localStorage.getItem('showCategoryBar');
     return saved !== null ? JSON.parse(saved) : true;
   });
-  const [showWelcomeSetup, setShowWelcomeSetup] = useState(() => {
+  const [showWelcomeSetup, setShowWelcomeSetup] = useState(false);
+
+  // Check if we should show welcome setup
+  useEffect(() => {
     const completed = localStorage.getItem('setupCompleted');
-    return !completed;
-  });
+    const hasDefaultPath = localStorage.getItem('defaultProjectsPath');
+
+    // Show welcome if setup not completed OR no default path set
+    if (!completed || !hasDefaultPath) {
+      setShowWelcomeSetup(true);
+    }
+  }, []);
 
   // Temporary keybind to show welcome setup (numpad decimal/dot)
   useEffect(() => {
