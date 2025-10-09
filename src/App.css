@@ -1,0 +1,319 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS Variables */
+:root {
+  --accent-color: #a855f7;
+  --accent-color-hover: #9333ea;
+}
+
+/* Tauri Drag Region */
+.titlebar {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.titlebar-button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Windows 11 Style Rounded Corners */
+body {
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+#root {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Versions scroll container */
+.versions-scroll-container {
+  overscroll-behavior: contain;
+}
+
+/* Custom scrollbar styles */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #52525b #18181b;
+}
+
+/* Webkit scrollbar styles for Chrome, Safari, Edge */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #18181b;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #52525b;
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #71717a;
+}
+
+*::-webkit-scrollbar-corner {
+  background: #18181b;
+}
+
+/* MDXEditor Dark Theme */
+.markdown-editor-container {
+  --accentBase: #a855f7;
+  --baseBackground: #18181b;
+  --admonitionTipBackground: #1e293b;
+}
+
+.markdown-editor-container [class*='_rootContentEditableWrapper'] {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 0 0 8px 8px;
+  border-top: 1px solid #3f3f46;
+  min-height: 200px;
+  max-height: 500px;
+  overflow-y: auto;
+  cursor: text;
+}
+
+/* Make the entire editor wrapper clickable */
+.markdown-editor-container [class*='_rootContentEditableWrapper'] > div {
+  min-height: 200px;
+  cursor: text;
+}
+
+.markdown-editor-container [class*='_contentEditable'] {
+  padding: 12px;
+  color: #e4e4e7;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Placeholder styling */
+.markdown-editor-container [class*='_contentEditable'][data-placeholder]::before {
+  color: #3f3f46 !important;
+  opacity: 1 !important;
+}
+
+.markdown-editor-container [class*='_contentEditable']::placeholder {
+  color: #3f3f46 !important;
+  opacity: 1 !important;
+}
+
+.markdown-editor-container [class*='_contentEditable'][contenteditable='true']:empty::before {
+  content: attr(placeholder);
+  color: #3f3f46 !important;
+  opacity: 1 !important;
+  pointer-events: none;
+}
+
+/* Toolbar styling */
+.markdown-editor-container [class*='_toolbarRoot'] {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 8px 8px 0 0;
+  border-bottom: none;
+  margin-bottom: 0;
+  padding: 6px;
+}
+
+.markdown-editor-container [class*='_toolbarButtonGroupRoot'] {
+  gap: 4px;
+}
+
+.markdown-editor-container button[class*='_toolbarButton'] {
+  background: transparent;
+  color: #cccccc !important;
+  border: none;
+  padding: 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  opacity: 0.8;
+}
+
+.markdown-editor-container button[class*='_toolbarButton'] svg {
+  color: #cccccc !important;
+  fill: #cccccc !important;
+  stroke: #cccccc !important;
+}
+
+.markdown-editor-container button[class*='_toolbarButton'] svg path {
+  fill: #cccccc !important;
+  stroke: #cccccc !important;
+}
+
+.markdown-editor-container button[class*='_toolbarButton']:hover {
+  background: #27272a;
+  color: #ffffff !important;
+  opacity: 1;
+}
+
+.markdown-editor-container button[class*='_toolbarButton']:hover svg {
+  color: #ffffff !important;
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+.markdown-editor-container button[class*='_toolbarButton'][data-active='true'] {
+  background: #27272a;
+  color: #a855f7 !important;
+  opacity: 1;
+}
+
+.markdown-editor-container button[class*='_toolbarButton'][data-active='true'] svg {
+  color: #a855f7 !important;
+  fill: #a855f7 !important;
+  stroke: #a855f7 !important;
+}
+
+.markdown-editor-container button[class*='_toolbarButton'][data-active='true'] svg path {
+  fill: #a855f7 !important;
+  stroke: #a855f7 !important;
+}
+
+/* Force all toolbar icons to be 80% white */
+.markdown-editor-container [class*='_toolbarRoot'] svg {
+  color: #cccccc !important;
+  fill: currentColor !important;
+  opacity: 0.8;
+}
+
+.markdown-editor-container [class*='_toolbarRoot'] button:not([data-active='true']) svg {
+  color: #cccccc !important;
+}
+
+/* Select dropdown */
+.markdown-editor-container select[class*='_selectWithLabel'] {
+  background: #18181b;
+  border: 1px solid #27272a;
+  color: #e4e4e7;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+/* Headings */
+.markdown-editor-container h1 {
+  font-size: 2em;
+  font-weight: bold;
+  color: #f4f4f5;
+  margin: 0.67em 0;
+}
+
+.markdown-editor-container h2 {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: #f4f4f5;
+  margin: 0.75em 0;
+}
+
+.markdown-editor-container h3 {
+  font-size: 1.17em;
+  font-weight: bold;
+  color: #f4f4f5;
+  margin: 0.83em 0;
+}
+
+/* Lists */
+.markdown-editor-container ul,
+.markdown-editor-container ol {
+  padding-left: 2em;
+  margin: 1em 0;
+}
+
+.markdown-editor-container li {
+  margin: 0.5em 0;
+}
+
+/* Code */
+.markdown-editor-container code {
+  background: #27272a;
+  color: #a855f7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.markdown-editor-container pre {
+  background: #09090b;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.markdown-editor-container pre code {
+  background: transparent;
+  color: #e4e4e7;
+  padding: 0;
+}
+
+/* Blockquote */
+.markdown-editor-container blockquote {
+  border-left: 4px solid #a855f7;
+  padding-left: 16px;
+  margin: 1em 0;
+  color: #a1a1aa;
+  font-style: italic;
+}
+
+/* Links */
+.markdown-editor-container a {
+  color: #a855f7;
+  text-decoration: underline;
+}
+
+.markdown-editor-container a:hover {
+  color: #9333ea;
+}
+
+/* Strong and emphasis */
+.markdown-editor-container strong {
+  font-weight: bold;
+  color: #f4f4f5;
+}
+
+.markdown-editor-container em {
+  font-style: italic;
+}
+
+/* Dialog overlays */
+.markdown-editor-container [class*='_dialogOverlay'] {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.markdown-editor-container [class*='_dialogContent'] {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  color: #e4e4e7;
+}
+
+.markdown-editor-container [class*='_dialogContent'] input,
+.markdown-editor-container [class*='_dialogContent'] textarea {
+  background: #09090b;
+  border: 1px solid #27272a;
+  color: #e4e4e7;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.markdown-editor-container [class*='_dialogContent'] button {
+  background: #a855f7;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.markdown-editor-container [class*='_dialogContent'] button:hover {
+  background: #9333ea;
+}
