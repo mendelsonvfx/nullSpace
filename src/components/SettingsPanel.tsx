@@ -91,7 +91,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
-      <div data-settings-panel className="bg-zinc-900 rounded-xl max-w-4xl w-full h-[80vh] flex overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div data-settings-panel className="bg-zinc-900 rounded-xl max-w-4xl w-full h-[80vh] flex overflow-hidden animate-modal" onClick={(e) => e.stopPropagation()}>
         {/* Sidebar */}
         <div className="w-48 border-r border-zinc-800 p-4 flex flex-col">
           <div className="flex items-center justify-between mb-6">
@@ -185,7 +185,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
               onClick={onClose}
               className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 close-button-red" />
             </button>
           </div>
 
@@ -203,7 +203,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
           <div className="border-t border-zinc-800 px-6 py-4 flex justify-end gap-3 flex-shrink-0">
             <button
               onClick={handleSave}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium"
+              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
             >
               Save Changes
             </button>
@@ -273,7 +273,7 @@ function GeneralSettings() {
           />
           <button
             onClick={handleBrowseDirectory}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-2 animate-button"
           >
             <FolderOpen className="w-4 h-4" />
             Browse
@@ -281,7 +281,7 @@ function GeneralSettings() {
         </div>
         <button
           onClick={handleSave}
-          className="mt-3 px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium"
+          className="mt-3 px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium animate-button"
         >
           Apply & Reload Projects
         </button>
@@ -348,7 +348,7 @@ function GeneralSettings() {
           <button
             onClick={handleClearCache}
             disabled={getCacheSize() === 0}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 text-sm font-medium animate-button"
           >
             <RefreshCw className="w-4 h-4" />
             Clear Cache ({getCacheSize()} thumbnails)
@@ -423,7 +423,7 @@ function SoftwareSettings({
         </p>
         <button
           onClick={handleAutoDetect}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium"
+          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium animate-button"
         >
           Auto-Detect
         </button>
@@ -506,6 +506,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
   const [customColor, setCustomColor] = useState('#9103C6');
   const [showCustomColorPicker, setShowCustomColorPicker] = useState(false);
   const colorInputRef = useRef<HTMLInputElement>(null);
+  const [animationsEnabled, setAnimationsEnabled] = useState(() => {
+    const saved = localStorage.getItem('animationsEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
 
   const defaultAccentColors = [
     { name: 'Purple', value: '#9103c6' },
@@ -519,8 +523,6 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     const saved = localStorage.getItem('customAccentColors');
     return saved ? JSON.parse(saved) : [];
   });
-
-  const accentColors = [...defaultAccentColors, ...customColors.map(color => ({ name: 'Custom', value: color }))];
 
   const handleColorChange = (color: string) => {
     setAccentColor(color);
@@ -707,6 +709,38 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
         </div>
       </div>
 
+      {/* Animations */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-medium mb-1">Animations</div>
+          <p className="text-sm text-zinc-400">
+            Enable smooth transitions and animations
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !animationsEnabled;
+            setAnimationsEnabled(newValue);
+            localStorage.setItem('animationsEnabled', JSON.stringify(newValue));
+            if (newValue) {
+              document.body.classList.remove('animations-disabled');
+            } else {
+              document.body.classList.add('animations-disabled');
+            }
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full transition-colors relative ${
+            animationsEnabled ? 'bg-accent' : 'bg-zinc-700'
+          }`}
+        >
+          <div
+            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+              animationsEnabled ? 'translate-x-6' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
       {/* Compact Mode */}
       <div className="flex items-center justify-between">
         <div>
@@ -719,21 +753,6 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
           className="w-12 h-6 rounded-full bg-zinc-700 relative"
         >
           <div className="w-5 h-5 bg-white rounded-full absolute top-0.5 left-0.5" />
-        </button>
-      </div>
-
-      {/* Animations */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-medium mb-1">Animations</div>
-          <p className="text-sm text-zinc-400">
-            Enable smooth transitions and animations
-          </p>
-        </div>
-        <button
-          className="w-12 h-6 rounded-full bg-accent relative"
-        >
-          <div className="w-5 h-5 bg-white rounded-full absolute top-0.5 translate-x-6" />
         </button>
       </div>
 
@@ -817,7 +836,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
         </p>
         <button
           onClick={() => setShowAddClient(!showAddClient)}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium flex items-center gap-2 animate-button"
         >
           <Plus className="w-4 h-4" />
           Add Client
@@ -839,7 +858,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
             />
             <button
               onClick={handleAddClient}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium"
+              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
             >
               Add
             </button>
@@ -872,7 +891,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
                 onClick={() => setEditingClient(editingClient === client.id ? null : client.id)}
                 className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
               >
-                <Settings className="w-4 h-4" />
+                <Settings className="w-4 h-4 animate-settings-icon" />
               </button>
             </div>
 
@@ -1006,7 +1025,7 @@ function CategoriesSettings() {
         </p>
         <button
           onClick={() => setShowAddCategory(!showAddCategory)}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium flex items-center gap-2 animate-button"
         >
           <Plus className="w-4 h-4" />
           Add Category
@@ -1028,7 +1047,7 @@ function CategoriesSettings() {
             />
             <button
               onClick={handleAddCategory}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium"
+              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
             >
               Add
             </button>
@@ -1324,7 +1343,7 @@ function FinanceSettings() {
                         onClick={() => setEditingRate(isEditing ? null : { from: baseCurrency, to: from })}
                         className="p-1.5 hover:bg-zinc-700 rounded transition-colors"
                       >
-                        <Settings className="w-3.5 h-3.5" />
+                        <Settings className="w-3.5 h-3.5 animate-settings-icon" />
                       </button>
                     )}
                   </div>
