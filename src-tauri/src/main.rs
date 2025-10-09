@@ -988,6 +988,69 @@ async fn open_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn open_links_in_browser(links: Vec<Link>) -> Result<(), String> {
+    if links.is_empty() {
+        // If no links provided, open default browser with empty page
+        #[cfg(target_os = "windows")]
+        {
+            Command::new("cmd")
+                .args(&["/c", "start", "http://"])
+                .spawn()
+                .map_err(|e| format!("Failed to open browser: {}", e))?;
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            Command::new("open")
+                .arg("-a")
+                .arg("Safari")
+                .spawn()
+                .map_err(|e| format!("Failed to open browser: {}", e))?;
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            Command::new("xdg-open")
+                .arg("about:blank")
+                .spawn()
+                .map_err(|e| format!("Failed to open browser: {}", e))?;
+        }
+    } else {
+        // Open each link in a new tab
+        for link in links {
+            #[cfg(target_os = "windows")]
+            {
+                Command::new("cmd")
+                    .args(&["/c", "start", &link.url])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open URL {}: {}", link.url, e))?;
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                Command::new("open")
+                    .arg(&link.url)
+                    .spawn()
+                    .map_err(|e| format!("Failed to open URL {}: {}", link.url, e))?;
+            }
+
+            #[cfg(target_os = "linux")]
+            {
+                Command::new("xdg-open")
+                    .arg(&link.url)
+                    .spawn()
+                    .map_err(|e| format!("Failed to open URL {}: {}", link.url, e))?;
+            }
+
+            // Small delay to avoid overwhelming the system
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn fetch_page_title(url: String) -> Result<String, String> {
     println!("Fetching title for URL: {}", url);
 
@@ -1266,6 +1329,7 @@ fn main() {
             cleanup_backup_files,
             get_directory_size,
             open_url,
+            open_links_in_browser,
             fetch_page_title,
             start_watching_project,
             stop_watching_project,

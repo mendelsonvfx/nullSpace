@@ -76,7 +76,7 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-zinc-900 rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl"
+        className="bg-zinc-900 rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl animate-modal"
         data-feedback-panel
       >
         {/* Header */}
@@ -86,7 +86,7 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
             onClick={onClose}
             className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 close-button-red" />
           </button>
         </div>
 
@@ -106,7 +106,7 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
             <button
               onClick={handleSave}
               disabled={!feedback.trim() || saving}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg transition-colors animate-button"
             >
               <Save className="w-4 h-4" />
               {saving ? 'Saving...' : 'Save'}
@@ -121,7 +121,7 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
               </label>
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm animate-button"
               >
                 {copied ? (
                   <>
