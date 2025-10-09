@@ -1,5 +1,7 @@
 // src/utils/tauri.ts
 import { invoke } from '@tauri-apps/api/tauri';
+import { open } from '@tauri-apps/api/dialog';
+
 export const tauriCommands = {
   async createProject(input: any): Promise<any> {
     return invoke('create_project', { input });
@@ -28,7 +30,6 @@ export const tauriCommands = {
 
 export async function selectProjectDirectory(): Promise<string | null> {
   try {
-    const { open } = await import('@tauri-apps/api/dialog');
     const selected = await open({
       directory: true,
       multiple: false
@@ -42,7 +43,6 @@ export async function selectProjectDirectory(): Promise<string | null> {
 
 export async function selectExecutable(): Promise<string | null> {
   try {
-    const { open } = await import('@tauri-apps/api/dialog');
     const selected = await open({
       multiple: false,
       filters: [{
@@ -59,7 +59,6 @@ export async function selectExecutable(): Promise<string | null> {
 
 export async function selectImageFile(): Promise<string | null> {
   try {
-    const { open } = await import('@tauri-apps/api/dialog');
     const selected = await open({
       multiple: false,
       filters: [{
