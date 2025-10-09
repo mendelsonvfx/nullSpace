@@ -1,6 +1,6 @@
 // src/components/SettingsPanel.tsx
 import { useProjectStore } from '../store/projectStore';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw } from 'lucide-react';
 import { selectProjectDirectory, selectExecutable, getSoftwarePaths } from '../utils/tauri';
 import type { SoftwareName } from '../types/project';
@@ -501,18 +501,26 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [accentColor, setAccentColor] = useState(() => {
     const saved = localStorage.getItem('accentColor');
-    return saved || '#a855f7';
+    return saved || '#9103c6';
   });
-  const [customColor, setCustomColor] = useState('');
-  const [showCustomColorInput, setShowCustomColorInput] = useState(false);
+  const [customColor, setCustomColor] = useState('#9103C6');
+  const [showCustomColorPicker, setShowCustomColorPicker] = useState(false);
+  const colorInputRef = useRef<HTMLInputElement>(null);
 
-  const accentColors = [
-    { name: 'Purple', value: '#a855f7' },
+  const defaultAccentColors = [
+    { name: 'Purple', value: '#9103c6' },
     { name: 'Blue', value: '#3b82f6' },
     { name: 'Green', value: '#10b981' },
     { name: 'Pink', value: '#ec4899' },
     { name: 'Orange', value: '#f97316' },
   ];
+
+  const [customColors, setCustomColors] = useState<string[]>(() => {
+    const saved = localStorage.getItem('customAccentColors');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const accentColors = [...defaultAccentColors, ...customColors.map(color => ({ name: 'Custom', value: color }))];
 
   const handleColorChange = (color: string) => {
     setAccentColor(color);
@@ -542,9 +550,26 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
 
   const handleCustomColorAdd = () => {
     if (customColor && /^#[0-9A-F]{6}$/i.test(customColor)) {
+      // Добавить кастомный цвет в список, если его там еще нет
+      if (!customColors.includes(customColor.toUpperCase())) {
+        const updatedColors = [...customColors, customColor.toUpperCase()];
+        setCustomColors(updatedColors);
+        localStorage.setItem('customAccentColors', JSON.stringify(updatedColors));
+      }
       handleColorChange(customColor);
-      setShowCustomColorInput(false);
-      setCustomColor('');
+      setShowCustomColorPicker(false);
+      setCustomColor('#9103C6');
+    }
+  };
+
+  const handleRemoveCustomColor = (colorToRemove: string) => {
+    const updatedColors = customColors.filter(c => c !== colorToRemove);
+    setCustomColors(updatedColors);
+    localStorage.setItem('customAccentColors', JSON.stringify(updatedColors));
+
+    // Если удаляемый цвет был выбран, переключиться на дефолтный
+    if (accentColor === colorToRemove) {
+      handleColorChange('#9103c6');
     }
   };
 
@@ -593,7 +618,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       <div>
         <label className="block text-sm font-medium mb-3">Accent Color</label>
         <div className="flex gap-3 flex-wrap items-center">
-          {accentColors.map(color => (
+          {defaultAccentColors.map(color => (
             <button
               key={color.value}
               onClick={() => handleColorChange(color.value)}
@@ -606,9 +631,36 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
               title={color.name}
             />
           ))}
-          {!showCustomColorInput ? (
+          {customColors.map(color => (
+            <div key={color} className="relative group">
+              <button
+                onClick={() => handleColorChange(color)}
+                className={`w-12 h-12 rounded-lg border-2 transition-all ${
+                  accentColor === color
+                    ? 'border-white scale-110'
+                    : 'border-transparent hover:scale-105'
+                }`}
+                style={{ backgroundColor: color }}
+                title="Custom color"
+              />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveCustomColor(color);
+                }}
+                className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Remove custom color"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {!showCustomColorPicker ? (
             <button
-              onClick={() => setShowCustomColorInput(true)}
+              onClick={() => {
+                setShowCustomColorPicker(true);
+                setTimeout(() => colorInputRef.current?.click(), 0);
+              }}
               className="w-12 h-12 rounded-lg border-2 border-dashed border-zinc-600 hover:border-zinc-500 flex items-center justify-center text-zinc-500 hover:text-zinc-400 transition-colors"
               title="Add custom color"
             >
@@ -617,10 +669,21 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
           ) : (
             <div className="flex gap-2 items-center">
               <input
+                ref={colorInputRef}
+                type="color"
+                value={customColor}
+                onChange={(e) => setCustomColor(e.target.value.toUpperCase())}
+                className="w-12 h-12 rounded-lg cursor-pointer bg-transparent"
+                style={{
+                  colorScheme: 'dark'
+                }}
+                title="Pick a color"
+              />
+              <input
                 type="text"
                 value={customColor}
                 onChange={(e) => setCustomColor(e.target.value.toUpperCase())}
-                placeholder="#A855F7"
+                placeholder="#9103C6"
                 className="w-24 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-accent"
                 maxLength={7}
               />
@@ -632,8 +695,8 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
               </button>
               <button
                 onClick={() => {
-                  setShowCustomColorInput(false);
-                  setCustomColor('');
+                  setShowCustomColorPicker(false);
+                  setCustomColor('#9103C6');
                 }}
                 className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-sm transition-colors"
               >
