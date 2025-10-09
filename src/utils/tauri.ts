@@ -26,15 +26,35 @@ export const tauriCommands = {
   }
 };
 
-// Временные заглушки для функций
 export async function selectProjectDirectory(): Promise<string | null> {
-  console.log('Select directory dialog');
-  return null;
+  try {
+    const { open } = await import('@tauri-apps/api/dialog');
+    const selected = await open({
+      directory: true,
+      multiple: false
+    });
+    return selected as string | null;
+  } catch (error) {
+    console.error('Failed to open directory dialog:', error);
+    return null;
+  }
 }
 
 export async function selectExecutable(): Promise<string | null> {
-  console.log('Select executable dialog');
-  return null;
+  try {
+    const { open } = await import('@tauri-apps/api/dialog');
+    const selected = await open({
+      multiple: false,
+      filters: [{
+        name: 'Executable',
+        extensions: ['exe', 'app', 'bat', 'sh']
+      }]
+    });
+    return selected as string | null;
+  } catch (error) {
+    console.error('Failed to open file dialog:', error);
+    return null;
+  }
 }
 
 export async function selectImageFile(): Promise<string | null> {

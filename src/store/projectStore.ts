@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/tauri';
 import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client } from '../types/project';
+import { thumbnailCache } from '../utils/thumbnailCache';
 
 interface ProjectStore {
   // State
@@ -12,6 +13,8 @@ interface ProjectStore {
   projectsDirectory: string;
   defaultProjectsPath: string;
   clients: Client[];
+  categories: string[];
+  selectedCategory: string;
 
   // Actions
   loadProjects: () => Promise<void>;
@@ -44,6 +47,25 @@ interface ProjectStore {
   updateClient: (clientId: string, updates: Partial<Client>) => void;
   deleteClient: (clientId: string) => void;
   getClientById: (clientId: string) => Client | undefined;
+  // Category management
+  addCategory: (name: string) => void;
+  removeCategory: (name: string) => void;
+  setSelectedCategory: (category: string) => void;
+  // Shot management
+  addShot: (projectId: string, name?: string) => void;
+  removeShot: (projectId: string, shotId: string) => void;
+  setCurrentShot: (projectId: string, shotId: string | null) => void;
+  addShotNote: (projectId: string, shotId: string, content: string) => void;
+  updateShotNote: (projectId: string, shotId: string, noteId: string, content: string) => void;
+  deleteShotNote: (projectId: string, shotId: string, noteId: string) => void;
+  addShotTodo: (projectId: string, shotId: string, text: string) => void;
+  toggleShotTodo: (projectId: string, shotId: string, todoId: string) => void;
+  removeShotTodo: (projectId: string, shotId: string, todoId: string) => void;
+  addShotBrowserTab: (projectId: string, shotId: string, url: string, title: string) => void;
+  removeShotBrowserTab: (projectId: string, shotId: string, tabId: string) => void;
+  addShotLink: (projectId: string, shotId: string, url: string, title: string) => string;
+  updateShotLink: (projectId: string, shotId: string, linkId: string, newTitle: string) => void;
+  removeShotLink: (projectId: string, shotId: string, linkId: string) => void;
 }
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
@@ -55,6 +77,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   projectsDirectory: '',
   defaultProjectsPath: typeof window !== 'undefined' ? (localStorage.getItem('defaultProjectsPath') || 'E:\\Projects\\Personal') : 'E:\\Projects\\Personal',
   clients: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('clients') || '[]') : [],
+  categories: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('categories') || '["Commercial", "Personal"]') : ['Commercial', 'Personal'],
+  selectedCategory: typeof window !== 'undefined' ? (localStorage.getItem('selectedCategory') || 'Personal') : 'Personal',
 
   // Load all projects
   loadProjects: async () => {
@@ -91,13 +115,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   // Update existing project
   updateProject: async (project: Project) => {
     try {
+      // Clear thumbnail cache if thumbnail changed
+      const oldProject = get().projects.find(p => p.id === project.id);
+      if (oldProject && oldProject.thumbnail !== project.thumbnail) {
+        if (oldProject.thumbnail) {
+          thumbnailCache.clear(oldProject.path, oldProject.thumbnail);
+        }
+      }
+
       await invoke('update_project', { project });
       set(state => ({
-        projects: state.projects.map(p => 
+        projects: state.projects.map(p =>
           p.id === project.id ? project : p
         ),
-        selectedProject: state.selectedProject?.id === project.id 
-          ? project 
+        selectedProject: state.selectedProject?.id === project.id
+          ? project
           : state.selectedProject
       }));
     } catch (error) {
@@ -110,11 +142,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   deleteProject: async (projectPath: string) => {
     set({ isLoading: true, error: null });
     try {
+      // Clear all thumbnails for this project from cache
+      thumbnailCache.clearProject(projectPath);
+
       await invoke('delete_project', { projectPath });
       set(state => ({
         projects: state.projects.filter(p => p.path !== projectPath),
-        selectedProject: state.selectedProject?.path === projectPath 
-          ? null 
+        selectedProject: state.selectedProject?.path === projectPath
+          ? null
           : state.selectedProject,
         isLoading: false
       }));
@@ -135,6 +170,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       console.log('Launching software with input:', input);
       const result = await invoke<string>('launch_software', { input });
       console.log('Software launched successfully, created file:', result);
+
+      // Dispatch event to update versions list
+      window.dispatchEvent(new CustomEvent('version-created'));
     } catch (error) {
       console.error('Failed to launch software:', error);
       set({ error: String(error) });
@@ -549,6 +587,369 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   // Get client by ID
   getClientById: (clientId: string) => {
     return get().clients.find(c => c.id === clientId);
+  },
+
+  // Shot management
+  addShot: (projectId: string, name?: string) => {
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const shotNumber = (p.shots?.length || 0) + 1;
+          const newShot = {
+            id: crypto.randomUUID(),
+            number: shotNumber,
+            name: name || `Shot ${shotNumber.toString().padStart(3, '0')}`,
+            todos: [],
+            notes: [],
+            browserTabs: [],
+            links: []
+          };
+          const updated = {
+            ...p,
+            shots: [...(p.shots || []), newShot],
+            currentShotId: p.currentShotId || newShot.id
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  removeShot: (projectId: string, shotId: string) => {
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).filter(s => s.id !== shotId),
+            currentShotId: p.currentShotId === shotId ? (p.shots?.[0]?.id || undefined) : p.currentShotId
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  setCurrentShot: (projectId: string, shotId: string | null) => {
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = { ...p, currentShotId: shotId || undefined };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  addShotNote: (projectId: string, shotId: string, content: string) => {
+    const newNote = {
+      id: crypto.randomUUID(),
+      content,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId ? { ...s, notes: [...s.notes, newNote] } : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  updateShotNote: (projectId: string, shotId: string, noteId: string, content: string) => {
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId
+                ? {
+                    ...s,
+                    notes: s.notes.map(n =>
+                      n.id === noteId ? { ...n, content, updatedAt: new Date().toISOString() } : n
+                    )
+                  }
+                : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  deleteShotNote: (projectId: string, shotId: string, noteId: string) => {
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId ? { ...s, notes: s.notes.filter(n => n.id !== noteId) } : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  addShotTodo: (projectId: string, shotId: string, text: string) => {
+    const newTodo = {
+      id: crypto.randomUUID(),
+      text,
+      completed: false
+    };
+
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId ? { ...s, todos: [...s.todos, newTodo] } : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  toggleShotTodo: (projectId: string, shotId: string, todoId: string) => {
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId
+                ? {
+                    ...s,
+                    todos: s.todos.map(t => (t.id === todoId ? { ...t, completed: !t.completed } : t))
+                  }
+                : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  removeShotTodo: (projectId: string, shotId: string, todoId: string) => {
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId ? { ...s, todos: s.todos.filter(t => t.id !== todoId) } : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  addShotBrowserTab: (projectId: string, shotId: string, url: string, title: string) => {
+    const newTab = {
+      id: crypto.randomUUID(),
+      url,
+      title,
+      isPinned: false
+    };
+
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId ? { ...s, browserTabs: [...s.browserTabs, newTab] } : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  removeShotBrowserTab: (projectId: string, shotId: string, tabId: string) => {
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId ? { ...s, browserTabs: s.browserTabs.filter(t => t.id !== tabId) } : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  addShotLink: (projectId: string, shotId: string, url: string, title: string) => {
+    const newLink = {
+      id: crypto.randomUUID(),
+      url,
+      title
+    };
+
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId ? { ...s, links: [...(s.links || []), newLink] } : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+
+    return newLink.id;
+  },
+
+  updateShotLink: (projectId: string, shotId: string, linkId: string, newTitle: string) => {
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId
+                ? {
+                    ...s,
+                    links: (s.links || []).map(l => (l.id === linkId ? { ...l, title: newTitle } : l))
+                  }
+                : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  removeShotLink: (projectId: string, shotId: string, linkId: string) => {
+    set(state => {
+      const updatedProjects = state.projects.map(p => {
+        if (p.id === projectId && p.hasShots) {
+          const updated = {
+            ...p,
+            shots: (p.shots || []).map(s =>
+              s.id === shotId ? { ...s, links: (s.links || []).filter(l => l.id !== linkId) } : s
+            )
+          };
+          get().updateProject(updated);
+          return updated;
+        }
+        return p;
+      });
+
+      return { projects: updatedProjects };
+    });
+  },
+
+  // Category management
+  addCategory: (name: string) => {
+    set(state => {
+      if (!state.categories.includes(name)) {
+        const updatedCategories = [...state.categories, name];
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('categories', JSON.stringify(updatedCategories));
+        }
+        return { categories: updatedCategories };
+      }
+      return state;
+    });
+  },
+
+  removeCategory: (name: string) => {
+    set(state => {
+      const updatedCategories = state.categories.filter(c => c !== name);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('categories', JSON.stringify(updatedCategories));
+      }
+      return {
+        categories: updatedCategories,
+        selectedCategory: state.selectedCategory === name ? updatedCategories[0] : state.selectedCategory
+      };
+    });
+  },
+
+  setSelectedCategory: (category: string) => {
+    set({ selectedCategory: category });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selectedCategory', category);
+    }
   }
 }));
 

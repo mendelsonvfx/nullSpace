@@ -1140,7 +1140,7 @@ async fn stop_watching_project() -> Result<(), String> {
 }
 
 #[tauri::command]
-fn save_feedback(feedback: String) -> Result<(), String> {
+fn save_feedback(feedback: String, app_handle: tauri::AppHandle) -> Result<(), String> {
     // Get app data directory
     let app_dir = tauri::api::path::app_data_dir(&tauri::Config::default())
         .ok_or_else(|| "Failed to get app data directory".to_string())?;
@@ -1150,6 +1150,10 @@ fn save_feedback(feedback: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to create app directory: {}", e))?;
 
     let feedback_path = app_dir.join("feedback.txt");
+
+    // Get app version from package info
+    let version = app_handle.package_info().version.to_string();
+    let app_name = app_handle.package_info().name.clone();
 
     // Collect system information
     let mut sys = System::new_all();
@@ -1170,13 +1174,16 @@ fn save_feedback(feedback: String) -> Result<(), String> {
     let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let metadata = format!(
         "Timestamp: {}\n\
-        App Version: nullSpace v0.6.0-beta\n\
+        App Name: {}\n\
+        App Version: {}\n\
         OS: {}\n\
         Kernel: {}\n\
         Hostname: {}\n\
         CPU: {} ({} cores)\n\
         Memory: {} MB / {} MB\n",
         timestamp,
+        app_name,
+        version,
         os_version,
         kernel_version,
         hostname,

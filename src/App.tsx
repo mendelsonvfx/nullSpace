@@ -1,9 +1,11 @@
-import { useEffect, useState, useRef } from 'react';
-import { Plus, Folder, Search, ExternalLink, FolderOpen, X, Settings, Check, Star, Archive, Grid3x3, CreditCard, FolderTree, ChevronRight, ChevronDown, File, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, Link as LinkIcon, Pencil } from 'lucide-react';
+import { useEffect, useState, useRef, useMemo } from 'react';
+import { Plus, Folder, Search, ExternalLink, FolderOpen, X, Settings, Check, Star, Archive, Grid3x3, CreditCard, FolderTree, ChevronRight, ChevronDown, File, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, Link as LinkIcon, Pencil, Eye, EyeOff, MessageSquare } from 'lucide-react';
 import { invoke, convertFileSrc } from '@tauri-apps/api/tauri';
+import { listen } from '@tauri-apps/api/event';
 import { selectProjectDirectory } from './utils/tauri';
 import { useProjectStore } from './store/projectStore';
 import { SettingsPanel } from './components/SettingsPanel';
+import { FeedbackPanel } from './components/FeedbackPanel';
 import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin, linkPlugin, linkDialogPlugin, codeBlockPlugin, codeMirrorPlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles, BlockTypeSelect, CreateLink, InsertCodeBlock, ListsToggle } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
 import { SoftwareIcon } from './components/SoftwareIcon';
@@ -12,6 +14,9 @@ import { ProjectCard } from './components/ProjectCard';
 import { appWindow } from '@tauri-apps/api/window';
 import { DeadlineNotification } from './components/DeadlineNotification';
 import { useThumbnail } from './hooks/useThumbnail';
+import { CategoryTabs } from './components/CategoryTabs';
+import { WelcomeSetup } from './components/WelcomeSetup';
+import { getCurrentRates, getManualRates, getRateMode, getCachedRatesSync } from './utils/exchangeRates';
 
 
 // Helper function to darken color by percentage
@@ -162,24 +167,31 @@ const STATUS_LABELS = {
 const STATUS_CYCLE: ProjectStatus[] = ['active', 'paused', 'completed'];
 
 const SOFTWARE_OPTIONS = [
-  'Blender', 'Houdini', 'After Effects', 'Maya',
-  'Cinema 4D', 'Substance', 'Unreal', 'Unity', 'ZBrush', 'Marmoset'
+  'Blender', 'Houdini', 'After Effects',
+  // 'Maya',
+  // 'Cinema 4D', 'Substance', 'Unreal', 'Unity', 'ZBrush', 'Marmoset'
 ];
 
 interface ProjectVersion {
   name: string;
   path: string;
   software: string[];
+  created_at: number; // Unix timestamp in seconds
 }
 
-function LinkItem({ link, projectId }: { link: any; projectId: string }) {
+function LinkItem({ link, projectId, shotId }: { link: any; projectId: string; shotId?: string | null }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(link.title);
 
   const handleSave = () => {
     if (editedTitle.trim()) {
-      const { updateLink } = useProjectStore.getState();
-      updateLink(projectId, link.id, editedTitle.trim());
+      if (shotId) {
+        const { updateShotLink } = useProjectStore.getState();
+        updateShotLink(projectId, shotId, link.id, editedTitle.trim());
+      } else {
+        const { updateLink } = useProjectStore.getState();
+        updateLink(projectId, link.id, editedTitle.trim());
+      }
       setIsEditing(false);
     }
   };
@@ -241,8 +253,13 @@ function LinkItem({ link, projectId }: { link: any; projectId: string }) {
       </button>
       <button
         onClick={() => {
-          const { removeLink } = useProjectStore.getState();
-          removeLink(projectId, link.id);
+          if (shotId) {
+            const { removeShotLink } = useProjectStore.getState();
+            removeShotLink(projectId, shotId, link.id);
+          } else {
+            const { removeLink } = useProjectStore.getState();
+            removeLink(projectId, link.id);
+          }
         }}
         className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
         title="Remove link"
@@ -253,16 +270,25 @@ function LinkItem({ link, projectId }: { link: any; projectId: string }) {
   );
 }
 
-function NotesSection({ project }: { project: any }) {
-  const noteContent = project.notes && project.notes.length > 0 ? project.notes[0].content : '';
+function NotesSection({ project, context }: { project: any; context: any }) {
+  const noteContent = context.notes && context.notes.length > 0 ? context.notes[0].content : '';
   const editorRef = useRef<any>(null);
 
   const handleNoteChange = (markdown: string) => {
-    const { addNote, updateNote } = useProjectStore.getState();
-    if (project.notes && project.notes.length > 0) {
-      updateNote(project.id, project.notes[0].id, markdown);
+    if (context.isShot && context.shotId) {
+      const { addShotNote, updateShotNote } = useProjectStore.getState();
+      if (context.notes && context.notes.length > 0) {
+        updateShotNote(project.id, context.shotId, context.notes[0].id, markdown);
+      } else {
+        addShotNote(project.id, context.shotId, markdown);
+      }
     } else {
-      addNote(project.id, markdown);
+      const { addNote, updateNote } = useProjectStore.getState();
+      if (context.notes && context.notes.length > 0) {
+        updateNote(project.id, context.notes[0].id, markdown);
+      } else {
+        addNote(project.id, markdown);
+      }
     }
   };
 
@@ -319,7 +345,7 @@ function NotesSection({ project }: { project: any }) {
   );
 }
 
-function LinkInputForm({ projectId }: { projectId: string }) {
+function LinkInputForm({ projectId, shotId }: { projectId: string; shotId?: string | null }) {
   const [url, setUrl] = useState('');
   const lastProcessedClipboard = useRef('');
   const [isHovered, setIsHovered] = useState(false);
@@ -348,9 +374,16 @@ function LinkInputForm({ projectId }: { projectId: string }) {
     }
 
     // Add link immediately with domain name
-    const { addLink } = useProjectStore.getState();
     const tempTitle = extractDomainName(trimmedUrl);
-    const linkId = addLink(projectId, trimmedUrl, tempTitle);
+    let linkId: string;
+
+    if (shotId) {
+      const { addShotLink } = useProjectStore.getState();
+      linkId = addShotLink(projectId, shotId, trimmedUrl, tempTitle);
+    } else {
+      const { addLink } = useProjectStore.getState();
+      linkId = addLink(projectId, trimmedUrl, tempTitle);
+    }
 
     // Clear input and reset clipboard tracking
     setUrl('');
@@ -361,8 +394,13 @@ function LinkInputForm({ projectId }: { projectId: string }) {
       const fetchedTitle = await invoke<string>('fetch_page_title', { url: trimmedUrl });
 
       // Update the link with the fetched title
-      const { updateLink } = useProjectStore.getState();
-      updateLink(projectId, linkId, fetchedTitle);
+      if (shotId) {
+        const { updateShotLink } = useProjectStore.getState();
+        updateShotLink(projectId, shotId, linkId, fetchedTitle);
+      } else {
+        const { updateLink } = useProjectStore.getState();
+        updateLink(projectId, linkId, fetchedTitle);
+      }
     } catch (error) {
       console.error('Failed to fetch page title:', error);
     }
@@ -388,17 +426,29 @@ function LinkInputForm({ projectId }: { projectId: string }) {
             const finalUrl = trimmedText.startsWith('www.') ? `https://${trimmedText}` : trimmedText;
 
             // Automatically add the link
-            const { addLink } = useProjectStore.getState();
             const tempTitle = extractDomainName(finalUrl);
-            const linkId = addLink(projectId, finalUrl, tempTitle);
+            let linkId: string;
+
+            if (shotId) {
+              const { addShotLink } = useProjectStore.getState();
+              linkId = addShotLink(projectId, shotId, finalUrl, tempTitle);
+            } else {
+              const { addLink } = useProjectStore.getState();
+              linkId = addLink(projectId, finalUrl, tempTitle);
+            }
 
             lastProcessedClipboard.current = trimmedText;
 
             // Fetch real title in background
             try {
               const fetchedTitle = await invoke<string>('fetch_page_title', { url: finalUrl });
-              const { updateLink } = useProjectStore.getState();
-              updateLink(projectId, linkId, fetchedTitle);
+              if (shotId) {
+                const { updateShotLink } = useProjectStore.getState();
+                updateShotLink(projectId, shotId, linkId, fetchedTitle);
+              } else {
+                const { updateLink } = useProjectStore.getState();
+                updateLink(projectId, linkId, fetchedTitle);
+              }
             } catch (error) {
               console.error('Failed to fetch page title:', error);
             }
@@ -458,31 +508,130 @@ function LinkInputForm({ projectId }: { projectId: string }) {
   );
 }
 
-function VersionsOverview({ project }: any) {
-  const [versions, setVersions] = useState<ProjectVersion[]>([]);
+function VersionsOverview({ project, currentShot }: any) {
+  const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSoftware, setSelectedSoftware] = useState<string>('all');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const loadingTimerRef = useRef<number | null>(null);
+  const isFirstLoadRef = useRef(true);
 
-  useEffect(() => {
-    loadVersions();
-  }, [project.path]);
+  const loadVersions = async (skipCleanup = false) => {
+    // Clear any existing timer first
+    if (loadingTimerRef.current !== null) {
+      clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = null;
+    }
 
-  const loadVersions = async () => {
-    setLoading(true);
+    // Only show loading state for first load or after 200ms delay
+    const shouldShowLoading = isFirstLoadRef.current;
+    if (shouldShowLoading) {
+      setLoading(true);
+      isFirstLoadRef.current = false;
+    } else {
+      // Set a delayed loading state to prevent flickering on updates
+      loadingTimerRef.current = window.setTimeout(() => {
+        setLoading(true);
+        loadingTimerRef.current = null;
+      }, 200);
+    }
+
     try {
+      // Clean up backup files only if not skipped
+      if (!skipCleanup) {
+        await invoke<number>('cleanup_backup_files', {
+          projectPath: project.path
+        });
+      }
+
       const result = await invoke<ProjectVersion[]>('get_project_versions', {
         projectPath: project.path
       });
       console.log('Loaded versions:', result);
-      // Reverse to show newest first
-      setVersions(result.reverse());
+
+      // Clear the loading timer if it hasn't fired yet
+      if (loadingTimerRef.current !== null) {
+        clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
+
+      // Update data and stop loading
+      setAllVersions(result);
+      setLoading(false);
     } catch (error) {
       console.error('Failed to load versions:', error);
-    } finally {
+      // Clear the loading timer on error
+      if (loadingTimerRef.current !== null) {
+        clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
       setLoading(false);
     }
   };
+
+  // Load all versions and start watcher when project changes
+  useEffect(() => {
+    loadVersions();
+
+    // Start watching the project directory
+    invoke('start_watching_project', {
+      projectPath: project.path
+    }).catch((err) => {
+      console.error('Failed to start watching project:', err);
+    });
+
+    // Cleanup watcher on unmount
+    return () => {
+      invoke('stop_watching_project').catch((err) => {
+        console.error('Failed to stop watching project:', err);
+      });
+    };
+  }, [project.path]);
+
+  // Listen for version changes from file system watcher
+  useEffect(() => {
+    let unlisten: any;
+
+    listen('version-changed', () => {
+      console.log('Version changed detected by file watcher');
+      // Skip cleanup since watcher already did it
+      loadVersions(true);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [project.path]);
+
+  // Listen for version updates from launch_software
+  useEffect(() => {
+    const handleVersionUpdate = () => {
+      console.log('Version update event received from launch');
+      loadVersions();
+    };
+
+    window.addEventListener('version-created', handleVersionUpdate);
+    return () => window.removeEventListener('version-created', handleVersionUpdate);
+  }, [project.path]);
+
+  // Filter versions by shot and sort by version number (desc) then by date (desc)
+  const versions = useMemo(() => {
+    let filtered = currentShot
+      ? allVersions.filter(v => {
+          const shotPrefix = `_Shot${currentShot.number.toString().padStart(3, '0')}_`;
+          return v.name.includes(shotPrefix);
+        })
+      : allVersions;
+
+    // Sort only by creation date (newest left)
+    const sorted = [...filtered].sort((a, b) => {
+      return b.created_at - a.created_at;
+    });
+
+    return sorted;
+  }, [allVersions, currentShot]);
 
   const handleVersionDoubleClick = async (versionPath: string) => {
     try {
@@ -501,7 +650,8 @@ function VersionsOverview({ project }: any) {
     }
   };
 
-  if (loading) {
+  // Only show loading spinner if there's no data yet
+  if (loading && versions.length === 0) {
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-zinc-400 mb-3">Versions Overview</h3>
@@ -514,12 +664,13 @@ function VersionsOverview({ project }: any) {
     );
   }
 
-  if (versions.length === 0) {
+  // Only show "no versions" if not loading and truly no data
+  if (!loading && versions.length === 0) {
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-zinc-400 mb-3">Versions Overview</h3>
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-          <p className="text-xs text-zinc-500 text-center">No versions found (looking for folders like ProjectName_V0001)</p>
+          <p className="text-xs text-zinc-500 text-center">No versions found (looking for folders like ProjectName_v001)</p>
         </div>
       </div>
     );
@@ -528,6 +679,18 @@ function VersionsOverview({ project }: any) {
   // Remove file extension from version name
   const getVersionNameWithoutExtension = (fullName: string) => {
     return fullName.replace(/\.[^/.]+$/, '');
+  };
+
+  // Extract only version number from full name (remove project name and shot info)
+  const getVersionDisplayName = (fullName: string) => {
+    const nameWithoutExt = getVersionNameWithoutExtension(fullName);
+    // Match pattern like "ProjectName_Shot001_v001" or "ProjectName_v001"
+    // Extract only the version part (v001, v002, etc.)
+    const versionMatch = nameWithoutExt.match(/_v(\d+)$/i);
+    if (versionMatch) {
+      return `v${versionMatch[1]}`;
+    }
+    return nameWithoutExt;
   };
 
   // Get unique software list
@@ -605,7 +768,7 @@ function VersionsOverview({ project }: any) {
                 </div>
                 {/* Version name without extension */}
                 <div className="text-xs text-center font-medium truncate" title={version.name}>
-                  {getVersionNameWithoutExtension(version.name)}
+                  {getVersionDisplayName(version.name)}
                 </div>
               </div>
             ))}
@@ -911,6 +1074,37 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
     const saved = localStorage.getItem('convertToBaseCurrency');
     return saved ? JSON.parse(saved) : false;
   });
+  const [exchangeRates, setExchangeRates] = useState<Record<string, Record<string, number>>>(() => {
+    const rateMode = getRateMode();
+
+    if (rateMode === 'auto') {
+      // Пытаемся загрузить из кэша синхронно
+      const cachedRates = getCachedRatesSync(baseCurrency);
+      if (cachedRates) {
+        // Преобразуем в nested структуру
+        const nestedRates: Record<string, Record<string, number>> = {};
+        const currencies = ['USD', 'RUB', 'EUR'];
+        currencies.forEach(from => {
+          nestedRates[from] = {};
+          currencies.forEach(to => {
+            if (from === to) {
+              nestedRates[from][to] = 1;
+            } else if (from === baseCurrency) {
+              nestedRates[from][to] = cachedRates[to] || 1;
+            } else if (to === baseCurrency) {
+              nestedRates[from][to] = 1 / (cachedRates[from] || 1);
+            } else {
+              nestedRates[from][to] = (cachedRates[to] || 1) / (cachedRates[from] || 1);
+            }
+          });
+        });
+        return nestedRates;
+      }
+    }
+
+    // Fallback на ручные курсы
+    return getManualRates();
+  });
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'unpaid'>('all');
   const [sortBy, setSortBy] = useState<'amount' | 'name' | 'client'>('amount');
@@ -920,6 +1114,45 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
 
   const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
 
+  // Load exchange rates on mount
+  useEffect(() => {
+    const loadRates = async () => {
+      const rateMode = getRateMode();
+      if (rateMode === 'auto') {
+        const rates = await getCurrentRates(baseCurrency);
+        // rates содержит курсы от baseCurrency ко всем валютам
+        // Например, если baseCurrency=USD, то rates.RUB = 90 означает 1 USD = 90 RUB
+        // Нужно создать nested структуру для всех направлений конвертации
+        const nestedRates: Record<string, Record<string, number>> = {};
+
+        // Для каждой валюты создаем курсы конвертации
+        const currencies = ['USD', 'RUB', 'EUR'];
+        currencies.forEach(from => {
+          nestedRates[from] = {};
+          currencies.forEach(to => {
+            if (from === to) {
+              nestedRates[from][to] = 1;
+            } else if (from === baseCurrency) {
+              // Прямой курс из базовой валюты
+              nestedRates[from][to] = rates[to] || 1;
+            } else if (to === baseCurrency) {
+              // Обратный курс к базовой валюте
+              nestedRates[from][to] = 1 / (rates[from] || 1);
+            } else {
+              // Кросс-курс через базовую валюту
+              nestedRates[from][to] = (rates[to] || 1) / (rates[from] || 1);
+            }
+          });
+        });
+
+        setExchangeRates(nestedRates);
+      } else {
+        setExchangeRates(getManualRates());
+      }
+    };
+    loadRates();
+  }, [baseCurrency]);
+
   // Force re-render when projects change
   useEffect(() => {
     forceUpdate({});
@@ -927,15 +1160,43 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
 
   // Listen for storage changes
   useEffect(() => {
-    const handleStorageChange = () => {
+    const handleStorageChange = async () => {
       const savedCurrency = localStorage.getItem('baseCurrency');
       const savedConvert = localStorage.getItem('convertToBaseCurrency');
       if (savedCurrency) setBaseCurrency(savedCurrency);
       if (savedConvert) setConvertToBaseCurrency(JSON.parse(savedConvert));
+
+      // Reload exchange rates
+      const rateMode = getRateMode();
+      if (rateMode === 'auto') {
+        const newBaseCurrency = savedCurrency || baseCurrency;
+        const rates = await getCurrentRates(newBaseCurrency);
+        const nestedRates: Record<string, Record<string, number>> = {};
+
+        const currencies = ['USD', 'RUB', 'EUR'];
+        currencies.forEach(from => {
+          nestedRates[from] = {};
+          currencies.forEach(to => {
+            if (from === to) {
+              nestedRates[from][to] = 1;
+            } else if (from === newBaseCurrency) {
+              nestedRates[from][to] = rates[to] || 1;
+            } else if (to === newBaseCurrency) {
+              nestedRates[from][to] = 1 / (rates[from] || 1);
+            } else {
+              nestedRates[from][to] = (rates[to] || 1) / (rates[from] || 1);
+            }
+          });
+        });
+
+        setExchangeRates(nestedRates);
+      } else {
+        setExchangeRates(getManualRates());
+      }
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  }, [baseCurrency]);
 
   const currencySymbols: Record<string, string> = {
     'USD': '$',
@@ -943,16 +1204,9 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
     'EUR': '€'
   };
 
-  // Курсы валют (примерные, можно заменить на реальные API)
-  const exchangeRates: Record<string, Record<string, number>> = {
-    'USD': { 'USD': 1, 'RUB': 92, 'EUR': 0.92 },
-    'RUB': { 'USD': 0.011, 'RUB': 1, 'EUR': 0.010 },
-    'EUR': { 'USD': 1.09, 'RUB': 100, 'EUR': 1 }
-  };
-
   const convertCurrency = (amount: number, from: string, to: string): number => {
     if (from === to) return amount;
-    return amount * exchangeRates[from][to];
+    return amount * (exchangeRates[from]?.[to] || 1);
   };
 
   // Подсчет общего дохода (оплаченные проекты)
@@ -1020,7 +1274,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
 
   const formatRevenue = (revenues: Record<string, number>) => {
     return Object.entries(revenues)
-      .map(([currency, amount]) => `${amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ${currencySymbols[currency]}`)
+      .map(([currency, amount]) => `${amount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[currency]}`)
       .join(' ');
   };
 
@@ -1058,7 +1312,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
                       const originalAmount = project.displayAmount || project.cost;
 
                       const displayText = convertToBaseCurrency
-                        ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ${currencySymbols[baseCurrency]}`
+                        ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
                         : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`;
 
                       return (
@@ -1089,7 +1343,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
                       const originalAmount = project.displayAmount || project.cost;
 
                       const displayText = convertToBaseCurrency
-                        ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ${currencySymbols[baseCurrency]}`
+                        ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
                         : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`;
 
                       return (
@@ -1236,7 +1490,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
                             <div className="text-right flex-shrink-0">
                               <div className={`font-medium ${isPaid ? 'text-green-500' : 'text-zinc-600'}`}>
                                 {convertToBaseCurrency
-                                  ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ${currencySymbols[baseCurrency]}`
+                                  ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
                                   : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`
                                 }
                               </div>
@@ -1714,7 +1968,11 @@ function App() {
     toggleFavorite,
     updateProject,
     clients,
-    deleteClient
+    deleteClient,
+    categories,
+    selectedCategory,
+    setSelectedCategory,
+    addCategory
   } = useProjectStore();
 
   //const [view, setView] = useState<'grid' | 'list'>('grid');
@@ -1722,6 +1980,7 @@ function App() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [filterView, setFilterView] = useState<'all' | 'favorites' | 'archive'>('all');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
@@ -1736,7 +1995,31 @@ function App() {
   });
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'project' | 'client'; name: string; id: string; path?: string } | null>(null);
   const [deadlineNotifications, setDeadlineNotifications] = useState<Array<{ id: string; projectName: string; daysRemaining: number }>>([]);
+  const [notificationsShown, setNotificationsShown] = useState(false); // Track if notifications were shown this session
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
+  const [showCategoryBar, setShowCategoryBar] = useState(() => {
+    const saved = localStorage.getItem('showCategoryBar');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [showWelcomeSetup, setShowWelcomeSetup] = useState(() => {
+    const completed = localStorage.getItem('setupCompleted');
+    return !completed;
+  });
+
+  // Temporary keybind to show welcome setup (numpad decimal/dot)
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      console.log('Key pressed:', e.key, 'Code:', e.code, 'Location:', e.location);
+      // Check for numpad decimal key
+      if (e.code === 'NumpadDecimal' || e.key === 'Decimal') {
+        e.preventDefault();
+        console.log('Opening welcome setup');
+        setShowWelcomeSetup(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
 
   // Global paste handler that uses hovered project
   useEffect(() => {
@@ -1918,6 +2201,9 @@ function App() {
     // Wait for projects to load
     if (isLoading) return;
 
+    // Only show notifications once per app session
+    if (notificationsShown) return;
+
     // Check if notifications are enabled
     const notificationsEnabled = localStorage.getItem('deadlineNotifications');
     const isEnabled = notificationsEnabled !== null ? JSON.parse(notificationsEnabled) : true;
@@ -1951,10 +2237,11 @@ function App() {
       });
 
       setDeadlineNotifications(notifications);
+      setNotificationsShown(true); // Mark that notifications have been shown
     }, 2000); // 2 second delay
 
     return () => clearTimeout(timer);
-  }, [isLoading]); // Run once when loading completes
+  }, [isLoading, notificationsShown]); // Run once when loading completes
 
   useEffect(() => {
     const handleStorageChange = () => {
@@ -1968,10 +2255,8 @@ function App() {
       if (!isEnabled) {
         // Clear all notifications if disabled
         setDeadlineNotifications([]);
-      } else {
-        // Re-check deadlines if enabled
-        loadProjects();
       }
+      // Don't re-check deadlines when enabled - they should only show on app startup
 
       // Also update accent color when storage changes
       const savedColor = localStorage.getItem('accentColor');
@@ -2009,29 +2294,12 @@ function App() {
     }
   }, [contextMenu]);
 
-  useEffect(() => {
-    if (!showSettings) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      // Don't close if clicking inside the settings panel
-      if (target.closest('[data-settings-panel]')) return;
-      setShowSettings(false);
-    };
-
-    // Add event listener with a small delay to avoid immediate close
-    const timer = setTimeout(() => {
-      document.addEventListener('click', handleClickOutside);
-    }, 100);
-
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, [showSettings]);
 
   const filteredProjects = projects
     .filter(p => {
+      // Filter by category
+      const matchesCategory = p.category === selectedCategory || !p.category && selectedCategory === 'Personal';
+
       // Filter by search query
       const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -2041,12 +2309,12 @@ function App() {
 
       // Filter by view
       if (filterView === 'archive') {
-        return matchesSearch && matchesClient && p.status === 'archived';
+        return matchesCategory && matchesSearch && matchesClient && p.status === 'archived';
       } else if (filterView === 'favorites') {
-        return matchesSearch && matchesClient && p.isFavorite && p.status !== 'archived';
+        return matchesCategory && matchesSearch && matchesClient && p.isFavorite && p.status !== 'archived';
       } else {
         // 'all' - show all except archived
-        return matchesSearch && matchesClient && p.status !== 'archived';
+        return matchesCategory && matchesSearch && matchesClient && p.status !== 'archived';
       }
     })
     .sort((a, b) => {
@@ -2077,7 +2345,10 @@ function App() {
     selectProject(project);
   };
 
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const selectedProject = useMemo(() =>
+    projects.find(p => p.id === selectedProjectId),
+    [projects, selectedProjectId]
+  );
 
   const cycleStatus = (projectId: string, currentStatus: ProjectStatus) => {
     const currentIndex = STATUS_CYCLE.indexOf(currentStatus);
@@ -2099,6 +2370,11 @@ function App() {
 
   return (
     <div className="h-screen bg-zinc-950 text-white flex flex-col overflow-hidden rounded-lg">
+      {/* Welcome Setup */}
+      {showWelcomeSetup && (
+        <WelcomeSetup onComplete={() => setShowWelcomeSetup(false)} />
+      )}
+
       {/* Deadline Notifications */}
       <div className="fixed top-12 right-4 z-50 flex flex-col gap-3">
         {deadlineNotifications.slice(0, 3).map((notification) => (
@@ -2116,9 +2392,10 @@ function App() {
       </div>
 
       {/* Custom Title Bar */}
-      <div className="h-8 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between select-none flex-shrink-0 rounded-t-lg">
+      <div className="h-8 bg-zinc-900 flex items-center justify-between select-none flex-shrink-0 rounded-t-lg">
         <div
-          className="flex items-center gap-2 flex-1 h-full pl-4"
+          className="flex items-center gap-2 flex-1 h-full"
+          style={{ paddingLeft: '13px' }}
           onMouseDown={() => appWindow.startDragging()}
         >
           <img src="/icon.png" alt="Logo" className="w-4 h-4" />
@@ -2137,7 +2414,21 @@ function App() {
           <span className="text-sm font-bold">nullSpace</span>
         </div>
 
-        <div className="titlebar-button flex items-center gap-1 pr-4">
+        <div className="titlebar-button flex items-center gap-1 pr-2">
+          <button
+            onClick={() => {
+              const newValue = !showCategoryBar;
+              setShowCategoryBar(newValue);
+              localStorage.setItem('showCategoryBar', JSON.stringify(newValue));
+            }}
+            className="w-8 h-6 hover:bg-zinc-800 flex items-center justify-center transition-colors rounded"
+            title="Toggle Category Bar"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className={showCategoryBar ? "text-zinc-400" : "text-zinc-600"}>
+              <rect x="0.5" y="0.5" width="13" height="13" stroke="currentColor" strokeWidth="1" fill="none" />
+              <rect x="0.5" y="0.5" width="3.25" height="13" fill="currentColor" opacity={showCategoryBar ? "1" : "0.3"} />
+            </svg>
+          </button>
           <button
             onClick={() => {
               console.log('Minimize clicked');
@@ -2173,6 +2464,16 @@ function App() {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
+      {/* Category Tabs - крайний левый */}
+      {showCategoryBar && (
+        <CategoryTabs
+          categories={categories}
+          selectedCategory={selectedCategory}
+          onSelectCategory={setSelectedCategory}
+          onAddCategory={addCategory}
+          accentColor="#a855f7"
+        />
+      )}
       {/* Sidebar - Project List */}
       <div className="w-80 border-r border-zinc-800 flex flex-col">
         {/* Sidebar Header */}
@@ -2208,13 +2509,22 @@ function App() {
                 {viewMode === 'projects' ? 'Projects' : 'Finance'}
               </h1>
             </div>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-              title="Settings"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowFeedback(true)}
+                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                title="Feedback"
+              >
+                <MessageSquare className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                title="Settings"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <div className="relative mb-3">
@@ -2530,12 +2840,19 @@ function App() {
              console.log('Opening folder:', selectedProject.path);
              openInExplorer(selectedProject.path);
              }}
-            onLaunchSoftware={(sw: any) => launchSoftware({
-              projectPath: selectedProject.path,
-              executablePath: sw.executablePath,
-              software: sw.name,
-              projectName: selectedProject.name
-            })}
+            onLaunchSoftware={(sw: any) => {
+              const currentShot = selectedProject.hasShots && selectedProject.currentShotId
+                ? selectedProject.shots?.find((s: any) => s.id === selectedProject.currentShotId)
+                : null;
+
+              launchSoftware({
+                projectPath: selectedProject.path,
+                executablePath: sw.executablePath,
+                software: sw.name,
+                projectName: selectedProject.name,
+                shotNumber: currentShot?.number
+              });
+            }}
           />
         ) : (
           <EmptyState onCreateProject={() => setShowCreateModal(true)} />
@@ -2564,6 +2881,13 @@ function App() {
               id: clientId
             });
           }}
+        />
+      )}
+
+      {/* Feedback Panel */}
+      {showFeedback && (
+        <FeedbackPanel
+          onClose={() => setShowFeedback(false)}
         />
       )}
 
@@ -2761,12 +3085,40 @@ function App() {
 function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: any) {
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isShotEditMode, setIsShotEditMode] = useState(false);
 
   // Debug: log project data
   useEffect(() => {
     console.log('Project data:', project);
     console.log('createdAt:', project.createdAt);
   }, [project]);
+
+  // Get current context (todos, notes, links, browserTabs) based on shot selection
+  const getCurrentContext = () => {
+    if (project.hasShots && project.currentShotId) {
+      const currentShot = project.shots?.find((s: any) => s.id === project.currentShotId);
+      if (currentShot) {
+        return {
+          todos: currentShot.todos || [],
+          notes: currentShot.notes || [],
+          links: currentShot.links || [],
+          browserTabs: currentShot.browserTabs || [],
+          isShot: true,
+          shotId: currentShot.id
+        };
+      }
+    }
+    return {
+      todos: project.todos || [],
+      notes: project.notes || [],
+      links: project.links || [],
+      browserTabs: project.browserTabs || [],
+      isShot: false,
+      shotId: null
+    };
+  };
+
+  const context = getCurrentContext();
 
   const handlePaste = async (e: React.ClipboardEvent) => {
     // Ignore paste in input/textarea fields
@@ -2909,7 +3261,64 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
               />
             </div>
           </div>
-          <p className="text-zinc-400 text-sm">{project.description}</p>
+          <p className="text-zinc-400 text-sm mb-2">{project.description}</p>
+          {project.hasShots === true && (
+            <div className="flex gap-2 flex-wrap items-center">
+              {(project.shots || []).map((shot: any) => (
+                <div
+                  key={shot.id}
+                  className={`group relative flex items-center gap-1 rounded overflow-hidden ${
+                    project.currentShotId === shot.id
+                      ? 'bg-accent text-white'
+                      : 'bg-zinc-800 text-zinc-300'
+                  }`}
+                >
+                  <button
+                    onClick={() => {
+                      const { setCurrentShot } = useProjectStore.getState();
+                      setCurrentShot(project.id, shot.id);
+                    }}
+                    className="px-3 py-1 text-sm font-medium transition-all hover:brightness-110"
+                  >
+                    {shot.name}
+                  </button>
+                  {isShotEditMode && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete ${shot.name}?`)) {
+                          const { removeShot } = useProjectStore.getState();
+                          removeShot(project.id, shot.id);
+                        }
+                      }}
+                      className="px-2 py-1 hover:bg-red-500/20 transition-all"
+                      title="Delete shot"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={() => {
+                  const { addShot } = useProjectStore.getState();
+                  addShot(project.id);
+                }}
+                className="px-3 py-1 bg-transparent border border-zinc-700 border-dashed rounded text-sm text-zinc-400 hover:border-accent hover:text-accent transition-all"
+              >
+                + Add shot...
+              </button>
+              <button
+                onClick={() => setIsShotEditMode(!isShotEditMode)}
+                className={`p-1 transition-colors ${
+                  isShotEditMode ? 'text-accent' : 'text-zinc-400 hover:text-accent'
+                }`}
+                title={isShotEditMode ? 'Done editing' : 'Edit shots'}
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -2996,11 +3405,18 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
               return (
                 <button
                   key={sw.name}
-                  onClick={() => onLaunchSoftware({
-                    ...sw,
-                    executablePath
-                  })}
-                  className="p-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg flex items-center gap-3 transition-colors group"
+                  onClick={() => {
+                    const currentShot = project.hasShots && project.currentShotId
+                      ? project.shots?.find((s: any) => s.id === project.currentShotId)
+                      : null;
+
+                    onLaunchSoftware({
+                      ...sw,
+                      executablePath,
+                      shotNumber: currentShot?.number
+                    });
+                  }}
+                  className="p-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg flex items-center gap-3 transition-all duration-200 group active:scale-[0.98] active:brightness-95 select-none"
                 >
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center">
                     <SoftwareIcon name={sw.name} />
@@ -3018,16 +3434,16 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
         </div>
 
         {/* Versions Overview */}
-        <VersionsOverview project={project} />
+        <VersionsOverview project={project} currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null} />
 
         {/* Links Section */}
         <div className="mb-6">
           <h3 className="text-sm font-medium text-zinc-400 mb-3">Links</h3>
           <div className="space-y-2">
-            {project.links && project.links.map((link: any) => (
-              <LinkItem key={link.id} link={link} projectId={project.id} />
+            {context.links.map((link: any) => (
+              <LinkItem key={link.id} link={link} projectId={project.id} shotId={context.shotId} />
             ))}
-            <LinkInputForm projectId={project.id} />
+            <LinkInputForm projectId={project.id} shotId={context.shotId} />
           </div>
         </div>
 
@@ -3035,12 +3451,17 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
         <div className="mb-6">
           <h3 className="text-sm font-medium text-zinc-400 mb-3">Tasks</h3>
           <div className="space-y-2">
-            {project.todos && project.todos.map((todo: any) => (
+            {context.todos.map((todo: any) => (
               <div key={todo.id} className="flex items-center gap-2 group">
                 <button
                   onClick={() => {
-                    const { toggleTodo } = useProjectStore.getState();
-                    toggleTodo(project.id, todo.id);
+                    if (context.isShot && context.shotId) {
+                      const { toggleShotTodo } = useProjectStore.getState();
+                      toggleShotTodo(project.id, context.shotId, todo.id);
+                    } else {
+                      const { toggleTodo } = useProjectStore.getState();
+                      toggleTodo(project.id, todo.id);
+                    }
                   }}
                   className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                     todo.completed
@@ -3059,8 +3480,13 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
                 </span>
                 <button
                   onClick={() => {
-                    const { removeTodo } = useProjectStore.getState();
-                    removeTodo(project.id, todo.id);
+                    if (context.isShot && context.shotId) {
+                      const { removeShotTodo } = useProjectStore.getState();
+                      removeShotTodo(project.id, context.shotId, todo.id);
+                    } else {
+                      const { removeTodo } = useProjectStore.getState();
+                      removeTodo(project.id, todo.id);
+                    }
                   }}
                   className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-800 rounded transition-opacity"
                 >
@@ -3073,15 +3499,25 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
               placeholder="+ Add task..."
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                  const { addTodo } = useProjectStore.getState();
-                  addTodo(project.id, e.currentTarget.value.trim());
+                  if (context.isShot && context.shotId) {
+                    const { addShotTodo } = useProjectStore.getState();
+                    addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
+                  } else {
+                    const { addTodo } = useProjectStore.getState();
+                    addTodo(project.id, e.currentTarget.value.trim());
+                  }
                   e.currentTarget.value = '';
                 }
               }}
               onBlur={(e) => {
                 if (e.currentTarget.value.trim()) {
-                  const { addTodo } = useProjectStore.getState();
-                  addTodo(project.id, e.currentTarget.value.trim());
+                  if (context.isShot && context.shotId) {
+                    const { addShotTodo } = useProjectStore.getState();
+                    addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
+                  } else {
+                    const { addTodo } = useProjectStore.getState();
+                    addTodo(project.id, e.currentTarget.value.trim());
+                  }
                   e.currentTarget.value = '';
                 }
               }}
@@ -3091,7 +3527,7 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
         </div>
 
         {/* Notes Section */}
-        <NotesSection project={project} />
+        <NotesSection project={project} context={context} />
       </div>
 
       {/* Payment Modal */}
@@ -3182,15 +3618,15 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
       {/* Project Settings Modal */}
       {showProjectSettings && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowProjectSettings(false)}>
-          <div className="bg-zinc-900 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+          <div className="bg-zinc-900 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
               <h2 className="text-xl font-semibold">Project Settings</h2>
               <button onClick={() => setShowProjectSettings(false)} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
               <div>
                 <label className="block text-sm font-medium mb-2">Project Name</label>
                 <input
@@ -3386,35 +3822,30 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
                   />
                 </div>
               )}
+
+              <div className="pt-6 border-t border-zinc-800">
+                <button
+                  onClick={async () => {
+                    // Close modal first to prevent UI glitches
+                    setShowProjectSettings(false);
+                    onClose();
+
+                    // Then show confirmation
+                    setTimeout(async () => {
+                      const confirmed = confirm(`Are you sure you want to delete project "${project.name}"? This action cannot be undone.`);
+                      if (confirmed) {
+                        const { deleteProject } = useProjectStore.getState();
+                        await deleteProject(project.path);
+                      }
+                    }, 100);
+                  }}
+                  className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium"
+                >
+                  Delete Project
+                </button>
+              </div>
             </div>
 
-            <div className="p-6 border-t border-zinc-800 flex justify-between items-center">
-              <button
-                onClick={async () => {
-                  // Close modal first to prevent UI glitches
-                  setShowProjectSettings(false);
-                  onClose();
-
-                  // Then show confirmation
-                  setTimeout(async () => {
-                    const confirmed = confirm(`Are you sure you want to delete project "${project.name}"? This action cannot be undone.`);
-                    if (confirmed) {
-                      const { deleteProject } = useProjectStore.getState();
-                      await deleteProject(project.path);
-                    }
-                  }, 100);
-                }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium"
-              >
-                Delete Project
-              </button>
-              <button
-                onClick={() => setShowProjectSettings(false)}
-                className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -3443,19 +3874,30 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
 }
 
 function RightSidebar({ project }: any) {
+  const [showHidden, setShowHidden] = useState(false);
+
   return (
     <div className="w-80 border-l border-zinc-800 flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-zinc-800">
-        <div className="flex items-center gap-2">
-          <FolderTree className="w-4 h-4" />
-          <h3 className="text-sm font-medium">Project Structure</h3>
+        <div className="flex items-center gap-2 justify-between">
+          <div className="flex items-center gap-2">
+            <FolderTree className="w-4 h-4" />
+            <h3 className="text-sm font-medium">Project Structure</h3>
+          </div>
+          <button
+            onClick={() => setShowHidden(!showHidden)}
+            className="p-1 hover:bg-zinc-800 rounded transition-colors"
+            title={showHidden ? "Hide hidden items" : "Show hidden items"}
+          >
+            <Eye className={`w-4 h-4 ${showHidden ? 'text-accent' : 'text-zinc-400'}`} />
+          </button>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
-        <TreeView project={project} />
+      <div className="flex-1 overflow-hidden p-4">
+        <TreeView project={project} showHidden={showHidden} />
       </div>
     </div>
   );
@@ -3468,29 +3910,116 @@ interface FileNode {
   children?: FileNode[];
 }
 
-function TreeView({ project }: any) {
+function TreeView({ project, showHidden }: any) {
   const [tree, setTree] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [directorySize, setDirectorySize] = useState<number | null>(null);
   const [loadingSize, setLoadingSize] = useState(true);
+  const [hiddenPaths, setHiddenPaths] = useState<Set<string>>(new Set());
+  const clickTimerRef = useRef<number | null>(null);
+  const loadingTimerRef = useRef<number | null>(null);
+  const isFirstLoadRef = useRef(true);
 
+  const loadTree = async () => {
+    // Clear any existing timer first
+    if (loadingTimerRef.current !== null) {
+      clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = null;
+    }
+
+    // Only show loading state for first load or after 200ms delay
+    const shouldShowLoading = isFirstLoadRef.current;
+    if (shouldShowLoading) {
+      setLoading(true);
+      isFirstLoadRef.current = false;
+    } else {
+      // Set a delayed loading state to prevent flickering on updates
+      loadingTimerRef.current = window.setTimeout(() => {
+        setLoading(true);
+        loadingTimerRef.current = null;
+      }, 200);
+    }
+
+    try {
+      const result = await invoke<FileNode[]>('get_folder_structure', { path: project.path });
+      // Filter out system files starting with .
+      const filterSystemFiles = (nodes: FileNode[]): FileNode[] => {
+        return nodes
+          .filter(node => !node.name.startsWith('.'))
+          .map(node => ({
+            ...node,
+            children: node.children ? filterSystemFiles(node.children) : undefined
+          }));
+      };
+      const filteredResult = filterSystemFiles(result);
+
+      // Clear the loading timer if it hasn't fired yet
+      if (loadingTimerRef.current !== null) {
+        clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
+
+      // Update tree data
+      setTree(filteredResult);
+
+      // Auto-expand software folders like Blender, After Effects, etc.
+      const autoExpandSoftwareFolders = (nodes: FileNode[]) => {
+        const newExpanded = new Set(expandedDirs);
+        nodes.forEach(node => {
+          if (node.is_dir && node.children && node.children.length > 0) {
+            newExpanded.add(node.path);
+          }
+        });
+        setExpandedDirs(newExpanded);
+      };
+      autoExpandSoftwareFolders(filteredResult);
+      setLoading(false);
+    } catch (error) {
+      console.error('Failed to load folder structure:', error);
+      // Clear the loading timer on error
+      if (loadingTimerRef.current !== null) {
+        clearTimeout(loadingTimerRef.current);
+        loadingTimerRef.current = null;
+      }
+      setLoading(false);
+    }
+  };
+
+  // Initial load
   useEffect(() => {
     loadTree();
     loadDirectorySize();
   }, [project.path]);
 
-  const loadTree = async () => {
-    setLoading(true);
-    try {
-      const result = await invoke<FileNode[]>('get_folder_structure', { path: project.path });
-      setTree(result);
-    } catch (error) {
-      console.error('Failed to load folder structure:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Listen for version changes from file system watcher
+  useEffect(() => {
+    let unlisten: any;
+
+    listen('version-changed', () => {
+      console.log('Version changed detected - updating folder tree');
+      loadTree();
+      loadDirectorySize();
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [project.path]);
+
+  // Listen for version updates from launch_software
+  useEffect(() => {
+    const handleVersionUpdate = () => {
+      console.log('Version update event received - updating folder tree');
+      loadTree();
+      loadDirectorySize();
+    };
+
+    window.addEventListener('version-created', handleVersionUpdate);
+    return () => window.removeEventListener('version-created', handleVersionUpdate);
+  }, [project.path]);
 
   const loadDirectorySize = async () => {
     setLoadingSize(true);
@@ -3522,36 +4051,138 @@ function TreeView({ project }: any) {
     setExpandedDirs(newExpanded);
   };
 
-  const handleDoubleClick = (node: FileNode) => {
+  const handleClick = (node: FileNode) => {
+    if (!node.is_dir) return;
+
+    // Clear any existing timer
+    if (clickTimerRef.current !== null) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+
+    // Set a new timer for single click action
+    clickTimerRef.current = window.setTimeout(() => {
+      toggleDir(node.path);
+      clickTimerRef.current = null;
+    }, 200); // 200ms delay to distinguish from double click
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent, node: FileNode) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Clear the single click timer to prevent toggle
+    if (clickTimerRef.current !== null) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+
     if (node.is_dir) {
       const { openInExplorer } = useProjectStore.getState();
       openInExplorer(node.path);
     }
   };
 
+  const toggleHidden = (path: string) => {
+    setHiddenPaths(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(path)) {
+        newSet.delete(path);
+      } else {
+        newSet.add(path);
+      }
+      return newSet;
+    });
+  };
+
+  const getFileIcon = (fileName: string) => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+
+    switch (extension) {
+      case 'blend':
+        return 'Blender';
+      case 'aep':
+        return 'After Effects';
+      case 'hip':
+        return 'Houdini';
+      case 'ma':
+      case 'mb':
+        return 'Maya';
+      case 'c4d':
+        return 'Cinema 4D';
+      case 'spp':
+        return 'Substance';
+      case 'uproject':
+        return 'Unreal';
+      case 'unity':
+        return 'Unity';
+      case 'zpr':
+        return 'ZBrush';
+      case 'tbscene':
+        return 'Marmoset';
+      default:
+        return null;
+    }
+  };
+
   const renderNode = (node: FileNode, depth: number = 0) => {
     const isExpanded = expandedDirs.has(node.path);
     const hasChildren = node.children && node.children.length > 0;
+    const fileIcon = !node.is_dir ? getFileIcon(node.name) : null;
+    const isHidden = hiddenPaths.has(node.path);
+
+    // Remove file extension from display name only for project files (with icons)
+    const displayName = !node.is_dir && fileIcon && node.name.includes('.')
+      ? node.name.substring(0, node.name.lastIndexOf('.'))
+      : node.name;
+
+    // Skip hidden items if showHidden is false
+    if (isHidden && !showHidden) {
+      return null;
+    }
 
     return (
       <div key={node.path}>
         <div
-          className={`flex items-center gap-1 px-2 py-1 hover:bg-zinc-800 rounded cursor-pointer text-sm`}
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
-          onClick={() => node.is_dir && toggleDir(node.path)}
-          onDoubleClick={() => handleDoubleClick(node)}
+          className={`flex items-center gap-1 px-2 py-1 hover:bg-zinc-800 rounded text-sm select-none group ${isHidden ? 'opacity-40' : ''}`}
+          style={{ paddingLeft: `${depth * 16 + 24}px` }}
         >
-          {node.is_dir ? (
-            <>
-              {hasChildren && (
-                isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />
-              )}
-              <Folder className="w-4 h-4 text-blue-400" />
-            </>
-          ) : (
-            <File className="w-4 h-4 text-zinc-400 ml-3" />
-          )}
-          <span className="truncate">{node.name}</span>
+          <div
+            className="flex items-center gap-1 flex-1 cursor-pointer"
+            onClick={() => handleClick(node)}
+            onDoubleClick={(e) => handleDoubleClick(e, node)}
+          >
+            {node.is_dir ? (
+              <>
+                {hasChildren ? (
+                  isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />
+                ) : (
+                  <div className="w-3 h-3" />
+                )}
+                <Folder className="w-4 h-4 text-blue-400" />
+              </>
+            ) : (
+              <>
+                <div className="w-3 h-3" />
+                {fileIcon ? (
+                  <SoftwareIcon name={fileIcon} className="w-4 h-4" />
+                ) : (
+                  <File className="w-4 h-4 text-zinc-400" />
+                )}
+              </>
+            )}
+            <span className="truncate">{displayName}</span>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleHidden(node.path);
+            }}
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded"
+            title={isHidden ? "Show" : "Hide"}
+          >
+            <EyeOff className="w-3 h-3 text-zinc-400" />
+          </button>
         </div>
         {node.is_dir && isExpanded && node.children && (
           <div>
@@ -3571,22 +4202,21 @@ function TreeView({ project }: any) {
   }
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-zinc-400">Project Structure</h3>
-        <div className="text-xs text-zinc-500">
-          {loadingSize ? (
-            <span>Calculating...</span>
-          ) : directorySize !== null ? (
-            <span>{formatSize(directorySize)}</span>
-          ) : null}
-        </div>
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-auto space-y-1">
+        {tree.length > 0 ? (
+          tree.map(node => renderNode(node))
+        ) : (
+          <p className="text-xs text-zinc-500">No files found</p>
+        )}
       </div>
-      {tree.length > 0 ? (
-        tree.map(node => renderNode(node))
-      ) : (
-        <p className="text-xs text-zinc-500">No files found</p>
-      )}
+      <div className="mt-4 pt-3 border-t border-zinc-800 text-xs text-zinc-500">
+        {loadingSize ? (
+          <span>Calculating size...</span>
+        ) : directorySize !== null ? (
+          <span>Project size: {formatSize(directorySize)}</span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -3639,9 +4269,13 @@ const generateBrightColor = () => {
 };
 
 function CreateProjectModal({ onClose, onCreate }: any) {
-  const { defaultProjectsPath, clients, addClient } = useProjectStore();
+  const { defaultProjectsPath, clients, addClient, selectedCategory } = useProjectStore();
   const [useDefaultPath, setUseDefaultPath] = useState(true);
   const [newClientName, setNewClientName] = useState('');
+
+  // Get base currency from settings
+  const baseCurrency = (localStorage.getItem('baseCurrency') || 'USD') as 'USD' | 'RUB' | 'EUR';
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -3650,11 +4284,13 @@ function CreateProjectModal({ onClose, onCreate }: any) {
     tags: [] as string[],
     deadline: '',
     cost: '',
-    currency: 'USD' as 'USD' | 'RUB' | 'EUR',
+    currency: baseCurrency,
     paymentStatus: 'unpaid' as 'paid' | 'prepaid' | 'unpaid',
     prepaymentAmount: '',
     clientId: '',
-    thumbnailPath: ''
+    thumbnailPath: '',
+    hasShots: false,
+    category: selectedCategory
   });
 
   useEffect(() => {
@@ -3737,7 +4373,8 @@ function CreateProjectModal({ onClose, onCreate }: any) {
       cost: formData.cost ? parseFloat(formData.cost) : undefined,
       prepaymentAmount: formData.prepaymentAmount ? parseFloat(formData.prepaymentAmount) : undefined,
       paymentStatus: formData.paymentStatus || undefined,
-      clientId: finalClientId || undefined
+      clientId: finalClientId || undefined,
+      hasShots: formData.hasShots
     };
     console.log('Project data being sent:', projectData);
     console.log('projectData.clientId:', projectData.clientId);
@@ -3957,6 +4594,19 @@ function CreateProjectModal({ onClose, onCreate }: any) {
                 )}
               </div>
             </div>
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 mb-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.hasShots}
+                onChange={(e) => setFormData(prev => ({ ...prev, hasShots: e.target.checked }))}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-medium">Has shots</span>
+            </label>
+            <p className="text-xs text-zinc-500 mb-4">Enable shot-based workflow for this project</p>
           </div>
 
           <div>

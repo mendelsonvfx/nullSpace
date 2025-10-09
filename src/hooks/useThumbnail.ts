@@ -1,12 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { readBinaryFile } from '@tauri-apps/api/fs';
+import { thumbnailCache } from '../utils/thumbnailCache';
 
 export function useThumbnail(projectPath: string, thumbnail: string | undefined) {
   const [imageSrc, setImageSrc] = useState<string>('');
 
+  // Memoize cache key to prevent unnecessary recalculations
+  const cacheKey = useMemo(() =>
+    thumbnail ? `${projectPath}::${thumbnail}` : null,
+    [projectPath, thumbnail]
+  );
+
   useEffect(() => {
-    if (!thumbnail) {
+    if (!thumbnail || !cacheKey) {
       setImageSrc('');
+      return;
+    }
+
+    // Check cache first
+    const cached = thumbnailCache.get(projectPath, thumbnail);
+    if (cached) {
+      setImageSrc(cached);
       return;
     }
 
@@ -14,6 +28,8 @@ export function useThumbnail(projectPath: string, thumbnail: string | undefined)
 
     async function loadImage() {
       try {
+        if (!thumbnail) return;
+
         // Clean paths and join correctly
         const cleanPath = projectPath.trim().replace(/[\/\\]+$/, '');
         const cleanFile = thumbnail.trim().replace(/^[\/\\]+/, '');
@@ -40,6 +56,9 @@ export function useThumbnail(projectPath: string, thumbnail: string | undefined)
         );
         const dataUrl = `data:${mimeType};base64,${base64}`;
 
+        // Store in cache
+        thumbnailCache.set(projectPath, thumbnail, dataUrl);
+
         if (isMounted) {
           setImageSrc(dataUrl);
         }
@@ -56,7 +75,10 @@ export function useThumbnail(projectPath: string, thumbnail: string | undefined)
     return () => {
       isMounted = false;
     };
-  }, [projectPath, thumbnail]);
+  }, [projectPath, thumbnail, cacheKey]);
 
   return imageSrc;
 }
+
+// Export cache for manual cache management if needed
+export { thumbnailCache };
