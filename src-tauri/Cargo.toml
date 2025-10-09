@@ -1,0 +1,21 @@
+[package]
+name = "rayhub"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tauri = { version = "1.5", features = [ "window-hide", "window-set-resizable", "window-unminimize", "window-set-title", "window-set-fullscreen", "window-show", "window-unmaximize", "window-close", "window-minimize", "window-maximize", "window-start-dragging", "dialog-all", "fs-all", "path-all", "shell-open"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
+reqwest = { version = "0.11", default-features = false, features = ["rustls-tls"] }
+scraper = "0.18"
+url = "2.5"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
