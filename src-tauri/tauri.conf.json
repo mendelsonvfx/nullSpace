@@ -6,8 +6,8 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "RayHub",
-    "version": "0.1.0"
+    "productName": "nullSpace",
+    "version": "0.5.0"
   },
   "tauri": {
     "allowlist": {
