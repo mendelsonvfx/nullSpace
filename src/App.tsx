@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
-import { Plus, Folder, Search, ExternalLink, FolderOpen, X, Settings, Check, Star, Archive, Grid3x3, CreditCard, FolderTree, ChevronRight, ChevronDown, File, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, Link as LinkIcon, Pencil, Eye, EyeOff, MessageSquare } from 'lucide-react';
+import { Plus, Folder, Search, ExternalLink, FolderOpen, X, Settings, Check, Star, Archive, Grid3x3, CreditCard, FolderTree, ChevronRight, ChevronDown, File, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, Link as LinkIcon, Pencil, Eye, EyeOff, MessageSquare, Image } from 'lucide-react';
 import { invoke, convertFileSrc } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { selectProjectDirectory } from './utils/tauri';
@@ -1987,6 +1987,7 @@ function App() {
   const [showClientSubmenu, setShowClientSubmenu] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const clientSubmenuTimeoutRef = useRef<number | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const [sortBy, setSortBy] = useState<'name' | 'createdAt' | 'deadline' | 'cost'>('createdAt');
   const [viewMode, setViewMode] = useState<'projects' | 'finance'>('projects');
   const [showTagIcons, setShowTagIcons] = useState(() => {
@@ -2941,8 +2942,22 @@ function App() {
       {/* Context Menu */}
       {contextMenu && (
         <div
+          ref={contextMenuRef}
           className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px]"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
+          style={{
+            top: (() => {
+              const menuHeight = contextMenuRef.current?.offsetHeight || 500;
+              const windowHeight = window.innerHeight;
+              const wouldOverflow = contextMenu.y + menuHeight > windowHeight;
+              return wouldOverflow ? windowHeight - menuHeight - 10 : contextMenu.y;
+            })(),
+            left: (() => {
+              const menuWidth = contextMenuRef.current?.offsetWidth || 180;
+              const windowWidth = window.innerWidth;
+              const wouldOverflow = contextMenu.x + menuWidth > windowWidth;
+              return wouldOverflow ? windowWidth - menuWidth - 10 : contextMenu.x;
+            })()
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -2964,6 +2979,44 @@ function App() {
           >
             <Star className="w-4 h-4" />
             {projects.find(p => p.id === contextMenu.projectId)?.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          </button>
+          <button
+            onClick={async () => {
+              const project = projects.find(p => p.id === contextMenu.projectId);
+              if (project) {
+                try {
+                  const clipboardItems = await navigator.clipboard.read();
+                  for (const item of clipboardItems) {
+                    const imageTypes = item.types.filter(type => type.startsWith('image/'));
+                    if (imageTypes.length > 0) {
+                      const blob = await item.getType(imageTypes[0]);
+                      await processImageBlobForProject(project, blob);
+                      break;
+                    }
+                  }
+                } catch (error) {
+                  console.error('Failed to paste thumbnail from clipboard:', error);
+                }
+              }
+              setContextMenu(null);
+            }}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+          >
+            <Image className="w-4 h-4" />
+            Paste Thumbnail
+          </button>
+          <button
+            onClick={() => {
+              const project = projects.find(p => p.id === contextMenu.projectId);
+              if (project) {
+                updateProject({ ...project, thumbnail: undefined });
+              }
+              setContextMenu(null);
+            }}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+          >
+            <X className="w-4 h-4" />
+            Remove Thumbnail
           </button>
           <div className="border-t border-zinc-700 my-1" />
 

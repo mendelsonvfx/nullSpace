@@ -15,7 +15,7 @@ export function ProjectCard({ projectPath, thumbnail, isSelected, onContextMenu,
 
   return (
     <div
-      className={`w-full text-left rounded-lg transition-all relative overflow-hidden border ${
+      className={`w-full text-left rounded-lg transition-all relative overflow-hidden border group ${
         isSelected
           ? 'border-accent'
           : 'hover:border-accent border-white/10'
@@ -39,6 +39,14 @@ export function ProjectCard({ projectPath, thumbnail, isSelected, onContextMenu,
 
       {/* Gray outline overlay on top of background */}
       <div className="absolute inset-0 border border-zinc-700/30 rounded-lg pointer-events-none z-10" />
+
+      {/* Bottom gradient overlay (accent color, appears on hover) */}
+      <div
+        className="absolute inset-x-0 bottom-0 h-24 rounded-lg pointer-events-none z-10 opacity-0 group-hover:opacity-20 transition-opacity duration-500"
+        style={{
+          backgroundImage: 'linear-gradient(to top, var(--accent-color), transparent)'
+        }}
+      />
 
       {/* Content */}
       <div className="relative z-20 p-3">
