@@ -462,7 +462,6 @@ function SoftwareSettings({
 }
 
 function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: boolean; setShowTagIcons: (value: boolean) => void }) {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [accentColor, setAccentColor] = useState(() => {
     const saved = localStorage.getItem('accentColor');
     return saved || '#9103c6';
