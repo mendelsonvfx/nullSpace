@@ -10,6 +10,7 @@ import { getVersion } from '@tauri-apps/api/app';
 interface SettingsPanelProps {
   onClose: () => void;
   onDeleteClient?: (clientId: string, clientName: string) => void;
+  onDeleteCategory?: (categoryName: string) => void;
 }
 
 interface SoftwarePathConfig {
@@ -32,7 +33,7 @@ const DEFAULT_SOFTWARE: Array<{ name: SoftwareName; displayName: string }> = [
   // { name: 'marmoset', displayName: 'Marmoset Toolbag' },
 ];
 
-export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
+export function SettingsPanel({ onClose, onDeleteClient, onDeleteCategory }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<'general' | 'software' | 'appearance' | 'clients' | 'finance' | 'categories'>('general');
   const [softwarePaths, setSoftwarePaths] = useState<SoftwarePathConfig[]>([]);
   const [appVersion, setAppVersion] = useState<string>('');
@@ -196,7 +197,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
             {activeTab === 'appearance' && <AppearanceSettings showTagIcons={showTagIcons} setShowTagIcons={setShowTagIcons} />}
             {activeTab === 'clients' && <ClientsSettings onDeleteClient={onDeleteClient} />}
             {activeTab === 'finance' && <FinanceSettings />}
-            {activeTab === 'categories' && <CategoriesSettings />}
+            {activeTab === 'categories' && <CategoriesSettings onDeleteCategory={onDeleteCategory} />}
           </div>
 
           {/* Footer */}
@@ -949,7 +950,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
   );
 }
 
-function CategoriesSettings() {
+function CategoriesSettings({ onDeleteCategory }: { onDeleteCategory?: (categoryName: string) => void }) {
   const { categories, removeCategory, addCategory } = useProjectStore();
   const defaultCategories = ['Commercial', 'Personal'];
   const [showAddCategory, setShowAddCategory] = useState(false);
@@ -960,8 +961,14 @@ function CategoriesSettings() {
       return; // Don't delete default categories
     }
 
-    if (window.confirm(`Are you sure you want to delete the "${categoryName}" category? Projects in this category will be moved to "Personal".`)) {
-      removeCategory(categoryName);
+    // Use custom confirm dialog if provided, otherwise use native confirm
+    if (onDeleteCategory) {
+      onDeleteCategory(categoryName);
+    } else {
+      const confirmed = confirm(`Are you sure you want to delete the "${categoryName}" category? Projects in this category will be moved to "Personal".`);
+      if (confirmed) {
+        removeCategory(categoryName);
+      }
     }
   };
 

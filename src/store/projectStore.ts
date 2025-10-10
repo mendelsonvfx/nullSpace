@@ -50,6 +50,7 @@ interface ProjectStore {
   // Category management
   addCategory: (name: string) => void;
   removeCategory: (name: string) => void;
+  renameCategory: (oldName: string, newName: string) => void;
   setSelectedCategory: (category: string) => void;
   // Shot management
   addShot: (projectId: string, name?: string) => void;
@@ -938,9 +939,51 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       if (typeof window !== 'undefined') {
         localStorage.setItem('categories', JSON.stringify(updatedCategories));
       }
+
+      // Move projects from deleted category to "Personal"
+      const updatedProjects = state.projects.map(p =>
+        p.category === name ? { ...p, category: 'Personal' } : p
+      );
+
+      // Save each updated project
+      updatedProjects.forEach(async (p) => {
+        if (p.category === 'Personal' && state.projects.find(orig => orig.id === p.id)?.category === name) {
+          await get().updateProject(p);
+        }
+      });
+
       return {
         categories: updatedCategories,
-        selectedCategory: state.selectedCategory === name ? updatedCategories[0] : state.selectedCategory
+        selectedCategory: state.selectedCategory === name ? updatedCategories[0] : state.selectedCategory,
+        projects: updatedProjects
+      };
+    });
+  },
+
+  renameCategory: (oldName: string, newName: string) => {
+    set(state => {
+      // Update category list
+      const updatedCategories = state.categories.map(c => c === oldName ? newName : c);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('categories', JSON.stringify(updatedCategories));
+      }
+
+      // Update all projects with this category
+      const updatedProjects = state.projects.map(p =>
+        p.category === oldName ? { ...p, category: newName } : p
+      );
+
+      // Save each updated project
+      updatedProjects.forEach(async (p) => {
+        if (p.category === newName && state.projects.find(orig => orig.id === p.id)?.category === oldName) {
+          await get().updateProject(p);
+        }
+      });
+
+      return {
+        categories: updatedCategories,
+        selectedCategory: state.selectedCategory === oldName ? newName : state.selectedCategory,
+        projects: updatedProjects
       };
     });
   },

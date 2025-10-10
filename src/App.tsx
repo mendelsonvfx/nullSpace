@@ -2044,7 +2044,7 @@ function App() {
     const saved = localStorage.getItem('showTagIcons');
     return saved !== null ? JSON.parse(saved) : true;
   });
-  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'project' | 'client'; name: string; id: string; path?: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'project' | 'client' | 'category'; name: string; id: string; path?: string } | null>(null);
   const [previousProjectId, setPreviousProjectId] = useState<string | null>(null);
   const [deadlineNotifications, setDeadlineNotifications] = useState<Array<{ id: string; projectName: string; daysRemaining: number }>>([]);
   const [notificationsShown, setNotificationsShown] = useState(false); // Track if notifications were shown this session
@@ -2120,6 +2120,26 @@ function App() {
         if (selectedProjectId) {
           e.preventDefault();
           setSelectedProjectId(null);
+          return;
+        }
+      }
+
+      // Enter - Confirm delete
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+        if (deleteConfirm) {
+          e.preventDefault();
+          // Execute delete action
+          (async () => {
+            if (deleteConfirm.type === 'project' && deleteConfirm.path) {
+              await deleteProject(deleteConfirm.path);
+            } else if (deleteConfirm.type === 'client') {
+              deleteClient(deleteConfirm.id);
+            } else if (deleteConfirm.type === 'category') {
+              const { removeCategory } = useProjectStore.getState();
+              removeCategory(deleteConfirm.id);
+            }
+            setDeleteConfirm(null);
+          })();
           return;
         }
       }
@@ -2222,61 +2242,6 @@ function App() {
     return () => window.removeEventListener('paste', handleGlobalPaste);
   }, [hoveredProjectId, projects]);
 
-  // Universal function to handle image paste for any project (for ProjectDetails)
-  const handleProjectImagePaste = async (projectId: string, e: React.ClipboardEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-      return;
-    }
-
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return;
-
-    const items = e.clipboardData?.items;
-    const files = e.clipboardData?.files;
-
-    // Check for image in clipboard items
-    if (items) {
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.type.indexOf('image') !== -1) {
-          e.preventDefault();
-          const blob = item.getAsFile();
-          if (blob) {
-            await processImageBlobForProject(project, blob);
-            return;
-          }
-        }
-      }
-    }
-
-    // Check for image files
-    if (files && files.length > 0) {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file.type.indexOf('image') !== -1) {
-          e.preventDefault();
-          await processImageBlobForProject(project, file);
-          return;
-        }
-      }
-    }
-
-    // Try to get text (might be a file path)
-    const text = e.clipboardData?.getData('text');
-    if (text && text.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
-      e.preventDefault();
-      try {
-        const thumbnailName = await invoke<string>('set_project_thumbnail', {
-          projectPath: project.path,
-          imagePath: text
-        });
-        updateProject({ ...project, thumbnail: thumbnailName });
-      } catch (error) {
-        console.error('Failed to set thumbnail from path:', error);
-      }
-    }
-  };
 
   const processImageBlobForProject = async (project: any, blob: Blob) => {
     try {
@@ -2628,6 +2593,17 @@ function App() {
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
           onAddCategory={addCategory}
+          onDeleteCategory={(categoryName) => {
+            setDeleteConfirm({
+              type: 'category',
+              name: categoryName,
+              id: categoryName
+            });
+          }}
+          onRenameCategory={(oldName, newName) => {
+            const { renameCategory } = useProjectStore.getState();
+            renameCategory(oldName, newName);
+          }}
           accentColor="#a855f7"
         />
       )}
@@ -2882,7 +2858,6 @@ function App() {
                       e.preventDefault();
                       setContextMenu({ x: e.clientX, y: e.clientY, projectId: project.id });
                     }}
-                    onPaste={(e) => handleProjectImagePaste(project.id, e)}
                   >
                     <div
                       onClick={() => handleOpenProject(project)}
@@ -3063,6 +3038,13 @@ function App() {
               id: clientId
             });
           }}
+          onDeleteCategory={(categoryName) => {
+            setDeleteConfirm({
+              type: 'category',
+              name: categoryName,
+              id: categoryName
+            });
+          }}
         />
       )}
 
@@ -3095,12 +3077,15 @@ function App() {
           >
             <h3 className="text-lg font-semibold mb-2">Confirm Delete</h3>
             <p className="text-zinc-400 mb-6">
-              Are you sure you want to delete "{deleteConfirm.name}"? This action cannot be undone.
+              {deleteConfirm.type === 'category'
+                ? `Are you sure you want to delete the "${deleteConfirm.name}" category? Projects in this category will be moved to "Personal".`
+                : `Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone.`
+              }
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors animate-button"
               >
                 Cancel
               </button>
@@ -3110,10 +3095,13 @@ function App() {
                     await deleteProject(deleteConfirm.path);
                   } else if (deleteConfirm.type === 'client') {
                     deleteClient(deleteConfirm.id);
+                  } else if (deleteConfirm.type === 'category') {
+                    const { removeCategory } = useProjectStore.getState();
+                    removeCategory(deleteConfirm.id);
                   }
                   setDeleteConfirm(null);
                 }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium"
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium animate-button"
               >
                 Delete
               </button>
