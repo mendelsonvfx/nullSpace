@@ -15,6 +15,7 @@ interface ProjectStore {
   clients: Client[];
   categories: string[];
   selectedCategory: string;
+  launchingStatus: Record<string, 'idle' | 'launching' | 'success'>; // track launch status per software
 
   // Actions
   loadProjects: () => Promise<void>;
@@ -80,6 +81,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   clients: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('clients') || '[]') : [],
   categories: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('categories') || '["Commercial", "Personal"]') : ['Commercial', 'Personal'],
   selectedCategory: typeof window !== 'undefined' ? (localStorage.getItem('selectedCategory') || 'Personal') : 'Personal',
+  launchingStatus: {},
 
   // Load all projects
   loadProjects: async () => {
@@ -167,16 +169,43 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   // Launch software
   launchSoftware: async (input: LaunchSoftwareCommand) => {
+    const statusKey = `${input.projectPath}-${input.software}`;
+
     try {
+      // Set launching status
+      set((state) => ({
+        launchingStatus: { ...state.launchingStatus, [statusKey]: 'launching' }
+      }));
+
       console.log('Launching software with input:', input);
       const result = await invoke<string>('launch_software', { input });
       console.log('Software launched successfully, created file:', result);
 
-      // Dispatch event to update versions list
-      window.dispatchEvent(new CustomEvent('version-created'));
+      // Set success status
+      set((state) => ({
+        launchingStatus: { ...state.launchingStatus, [statusKey]: 'success' }
+      }));
+
+      // Reset status after 2 seconds
+      setTimeout(() => {
+        set((state) => ({
+          launchingStatus: { ...state.launchingStatus, [statusKey]: 'idle' }
+        }));
+      }, 2000);
+
+      // Dispatch event to update versions list for this specific project
+      window.dispatchEvent(new CustomEvent('version-created', {
+        detail: { projectPath: input.projectPath }
+      }));
     } catch (error) {
       console.error('Failed to launch software:', error);
-      set({ error: String(error) });
+
+      // Reset status on error
+      set((state) => ({
+        error: String(error),
+        launchingStatus: { ...state.launchingStatus, [statusKey]: 'idle' }
+      }));
+
       alert(`Failed to launch software: ${error}`);
       throw error;
     }
