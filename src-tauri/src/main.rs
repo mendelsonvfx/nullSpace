@@ -551,6 +551,85 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
                 .map_err(|e| format!("Failed to create After Effects project from template: {}", e))?;
         }
 
+        // For Blender, create project with path configuration if it doesn't exist
+        if software_lower == "blender" && !file_path.exists() {
+            println!("Creating new Blender file with path config: {:?}", file_path);
+
+            let exe_dir = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                .unwrap_or_else(|| PathBuf::from("."));
+
+            let script_path = exe_dir.join("templates").join("blender_setup.py");
+            let script_path = if !script_path.exists() {
+                PathBuf::from("src-tauri/templates/blender_setup.py")
+            } else {
+                script_path
+            };
+
+            if script_path.exists() {
+                // Spawn Blender process
+                let child = Command::new(&input.executable_path)
+                    .arg("--background")
+                    .arg("--python")
+                    .arg(&script_path)
+                    .arg("--")
+                    .arg(file_path.to_str().unwrap())
+                    .arg(&project_path)
+                    .spawn()
+                    .map_err(|e| format!("Failed to run Blender setup: {}", e))?;
+
+                let child_id = child.id();
+                println!("Blender setup process started (PID: {})", child_id);
+
+                // Wait for file to be created (max 10 seconds)
+                let timeout = Duration::from_secs(10);
+                let start = std::time::Instant::now();
+
+                loop {
+                    if file_path.exists() {
+                        println!("✓ Blender file created successfully");
+                        break;
+                    }
+
+                    if start.elapsed() > timeout {
+                        println!("⚠ Timeout waiting for file creation");
+                        break;
+                    }
+
+                    std::thread::sleep(Duration::from_millis(500));
+                }
+
+                // Force kill the background process using taskkill
+                println!("Killing Blender background process {}", child_id);
+                let kill_result = Command::new("taskkill")
+                    .args(&["/F", "/PID", &child_id.to_string()])
+                    .output();
+
+                match kill_result {
+                    Ok(output) => {
+                        if output.status.success() {
+                            println!("✓ Background process killed successfully");
+                        } else {
+                            println!("⚠ Failed to kill process: {:?}", String::from_utf8_lossy(&output.stderr));
+                        }
+                    }
+                    Err(e) => {
+                        println!("⚠ Error killing process: {}", e);
+                    }
+                }
+
+                // Give it a moment to actually die
+                std::thread::sleep(Duration::from_millis(500));
+            } else {
+                println!("Warning: Blender setup script not found");
+            }
+        }
+
+        // Log before launching
+        println!("About to launch {} with file: {:?}", software_lower, file_path);
+        println!("File exists before launch: {}", file_path.exists());
+
         // For Houdini, create project using hython if it doesn't exist
         if software_lower == "houdini" && !file_path.exists() {
             let hython_path = find_hython_path(&input.executable_path)?;
@@ -577,24 +656,16 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
 
         // For Houdini on Windows, open the file through Windows Explorer
         // This mimics double-clicking the file in Explorer and preserves all environment variables
-        #[cfg(target_os = "windows")]
         if software_lower == "houdini" {
             Command::new("explorer")
                 .arg(file_path.to_str().unwrap())
                 .spawn()
                 .map_err(|e| format!("Failed to open Houdini file: {}", e))?;
         } else {
-            let mut cmd = Command::new(&input.executable_path);
-            cmd.arg(&file_path);
-            cmd.spawn()
-                .map_err(|e| format!("Failed to launch software: {}", e))?;
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            let mut cmd = Command::new(&input.executable_path);
-            cmd.arg(&file_path);
-            cmd.spawn()
+            // For all other software (including Blender), launch normally
+            Command::new(&input.executable_path)
+                .arg(&file_path)
+                .spawn()
                 .map_err(|e| format!("Failed to launch software: {}", e))?;
         }
     }

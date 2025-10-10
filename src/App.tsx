@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
-import { Plus, Folder, Search, ExternalLink, FolderOpen, X, Settings, Check, Star, Archive, Grid3x3, CreditCard, FolderTree, ChevronRight, ChevronDown, File, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, Link as LinkIcon, Pencil, Eye, EyeOff, MessageSquare, Image } from 'lucide-react';
+import { Plus, Folder, Search, ExternalLink, FolderOpen, X, Settings, Check, Star, Archive, Grid3x3, CreditCard, FolderTree, ChevronRight, ChevronDown, File, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, Link as LinkIcon, Pencil, Eye, EyeOff, MessageSquare, Image, Loader2 } from 'lucide-react';
 import { invoke, convertFileSrc } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { selectProjectDirectory } from './utils/tauri';
@@ -623,11 +623,17 @@ function VersionsOverview({ project, currentShot }: any) {
 
   // Listen for version updates from launch_software
   useEffect(() => {
-    const handleVersionUpdate = () => {
-      console.log('Version update event received from launch');
-      // Invalidate cache and reload
-      versionsCache.invalidate(project.path);
-      loadVersions(false, true);
+    const handleVersionUpdate = (event: any) => {
+      // Check if this event is for the current project
+      const eventProjectPath = event.detail?.projectPath;
+
+      // If no projectPath in event (backward compatibility) or matches current project
+      if (!eventProjectPath || eventProjectPath === project.path) {
+        console.log('Version update event received from launch for project:', project.path);
+        // Invalidate cache and reload
+        versionsCache.invalidate(project.path);
+        loadVersions(false, true);
+      }
     };
 
     window.addEventListener('version-created', handleVersionUpdate);
@@ -2021,7 +2027,8 @@ function App() {
     categories,
     selectedCategory,
     setSelectedCategory,
-    addCategory
+    addCategory,
+    launchingStatus
   } = useProjectStore();
 
   //const [view, setView] = useState<'grid' | 'list'>('grid');
@@ -2465,6 +2472,14 @@ function App() {
   const handleOpenProject = (project: any) => {
     setSelectedProjectId(project.id);
     selectProject(project);
+
+    // Trigger version list update when project is opened
+    // This ensures versions are refreshed even if files were deleted outside the app
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('version-created', {
+        detail: { projectPath: project.path }
+      }));
+    }, 100);
   };
 
   const selectedProject = useMemo(() =>
@@ -2984,6 +2999,7 @@ function App() {
         ) : selectedProject ? (
           <ProjectDetails
             project={selectedProject}
+            launchingStatus={launchingStatus}
             onClose={() => setSelectedProjectId(null)}
             onOpenFolder={() => {
              console.log('Opening folder:', selectedProject.path);
@@ -3314,7 +3330,7 @@ function App() {
   );
 }
 
-function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware, onDeleteProject }: any) {
+function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder, onLaunchSoftware, onDeleteProject }: any) {
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isShotEditMode, setIsShotEditMode] = useState(false);
@@ -3657,10 +3673,16 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware, onDe
               const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
               const executablePath = pathsMap[softwareKey] || sw.executablePath;
 
+              // Get launch status for this software
+              const statusKey = `${project.path}-${sw.name}`;
+              const status = launchingStatus?.[statusKey] || 'idle';
+
               return (
                 <button
                   key={sw.name}
                   onClick={() => {
+                    if (status === 'launching') return; // Prevent multiple clicks while launching
+
                     const currentShot = project.hasShots && project.currentShotId
                       ? project.shots?.find((s: any) => s.id === project.currentShotId)
                       : null;
@@ -3671,17 +3693,25 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware, onDe
                       shotNumber: currentShot?.number
                     });
                   }}
-                  className="p-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg flex items-center gap-3 transition-all duration-200 group active:scale-[0.98] active:brightness-95 select-none"
+                  disabled={status === 'launching'}
+                  className="p-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg flex items-center gap-3 transition-all duration-200 group active:scale-[0.98] active:brightness-95 select-none disabled:opacity-60 disabled:cursor-not-allowed relative"
                 >
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center">
                     <SoftwareIcon name={sw.name} />
                   </div>
-                  <div className="text-left">
+                  <div className="text-left flex-1">
                     <div className="font-medium">{sw.name}</div>
                     <div className="text-xs text-zinc-500">
-                      {executablePath ? 'Click to launch' : 'Path not configured'}
+                      {status === 'launching' ? 'Launching...' : status === 'success' ? 'Launched!' : executablePath ? 'Click to launch' : 'Path not configured'}
                     </div>
                   </div>
+                  {/* Status indicator */}
+                  {status === 'launching' && (
+                    <Loader2 className="w-5 h-5 text-accent animate-spin" />
+                  )}
+                  {status === 'success' && (
+                    <Check className="w-5 h-5 text-green-500 animate-in fade-in zoom-in duration-300" />
+                  )}
                 </button>
               );
             })}
