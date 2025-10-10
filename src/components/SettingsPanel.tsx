@@ -218,7 +218,6 @@ function GeneralSettings() {
   const { defaultProjectsPath, setDefaultProjectsPath, loadProjects } = useProjectStore();
   const { clearAllThumbnails, getCacheSize } = useThumbnailCache();
   const [projectsDir, setProjectsDir] = useState(defaultProjectsPath);
-  const [autoSave, setAutoSave] = useState(true);
   const [cacheCleared, setCacheCleared] = useState(false);
   const [notifications, setNotifications] = useState(() => {
     const saved = localStorage.getItem('deadlineNotifications');
@@ -287,28 +286,6 @@ function GeneralSettings() {
         </button>
       </div>
 
-      {/* Auto Save */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-medium mb-1">Auto Save</div>
-          <p className="text-sm text-zinc-400">
-            Automatically save project metadata on changes
-          </p>
-        </div>
-        <button
-          onClick={() => setAutoSave(!autoSave)}
-          className={`w-12 h-6 rounded-full transition-colors relative ${
-            autoSave ? 'bg-accent' : 'bg-zinc-700'
-          }`}
-        >
-          <div
-            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-              autoSave ? 'translate-x-6' : 'translate-x-0.5'
-            }`}
-          />
-        </button>
-      </div>
-
       {/* Notifications */}
       <div className="flex items-center justify-between">
         <div>
@@ -359,19 +336,6 @@ function GeneralSettings() {
               Cache cleared
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Clear Cache */}
-      <div>
-        <label className="block text-sm font-medium mb-2">Cache & Data</label>
-        <div className="flex gap-2">
-          <button className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors">
-            Clear Cache
-          </button>
-          <button className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
-            Reset All Settings
-          </button>
         </div>
       </div>
     </div>
@@ -589,29 +553,21 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     <div className="space-y-6">
       {/* Theme */}
       <div>
-        <label className="block text-sm font-medium mb-3">Theme</label>
+        <label className="block text-sm font-medium mb-3 text-zinc-500">Theme</label>
         <div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => setTheme('light')}
-            className={`p-4 rounded-lg border-2 transition-colors ${
-              theme === 'light'
-                ? 'border-accent bg-zinc-800'
-                : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
-            }`}
+            disabled
+            className="p-4 rounded-lg border-2 border-zinc-700/50 bg-zinc-800/30 cursor-not-allowed opacity-50"
           >
-            <div className="w-full h-20 bg-white rounded mb-2" />
-            <div className="text-sm font-medium">Light</div>
+            <div className="w-full h-20 bg-white/20 rounded mb-2" />
+            <div className="text-sm font-medium text-zinc-500">Light</div>
           </button>
           <button
-            onClick={() => setTheme('dark')}
-            className={`p-4 rounded-lg border-2 transition-colors ${
-              theme === 'dark'
-                ? 'border-accent bg-zinc-800'
-                : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
-            }`}
+            disabled
+            className="p-4 rounded-lg border-2 border-accent/50 bg-zinc-800/30 cursor-not-allowed opacity-50"
           >
-            <div className="w-full h-20 bg-zinc-950 rounded mb-2" />
-            <div className="text-sm font-medium">Dark</div>
+            <div className="w-full h-20 bg-zinc-950/50 rounded mb-2" />
+            <div className="text-sm font-medium text-zinc-500">Dark</div>
           </button>
         </div>
       </div>
@@ -742,17 +698,18 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       </div>
 
       {/* Compact Mode */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between opacity-50">
         <div>
-          <div className="font-medium mb-1">Compact Mode</div>
-          <p className="text-sm text-zinc-400">
+          <div className="font-medium mb-1 text-zinc-500">Compact Mode</div>
+          <p className="text-sm text-zinc-500">
             Use smaller spacing and UI elements
           </p>
         </div>
         <button
-          className="w-12 h-6 rounded-full bg-zinc-700 relative"
+          disabled
+          className="w-12 h-6 rounded-full bg-zinc-700/50 relative cursor-not-allowed"
         >
-          <div className="w-5 h-5 bg-white rounded-full absolute top-0.5 left-0.5" />
+          <div className="w-5 h-5 bg-white/50 rounded-full absolute top-0.5 left-0.5" />
         </button>
       </div>
 
@@ -829,23 +786,23 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-zinc-400">
+        <p className="text-xs text-zinc-400">
           Manage your clients and their contact information
         </p>
         <button
           onClick={() => setShowAddClient(!showAddClient)}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium flex items-center gap-2 animate-button"
+          className="px-3 py-1.5 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium flex items-center gap-2 animate-button"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
           Add Client
         </button>
       </div>
 
       {showAddClient && (
-        <div className="bg-zinc-800 rounded-lg p-4">
-          <label className="block text-sm font-medium mb-2">Client Name</label>
+        <div className="bg-zinc-800 rounded-lg p-3">
+          <label className="block text-xs font-medium mb-2">Client Name</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -853,12 +810,12 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
               onChange={(e) => setNewClientName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddClient()}
               placeholder="Enter client name..."
-              className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+              className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
               autoFocus
             />
             <button
               onClick={handleAddClient}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
+              className="px-3 py-1.5 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium animate-button"
             >
               Add
             </button>
@@ -867,7 +824,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
                 setShowAddClient(false);
                 setNewClientName('');
               }}
-              className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors"
+              className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors text-sm"
             >
               Cancel
             </button>
@@ -875,75 +832,75 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {clients.map(client => (
           <div
             key={client.id}
-            className="bg-zinc-800 rounded-lg p-4"
+            className="bg-zinc-800 rounded-lg p-3"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <div
-                className="w-4 h-4 rounded-full flex-shrink-0"
+                className="w-3 h-3 rounded-full flex-shrink-0"
                 style={{ backgroundColor: client.color || '#ffffff' }}
               />
-              <span className="text-base font-medium flex-1">{client.name}</span>
+              <span className="text-sm font-medium flex-1">{client.name}</span>
               <button
                 onClick={() => setEditingClient(editingClient === client.id ? null : client.id)}
-                className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-zinc-700 rounded-lg transition-colors"
               >
-                <Settings className="w-4 h-4 animate-settings-icon" />
+                <Settings className="w-3.5 h-3.5 animate-settings-icon" />
               </button>
             </div>
 
             {editingClient === client.id && (
-              <div className="mt-4 pt-4 border-t border-zinc-700 space-y-4">
+              <div className="mt-3 pt-3 border-t border-zinc-700 space-y-3">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Color</label>
+                  <label className="block text-xs font-medium mb-1.5">Color</label>
                   <input
                     type="color"
                     value={client.color || '#ffffff'}
                     onChange={(e) => updateClient(client.id, { color: e.target.value })}
-                    className="w-full h-10 bg-zinc-900 border border-zinc-700 rounded-lg cursor-pointer"
+                    className="w-full h-8 bg-zinc-900 border border-zinc-700 rounded-lg cursor-pointer"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Description</label>
+                  <label className="block text-xs font-medium mb-1.5">Description</label>
                   <textarea
                     value={client.description || ''}
                     onChange={(e) => updateClient(client.id, { description: e.target.value })}
                     placeholder="Brief description..."
-                    rows={3}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent resize-none"
+                    rows={2}
+                    className="w-full text-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:border-accent resize-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Website</label>
+                  <label className="block text-xs font-medium mb-1.5">Website</label>
                   <input
                     type="url"
                     value={client.website || ''}
                     onChange={(e) => updateClient(client.id, { website: e.target.value })}
                     placeholder="https://..."
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                    className="w-full text-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:border-accent"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Telegram</label>
+                  <label className="block text-xs font-medium mb-1.5">Telegram</label>
                   <input
                     type="text"
                     value={client.telegram || ''}
                     onChange={(e) => updateClient(client.id, { telegram: e.target.value })}
                     placeholder="@username"
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                    className="w-full text-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:border-accent"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Instagram</label>
+                  <label className="block text-xs font-medium mb-1.5">Instagram</label>
                   <input
                     type="text"
                     value={client.instagram || ''}
                     onChange={(e) => updateClient(client.id, { instagram: e.target.value })}
                     placeholder="@username"
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                    className="w-full text-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:border-accent"
                   />
                 </div>
                 <button
@@ -967,7 +924,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
                       }
                     }
                   }}
-                  className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium"
+                  className="w-full px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium"
                 >
                   Delete Client
                 </button>
@@ -1155,6 +1112,9 @@ function FinanceSettings() {
     if (mode === 'auto') {
       fetchAutoRates(baseCurrency);
     }
+
+    // Уведомить другие компоненты об изменении режима
+    window.dispatchEvent(new Event('storage'));
   };
 
   const fetchAutoRates = async (currency: string) => {
@@ -1308,39 +1268,55 @@ function FinanceSettings() {
           </div>
 
           <div className="space-y-2">
-            {Object.keys(currencySymbols).map(from => {
-              if (from === baseCurrency) return null;
-              const rate = currentRates[from] || 0;
-              const isEditing = editingRate?.from === baseCurrency && editingRate?.to === from;
+            {Object.keys(currencySymbols).map(currency => {
+              if (currency === baseCurrency) return null;
+
+              // В авто режиме берем курсы из autoRates, в ручном из exchangeRates
+              let rate = 0;
+              if (rateMode === 'auto' && autoRates) {
+                // autoRates содержит прямые курсы от базовой валюты
+                // Нужно инвертировать для отображения "сколько базовой за 1 другую"
+                rate = autoRates[currency] ? 1 / autoRates[currency] : 0;
+              } else {
+                rate = currentRates[currency] || 0;
+              }
+
+              const isEditing = editingRate?.from === baseCurrency && editingRate?.to === currency;
+              const isDisabled = rateMode === 'auto';
 
               return (
-                <div key={from} className="flex items-center justify-between bg-zinc-800 rounded-lg px-4 py-3">
-                  <span className="text-sm">
-                    1 {currencySymbols[from]} ({from})
+                <div
+                  key={currency}
+                  className={`flex items-center justify-between rounded-lg px-4 py-3 transition-colors ${
+                    isDisabled ? 'bg-zinc-800/50' : 'bg-zinc-800'
+                  }`}
+                >
+                  <span className={`text-sm ${isDisabled ? 'text-zinc-500' : ''}`}>
+                    1 {currencySymbols[currency]} ({currency})
                   </span>
                   <div className="flex items-center gap-2">
                     {rateMode === 'manual' && isEditing ? (
                       <input
                         type="number"
                         step="0.01"
-                        defaultValue={rate.toFixed(4)}
-                        onBlur={(e) => handleManualRateChange(baseCurrency, from, parseFloat(e.target.value) || rate)}
+                        defaultValue={rate.toFixed(2)}
+                        onBlur={(e) => handleManualRateChange(baseCurrency, currency, parseFloat(e.target.value) || rate)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
-                            handleManualRateChange(baseCurrency, from, parseFloat(e.currentTarget.value) || rate);
+                            handleManualRateChange(baseCurrency, currency, parseFloat(e.currentTarget.value) || rate);
                           }
                         }}
                         className="w-24 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-accent text-right"
                         autoFocus
                       />
                     ) : (
-                      <span className="text-sm font-medium">
-                        {rate.toFixed(4)} {currencySymbols[baseCurrency]}
+                      <span className={`text-sm font-medium ${isDisabled ? 'text-zinc-500' : ''}`}>
+                        {rate.toFixed(2)} {currencySymbols[baseCurrency]}
                       </span>
                     )}
                     {rateMode === 'manual' && (
                       <button
-                        onClick={() => setEditingRate(isEditing ? null : { from: baseCurrency, to: from })}
+                        onClick={() => setEditingRate(isEditing ? null : { from: baseCurrency, to: currency })}
                         className="p-1.5 hover:bg-zinc-700 rounded transition-colors"
                       >
                         <Settings className="w-3.5 h-3.5 animate-settings-icon" />

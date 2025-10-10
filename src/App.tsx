@@ -17,6 +17,7 @@ import { useThumbnail } from './hooks/useThumbnail';
 import { CategoryTabs } from './components/CategoryTabs';
 import { WelcomeSetup } from './components/WelcomeSetup';
 import { getCurrentRates, getManualRates, getRateMode, getCachedRatesSync } from './utils/exchangeRates';
+import { versionsCache } from './utils/versionsCache';
 
 
 // Helper function to darken color by percentage
@@ -264,7 +265,7 @@ function LinkItem({ link, projectId, shotId }: { link: any; projectId: string; s
         className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
         title="Remove link"
       >
-        <X className="w-3 h-3" />
+        <X className="w-3 h-3 close-button-red" />
       </button>
     </div>
   );
@@ -516,11 +517,23 @@ function VersionsOverview({ project, currentShot }: any) {
   const loadingTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
 
-  const loadVersions = async (skipCleanup = false) => {
+  const loadVersions = async (skipCleanup = false, forceReload = false) => {
     // Clear any existing timer first
     if (loadingTimerRef.current !== null) {
       clearTimeout(loadingTimerRef.current);
       loadingTimerRef.current = null;
+    }
+
+    // Check cache first if not forcing reload
+    if (!forceReload) {
+      const cachedVersions = versionsCache.get(project.path);
+      if (cachedVersions) {
+        console.log('Using cached versions:', cachedVersions.length);
+        setAllVersions(cachedVersions);
+        setLoading(false);
+        isFirstLoadRef.current = false;
+        return;
+      }
     }
 
     // Only show loading state for first load or after 200ms delay
@@ -555,8 +568,9 @@ function VersionsOverview({ project, currentShot }: any) {
         loadingTimerRef.current = null;
       }
 
-      // Update data and stop loading
+      // Update data and cache it
       setAllVersions(result);
+      versionsCache.set(project.path, result);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load versions:', error);
@@ -594,8 +608,10 @@ function VersionsOverview({ project, currentShot }: any) {
 
     listen('version-changed', () => {
       console.log('Version changed detected by file watcher');
-      // Skip cleanup since watcher already did it
-      loadVersions(true);
+      // Invalidate cache and reload
+      versionsCache.invalidate(project.path);
+      // Skip cleanup since watcher already did it, force reload
+      loadVersions(true, true);
     }).then((fn) => {
       unlisten = fn;
     });
@@ -609,7 +625,9 @@ function VersionsOverview({ project, currentShot }: any) {
   useEffect(() => {
     const handleVersionUpdate = () => {
       console.log('Version update event received from launch');
-      loadVersions();
+      // Invalidate cache and reload
+      versionsCache.invalidate(project.path);
+      loadVersions(false, true);
     };
 
     window.addEventListener('version-created', handleVersionUpdate);
@@ -785,7 +803,8 @@ function FinanceProjectDetails({
   baseCurrency,
   convertToBaseCurrency,
   currencySymbols,
-  exchangeRates,
+  totalRevenue,
+  convertCurrency,
   onClose
 }: {
   project: any;
@@ -793,7 +812,8 @@ function FinanceProjectDetails({
   baseCurrency: string;
   convertToBaseCurrency: boolean;
   currencySymbols: Record<string, string>;
-  exchangeRates: Record<string, Record<string, number>>;
+  totalRevenue: Record<string, number>;
+  convertCurrency: (amount: number, from: string, to: string) => number;
   onClose: () => void;
 }) {
   const { clients } = useProjectStore();
@@ -803,24 +823,13 @@ function FinanceProjectDetails({
 
   // Конвертация если нужно
   const displayRevenue = convertToBaseCurrency && projectCurrency !== baseCurrency
-    ? projectRevenue * exchangeRates[projectCurrency][baseCurrency]
+    ? convertCurrency(projectRevenue, projectCurrency, baseCurrency)
     : projectRevenue;
 
   const displayCurrency = convertToBaseCurrency ? baseCurrency : projectCurrency;
 
-  // Подсчет общего дохода (только оплаченные проекты)
-  const totalRevenueByCurrency: Record<string, number> = {};
-  projects.forEach(p => {
-    if (p.paymentStatus === 'paid' && p.cost) {
-      const currency = convertToBaseCurrency ? baseCurrency : (p.currency || 'USD');
-      const amount = convertToBaseCurrency && p.currency !== baseCurrency
-        ? p.cost * exchangeRates[p.currency || 'USD'][baseCurrency]
-        : p.cost;
-      totalRevenueByCurrency[currency] = (totalRevenueByCurrency[currency] || 0) + amount;
-    }
-  });
-
-  const totalRevenueInDisplayCurrency = totalRevenueByCurrency[displayCurrency] || 0;
+  // Используем переданный totalRevenue вместо пересчета
+  const totalRevenueInDisplayCurrency = totalRevenue[displayCurrency] || 0;
 
   // Процент от общего дохода (только если проект оплачен)
   const percentageOfTotal = project.paymentStatus === 'paid' && totalRevenueInDisplayCurrency > 0
@@ -834,7 +843,7 @@ function FinanceProjectDetails({
     projects.forEach(p => {
       if (p.clientId === project.clientId && p.paymentStatus === 'paid' && p.cost) {
         const amount = convertToBaseCurrency && p.currency !== baseCurrency
-          ? p.cost * exchangeRates[p.currency || 'USD'][baseCurrency]
+          ? convertCurrency(p.cost, p.currency || 'USD', baseCurrency)
           : p.cost;
         if (!convertToBaseCurrency && p.currency !== projectCurrency) return;
         clientRevenue += amount;
@@ -866,7 +875,7 @@ function FinanceProjectDetails({
           className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
           title="Вернуться к обзору"
         >
-          <X className="w-6 h-6" />
+          <X className="w-6 h-6 close-button-red" />
         </button>
       </div>
 
@@ -904,8 +913,8 @@ function FinanceProjectDetails({
           <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
             <p className="text-sm text-zinc-500 mb-3">Percentage of Total Revenue</p>
             <div className="flex items-end gap-3 mb-4">
-              <p className="text-5xl font-bold text-accent">{percentageOfTotal.toFixed(1)}%</p>
-              <p className="text-zinc-500 mb-2">of {totalRevenueInDisplayCurrency.toLocaleString()} {currencySymbols[displayCurrency]}</p>
+              <p className="text-5xl font-bold text-accent">{Math.round(percentageOfTotal)}%</p>
+              <p className="text-zinc-500 mb-2">of {totalRevenueInDisplayCurrency.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[displayCurrency]}</p>
             </div>
             <div className="bg-zinc-800 rounded-full h-3 overflow-hidden">
               <div
@@ -1118,29 +1127,37 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
   useEffect(() => {
     const loadRates = async () => {
       const rateMode = getRateMode();
+
       if (rateMode === 'auto') {
         const rates = await getCurrentRates(baseCurrency);
-        // rates содержит курсы от baseCurrency ко всем валютам
-        // Например, если baseCurrency=USD, то rates.RUB = 90 означает 1 USD = 90 RUB
-        // Нужно создать nested структуру для всех направлений конвертации
+
+        // API возвращает: rates[currency] = сколько валюты за 1 базовую
+        // Например, если база RUB: rates.USD = 0.0123 означает 1 RUB = 0.0123 USD
+        // Для нашей nested структуры нужно: nestedRates[to][from] = сколько TO за 1 FROM
+        // То есть nestedRates.RUB.USD = 1/0.0123 = 81.3 (сколько RUB за 1 USD)
+
         const nestedRates: Record<string, Record<string, number>> = {};
 
-        // Для каждой валюты создаем курсы конвертации
         const currencies = ['USD', 'RUB', 'EUR'];
-        currencies.forEach(from => {
-          nestedRates[from] = {};
-          currencies.forEach(to => {
+        currencies.forEach(to => {
+          nestedRates[to] = {};
+          currencies.forEach(from => {
             if (from === to) {
-              nestedRates[from][to] = 1;
+              nestedRates[to][from] = 1;
             } else if (from === baseCurrency) {
-              // Прямой курс из базовой валюты
-              nestedRates[from][to] = rates[to] || 1;
+              // from = база, to = другая валюта
+              // rates[to] = сколько to валюты за 1 базовую
+              // nestedRates[to][from] = сколько to за 1 from = rates[to]
+              nestedRates[to][from] = rates[to] || 1;
             } else if (to === baseCurrency) {
-              // Обратный курс к базовой валюте
-              nestedRates[from][to] = 1 / (rates[from] || 1);
+              // to = база, from = другая валюта
+              // rates[from] = сколько from валюты за 1 базовую
+              // nestedRates[to][from] = сколько базы за 1 from = 1/rates[from]
+              nestedRates[to][from] = 1 / (rates[from] || 1);
             } else {
-              // Кросс-курс через базовую валюту
-              nestedRates[from][to] = (rates[to] || 1) / (rates[from] || 1);
+              // Кросс-курс: оба не базовые
+              // nestedRates[to][from] = rates[to] / rates[from]
+              nestedRates[to][from] = (rates[to] || 1) / (rates[from] || 1);
             }
           });
         });
@@ -1168,23 +1185,38 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
 
       // Reload exchange rates
       const rateMode = getRateMode();
+
       if (rateMode === 'auto') {
         const newBaseCurrency = savedCurrency || baseCurrency;
         const rates = await getCurrentRates(newBaseCurrency);
+
+        // API возвращает: rates[currency] = сколько валюты за 1 базовую
+        // Например, если база RUB: rates.USD = 0.0123 означает 1 RUB = 0.0123 USD
+        // Для нашей nested структуры нужно: nestedRates[to][from] = сколько TO за 1 FROM
+        // То есть nestedRates.RUB.USD = 1/0.0123 = 81.3 (сколько RUB за 1 USD)
+
         const nestedRates: Record<string, Record<string, number>> = {};
 
         const currencies = ['USD', 'RUB', 'EUR'];
-        currencies.forEach(from => {
-          nestedRates[from] = {};
-          currencies.forEach(to => {
+        currencies.forEach(to => {
+          nestedRates[to] = {};
+          currencies.forEach(from => {
             if (from === to) {
-              nestedRates[from][to] = 1;
+              nestedRates[to][from] = 1;
             } else if (from === newBaseCurrency) {
-              nestedRates[from][to] = rates[to] || 1;
+              // from = база, to = другая валюта
+              // rates[to] = сколько to валюты за 1 базовую
+              // nestedRates[to][from] = сколько to за 1 from = rates[to]
+              nestedRates[to][from] = rates[to] || 1;
             } else if (to === newBaseCurrency) {
-              nestedRates[from][to] = 1 / (rates[from] || 1);
+              // to = база, from = другая валюта
+              // rates[from] = сколько from валюты за 1 базовую
+              // nestedRates[to][from] = сколько базы за 1 from = 1/rates[from]
+              nestedRates[to][from] = 1 / (rates[from] || 1);
             } else {
-              nestedRates[from][to] = (rates[to] || 1) / (rates[from] || 1);
+              // Кросс-курс: оба не базовые
+              // nestedRates[to][from] = rates[to] / rates[from]
+              nestedRates[to][from] = (rates[to] || 1) / (rates[from] || 1);
             }
           });
         });
@@ -1206,7 +1238,23 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
 
   const convertCurrency = (amount: number, from: string, to: string): number => {
     if (from === to) return amount;
-    return amount * (exchangeRates[from]?.[to] || 1);
+
+    // Для автоматического режима (API курсы): exchangeRates[to] = курсы из API
+    // Для ручного режима: exchangeRates[to][from] = сколько TO валюты за 1 FROM
+
+    // Попробуем найти курс в структуре для целевой валюты
+    const toRates = exchangeRates[to];
+    if (toRates && typeof toRates[from] === 'number') {
+      return amount * toRates[from];
+    }
+
+    // Если не нашли, попробуем обратный курс
+    const fromRates = exchangeRates[from];
+    if (fromRates && typeof fromRates[to] === 'number') {
+      return amount / fromRates[to];
+    }
+
+    return amount;
   };
 
   // Подсчет общего дохода (оплаченные проекты)
@@ -1279,7 +1327,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 min-h-0">
+    <div key={selectedProject ? `project-${selectedProject.id}` : 'overview'} className="flex-1 flex flex-col bg-zinc-950 min-h-0 animate-mode-switch">
       <div className="flex-1 overflow-y-auto px-8 pb-8 pt-6">
         {selectedProject ? (
           /* Project Financial Details */
@@ -1289,7 +1337,8 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
             baseCurrency={baseCurrency}
             convertToBaseCurrency={convertToBaseCurrency}
             currencySymbols={currencySymbols}
-            exchangeRates={exchangeRates}
+            totalRevenue={totalRevenue}
+            convertCurrency={convertCurrency}
             onClose={onClose}
           />
         ) : (
@@ -1365,7 +1414,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
               onClick={() => setShowAllProjects(!showAllProjects)}
               className="w-full px-6 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors font-medium text-center cursor-pointer mt-12 mb-12 block relative z-20"
             >
-              View Full List <span className="text-zinc-400 ml-2">({paidProjects.length + pendingProjects.length})</span>
+              View Full List
             </button>
 
             {showAllProjects && (
@@ -1584,7 +1633,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
                     const originalCurrency = project.currency || 'USD';
                     const originalAmount = project.displayAmount || project.cost || 0;
                     const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
-                      ? originalAmount * exchangeRates[originalCurrency][baseCurrency]
+                      ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
                       : originalAmount;
 
                     return {
@@ -1751,10 +1800,10 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
                     return paidProjects
                     .sort((a: any, b: any) => {
                       const amountA = convertToBaseCurrency && a.currency !== baseCurrency
-                        ? ((a.displayAmount || a.cost) || 0) * exchangeRates[a.currency || 'USD'][baseCurrency]
+                        ? convertCurrency(((a.displayAmount || a.cost) || 0), a.currency || 'USD', baseCurrency)
                         : ((a.displayAmount || a.cost) || 0);
                       const amountB = convertToBaseCurrency && b.currency !== baseCurrency
-                        ? ((b.displayAmount || b.cost) || 0) * exchangeRates[b.currency || 'USD'][baseCurrency]
+                        ? convertCurrency(((b.displayAmount || b.cost) || 0), b.currency || 'USD', baseCurrency)
                         : ((b.displayAmount || b.cost) || 0);
                       return amountB - amountA;
                     })
@@ -1763,7 +1812,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
                       const originalCurrency = project.currency || 'USD';
                       const originalAmount = project.displayAmount || project.cost || 0;
                       const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
-                        ? originalAmount * exchangeRates[originalCurrency][baseCurrency]
+                        ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
                         : originalAmount;
                       const displayCurr = convertToBaseCurrency ? baseCurrency : originalCurrency;
                       const percentage = totalRevenueCombined > 0 ? (displayAmount / totalRevenueCombined) * 100 : 0;
@@ -1801,7 +1850,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
                     const originalCurrency = project.currency || 'USD';
                     const originalAmount = project.displayAmount || project.cost || 0;
                     const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
-                      ? originalAmount * exchangeRates[originalCurrency][baseCurrency]
+                      ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
                       : originalAmount;
 
                     // Generate stable color based on project ID
@@ -1850,7 +1899,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
                       const originalCurrency = project.currency || 'USD';
                       const originalAmount = project.displayAmount || project.cost || 0;
                       const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
-                        ? originalAmount * exchangeRates[originalCurrency][baseCurrency]
+                        ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
                         : originalAmount;
 
                       if (!revenueByClient[project.clientId]) {
@@ -1918,7 +1967,7 @@ function FinancePage({ projects, selectedProjectId, onClose }: { projects: any[]
                       const originalCurrency = project.currency || 'USD';
                       const originalAmount = project.displayAmount || project.cost || 0;
                       const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
-                        ? originalAmount * exchangeRates[originalCurrency][baseCurrency]
+                        ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
                         : originalAmount;
 
                       if (!revenueByClient[project.clientId]) {
@@ -1988,6 +2037,7 @@ function App() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const clientSubmenuTimeoutRef = useRef<number | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
   const [sortBy, setSortBy] = useState<'name' | 'createdAt' | 'deadline' | 'cost'>('createdAt');
   const [viewMode, setViewMode] = useState<'projects' | 'finance'>('projects');
   const [showTagIcons, setShowTagIcons] = useState(() => {
@@ -1995,6 +2045,7 @@ function App() {
     return saved !== null ? JSON.parse(saved) : true;
   });
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'project' | 'client'; name: string; id: string; path?: string } | null>(null);
+  const [previousProjectId, setPreviousProjectId] = useState<string | null>(null);
   const [deadlineNotifications, setDeadlineNotifications] = useState<Array<{ id: string; projectName: string; daysRemaining: number }>>([]);
   const [notificationsShown, setNotificationsShown] = useState(false); // Track if notifications were shown this session
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
@@ -2029,6 +2080,83 @@ function App() {
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
+
+  // Hotkeys: F to toggle Finance mode, Ctrl+N to create new project, Escape to close modals
+  useEffect(() => {
+    const handleGlobalHotkeys = (e: KeyboardEvent) => {
+      // Ignore if typing in input, textarea, or contenteditable element
+      const target = e.target as HTMLElement;
+      const isTyping = target.tagName === 'INPUT' ||
+                       target.tagName === 'TEXTAREA' ||
+                       target.isContentEditable;
+
+      // Escape - Close any open modal/menu (except WelcomeSetup)
+      if (e.code === 'Escape') {
+        // Don't allow closing WelcomeSetup with Escape - it's required setup
+        if (showWelcomeSetup) {
+          return;
+        }
+
+        if (showCreateModal) {
+          e.preventDefault();
+          setShowCreateModal(false);
+          return;
+        }
+        if (showSettings) {
+          e.preventDefault();
+          setShowSettings(false);
+          return;
+        }
+        if (showFeedback) {
+          e.preventDefault();
+          setShowFeedback(false);
+          return;
+        }
+        if (deleteConfirm) {
+          e.preventDefault();
+          setDeleteConfirm(null);
+          return;
+        }
+        if (selectedProjectId) {
+          e.preventDefault();
+          setSelectedProjectId(null);
+          return;
+        }
+      }
+
+      // Ctrl+N - Create new project
+      if (e.ctrlKey && e.code === 'KeyN') {
+        e.preventDefault();
+        setShowCreateModal(true);
+        return;
+      }
+
+      // Don't handle other keys if typing
+      if (isTyping) {
+        return;
+      }
+
+      // F key (physical button) - Toggle Finance mode
+      if (e.code === 'KeyF') {
+        e.preventDefault();
+        setViewMode(prev => {
+          if (prev === 'projects') {
+            // Entering Finance mode - save current project
+            setPreviousProjectId(selectedProjectId);
+            setSelectedProjectId(null);
+            return 'finance';
+          } else {
+            // Exiting Finance mode - restore previous project
+            setSelectedProjectId(previousProjectId);
+            return 'projects';
+          }
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalHotkeys);
+    return () => window.removeEventListener('keydown', handleGlobalHotkeys);
+  }, [selectedProjectId, previousProjectId, showCreateModal, showSettings, showFeedback, showWelcomeSetup, deleteConfirm]);
 
   // Global paste handler that uses hovered project
   useEffect(() => {
@@ -2203,6 +2331,12 @@ function App() {
       const hoverColor = adjustColorBrightness(savedColor, -20);
       document.documentElement.style.setProperty('--accent-color-hover', hoverColor);
     }
+
+    // Initialize animations state
+    const animationsEnabled = localStorage.getItem('animationsEnabled');
+    if (animationsEnabled !== null && !JSON.parse(animationsEnabled)) {
+      document.body.classList.add('animations-disabled');
+    }
   }, []);
 
   // Check for upcoming deadlines ONLY on mount (app startup) after projects load
@@ -2302,6 +2436,20 @@ function App() {
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [contextMenu]);
+
+  // Close filter menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) {
+        setShowFilterMenu(false);
+        setShowClientSubmenu(false);
+      }
+    };
+    if (showFilterMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showFilterMenu]);
 
 
   const filteredProjects = projects
@@ -2466,7 +2614,7 @@ function App() {
             className="w-8 h-6 hover:bg-red-600 flex items-center justify-center transition-colors rounded"
             title="Close"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-3.5 h-3.5 close-button-red" />
           </button>
         </div>
       </div>
@@ -2515,7 +2663,7 @@ function App() {
                 </button>
               </div>
               <h1 className="text-xl font-semibold">
-                {viewMode === 'projects' ? 'Projects' : 'Finance'}
+                {viewMode === 'projects' ? 'Projects' : 'Finances'}
               </h1>
             </div>
             <div className="flex gap-2">
@@ -2531,7 +2679,7 @@ function App() {
                 className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
                 title="Settings"
               >
-                <Settings className="w-5 h-5" />
+                <Settings className="w-5 h-5 animate-settings-icon" />
               </button>
             </div>
           </div>
@@ -2579,7 +2727,7 @@ function App() {
               <Archive className="w-3.5 h-3.5" />
               <span className="text-xs">Архив</span>
             </button>
-            <div className="relative">
+            <div className="relative" ref={filterMenuRef}>
               <button
                 onClick={() => setShowFilterMenu(!showFilterMenu)}
                 className={`p-1.5 rounded-lg transition-colors ${
@@ -2687,10 +2835,14 @@ function App() {
                               setSelectedClientId(client.id);
                               setShowFilterMenu(false);
                             }}
-                            className={`w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 ${
+                            className={`w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 ${
                               selectedClientId === client.id ? 'bg-zinc-700 text-white' : ''
                             }`}
                           >
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: client.color || '#ffffff' }}
+                            />
                             {client.name}
                           </button>
                         ))}
@@ -2801,9 +2953,22 @@ function App() {
                         {project.deadline && project.status !== 'completed' && project.status !== 'archived' && (() => {
                           const daysLeft = getDaysRemaining(project.deadline);
                           if (daysLeft === null) return null;
+
+                          let displayText;
+                          if (daysLeft < 0) {
+                            const absDays = Math.abs(daysLeft);
+                            displayText = absDays >= 100 ? '99+ overdue' : `${absDays}d overdue`;
+                          } else if (daysLeft === 0) {
+                            displayText = 'today';
+                          } else {
+                            displayText = daysLeft >= 100 ? '99+ left' : `${daysLeft}d left`;
+                          }
+
                           return (
                             <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${
                               daysLeft < 0
+                                ? 'bg-red-900 text-red-300'
+                                : daysLeft === 0
                                 ? 'bg-red-900 text-red-300'
                                 : daysLeft < 5
                                 ? 'bg-red-900 text-red-300'
@@ -2811,7 +2976,7 @@ function App() {
                                 ? 'bg-yellow-900 text-yellow-300'
                                 : 'bg-zinc-800 text-zinc-400'
                             }`}>
-                              {daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`}
+                              {displayText}
                             </span>
                           );
                         })()}
@@ -2829,7 +2994,7 @@ function App() {
         <div className="border-t border-zinc-800 p-4">
           <button
             onClick={() => setShowCreateModal(true)}
-            className="w-full bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium text-white"
+            className="w-full bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium text-white animate-button"
           >
             <Plus className="w-5 h-5" />
             New Project
@@ -2860,6 +3025,14 @@ function App() {
                 software: sw.name,
                 projectName: selectedProject.name,
                 shotNumber: currentShot?.number
+              });
+            }}
+            onDeleteProject={(project: any) => {
+              setDeleteConfirm({
+                type: 'project',
+                name: project.name,
+                id: project.id,
+                path: project.path
               });
             }}
           />
@@ -2904,7 +3077,17 @@ function App() {
       {deleteConfirm && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
-          onClick={() => setDeleteConfirm(null)}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
+            }
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
+              setDeleteConfirm(null);
+            }
+            delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
+          }}
         >
           <div
             className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md w-full mx-4"
@@ -3143,10 +3326,18 @@ function App() {
   );
 }
 
-function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: any) {
+function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware, onDeleteProject }: any) {
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isShotEditMode, setIsShotEditMode] = useState(false);
+  const [isFavoriteAnimating, setIsFavoriteAnimating] = useState(false);
+
+  // Track which date fields user has manually filled in Project Settings
+  const [deadlineFieldsFilled, setDeadlineFieldsFilled] = useState({
+    day: false,
+    month: false,
+    year: false
+  });
 
   // Debug: log project data
   useEffect(() => {
@@ -3275,7 +3466,7 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
 
   return (
     <div
-      className="flex-1 flex flex-col h-screen overflow-hidden min-w-0"
+      className="flex-1 flex flex-col h-screen overflow-hidden min-w-0 animate-mode-switch focus:outline-none"
       onPaste={handlePaste}
       tabIndex={-1}
     >
@@ -3355,7 +3546,7 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
                       className="px-2 py-1 hover:bg-red-500/20 transition-all"
                       title="Delete shot"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-3.5 h-3.5 close-button-red" />
                     </button>
                   )}
                 </div>
@@ -3386,26 +3577,32 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
             onClick={() => {
               const { toggleFavorite } = useProjectStore.getState();
               toggleFavorite(project.id);
+
+              // Trigger animation
+              setIsFavoriteAnimating(true);
+              setTimeout(() => {
+                setIsFavoriteAnimating(false);
+              }, 500);
             }}
-            className={`p-2 hover:bg-zinc-800 rounded-lg transition-colors ${
+            className={`group p-2 hover:bg-zinc-800 rounded-lg transition-colors ${
               project.isFavorite ? 'text-yellow-400' : 'text-zinc-400'
             }`}
             title={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
-            <Star className={`w-5 h-5 ${project.isFavorite ? 'fill-yellow-400' : ''}`} />
+            <Star className={`w-5 h-5 text-zinc-300 transition-all ${project.isFavorite ? 'fill-yellow-400' : 'group-hover:fill-zinc-600'} ${isFavoriteAnimating ? 'animate-favorite-star-bounce' : ''}`} />
           </button>
           <button
             onClick={() => setShowProjectSettings(true)}
             className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
             title="Project Settings"
           >
-            <Settings className="w-5 h-5" />
+            <Settings className="w-5 h-5 animate-settings-icon" />
           </button>
           <button
             onClick={onClose}
             className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 close-button-red" />
           </button>
         </div>
       </div>
@@ -3423,7 +3620,16 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
               <FolderOpen className="w-4 h-4" />
               Open Folder
             </button>
-            <button className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors">
+            <button
+              onClick={async () => {
+                try {
+                  await invoke('open_links_in_browser', { links: context.links });
+                } catch (error) {
+                  console.error('Failed to open browser:', error);
+                }
+              }}
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors"
+            >
               <ExternalLink className="w-4 h-4" />
               Open Browser
             </button>
@@ -3551,7 +3757,7 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
                   }}
                   className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-800 rounded transition-opacity"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3 h-3 close-button-red" />
                 </button>
               </div>
             ))}
@@ -3593,12 +3799,25 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
 
       {/* Payment Modal */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowPaymentModal(false)}>
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
+            }
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
+              setShowPaymentModal(false);
+            }
+            delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
+          }}
+        >
           <div className="bg-zinc-900 rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
               <h2 className="text-xl font-semibold">Payment Settings</h2>
               <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 close-button-red" />
               </button>
             </div>
 
@@ -3667,7 +3886,7 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
             <div className="p-6 border-t border-zinc-800 flex justify-end">
               <button
                 onClick={() => setShowPaymentModal(false)}
-                className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium"
+                className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
               >
                 Close
               </button>
@@ -3678,18 +3897,31 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
 
       {/* Project Settings Modal */}
       {showProjectSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowProjectSettings(false)}>
-          <div className="bg-zinc-900 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
-              <h2 className="text-xl font-semibold">Project Settings</h2>
-              <button onClick={() => setShowProjectSettings(false)} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-                <X className="w-5 h-5" />
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
+            }
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
+              setShowProjectSettings(false);
+            }
+            delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
+          }}
+        >
+          <div className="bg-zinc-900 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
+              <h2 className="text-lg font-semibold">Project Settings</h2>
+              <button onClick={() => setShowProjectSettings(false)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
+                <X className="w-5 h-5 close-button-red" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6 overflow-y-auto flex-1">
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
               <div>
-                <label className="block text-sm font-medium mb-2">Project Name</label>
+                <label className="block text-sm font-medium mb-1.5">Project Name</label>
                 <input
                   type="text"
                   value={project.name}
@@ -3697,39 +3929,38 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
                     const { updateProject } = useProjectStore.getState();
                     updateProject({ ...project, name: e.target.value });
                   }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Description</label>
+                <label className="block text-sm font-medium mb-1.5">Description</label>
                 <textarea
                   value={project.description}
                   onChange={(e) => {
                     const { updateProject } = useProjectStore.getState();
                     updateProject({ ...project, description: e.target.value });
                   }}
-                  rows={3}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent resize-none"
+                  rows={2}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Project Path</label>
+                <label className="block text-sm font-medium mb-1.5">Project Path</label>
                 <input
                   type="text"
                   value={project.path}
                   readOnly
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent opacity-60"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Project Thumbnail</label>
-                <div className="text-xs text-zinc-500 mb-2">Press Ctrl+V to paste from clipboard</div>
+                <label className="block text-sm font-medium mb-1.5">Project Thumbnail <span className="text-xs text-zinc-500">(Ctrl+V to paste)</span></label>
                 <div className="flex gap-2 items-center">
                   {project.thumbnail && (
-                    <div className="w-32 h-32 rounded-lg overflow-hidden border border-zinc-700 bg-zinc-800">
+                    <div className="w-16 h-16 rounded-lg overflow-hidden border border-zinc-700 bg-zinc-800 flex-shrink-0">
                       <ThumbnailImage
                         projectPath={project.path}
                         thumbnail={project.thumbnail}
@@ -3738,139 +3969,359 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
                       />
                     </div>
                   )}
-                  <button
-                    onClick={async () => {
-                      const { selectImageFile } = await import('./utils/tauri');
-                      const imagePath = await selectImageFile();
-                      if (imagePath) {
-                        try {
-                          const thumbnailName = await invoke<string>('set_project_thumbnail', {
-                            projectPath: project.path,
-                            imagePath
-                          });
-                          const { updateProject } = useProjectStore.getState();
-                          updateProject({ ...project, thumbnail: thumbnailName });
-                        } catch (error) {
-                          console.error('Failed to set thumbnail:', error);
-                        }
-                      }
-                    }}
-                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
-                  >
-                    Choose Image
-                  </button>
-                  {project.thumbnail && (
+                  <div className="flex gap-2 flex-1">
                     <button
-                      onClick={() => {
-                        const { updateProject } = useProjectStore.getState();
-                        updateProject({ ...project, thumbnail: undefined });
+                      onClick={async () => {
+                        const { selectImageFile } = await import('./utils/tauri');
+                        const imagePath = await selectImageFile();
+                        if (imagePath) {
+                          try {
+                            const thumbnailName = await invoke<string>('set_project_thumbnail', {
+                              projectPath: project.path,
+                              imagePath
+                            });
+                            const { updateProject } = useProjectStore.getState();
+                            updateProject({ ...project, thumbnail: thumbnailName });
+                          } catch (error) {
+                            console.error('Failed to set thumbnail:', error);
+                          }
+                        }
                       }}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
+                      className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
                     >
-                      Remove
+                      Choose Image
                     </button>
-                  )}
+                    {project.thumbnail && (
+                      <button
+                        onClick={() => {
+                          const { updateProject } = useProjectStore.getState();
+                          updateProject({ ...project, thumbnail: undefined });
+                        }}
+                        className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">Status</label>
-                <select
-                  value={project.status}
-                  onChange={(e) => {
-                    const { updateStatus } = useProjectStore.getState();
-                    updateStatus(project.id, e.target.value as ProjectStatus);
-                  }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
-                >
-                  <option value="active">Active</option>
-                  <option value="paused">Paused</option>
-                  <option value="completed">Completed</option>
-                  <option value="archived">Archived</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Client</label>
-                <select
-                  value={project.clientId || ''}
-                  onChange={(e) => {
-                    const { updateProject } = useProjectStore.getState();
-                    updateProject({ ...project, clientId: e.target.value || undefined });
-                  }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
-                >
-                  <option value="">No client</option>
-                  {(() => {
-                    const { clients } = useProjectStore.getState();
-                    return clients.map(client => (
-                      <option key={client.id} value={client.id}>{client.name}</option>
-                    ));
-                  })()}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Deadline</label>
-                <input
-                  type="date"
-                  value={project.deadline || ''}
-                  onChange={(e) => {
-                    const { updateDeadline } = useProjectStore.getState();
-                    updateDeadline(project.id, e.target.value || undefined);
-                  }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent [color-scheme:dark]"
-                  style={{ colorScheme: 'dark' }}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Cost</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={project.cost || ''}
-                    onChange={(e) => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, cost: e.target.value ? parseFloat(e.target.value) : undefined });
-                    }}
-                    placeholder="0"
-                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
-                  />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Status</label>
                   <select
-                    value={project.currency || 'USD'}
+                    value={project.status}
+                    onChange={(e) => {
+                      const { updateStatus } = useProjectStore.getState();
+                      updateStatus(project.id, e.target.value as ProjectStatus);
+                    }}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                  >
+                    <option value="active">Active</option>
+                    <option value="paused">Paused</option>
+                    <option value="completed">Completed</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Client</label>
+                  <select
+                    value={project.clientId || ''}
                     onChange={(e) => {
                       const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, currency: e.target.value as 'USD' | 'RUB' | 'EUR' });
+                      updateProject({ ...project, clientId: e.target.value || undefined });
                     }}
-                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
                   >
-                    <option value="USD">USD</option>
-                    <option value="RUB">RUB</option>
-                    <option value="EUR">EUR</option>
+                    <option value="">No client</option>
+                    {(() => {
+                      const { clients } = useProjectStore.getState();
+                      return clients.map(client => (
+                        <option key={client.id} value={client.id}>{client.name}</option>
+                      ));
+                    })()}
                   </select>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">Payment Status</label>
-                <select
-                  value={project.paymentStatus || 'unpaid'}
-                  onChange={(e) => {
-                    const { updateProject } = useProjectStore.getState();
-                    updateProject({ ...project, paymentStatus: e.target.value as 'paid' | 'prepaid' | 'unpaid' });
-                  }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
-                >
-                  <option value="unpaid">Unpaid</option>
-                  <option value="prepaid">Prepaid</option>
-                  <option value="paid">Paid</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Deadline</label>
+                  <div className="flex gap-2 items-center">
+                    <div className="relative w-14">
+                      <input
+                        type="text"
+                        placeholder="ДД"
+                        value={project.deadline ? project.deadline.split('-')[2] : ''}
+                        onKeyDown={(e) => {
+                          if (e.key >= '0' && e.key <= '9') {
+                            e.preventDefault();
+                            const parts = project.deadline ? project.deadline.split('-') : ['', '', ''];
+                            const currentDay = parts[2] || '';
+
+                            let newDay;
+                            if (currentDay.length >= 2) {
+                              newDay = currentDay.slice(-1) + e.key;
+                            } else {
+                              newDay = currentDay + e.key;
+                            }
+
+                            const now = new Date();
+                            const year = parts[0] || String(now.getFullYear());
+                            const month = parts[1] || String(now.getMonth() + 1).padStart(2, '0');
+
+                            const maxDays = new Date(parseInt(year), parseInt(month), 0).getDate();
+
+                            let dayNum = parseInt(newDay);
+                            if (dayNum > maxDays) {
+                              dayNum = maxDays;
+                              newDay = String(maxDays);
+                            }
+                            if (dayNum < 1) {
+                              dayNum = 1;
+                              newDay = '01';
+                            }
+
+                            const { updateDeadline } = useProjectStore.getState();
+                            updateDeadline(project.id, `${year}-${month}-${newDay.padStart(2, '0')}`);
+                            setDeadlineFieldsFilled(prev => ({ ...prev, day: true }));
+                          } else if (e.key === 'Backspace') {
+                            e.preventDefault();
+                            const { updateDeadline } = useProjectStore.getState();
+                            updateDeadline(project.id, undefined);
+                            setDeadlineFieldsFilled({ day: false, month: false, year: false });
+                          }
+                        }}
+                        onChange={() => {}}
+                        className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                    <span className="text-zinc-500">.</span>
+                    <div className="relative w-14">
+                      {(() => {
+                        const showAutofill = deadlineFieldsFilled.day && !deadlineFieldsFilled.month;
+                        const now = new Date();
+                        const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+
+                        return showAutofill ? (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white" style={{ opacity: 0.3 }}>
+                            {currentMonth}
+                          </div>
+                        ) : null;
+                      })()}
+                      <input
+                        type="text"
+                        placeholder="ММ"
+                        value={project.deadline ? project.deadline.split('-')[1] : ''}
+                        onKeyDown={(e) => {
+                          if (e.key >= '0' && e.key <= '9') {
+                            e.preventDefault();
+                            const parts = project.deadline ? project.deadline.split('-') : ['', '', ''];
+                            const currentMonth = parts[1] || '';
+
+                            let newMonth;
+                            if (currentMonth.length >= 2) {
+                              newMonth = currentMonth.slice(-1) + e.key;
+                            } else {
+                              newMonth = currentMonth + e.key;
+                            }
+
+                            let monthNum = parseInt(newMonth);
+                            if (monthNum > 12) {
+                              monthNum = 12;
+                              newMonth = '12';
+                            }
+                            if (monthNum < 1) {
+                              monthNum = 1;
+                              newMonth = '01';
+                            }
+
+                            const now = new Date();
+                            const year = parts[0] || String(now.getFullYear());
+                            let day = parts[2] || '01';
+
+                            const maxDays = new Date(parseInt(year), parseInt(newMonth.padStart(2, '0')), 0).getDate();
+                            const dayNum = parseInt(day);
+                            if (dayNum > maxDays) {
+                              day = String(maxDays).padStart(2, '0');
+                            }
+
+                            const { updateDeadline } = useProjectStore.getState();
+                            updateDeadline(project.id, `${year}-${newMonth.padStart(2, '0')}-${day}`);
+                            setDeadlineFieldsFilled(prev => ({ ...prev, month: true }));
+                          } else if (e.key === 'Backspace') {
+                            e.preventDefault();
+                            const parts = project.deadline ? project.deadline.split('-') : ['', '', ''];
+                            if (parts[1]) {
+                              const newMonth = parts[1].slice(0, -1);
+                              if (newMonth && parts[0] && parts[2]) {
+                                const { updateDeadline } = useProjectStore.getState();
+                                updateDeadline(project.id, `${parts[0]}-${newMonth.padStart(2, '0')}-${parts[2]}`);
+                              } else {
+                                setDeadlineFieldsFilled(prev => ({ ...prev, month: false }));
+                              }
+                            }
+                          }
+                        }}
+                        onChange={() => {}}
+                        className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                    <span className="text-zinc-500">.</span>
+                    <div className="relative w-14">
+                      {(() => {
+                        const showAutofill = deadlineFieldsFilled.day && !deadlineFieldsFilled.year;
+                        const now = new Date();
+                        const currentYear = String(now.getFullYear()).slice(-2);
+
+                        return showAutofill ? (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white" style={{ opacity: 0.3 }}>
+                            {currentYear}
+                          </div>
+                        ) : null;
+                      })()}
+                      <input
+                        type="text"
+                        placeholder="ГГ"
+                        value={project.deadline ? project.deadline.split('-')[0].slice(-2) : ''}
+                        onKeyDown={(e) => {
+                          if (e.key >= '0' && e.key <= '9') {
+                            e.preventDefault();
+                            const parts = project.deadline ? project.deadline.split('-') : ['', '', ''];
+                            const currentYear = parts[0] ? parts[0].slice(-2) : '';
+
+                            let newYear;
+                            if (currentYear.length >= 2) {
+                              newYear = currentYear.slice(-1) + e.key;
+                            } else {
+                              newYear = currentYear + e.key;
+                            }
+
+                            const now = new Date();
+                            const currentYearFull = now.getFullYear();
+                            const maxYearFull = currentYearFull + 1;
+                            const maxYearShort = String(maxYearFull).slice(-2);
+
+                            let fullYear = '20' + newYear.padStart(2, '0');
+                            let fullYearNum = parseInt(fullYear);
+
+                            if (fullYearNum > maxYearFull) {
+                              fullYear = String(maxYearFull);
+                              newYear = maxYearShort;
+                            }
+
+                            const month = parts[1] || String(now.getMonth() + 1).padStart(2, '0');
+                            let day = parts[2] || '01';
+
+                            const maxDays = new Date(parseInt(fullYear), parseInt(month), 0).getDate();
+                            const dayNum = parseInt(day);
+                            if (dayNum > maxDays) {
+                              day = String(maxDays).padStart(2, '0');
+                            }
+
+                            const { updateDeadline } = useProjectStore.getState();
+                            updateDeadline(project.id, `${fullYear}-${month}-${day}`);
+                            setDeadlineFieldsFilled(prev => ({ ...prev, year: true }));
+                          } else if (e.key === 'Backspace') {
+                            e.preventDefault();
+                            const parts = project.deadline ? project.deadline.split('-') : ['', '', ''];
+                            if (parts[0]) {
+                              const currentYear = parts[0].slice(-2);
+                              const newYear = currentYear.slice(0, -1);
+                              if (newYear && parts[1] && parts[2]) {
+                                const fullYear = '20' + newYear.padStart(2, '0');
+                                const { updateDeadline } = useProjectStore.getState();
+                                updateDeadline(project.id, `${fullYear}-${parts[1]}-${parts[2]}`);
+                              } else {
+                                setDeadlineFieldsFilled(prev => ({ ...prev, year: false }));
+                              }
+                            }
+                          }
+                        }}
+                        onChange={() => {}}
+                        className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                    <div className="relative w-8 h-8 flex items-center justify-center calendar-icon-wrapper">
+                      <input
+                        type="date"
+                        value={project.deadline || ''}
+                        onChange={(e) => {
+                          const { updateDeadline } = useProjectStore.getState();
+                          updateDeadline(project.id, e.target.value || undefined);
+                          if (e.target.value) {
+                            setDeadlineFieldsFilled({ day: true, month: true, year: true });
+                          }
+                        }}
+                        className="absolute opacity-0"
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          zIndex: 10
+                        }}
+                      />
+                      <svg
+                        className="w-5 h-5 text-zinc-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        style={{ pointerEvents: 'none', position: 'relative', zIndex: 5 }}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Cost</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={project.cost || ''}
+                      onChange={(e) => {
+                        const { updateProject } = useProjectStore.getState();
+                        updateProject({ ...project, cost: e.target.value ? parseFloat(e.target.value) : undefined });
+                      }}
+                      placeholder="0"
+                      className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                    />
+                    <select
+                      value={project.currency || 'USD'}
+                      onChange={(e) => {
+                        const { updateProject } = useProjectStore.getState();
+                        updateProject({ ...project, currency: e.target.value as 'USD' | 'RUB' | 'EUR' });
+                      }}
+                      className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                    >
+                      <option value="USD">USD</option>
+                      <option value="RUB">RUB</option>
+                      <option value="EUR">EUR</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              {project.paymentStatus === 'prepaid' && (
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Prepayment Amount</label>
+                  <label className="block text-sm font-medium mb-1.5">Payment Status</label>
+                  <select
+                    value={project.paymentStatus || 'unpaid'}
+                    onChange={(e) => {
+                      const { updateProject } = useProjectStore.getState();
+                      updateProject({ ...project, paymentStatus: e.target.value as 'paid' | 'prepaid' | 'unpaid' });
+                    }}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                  >
+                    <option value="unpaid">Unpaid</option>
+                    <option value="prepaid">Prepaid</option>
+                    <option value="paid">Paid</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Prepayment Amount</label>
                   <input
                     type="number"
                     value={project.prepaymentAmount || ''}
@@ -3879,28 +4330,25 @@ function ProjectDetails({ project, onClose, onOpenFolder, onLaunchSoftware }: an
                       updateProject({ ...project, prepaymentAmount: e.target.value ? parseFloat(e.target.value) : undefined });
                     }}
                     placeholder="0"
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                    disabled={project.paymentStatus !== 'prepaid'}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
-              )}
+              </div>
 
-              <div className="pt-6 border-t border-zinc-800">
+              <div className="pt-4 border-t border-zinc-800">
                 <button
-                  onClick={async () => {
+                  onClick={() => {
                     // Close modal first to prevent UI glitches
                     setShowProjectSettings(false);
                     onClose();
 
-                    // Then show confirmation
-                    setTimeout(async () => {
-                      const confirmed = confirm(`Are you sure you want to delete project "${project.name}"? This action cannot be undone.`);
-                      if (confirmed) {
-                        const { deleteProject } = useProjectStore.getState();
-                        await deleteProject(project.path);
-                      }
+                    // Then show custom confirmation dialog
+                    setTimeout(() => {
+                      onDeleteProject(project);
                     }, 100);
                   }}
-                  className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium"
+                  className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium text-sm"
                 >
                   Delete Project
                 </button>
@@ -3977,10 +4425,52 @@ function TreeView({ project, showHidden }: any) {
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [directorySize, setDirectorySize] = useState<number | null>(null);
   const [loadingSize, setLoadingSize] = useState(true);
-  const [hiddenPaths, setHiddenPaths] = useState<Set<string>>(new Set());
+  const [hiddenPaths, setHiddenPaths] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(`hiddenPaths_${project.path}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch (error) {
+      console.error('Failed to load hidden paths from localStorage:', error);
+      return new Set();
+    }
+  });
   const clickTimerRef = useRef<number | null>(null);
   const loadingTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
+  const debounceTimerRef = useRef<number | null>(null);
+  const maxWaitTimerRef = useRef<number | null>(null);
+  const isPendingReloadRef = useRef(false);
+  const currentProjectPathRef = useRef(project.path);
+
+  // Save hidden paths to localStorage whenever they change
+  useEffect(() => {
+    try {
+      const pathsArray = Array.from(hiddenPaths);
+      localStorage.setItem(`hiddenPaths_${project.path}`, JSON.stringify(pathsArray));
+    } catch (error) {
+      console.error('Failed to save hidden paths to localStorage:', error);
+    }
+  }, [hiddenPaths, project.path]);
+
+  // Load hidden paths when project changes
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`hiddenPaths_${project.path}`);
+      if (stored) {
+        setHiddenPaths(new Set(JSON.parse(stored)));
+      } else {
+        setHiddenPaths(new Set());
+      }
+    } catch (error) {
+      console.error('Failed to load hidden paths from localStorage:', error);
+      setHiddenPaths(new Set());
+    }
+  }, [project.path]);
+
+  // Update current project path ref when project changes
+  useEffect(() => {
+    currentProjectPathRef.current = project.path;
+  }, [project.path]);
 
   const loadTree = async () => {
     // Clear any existing timer first
@@ -3989,9 +4479,11 @@ function TreeView({ project, showHidden }: any) {
       loadingTimerRef.current = null;
     }
 
-    // Only show loading state for first load or after 200ms delay
-    const shouldShowLoading = isFirstLoadRef.current;
-    if (shouldShowLoading) {
+    // Remember if this is first load before changing the flag
+    const isFirstLoad = isFirstLoadRef.current;
+
+    // Only show loading state for first load or after 300ms delay
+    if (isFirstLoad) {
       setLoading(true);
       isFirstLoadRef.current = false;
     } else {
@@ -3999,11 +4491,21 @@ function TreeView({ project, showHidden }: any) {
       loadingTimerRef.current = window.setTimeout(() => {
         setLoading(true);
         loadingTimerRef.current = null;
-      }, 200);
+      }, 300);
     }
 
     try {
-      const result = await invoke<FileNode[]>('get_folder_structure', { path: project.path });
+      const projectPath = currentProjectPathRef.current;
+      console.log('Loading tree for project:', projectPath);
+      const result = await invoke<FileNode[]>('get_folder_structure', { path: projectPath });
+      console.log('Received tree structure:', result.length, 'items');
+
+      // Check if project changed while loading
+      if (projectPath !== currentProjectPathRef.current) {
+        console.log('Project changed during load, discarding results');
+        return;
+      }
+
       // Filter out system files starting with .
       const filterSystemFiles = (nodes: FileNode[]): FileNode[] => {
         return nodes
@@ -4022,19 +4524,22 @@ function TreeView({ project, showHidden }: any) {
       }
 
       // Update tree data
+      console.log('Setting tree with', filteredResult.length, 'items for project', projectPath);
       setTree(filteredResult);
 
-      // Auto-expand software folders like Blender, After Effects, etc.
-      const autoExpandSoftwareFolders = (nodes: FileNode[]) => {
-        const newExpanded = new Set(expandedDirs);
-        nodes.forEach(node => {
-          if (node.is_dir && node.children && node.children.length > 0) {
-            newExpanded.add(node.path);
-          }
-        });
-        setExpandedDirs(newExpanded);
-      };
-      autoExpandSoftwareFolders(filteredResult);
+      // Auto-expand software folders on first load
+      if (isFirstLoad) {
+        const autoExpandSoftwareFolders = (nodes: FileNode[]) => {
+          const newExpanded = new Set<string>();
+          nodes.forEach(node => {
+            if (node.is_dir && node.children && node.children.length > 0) {
+              newExpanded.add(node.path);
+            }
+          });
+          setExpandedDirs(newExpanded);
+        };
+        autoExpandSoftwareFolders(filteredResult);
+      }
       setLoading(false);
     } catch (error) {
       console.error('Failed to load folder structure:', error);
@@ -4047,8 +4552,24 @@ function TreeView({ project, showHidden }: any) {
     }
   };
 
-  // Initial load
+  // Initial load and reset state on project change
   useEffect(() => {
+    // Reset state when project changes
+    setTree([]);
+    setLoading(true);
+    isFirstLoadRef.current = true;
+
+    // Clear all timers when switching projects
+    if (debounceTimerRef.current !== null) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (maxWaitTimerRef.current !== null) {
+      clearTimeout(maxWaitTimerRef.current);
+      maxWaitTimerRef.current = null;
+    }
+    isPendingReloadRef.current = false;
+
     loadTree();
     loadDirectorySize();
   }, [project.path]);
@@ -4059,14 +4580,23 @@ function TreeView({ project, showHidden }: any) {
 
     listen('version-changed', () => {
       console.log('Version changed detected - updating folder tree');
-      loadTree();
-      loadDirectorySize();
+      debouncedReload();
     }).then((fn) => {
       unlisten = fn;
     });
 
     return () => {
       if (unlisten) unlisten();
+      // Clear all timers on unmount
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      if (maxWaitTimerRef.current !== null) {
+        clearTimeout(maxWaitTimerRef.current);
+        maxWaitTimerRef.current = null;
+      }
+      isPendingReloadRef.current = false;
     };
   }, [project.path]);
 
@@ -4074,24 +4604,72 @@ function TreeView({ project, showHidden }: any) {
   useEffect(() => {
     const handleVersionUpdate = () => {
       console.log('Version update event received - updating folder tree');
-      loadTree();
-      loadDirectorySize();
+      debouncedReload();
     };
 
     window.addEventListener('version-created', handleVersionUpdate);
-    return () => window.removeEventListener('version-created', handleVersionUpdate);
+    return () => {
+      window.removeEventListener('version-created', handleVersionUpdate);
+    };
   }, [project.path]);
 
   const loadDirectorySize = async () => {
     setLoadingSize(true);
     try {
-      const size = await invoke<number>('get_directory_size', { path: project.path });
+      const projectPath = currentProjectPathRef.current;
+      const size = await invoke<number>('get_directory_size', { path: projectPath });
+
+      // Check if project changed while loading
+      if (projectPath !== currentProjectPathRef.current) {
+        console.log('Project changed during size load, discarding results');
+        return;
+      }
+
       setDirectorySize(size);
     } catch (error) {
       console.error('Failed to load directory size:', error);
     } finally {
       setLoadingSize(false);
     }
+  };
+
+  // Debounced reload function to prevent excessive reloads
+  const debouncedReload = () => {
+    // If this is the first call in a sequence, set maxWait timer
+    if (!isPendingReloadRef.current) {
+      isPendingReloadRef.current = true;
+
+      // Max wait timer ensures reload happens within 2 seconds max
+      maxWaitTimerRef.current = window.setTimeout(() => {
+        if (debounceTimerRef.current !== null) {
+          clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = null;
+        }
+        loadTree();
+        loadDirectorySize();
+        isPendingReloadRef.current = false;
+        maxWaitTimerRef.current = null;
+      }, 2000);
+    }
+
+    // Clear existing debounce timer
+    if (debounceTimerRef.current !== null) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Set new debounce timer (300ms delay)
+    debounceTimerRef.current = window.setTimeout(() => {
+      // Clear max wait timer since we're executing now
+      if (maxWaitTimerRef.current !== null) {
+        clearTimeout(maxWaitTimerRef.current);
+        maxWaitTimerRef.current = null;
+      }
+
+      loadTree();
+      loadDirectorySize();
+      debounceTimerRef.current = null;
+      isPendingReloadRef.current = false;
+    }, 300);
   };
 
   const formatSize = (bytes: number): string => {
@@ -4293,7 +4871,7 @@ function EmptyState({ onCreateProject }: any) {
       <p className="text-sm mb-6">Select a project from the sidebar or create a new one</p>
       <button
         onClick={onCreateProject}
-        className="bg-accent hover:bg-accent-hover px-6 py-3 rounded-lg flex items-center gap-2 transition-colors font-medium text-white"
+        className="bg-accent hover:bg-accent-hover px-6 py-3 rounded-lg flex items-center gap-2 transition-colors font-medium text-white animate-button"
       >
         <Plus className="w-5 h-5" />
         Create New Project
@@ -4352,6 +4930,13 @@ function CreateProjectModal({ onClose, onCreate }: any) {
     thumbnailPath: '',
     hasShots: false,
     category: selectedCategory
+  });
+
+  // Track which date fields user has manually filled
+  const [deadlineFieldsFilled, setDeadlineFieldsFilled] = useState({
+    day: false,
+    month: false,
+    year: false
   });
 
   useEffect(() => {
@@ -4424,13 +5009,28 @@ function CreateProjectModal({ onClose, onCreate }: any) {
       finalClientId = newClientId;
     }
 
+    // Auto-fill deadline if only day is entered
+    let finalDeadline = formData.deadline;
+    if (finalDeadline && deadlineFieldsFilled.day) {
+      // If only day is entered (partial date), auto-fill with current month and year
+      if (!deadlineFieldsFilled.month || !deadlineFieldsFilled.year) {
+        const parts = finalDeadline.split('-');
+        const now = new Date();
+        const currentYear = String(now.getFullYear());
+        const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+        const day = parts[2];
+
+        finalDeadline = `${currentYear}-${currentMonth}-${day.padStart(2, '0')}`;
+      }
+    }
+
     console.log('Creating project with formData:', formData);
     console.log('finalClientId value:', finalClientId);
     console.log('finalClientId type:', typeof finalClientId);
 
     const projectData = {
       ...formData,
-      deadline: formData.deadline || undefined,
+      deadline: finalDeadline || undefined,
       cost: formData.cost ? parseFloat(formData.cost) : undefined,
       prepaymentAmount: formData.prepaymentAmount ? parseFloat(formData.prepaymentAmount) : undefined,
       paymentStatus: formData.paymentStatus || undefined,
@@ -4473,99 +5073,375 @@ function CreateProjectModal({ onClose, onCreate }: any) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="p-6 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
-          <h2 className="text-xl font-semibold">Create New Project</h2>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-            <X className="w-5 h-5" />
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
+        }
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
+          onClose();
+        }
+        delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
+      }}
+    >
+      <div className="bg-zinc-900 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
+          <h2 className="text-lg font-semibold">Create New Project</h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
+            <X className="w-5 h-5 close-button-red" />
           </button>
         </div>
 
-        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+        <div className="p-4 space-y-4 overflow-y-auto flex-1">
           <div>
-            <label className="block text-sm font-medium mb-2">Project Name</label>
+            <label className="block text-sm font-medium mb-1.5">Project Name</label>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
               placeholder="My Awesome Project"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Description</label>
+            <label className="block text-sm font-medium mb-1.5">Description</label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
               placeholder="Brief description of your project..."
-              rows={3}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent resize-none"
+              rows={2}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none"
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Client (Optional)</label>
-            <select
-              value={formData.clientId}
-              onChange={(e) => {
-                console.log('Select changed to:', e.target.value);
-                setFormData(prev => ({ ...prev, clientId: e.target.value }));
-              }}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
-            >
-              <option value="">No client</option>
-              {clients.map(client => (
-                <option key={client.id} value={client.id}>{client.name}</option>
-              ))}
-            </select>
-            <div className="mt-2 text-xs text-zinc-500">
-              {formData.clientId && `Selected: ${clients.find(c => c.id === formData.clientId)?.name || 'Unknown'}`}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Client</label>
+              <select
+                value={formData.clientId}
+                onChange={(e) => {
+                  console.log('Select changed to:', e.target.value);
+                  setFormData(prev => ({ ...prev, clientId: e.target.value }));
+                }}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+              >
+                <option value="">No client</option>
+                {clients.map(client => (
+                  <option key={client.id} value={client.id}>{client.name}</option>
+                ))}
+              </select>
             </div>
-            <input
-              type="text"
-              value={newClientName}
-              onChange={(e) => setNewClientName(e.target.value)}
-              placeholder="Or add new client (press Enter)..."
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && newClientName.trim()) {
-                  e.preventDefault();
-                  const clientName = newClientName.trim();
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Or Add New</label>
+              <input
+                type="text"
+                value={newClientName}
+                onChange={(e) => setNewClientName(e.target.value)}
+                placeholder="Client name (Enter)"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newClientName.trim()) {
+                    e.preventDefault();
+                    const clientName = newClientName.trim();
 
-                  // Add client and get the generated ID
-                  const newClientId = addClient({ name: clientName, color: generateBrightColor() });
-                  console.log('Created new client with ID:', newClientId);
+                    // Add client and get the generated ID
+                    const newClientId = addClient({ name: clientName, color: generateBrightColor() });
+                    console.log('Created new client with ID:', newClientId);
 
-                  // Set the clientId immediately
-                  setFormData(prev => {
-                    console.log('Setting formData.clientId to:', newClientId);
-                    const newData = { ...prev, clientId: newClientId };
-                    console.log('New formData:', newData);
-                    return newData;
-                  });
+                    // Set the clientId immediately
+                    setFormData(prev => {
+                      console.log('Setting formData.clientId to:', newClientId);
+                      const newData = { ...prev, clientId: newClientId };
+                      console.log('New formData:', newData);
+                      return newData;
+                    });
 
-                  setNewClientName('');
-                  console.log('Clients after add:', useProjectStore.getState().clients);
-                }
-              }}
-              className="mt-2 w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-accent"
-            />
+                    setNewClientName('');
+                    console.log('Clients after add:', useProjectStore.getState().clients);
+                  }
+                }}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Deadline</label>
+              <div className="flex gap-2 items-center">
+                <div className="relative w-14">
+                <input
+                  type="text"
+                  placeholder="ДД"
+                  value={formData.deadline ? formData.deadline.split('-')[2] : ''}
+                  onKeyDown={(e) => {
+                  if (e.key >= '0' && e.key <= '9') {
+                    e.preventDefault();
+                    const parts = formData.deadline ? formData.deadline.split('-') : ['', '', ''];
+                    const currentDay = parts[2] || '';
+
+                    let newDay;
+                    if (currentDay.length >= 2) {
+                      // Shift: берем последнюю цифру и добавляем новую
+                      newDay = currentDay.slice(-1) + e.key;
+                    } else {
+                      // Просто добавляем
+                      newDay = currentDay + e.key;
+                    }
+
+                    const now = new Date();
+                    const year = parts[0] || String(now.getFullYear());
+                    const month = parts[1] || String(now.getMonth() + 1).padStart(2, '0');
+
+                    // Получаем максимальное количество дней в выбранном месяце
+                    const maxDays = new Date(parseInt(year), parseInt(month), 0).getDate();
+
+                    let dayNum = parseInt(newDay);
+                    // Если больше максимума для этого месяца, ставим максимум
+                    if (dayNum > maxDays) {
+                      dayNum = maxDays;
+                      newDay = String(maxDays);
+                    }
+                    // Если меньше 1, ставим 01
+                    if (dayNum < 1) {
+                      dayNum = 1;
+                      newDay = '01';
+                    }
+
+                    setFormData(prev => ({ ...prev, deadline: `${year}-${month}-${newDay.padStart(2, '0')}` }));
+                    setDeadlineFieldsFilled(prev => ({ ...prev, day: true }));
+                  } else if (e.key === 'Backspace') {
+                    e.preventDefault();
+                    setFormData(prev => ({ ...prev, deadline: '' }));
+                    setDeadlineFieldsFilled({ day: false, month: false, year: false });
+                  }
+                }}
+                onChange={() => {}}
+                className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-center focus:outline-none focus:border-accent"
+              />
+              </div>
+              <span className="text-zinc-500">.</span>
+              <div className="relative w-14">
+              {(() => {
+                const showAutofill = deadlineFieldsFilled.day && !deadlineFieldsFilled.month;
+                const now = new Date();
+                const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+
+                return showAutofill ? (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white" style={{ opacity: 0.3 }}>
+                    {currentMonth}
+                  </div>
+                ) : null;
+              })()}
+              <input
+                type="text"
+                placeholder="ММ"
+                value={formData.deadline ? formData.deadline.split('-')[1] : ''}
+                onKeyDown={(e) => {
+                  if (e.key >= '0' && e.key <= '9') {
+                    e.preventDefault();
+                    const parts = formData.deadline ? formData.deadline.split('-') : ['', '', ''];
+                    const currentMonth = parts[1] || '';
+
+                    let newMonth;
+                    if (currentMonth.length >= 2) {
+                      // Shift: берем последнюю цифру и добавляем новую
+                      newMonth = currentMonth.slice(-1) + e.key;
+                    } else {
+                      // Просто добавляем
+                      newMonth = currentMonth + e.key;
+                    }
+
+                    let monthNum = parseInt(newMonth);
+                    // Если больше 12, ставим 12
+                    if (monthNum > 12) {
+                      monthNum = 12;
+                      newMonth = '12';
+                    }
+                    // Если меньше 1, ставим 01
+                    if (monthNum < 1) {
+                      monthNum = 1;
+                      newMonth = '01';
+                    }
+
+                    const now = new Date();
+                    const year = parts[0] || String(now.getFullYear());
+                    let day = parts[2] || '01';
+
+                    // Корректируем день, если он больше максимального для нового месяца
+                    const maxDays = new Date(parseInt(year), parseInt(newMonth.padStart(2, '0')), 0).getDate();
+                    const dayNum = parseInt(day);
+                    if (dayNum > maxDays) {
+                      day = String(maxDays).padStart(2, '0');
+                    }
+
+                    setFormData(prev => ({ ...prev, deadline: `${year}-${newMonth.padStart(2, '0')}-${day}` }));
+                    setDeadlineFieldsFilled(prev => ({ ...prev, month: true }));
+                  } else if (e.key === 'Backspace') {
+                    e.preventDefault();
+                    const parts = formData.deadline ? formData.deadline.split('-') : ['', '', ''];
+                    if (parts[1]) {
+                      const newMonth = parts[1].slice(0, -1);
+                      if (newMonth && parts[0] && parts[2]) {
+                        setFormData(prev => ({ ...prev, deadline: `${parts[0]}-${newMonth.padStart(2, '0')}-${parts[2]}` }));
+                      } else {
+                        setDeadlineFieldsFilled(prev => ({ ...prev, month: false }));
+                      }
+                    }
+                  }
+                }}
+                onChange={() => {}}
+                className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-center focus:outline-none focus:border-accent"
+              />
+              </div>
+              <span className="text-zinc-500">.</span>
+              <div className="relative w-14">
+              {(() => {
+                const showAutofill = deadlineFieldsFilled.day && !deadlineFieldsFilled.year;
+                const now = new Date();
+                const currentYear = String(now.getFullYear()).slice(-2);
+
+                return showAutofill ? (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white" style={{ opacity: 0.3 }}>
+                    {currentYear}
+                  </div>
+                ) : null;
+              })()}
+              <input
+                type="text"
+                placeholder="ГГ"
+                value={formData.deadline ? formData.deadline.split('-')[0].slice(-2) : ''}
+                onKeyDown={(e) => {
+                  if (e.key >= '0' && e.key <= '9') {
+                    e.preventDefault();
+                    const parts = formData.deadline ? formData.deadline.split('-') : ['', '', ''];
+                    const currentYear = parts[0] ? parts[0].slice(-2) : '';
+
+                    let newYear;
+                    if (currentYear.length >= 2) {
+                      // Shift: берем последнюю цифру и добавляем новую
+                      newYear = currentYear.slice(-1) + e.key;
+                    } else {
+                      // Просто добавляем
+                      newYear = currentYear + e.key;
+                    }
+
+                    const now = new Date();
+                    const currentYearFull = now.getFullYear();
+                    const maxYearFull = currentYearFull + 1;
+                    const maxYearShort = String(maxYearFull).slice(-2);
+
+                    let fullYear = '20' + newYear.padStart(2, '0');
+                    let fullYearNum = parseInt(fullYear);
+
+                    // Если год больше чем на 1 год позже текущего, ставим максимальный
+                    if (fullYearNum > maxYearFull) {
+                      fullYear = String(maxYearFull);
+                      newYear = maxYearShort;
+                    }
+
+                    const month = parts[1] || String(now.getMonth() + 1).padStart(2, '0');
+                    let day = parts[2] || '01';
+
+                    // Корректируем день, если он больше максимального для выбранного месяца и года
+                    const maxDays = new Date(parseInt(fullYear), parseInt(month), 0).getDate();
+                    const dayNum = parseInt(day);
+                    if (dayNum > maxDays) {
+                      day = String(maxDays).padStart(2, '0');
+                    }
+
+                    setFormData(prev => ({ ...prev, deadline: `${fullYear}-${month}-${day}` }));
+                    setDeadlineFieldsFilled(prev => ({ ...prev, year: true }));
+                  } else if (e.key === 'Backspace') {
+                    e.preventDefault();
+                    const parts = formData.deadline ? formData.deadline.split('-') : ['', '', ''];
+                    if (parts[0]) {
+                      const currentYear = parts[0].slice(-2);
+                      const newYear = currentYear.slice(0, -1);
+                      if (newYear && parts[1] && parts[2]) {
+                        const fullYear = '20' + newYear.padStart(2, '0');
+                        setFormData(prev => ({ ...prev, deadline: `${fullYear}-${parts[1]}-${parts[2]}` }));
+                      } else {
+                        setDeadlineFieldsFilled(prev => ({ ...prev, year: false }));
+                      }
+                    }
+                  }
+                }}
+                onChange={() => {}}
+                className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-center focus:outline-none focus:border-accent"
+              />
+              </div>
+              <div className="relative w-8 h-8 flex items-center justify-center calendar-icon-wrapper">
+                <style>{`
+                  .calendar-icon-wrapper {
+                    cursor: pointer !important;
+                  }
+                  .calendar-icon-wrapper input[type="date"] {
+                    cursor: pointer !important;
+                  }
+                  .calendar-icon-wrapper input[type="date"]::-webkit-calendar-picker-indicator {
+                    cursor: pointer !important;
+                  }
+                `}</style>
+                <input
+                  type="date"
+                  value={formData.deadline || ''}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, deadline: e.target.value }));
+                    if (e.target.value) {
+                      setDeadlineFieldsFilled({ day: true, month: true, year: true });
+                    }
+                  }}
+                  className="absolute opacity-0"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    zIndex: 10
+                  }}
+                />
+                <svg
+                  className="w-5 h-5 text-zinc-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  style={{ pointerEvents: 'none', position: 'relative', zIndex: 5 }}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Cost</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={formData.cost}
+                  onChange={(e) => setFormData(prev => ({ ...prev, cost: e.target.value }))}
+                  placeholder="0"
+                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                />
+                <select
+                  value={formData.currency}
+                  onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value as 'USD' | 'RUB' | 'EUR' }))}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                >
+                  <option value="USD">USD</option>
+                  <option value="RUB">RUB</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Deadline (Optional)</label>
-            <input
-              type="date"
-              value={formData.deadline}
-              onChange={(e) => setFormData(prev => ({ ...prev, deadline: e.target.value }))}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent [color-scheme:dark]"
-              style={{ colorScheme: 'dark' }}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-3">Software Tools</label>
+            <label className="block text-sm font-medium mb-2">Software Tools</label>
             <div className="grid grid-cols-3 gap-2">
               {SOFTWARE_OPTIONS.map(sw => (
                 <button
@@ -4585,33 +5461,10 @@ function CreateProjectModal({ onClose, onCreate }: any) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Cost (Optional)</label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={formData.cost}
-                onChange={(e) => setFormData(prev => ({ ...prev, cost: e.target.value }))}
-                placeholder="0"
-                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
-              />
-              <select
-                value={formData.currency}
-                onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value as 'USD' | 'RUB' | 'EUR' }))}
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
-              >
-                <option value="USD">USD</option>
-                <option value="RUB">RUB</option>
-                <option value="EUR">EUR</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Project Thumbnail (Optional)</label>
-            <div className="text-xs text-zinc-500 mb-2">Press Ctrl+V to paste from clipboard</div>
+            <label className="block text-sm font-medium mb-1.5">Project Thumbnail <span className="text-xs text-zinc-500">(Ctrl+V to paste)</span></label>
             <div className="flex gap-2 items-center">
               {formData.thumbnailPath && (
-                <div className="w-20 h-20 rounded-lg overflow-hidden border border-zinc-700 flex-shrink-0 bg-zinc-800">
+                <div className="w-16 h-16 rounded-lg overflow-hidden border border-zinc-700 flex-shrink-0 bg-zinc-800">
                   <img
                     src={convertFileSrc(formData.thumbnailPath)}
                     alt="Thumbnail preview"
@@ -4640,7 +5493,7 @@ function CreateProjectModal({ onClose, onCreate }: any) {
                       setFormData(prev => ({ ...prev, thumbnailPath: imagePath }));
                     }
                   }}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
                 >
                   Choose Image
                 </button>
@@ -4648,7 +5501,7 @@ function CreateProjectModal({ onClose, onCreate }: any) {
                   <button
                     type="button"
                     onClick={() => setFormData(prev => ({ ...prev, thumbnailPath: '' }))}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
+                    className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
                   >
                     Remove
                   </button>
@@ -4657,30 +5510,29 @@ function CreateProjectModal({ onClose, onCreate }: any) {
             </div>
           </div>
 
-          <div>
-            <label className="flex items-center gap-2 mb-3 cursor-pointer">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={formData.hasShots}
                 onChange={(e) => setFormData(prev => ({ ...prev, hasShots: e.target.checked }))}
                 className="w-4 h-4"
               />
-              <span className="text-sm font-medium">Has shots</span>
+              <span className="text-sm">Has shots</span>
             </label>
-            <p className="text-xs text-zinc-500 mb-4">Enable shot-based workflow for this project</p>
-          </div>
-
-          <div>
-            <label className="flex items-center gap-2 mb-3 cursor-pointer">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={useDefaultPath}
                 onChange={(e) => setUseDefaultPath(e.target.checked)}
                 className="w-4 h-4"
               />
-              <span className="text-sm font-medium">Use default path</span>
+              <span className="text-sm">Use default path</span>
             </label>
+          </div>
 
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Project Path</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -4691,11 +5543,11 @@ function CreateProjectModal({ onClose, onCreate }: any) {
                 }}
                 disabled={useDefaultPath}
                 placeholder="/home/user/projects/my-project"
-                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent disabled:opacity-50"
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50"
               />
               <button
                 onClick={handleBrowse}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+                className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
               >
                 Browse
               </button>
@@ -4703,17 +5555,17 @@ function CreateProjectModal({ onClose, onCreate }: any) {
           </div>
         </div>
 
-        <div className="p-6 border-t border-zinc-800 flex justify-end gap-3 flex-shrink-0">
+        <div className="p-4 border-t border-zinc-800 flex justify-end gap-2 flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
           >
             Cancel
           </button>
           <button
             onClick={handleCreate}
             disabled={!formData.name || !formData.path}
-            className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors font-medium"
+            className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors font-medium animate-button text-sm"
           >
             Create Project
           </button>

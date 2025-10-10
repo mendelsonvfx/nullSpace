@@ -6,6 +6,139 @@
 :root {
   --accent-color: #9103c6;
   --accent-color-hover: #7a02a3;
+  --animation-duration: 0.3s;
+  --animation-timing: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Animations disabled state */
+body.animations-disabled * {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Smooth transitions for buttons */
+.animate-button {
+  transition: transform 0.15s ease-in-out;
+}
+
+.animate-button:active {
+  transform: translateY(3px) scale(0.98);
+}
+
+/* Mode switch animation */
+.animate-mode-switch {
+  animation: fadeInSlide var(--animation-duration) var(--animation-timing);
+}
+
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Card animations */
+.animate-card {
+  transition: all var(--animation-duration) var(--animation-timing);
+}
+
+.animate-card:hover {
+  transform: scale(1.02);
+}
+
+/* Panel slide in */
+.animate-panel-slide {
+  animation: slideIn 0.4s var(--animation-timing);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Fade in animation */
+.animate-fade-in {
+  animation: fadeIn 0.5s var(--animation-timing);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Scale animation for modals */
+.animate-modal {
+  animation: scaleIn 0.3s var(--animation-timing);
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Settings icon rotation animation */
+.animate-settings-icon {
+  transition: transform 0.25s linear;
+}
+
+button:hover .animate-settings-icon {
+  transform: rotate(60deg);
+}
+
+button:not(:hover) .animate-settings-icon {
+  transition: none;
+}
+
+/* Favorite star bounce animation */
+.animate-favorite-star-bounce {
+  animation: starBounce 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+}
+
+@keyframes starBounce {
+  0% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(0.85);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  75% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Close button red hover effect */
+.close-button-red {
+  transition: color 0.2s ease-in-out;
+}
+
+button:hover .close-button-red {
+  color: #ef4444;
 }
 
 /* Tauri Drag Region */
@@ -33,6 +166,18 @@ body {
 /* Versions scroll container */
 .versions-scroll-container {
   overscroll-behavior: contain;
+}
+
+/* Hide number input arrows */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 /* Custom scrollbar styles */

@@ -15,7 +15,7 @@ export function ProjectCard({ projectPath, thumbnail, isSelected, onContextMenu,
 
   return (
     <div
-      className={`w-full text-left rounded-lg transition-all relative overflow-hidden border group ${
+      className={`w-full text-left rounded-lg transition-all relative overflow-hidden border group animate-card ${
         isSelected
           ? 'border-accent'
           : 'hover:border-accent border-white/10'
