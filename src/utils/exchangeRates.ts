@@ -101,12 +101,13 @@ function getCachedRates(baseCurrency: string): ExchangeRatesData | null {
 
 /**
  * Получить дефолтные курсы (статические значения на случай, если API недоступен)
+ * Формат: базовая валюта -> { другая валюта: сколько базовой валюты за 1 единицу другой }
  */
 function getDefaultRates(baseCurrency: string): ExchangeRatesData {
   const defaultRates: Record<string, Record<string, number>> = {
-    USD: { USD: 1, RUB: 90, EUR: 0.92 },
-    RUB: { USD: 0.011, RUB: 1, EUR: 0.01 },
-    EUR: { USD: 1.09, RUB: 100, EUR: 1 }
+    USD: { USD: 1, RUB: 0.011, EUR: 1.09 },    // За 1 рубль = 0.011 USD, за 1 евро = 1.09 USD
+    RUB: { USD: 100, RUB: 1, EUR: 110 },        // За 1 доллар = 100 RUB, за 1 евро = 110 RUB
+    EUR: { USD: 0.92, RUB: 0.01, EUR: 1 }       // За 1 доллар = 0.92 EUR, за 1 рубль = 0.01 EUR
   };
 
   return {
@@ -118,6 +119,10 @@ function getDefaultRates(baseCurrency: string): ExchangeRatesData {
 
 /**
  * Конвертировать валюту
+ * Логика для ручных курсов: rates[currency] = сколько базовой валюты за 1 единицу указанной валюты
+ * Пример: base=RUB, rates={USD: 100} → 10 USD = 10 * 100 = 1000 RUB
+ *
+ * Для API курсов (auto mode): используется стандартная логика умножения
  */
 export function convertCurrency(
   amount: number,
@@ -129,9 +134,9 @@ export function convertCurrency(
     return amount;
   }
 
-  // Если у нас есть прямой курс
-  if (rates[toCurrency]) {
-    return amount * rates[toCurrency];
+  // Если у нас есть прямой курс fromCurrency -> toCurrency
+  if (rates[fromCurrency]) {
+    return amount * rates[fromCurrency];
   }
 
   return amount;
@@ -163,12 +168,14 @@ export function saveManualRates(rates: Record<string, Record<string, number>>): 
 
 /**
  * Получить дефолтные ручные курсы
+ * Формат: базовая валюта -> { другая валюта: сколько базовой валюты за 1 единицу другой }
+ * Пример: RUB -> { USD: 100 } означает "100 рублей за 1 доллар"
  */
 function getDefaultManualRates(): Record<string, Record<string, number>> {
   return {
-    USD: { USD: 1, RUB: 90, EUR: 0.92 },
-    RUB: { USD: 0.011, RUB: 1, EUR: 0.01 },
-    EUR: { USD: 1.09, RUB: 100, EUR: 1 }
+    USD: { USD: 1, RUB: 0.011, EUR: 1.09 },    // За 1 рубль = 0.011 USD, за 1 евро = 1.09 USD
+    RUB: { USD: 100, RUB: 1, EUR: 110 },        // За 1 доллар = 100 RUB, за 1 евро = 110 RUB
+    EUR: { USD: 0.92, RUB: 0.01, EUR: 1 }       // За 1 доллар = 0.92 EUR, за 1 рубль = 0.01 EUR
   };
 }
 
