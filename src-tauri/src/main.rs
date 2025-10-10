@@ -555,19 +555,24 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
         if software_lower == "blender" && !file_path.exists() {
             println!("Creating new Blender file with path config: {:?}", file_path);
 
-            let exe_dir = std::env::current_exe()
-                .ok()
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                .unwrap_or_else(|| PathBuf::from("."));
+            // Try multiple locations for the script
+            let script_path = {
+                let exe_dir = std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                    .unwrap_or_else(|| PathBuf::from("."));
 
-            let script_path = exe_dir.join("templates").join("blender_setup.py");
-            let script_path = if !script_path.exists() {
-                PathBuf::from("src-tauri/templates/blender_setup.py")
-            } else {
-                script_path
+                let candidates = vec![
+                    exe_dir.join("templates").join("blender_setup.py"),  // Portable: next to exe
+                    exe_dir.join("..").join("templates").join("blender_setup.py"),  // Some installers
+                    PathBuf::from("src-tauri/templates/blender_setup.py"),  // Dev mode
+                ];
+
+                // Find first existing path
+                candidates.into_iter().find(|p| p.exists())
             };
 
-            if script_path.exists() {
+            if let Some(script_path) = script_path {
                 // Spawn Blender process
                 let child = Command::new(&input.executable_path)
                     .arg("--background")
