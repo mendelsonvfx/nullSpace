@@ -15,7 +15,7 @@
 
 ## 🎯 About
 
-**nullSpace** is a powerful desktop application designed specifically for VFX artists and 3D designers to manage their creative projects. It combines project management, financial tracking, and seamless integration with industry-standard 3D software into one intuitive interface.
+**nullSpace** is a simple desktop application designed specifically for VFX artists and 3D designers to manage their creative projects. It combines project management, financial tracking, and seamless integration with industry-standard 3D software into one intuitive interface.
 
 ## ✨ Key Features
 
