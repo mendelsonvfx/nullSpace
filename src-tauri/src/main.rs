@@ -14,6 +14,8 @@ use sysinfo::System;
 
 // Embedded After Effects template
 const TEMPLATE_AEP: &[u8] = include_bytes!("../templates/empty.aep");
+// Embedded Blender setup script
+const BLENDER_SETUP_PY: &str = include_str!("../templates/blender_setup.py");
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Project {
@@ -555,24 +557,25 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
         if software_lower == "blender" && !file_path.exists() {
             println!("Creating new Blender file with path config: {:?}", file_path);
 
-            // Try multiple locations for the script
-            let script_path = {
-                let exe_dir = std::env::current_exe()
-                    .ok()
-                    .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                    .unwrap_or_else(|| PathBuf::from("."));
-
-                let candidates = vec![
-                    exe_dir.join("templates").join("blender_setup.py"),  // Portable: next to exe
-                    exe_dir.join("..").join("templates").join("blender_setup.py"),  // Some installers
-                    PathBuf::from("src-tauri/templates/blender_setup.py"),  // Dev mode
-                ];
-
-                // Find first existing path
-                candidates.into_iter().find(|p| p.exists())
+            // Create nullSpace folder in Documents for scripts
+            let documents_dir = if let Some(docs) = dirs::document_dir() {
+                docs
+            } else {
+                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
             };
 
-            if let Some(script_path) = script_path {
+            let nullspace_dir = documents_dir.join("nullSpace");
+            let templates_dir = nullspace_dir.join("templates");
+
+            // Create directories if they don't exist
+            let _ = std::fs::create_dir_all(&templates_dir);
+
+            let script_path = templates_dir.join("blender_setup.py");
+
+            // Write embedded script to temp file
+            if let Err(e) = std::fs::write(&script_path, BLENDER_SETUP_PY) {
+                println!("Warning: Failed to write temporary script: {}", e);
+            } else {
                 // Spawn Blender process
                 let child = Command::new(&input.executable_path)
                     .arg("--background")
@@ -626,8 +629,6 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
 
                 // Give it a moment to actually die
                 std::thread::sleep(Duration::from_millis(500));
-            } else {
-                println!("Warning: Blender setup script not found");
             }
         }
 
