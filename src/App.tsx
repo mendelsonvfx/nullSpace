@@ -2333,6 +2333,10 @@ function App() {
       now.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
       const notifications: Array<{ id: string; projectName: string; daysRemaining: number }> = [];
 
+      // Get custom deadline days from settings (default 3)
+      const deadlineNotificationDays = localStorage.getItem('deadlineNotificationDays');
+      const maxDays = deadlineNotificationDays ? parseInt(deadlineNotificationDays) : 3;
+
       projects.forEach((project) => {
         if (project.deadline && project.status !== 'completed' && project.status !== 'archived') {
           const deadlineDate = new Date(project.deadline);
@@ -2340,12 +2344,12 @@ function App() {
           const timeDiff = deadlineDate.getTime() - now.getTime();
           const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
 
-          // Show notification if 3 or fewer days remaining (including today and overdue)
-          if (daysRemaining <= 3) {
+          // Show notification if within custom days range (excluding overdue projects)
+          if (daysRemaining >= 0 && daysRemaining <= maxDays) {
             notifications.push({
               id: project.id,
               projectName: project.name,
-              daysRemaining: Math.max(0, daysRemaining)
+              daysRemaining: daysRemaining
             });
           }
         }
