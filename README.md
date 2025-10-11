@@ -4,7 +4,7 @@
 
 **Desktop Project Manager for VFX Artists & 3D Designers**
 
-![Version](https://img.shields.io/badge/version-0.5.0--beta-blue)
+![Version](https://img.shields.io/badge/version-0.9.0--beta-purple)
 ![Tauri](https://img.shields.io/badge/Tauri-1.6-orange)
 ![React](https://img.shields.io/badge/React-19-61dafb)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)
@@ -15,7 +15,7 @@
 
 ## 🎯 About
 
-**nullSpace** is a powerful desktop application designed specifically for VFX artists and 3D designers to manage their creative projects. It combines project management, financial tracking, and seamless integration with industry-standard 3D software into one intuitive interface.
+**nullSpace** is a simple desktop application designed specifically for VFX artists and 3D designers to manage their creative projects. It combines project management, financial tracking, and seamless integration with industry-standard 3D software into one intuitive interface.
 
 ## ✨ Key Features
 
@@ -29,8 +29,7 @@
 
 ### 🎨 Software Integration
 Seamlessly work with your favorite tools:
-- **3D Software**: Blender, Houdini, Maya, Cinema 4D, ZBrush, Marmoset
-- **Real-time Engines**: Unreal Engine, Unity
+- **3D Software**: Blender, Houdini, (Maya, Cinema 4D, ZBrush, Marmoset in progress)
 - **Compositing**: After Effects
 - **Texturing**: Substance Designer/Painter
 
@@ -125,7 +124,7 @@ npm run tauri build
 
 ## 📌 Beta Status
 
-This is a **beta release** (v0.5.0-beta). While the application is functional and ready for testing, please note:
+This is a **beta release** (v0.9.0-beta). While the application is functional and ready for testing, please note:
 
 - Some features may be refined in future updates
 - Regular backups of your project data are recommended
@@ -173,6 +172,6 @@ Special thanks to:
 
 <div align="center">
 
-**Made with ❤️ for artists, by artists**
+**Made with ❤️ for artists, by artist**
 
 </div>
