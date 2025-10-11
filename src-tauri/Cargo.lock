@@ -2551,8 +2551,10 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "dirs",
+ "lazy_static",
  "notify",
  "notify-debouncer-mini",
+ "parking_lot",
  "reqwest",
  "scraper",
  "serde",
