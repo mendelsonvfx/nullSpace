@@ -224,6 +224,10 @@ function GeneralSettings() {
     const saved = localStorage.getItem('deadlineNotifications');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [deadlineDays, setDeadlineDays] = useState(() => {
+    const saved = localStorage.getItem('deadlineNotificationDays');
+    return saved !== null ? parseInt(saved) : 3;
+  });
 
   const handleBrowseDirectory = async () => {
     const selected = await selectProjectDirectory();
@@ -288,30 +292,58 @@ function GeneralSettings() {
       </div>
 
       {/* Notifications */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-medium mb-1">Deadline Notifications</div>
-          <p className="text-sm text-zinc-400">
-            Show notifications for projects with upcoming deadlines (≤ 3 days)
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            const newValue = !notifications;
-            setNotifications(newValue);
-            localStorage.setItem('deadlineNotifications', JSON.stringify(newValue));
-            window.dispatchEvent(new Event('storage'));
-          }}
-          className={`w-12 h-6 rounded-full transition-colors relative ${
-            notifications ? 'bg-accent' : 'bg-zinc-700'
-          }`}
-        >
-          <div
-            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-              notifications ? 'translate-x-6' : 'translate-x-0.5'
+      <div className="border-t border-zinc-800 pt-6">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="font-medium mb-1">Deadline Notifications</div>
+            <p className="text-sm text-zinc-400">
+              Show notifications for projects with upcoming deadlines
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              const newValue = !notifications;
+              setNotifications(newValue);
+              localStorage.setItem('deadlineNotifications', JSON.stringify(newValue));
+              window.dispatchEvent(new Event('storage'));
+            }}
+            className={`w-12 h-6 rounded-full transition-colors relative ${
+              notifications ? 'bg-accent' : 'bg-zinc-700'
             }`}
-          />
-        </button>
+          >
+            <div
+              className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+                notifications ? 'translate-x-6' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+
+        {notifications && (
+          <div className="ml-0 mt-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium mb-1">Days Before Deadline</div>
+                <p className="text-sm text-zinc-400">
+                  Show notifications when deadline is within this many days
+                </p>
+              </div>
+              <input
+                type="number"
+                min="0"
+                max="7"
+                value={deadlineDays}
+                onChange={(e) => {
+                  const newValue = Math.min(7, Math.max(0, parseInt(e.target.value) || 0));
+                  setDeadlineDays(newValue);
+                  localStorage.setItem('deadlineNotificationDays', newValue.toString());
+                  window.dispatchEvent(new Event('storage'));
+                }}
+                className="w-20 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Thumbnail Cache */}
