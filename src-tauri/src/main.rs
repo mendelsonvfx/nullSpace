@@ -558,17 +558,14 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
             println!("Creating new Blender file with path config: {:?}", file_path);
 
             // Create nullSpace folder in Documents for scripts
-            let documents_dir = if let Some(docs) = dirs::document_dir() {
-                docs
-            } else {
-                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-            };
+            let documents_dir = dirs::document_dir()
+                .ok_or_else(|| "Could not determine Documents directory".to_string())?;
 
-            let nullspace_dir = documents_dir.join("nullSpace");
-            let templates_dir = nullspace_dir.join("templates");
+            let templates_dir = documents_dir.join("nullSpace").join("templates");
 
-            // Create directories if they don't exist
-            let _ = std::fs::create_dir_all(&templates_dir);
+            // Create directories - return error if this fails
+            std::fs::create_dir_all(&templates_dir)
+                .map_err(|e| format!("Failed to create templates directory: {}", e))?;
 
             let script_path = templates_dir.join("blender_setup.py");
 
