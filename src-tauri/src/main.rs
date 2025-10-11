@@ -8,9 +8,24 @@ use std::time::Duration;
 use chrono::Utc;
 use uuid::Uuid;
 use scraper::{Html, Selector};
-use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode, DebounceEventResult};
-use tauri::Manager;
 use sysinfo::System;
+use lazy_static::lazy_static;
+use parking_lot::Mutex;
+use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode, DebounceEventResult};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+use tauri::Manager;
+
+// Global state for file watcher
+struct WatcherHandle {
+    thread: Option<JoinHandle<()>>,
+    shutdown: Arc<AtomicBool>,
+}
+
+lazy_static! {
+    static ref WATCHER_HANDLE: Mutex<Option<WatcherHandle>> = Mutex::new(None);
+}
 
 // Embedded After Effects template
 const TEMPLATE_AEP: &[u8] = include_bytes!("../templates/empty.aep");
@@ -1200,22 +1215,33 @@ fn extract_domain_name(url: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn start_watching_project(app_handle: tauri::AppHandle, project_path: String) -> Result<(), String> {
-    let project_dir = PathBuf::from(&project_path);
+async fn start_watching_project(
+    app_handle: tauri::AppHandle,
+    project_path: String,
+) -> Result<(), String> {
+    println!("📁 Starting file watcher for: {}", project_path);
 
-    // List of software folders to watch
+    // Stop old watcher if exists
+    stop_watching_project().await?;
+
+    let project_dir = PathBuf::from(&project_path);
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
         "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
     ];
 
-    // Clone app_handle for the closure
+    // Create shutdown signal
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let shutdown_clone = shutdown.clone();
+
+    // Spawn watcher thread
     let app = app_handle.clone();
     let project_path_clone = project_path.clone();
 
-    // Spawn a new thread for the watcher
-    std::thread::spawn(move || {
-        // Create debouncer with 500ms delay
+    let thread = std::thread::spawn(move || {
+        println!("📁 File watcher thread started");
+
+        // Create debouncer
         let mut debouncer = match new_debouncer(
             Duration::from_millis(500),
             move |res: DebounceEventResult| {
@@ -1250,7 +1276,7 @@ async fn start_watching_project(app_handle: tauri::AppHandle, project_path: Stri
         };
 
         // Watch each software folder
-        for software_folder in software_folders {
+        for software_folder in &software_folders {
             let software_dir = project_dir.join(software_folder);
             if software_dir.exists() {
                 if let Err(e) = debouncer.watcher().watch(&software_dir, RecursiveMode::Recursive) {
@@ -1261,18 +1287,60 @@ async fn start_watching_project(app_handle: tauri::AppHandle, project_path: Stri
             }
         }
 
-        // Keep the watcher alive
-        loop {
-            std::thread::sleep(Duration::from_secs(1));
+        // ✅ FIXED: Loop with shutdown check (not infinite!)
+        while !shutdown_clone.load(Ordering::Relaxed) {
+            std::thread::sleep(Duration::from_millis(100));
         }
+
+        println!("📁 File watcher thread stopped gracefully");
     });
 
+    // Store handle globally
+    let mut handle = WATCHER_HANDLE.lock();
+    *handle = Some(WatcherHandle {
+        thread: Some(thread),
+        shutdown,
+    });
+
+    println!("✅ File watcher started successfully");
     Ok(())
 }
 
 #[tauri::command]
 async fn stop_watching_project() -> Result<(), String> {
-    // Watcher will be stopped when thread is dropped
+    println!("Stopping file watcher...");
+
+    let mut handle_guard = WATCHER_HANDLE.lock();
+
+    if let Some(mut handle) = handle_guard.take() {
+        // Signal shutdown
+        handle.shutdown.store(true, Ordering::Relaxed);
+
+        // Wait for thread to finish (with timeout)
+        if let Some(thread) = handle.thread.take() {
+            // Give thread 2 seconds to finish
+            let timeout = Duration::from_secs(2);
+            let start = std::time::Instant::now();
+
+            loop {
+                if thread.is_finished() {
+                    let _ = thread.join();
+                    println!("✅ File watcher stopped successfully");
+                    break;
+                }
+
+                if start.elapsed() > timeout {
+                    println!("⚠️  File watcher thread timeout (force dropping)");
+                    break;
+                }
+
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+    } else {
+        println!("ℹ️  No file watcher running");
+    }
+
     Ok(())
 }
 

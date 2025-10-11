@@ -1,0 +1,23 @@
+export type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
+
+export const STATUS_COLORS = {
+  active: 'bg-green-500',
+  paused: 'bg-yellow-500',
+  completed: 'bg-blue-500',
+  archived: 'bg-gray-500'
+} as const;
+
+export const STATUS_LABELS = {
+  active: 'Active',
+  paused: 'Paused',
+  completed: 'Completed',
+  archived: 'Archived'
+} as const;
+
+export const STATUS_CYCLE: ProjectStatus[] = ['active', 'paused', 'completed'];
+
+export const SOFTWARE_OPTIONS = [
+  'Blender', 'Houdini', 'After Effects',
+  // 'Maya',
+  // 'Cinema 4D', 'Substance', 'Unreal', 'Unity', 'ZBrush', 'Marmoset'
+] as const;

@@ -126,7 +126,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         }
       }
 
-      await invoke('update_project', { project });
+      // First update local state synchronously
       set(state => ({
         projects: state.projects.map(p =>
           p.id === project.id ? project : p
@@ -135,6 +135,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           ? project
           : state.selectedProject
       }));
+
+      // Then save to backend asynchronously
+      await invoke('update_project', { project });
     } catch (error) {
       set({ error: String(error) });
       throw error;
@@ -247,124 +250,77 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       updatedAt: new Date().toISOString(),
     };
 
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = { ...p, notes: [...p.notes, newNote] };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    // Find and update project
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = { ...project, notes: [...project.notes, newNote] };
+      // updateProject now handles both state update and backend save
+      get().updateProject(updated);
+    }
   },
 
   // Update note
   updateNote: (projectId: string, noteId: string, content: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = {
-            ...p,
-            notes: p.notes.map(n => 
-              n.id === noteId 
-                ? { ...n, content, updatedAt: new Date().toISOString() }
-                : n
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = {
+        ...project,
+        notes: project.notes.map(n =>
+          n.id === noteId
+            ? { ...n, content, updatedAt: new Date().toISOString() }
+            : n
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   // Delete note
   deleteNote: (projectId: string, noteId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = {
-            ...p,
-            notes: p.notes.filter(n => n.id !== noteId)
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = {
+        ...project,
+        notes: project.notes.filter(n => n.id !== noteId)
+      };
+      get().updateProject(updated);
+    }
   },
 
   // Add tag
   addTag: (projectId: string, tag: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && !p.tags.includes(tag)) {
-          const updated = { ...p, tags: [...p.tags, tag] };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && !project.tags.includes(tag)) {
+      const updated = { ...project, tags: [...project.tags, tag] };
+      get().updateProject(updated);
+    }
   },
 
   // Remove tag
   removeTag: (projectId: string, tag: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = { ...p, tags: p.tags.filter(t => t !== tag) };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = { ...project, tags: project.tags.filter(t => t !== tag) };
+      get().updateProject(updated);
+    }
   },
 
   // Update status
   updateStatus: (projectId: string, status: Project['status']) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = { ...p, status };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = { ...project, status };
+      get().updateProject(updated);
+    }
   },
 
   // Update deadline
   updateDeadline: (projectId: string, deadline: string | undefined) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = { ...p, deadline };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = { ...project, deadline };
+      get().updateProject(updated);
+    }
   },
 
   // Add browser tab
@@ -376,37 +332,23 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       isPinned: false
     };
 
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = { ...p, browserTabs: [...p.browserTabs, newTab] };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = { ...project, browserTabs: [...project.browserTabs, newTab] };
+      get().updateProject(updated);
+    }
   },
 
   // Remove browser tab
   removeBrowserTab: (projectId: string, tabId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = {
-            ...p,
-            browserTabs: p.browserTabs.filter((t: any) => t.id !== tabId)
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = {
+        ...project,
+        browserTabs: project.browserTabs.filter((t: any) => t.id !== tabId)
+      };
+      get().updateProject(updated);
+    }
   },
 
   // Add todo
@@ -417,58 +359,37 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       completed: false
     };
 
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = { ...p, todos: [...(p.todos || []), newTodo] };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = { ...project, todos: [...(project.todos || []), newTodo] };
+      get().updateProject(updated);
+    }
   },
 
   // Toggle todo completed state
   toggleTodo: (projectId: string, todoId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = {
-            ...p,
-            todos: (p.todos || []).map(t =>
-              t.id === todoId ? { ...t, completed: !t.completed } : t
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = {
+        ...project,
+        todos: (project.todos || []).map(t =>
+          t.id === todoId ? { ...t, completed: !t.completed } : t
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   // Remove todo
   removeTodo: (projectId: string, todoId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = {
-            ...p,
-            todos: (p.todos || []).filter(t => t.id !== todoId)
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = {
+        ...project,
+        todos: (project.todos || []).filter(t => t.id !== todoId)
+      };
+      get().updateProject(updated);
+    }
   },
 
   // Add link
@@ -479,92 +400,57 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       title
     };
 
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = { ...p, links: [...(p.links || []), newLink] };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = { ...project, links: [...(project.links || []), newLink] };
+      get().updateProject(updated);
+    }
 
     return newLink.id;
   },
 
   // Update link title
   updateLink: (projectId: string, linkId: string, newTitle: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = {
-            ...p,
-            links: (p.links || []).map(l =>
-              l.id === linkId ? { ...l, title: newTitle } : l
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = {
+        ...project,
+        links: (project.links || []).map(l =>
+          l.id === linkId ? { ...l, title: newTitle } : l
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   // Remove link
   removeLink: (projectId: string, linkId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = {
-            ...p,
-            links: (p.links || []).filter(l => l.id !== linkId)
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = {
+        ...project,
+        links: (project.links || []).filter(l => l.id !== linkId)
+      };
+      get().updateProject(updated);
+    }
   },
 
   // Toggle favorite
   toggleFavorite: (projectId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = { ...p, isFavorite: !p.isFavorite };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = { ...project, isFavorite: !project.isFavorite };
+      get().updateProject(updated);
+    }
   },
 
   // Toggle pin
   togglePin: (projectId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId) {
-          const updated = { ...p, isPinned: !p.isPinned };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = { ...project, isPinned: !project.isPinned };
+      get().updateProject(updated);
+    }
   },
 
   // Add client
@@ -621,66 +507,45 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   // Shot management
   addShot: (projectId: string, name?: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const shotNumber = (p.shots?.length || 0) + 1;
-          const newShot = {
-            id: crypto.randomUUID(),
-            number: shotNumber,
-            name: name || `Shot ${shotNumber.toString().padStart(3, '0')}`,
-            todos: [],
-            notes: [],
-            browserTabs: [],
-            links: []
-          };
-          const updated = {
-            ...p,
-            shots: [...(p.shots || []), newShot],
-            currentShotId: p.currentShotId || newShot.id
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const shotNumber = (project.shots?.length || 0) + 1;
+      const newShot = {
+        id: crypto.randomUUID(),
+        number: shotNumber,
+        name: name || `Shot ${shotNumber.toString().padStart(3, '0')}`,
+        todos: [],
+        notes: [],
+        browserTabs: [],
+        links: []
+      };
+      const updated = {
+        ...project,
+        shots: [...(project.shots || []), newShot],
+        currentShotId: project.currentShotId || newShot.id
+      };
+      get().updateProject(updated);
+    }
   },
 
   removeShot: (projectId: string, shotId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).filter(s => s.id !== shotId),
-            currentShotId: p.currentShotId === shotId ? (p.shots?.[0]?.id || undefined) : p.currentShotId
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).filter(s => s.id !== shotId),
+        currentShotId: project.currentShotId === shotId ? (project.shots?.[0]?.id || undefined) : project.currentShotId
+      };
+      get().updateProject(updated);
+    }
   },
 
   setCurrentShot: (projectId: string, shotId: string | null) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = { ...p, currentShotId: shotId || undefined };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = { ...project, currentShotId: shotId || undefined };
+      get().updateProject(updated);
+    }
   },
 
   addShotNote: (projectId: string, shotId: string, content: string) => {
@@ -691,70 +556,49 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       updatedAt: new Date().toISOString(),
     };
 
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId ? { ...s, notes: [...s.notes, newNote] } : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId ? { ...s, notes: [...s.notes, newNote] } : s
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   updateShotNote: (projectId: string, shotId: string, noteId: string, content: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId
-                ? {
-                    ...s,
-                    notes: s.notes.map(n =>
-                      n.id === noteId ? { ...n, content, updatedAt: new Date().toISOString() } : n
-                    )
-                  }
-                : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId
+            ? {
+                ...s,
+                notes: s.notes.map(n =>
+                  n.id === noteId ? { ...n, content, updatedAt: new Date().toISOString() } : n
+                )
+              }
+            : s
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   deleteShotNote: (projectId: string, shotId: string, noteId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId ? { ...s, notes: s.notes.filter(n => n.id !== noteId) } : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId ? { ...s, notes: s.notes.filter(n => n.id !== noteId) } : s
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   addShotTodo: (projectId: string, shotId: string, text: string) => {
@@ -764,68 +608,47 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       completed: false
     };
 
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId ? { ...s, todos: [...s.todos, newTodo] } : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId ? { ...s, todos: [...s.todos, newTodo] } : s
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   toggleShotTodo: (projectId: string, shotId: string, todoId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId
-                ? {
-                    ...s,
-                    todos: s.todos.map(t => (t.id === todoId ? { ...t, completed: !t.completed } : t))
-                  }
-                : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId
+            ? {
+                ...s,
+                todos: s.todos.map(t => (t.id === todoId ? { ...t, completed: !t.completed } : t))
+              }
+            : s
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   removeShotTodo: (projectId: string, shotId: string, todoId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId ? { ...s, todos: s.todos.filter(t => t.id !== todoId) } : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId ? { ...s, todos: s.todos.filter(t => t.id !== todoId) } : s
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   addShotBrowserTab: (projectId: string, shotId: string, url: string, title: string) => {
@@ -836,43 +659,29 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       isPinned: false
     };
 
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId ? { ...s, browserTabs: [...s.browserTabs, newTab] } : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId ? { ...s, browserTabs: [...s.browserTabs, newTab] } : s
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   removeShotBrowserTab: (projectId: string, shotId: string, tabId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId ? { ...s, browserTabs: s.browserTabs.filter(t => t.id !== tabId) } : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId ? { ...s, browserTabs: s.browserTabs.filter(t => t.id !== tabId) } : s
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   addShotLink: (projectId: string, shotId: string, url: string, title: string) => {
@@ -882,70 +691,49 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       title
     };
 
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId ? { ...s, links: [...(s.links || []), newLink] } : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId ? { ...s, links: [...(s.links || []), newLink] } : s
+        )
+      };
+      get().updateProject(updated);
+    }
 
     return newLink.id;
   },
 
   updateShotLink: (projectId: string, shotId: string, linkId: string, newTitle: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId
-                ? {
-                    ...s,
-                    links: (s.links || []).map(l => (l.id === linkId ? { ...l, title: newTitle } : l))
-                  }
-                : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId
+            ? {
+                ...s,
+                links: (s.links || []).map(l => (l.id === linkId ? { ...l, title: newTitle } : l))
+              }
+            : s
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   removeShotLink: (projectId: string, shotId: string, linkId: string) => {
-    set(state => {
-      const updatedProjects = state.projects.map(p => {
-        if (p.id === projectId && p.hasShots) {
-          const updated = {
-            ...p,
-            shots: (p.shots || []).map(s =>
-              s.id === shotId ? { ...s, links: (s.links || []).filter(l => l.id !== linkId) } : s
-            )
-          };
-          get().updateProject(updated);
-          return updated;
-        }
-        return p;
-      });
-
-      return { projects: updatedProjects };
-    });
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId ? { ...s, links: (s.links || []).filter(l => l.id !== linkId) } : s
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   // Category management
@@ -963,57 +751,59 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   removeCategory: (name: string) => {
-    set(state => {
-      const updatedCategories = state.categories.filter(c => c !== name);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('categories', JSON.stringify(updatedCategories));
+    const updatedCategories = get().categories.filter(c => c !== name);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('categories', JSON.stringify(updatedCategories));
+    }
+
+    // Move projects from deleted category to "Personal"
+    const updatedProjects = get().projects.map(p =>
+      p.category === name ? { ...p, category: 'Personal' } : p
+    );
+
+    // Update state first
+    set({
+      categories: updatedCategories,
+      selectedCategory: get().selectedCategory === name ? updatedCategories[0] : get().selectedCategory,
+      projects: updatedProjects
+    });
+
+    // Then save each updated project asynchronously
+    updatedProjects.forEach((p) => {
+      const originalProject = get().projects.find(orig => orig.id === p.id);
+      if (p.category === 'Personal' && originalProject?.category === name) {
+        get().updateProject(p);
       }
-
-      // Move projects from deleted category to "Personal"
-      const updatedProjects = state.projects.map(p =>
-        p.category === name ? { ...p, category: 'Personal' } : p
-      );
-
-      // Save each updated project
-      updatedProjects.forEach(async (p) => {
-        if (p.category === 'Personal' && state.projects.find(orig => orig.id === p.id)?.category === name) {
-          await get().updateProject(p);
-        }
-      });
-
-      return {
-        categories: updatedCategories,
-        selectedCategory: state.selectedCategory === name ? updatedCategories[0] : state.selectedCategory,
-        projects: updatedProjects
-      };
     });
   },
 
   renameCategory: (oldName: string, newName: string) => {
-    set(state => {
-      // Update category list
-      const updatedCategories = state.categories.map(c => c === oldName ? newName : c);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('categories', JSON.stringify(updatedCategories));
+    // Update category list
+    const updatedCategories = get().categories.map(c => c === oldName ? newName : c);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('categories', JSON.stringify(updatedCategories));
+    }
+
+    // Update all projects with this category
+    const updatedProjects = get().projects.map(p =>
+      p.category === oldName ? { ...p, category: newName } : p
+    );
+
+    // Update state first
+    set({
+      categories: updatedCategories,
+      selectedCategory: get().selectedCategory === oldName ? newName : get().selectedCategory,
+      projects: updatedProjects
+    });
+
+    // Then save each updated project asynchronously
+    updatedProjects.forEach((p) => {
+      const originalProject = get().projects.find(orig => orig.id === p.id);
+      if (p.category === newName && originalProject?.category === oldName) {
+        get().updateProject(p);
       }
-
-      // Update all projects with this category
-      const updatedProjects = state.projects.map(p =>
-        p.category === oldName ? { ...p, category: newName } : p
-      );
-
-      // Save each updated project
-      updatedProjects.forEach(async (p) => {
-        if (p.category === newName && state.projects.find(orig => orig.id === p.id)?.category === oldName) {
-          await get().updateProject(p);
-        }
-      });
-
-      return {
-        categories: updatedCategories,
-        selectedCategory: state.selectedCategory === oldName ? newName : state.selectedCategory,
-        projects: updatedProjects
-      };
     });
   },
 
