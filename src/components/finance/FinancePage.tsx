@@ -451,7 +451,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   console.log('[FinancePage] RENDER END', { duration: (renderEnd - renderStart).toFixed(2) + 'ms' });
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 min-h-0 animate-mode-switch">
+    <div className="h-full flex flex-col bg-zinc-950 animate-mode-switch">
       <div className="flex-1 overflow-y-auto px-8 pb-8 pt-6">
         {selectedProject ? (
           /* Project Financial Details */

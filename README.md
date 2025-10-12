@@ -4,7 +4,7 @@
 
 **Desktop Project Manager for VFX Artists & 3D Designers**
 
-![Version](https://img.shields.io/badge/version-0.9.0--beta-purple)
+![Version](https://img.shields.io/badge/version-0.9.6--beta-purple)
 ![Tauri](https://img.shields.io/badge/Tauri-1.6-orange)
 ![React](https://img.shields.io/badge/React-19-61dafb)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)
@@ -124,11 +124,17 @@ npm run tauri build
 
 ## 📌 Beta Status
 
-This is a **beta release** (v0.9.0-beta). While the application is functional and ready for testing, please note:
+This is a **beta release** (v0.9.6-beta). While the application is functional and ready for testing, please note:
 
 - Some features may be refined in future updates
 - Regular backups of your project data are recommended
 - Bug reports and feature requests are welcome!
+- **Known Limitation:** Auto-refresh for file changes is temporarily disabled (manual refresh required)
+
+### 📚 Documentation
+- [CODE_AUDIT_REPORT.md](CODE_AUDIT_REPORT.md) - Comprehensive code audit with identified issues
+- [DEVELOPMENT_HISTORY.md](DEVELOPMENT_HISTORY.md) - Development timeline and major changes
+- [KNOWN_ISSUES.md](KNOWN_ISSUES.md) - Current limitations and workarounds
 
 ---
 
