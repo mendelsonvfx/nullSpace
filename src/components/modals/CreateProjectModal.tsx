@@ -1,0 +1,680 @@
+import { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
+import { invoke, convertFileSrc } from '@tauri-apps/api/tauri';
+import { selectProjectDirectory } from '../../utils/tauri';
+import { useProjectStore } from '../../store/projectStore';
+import { SoftwareIcon } from '../SoftwareIcon';
+import { generateBrightColor, SOFTWARE_OPTIONS } from '../../utils';
+
+interface CreateProjectModalProps {
+  onClose: () => void;
+  onCreate: (projectData: any) => Promise<void>;
+}
+
+export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProps) {
+  const { defaultProjectsPath, clients, addClient, selectedCategory } = useProjectStore();
+  const [useDefaultPath, setUseDefaultPath] = useState(true);
+  const [newClientName, setNewClientName] = useState('');
+
+  // Get base currency from settings
+  const baseCurrency = (localStorage.getItem('baseCurrency') || 'USD') as 'USD' | 'RUB' | 'EUR';
+
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    path: defaultProjectsPath,
+    software: [] as string[],
+    tags: [] as string[],
+    deadline: '',
+    cost: '',
+    currency: baseCurrency,
+    paymentStatus: 'unpaid' as 'paid' | 'prepaid' | 'unpaid',
+    prepaymentAmount: '',
+    clientId: '',
+    thumbnailPath: '',
+    hasShots: false,
+    category: selectedCategory
+  });
+
+  // Track which date fields user has manually filled
+  const [deadlineFieldsFilled, setDeadlineFieldsFilled] = useState({
+    day: false,
+    month: false,
+    year: false
+  });
+
+  useEffect(() => {
+    if (useDefaultPath && formData.name) {
+      const projectName = formData.name.replace(/\s+/g, '');
+      setFormData(prev => ({
+        ...prev,
+        path: `${defaultProjectsPath}\\${projectName}`
+      }));
+    }
+  }, [useDefaultPath, formData.name, defaultProjectsPath]);
+
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf('image') !== -1) {
+          const blob = item.getAsFile();
+          if (blob) {
+            try {
+              // Convert blob to array buffer
+              const arrayBuffer = await blob.arrayBuffer();
+              const uint8Array = new Uint8Array(arrayBuffer);
+
+              // Save to temp file using Tauri
+              const { writeBinaryFile, BaseDirectory } = await import('@tauri-apps/api/fs');
+              const { appDataDir } = await import('@tauri-apps/api/path');
+              const appDir = await appDataDir();
+              const tempFileName = `temp_thumbnail_${Date.now()}.png`;
+              const tempPath = `${appDir}\\${tempFileName}`;
+
+              // Write binary file
+              await writeBinaryFile(tempFileName, uint8Array, { dir: BaseDirectory.AppData });
+
+              setFormData(prev => ({ ...prev, thumbnailPath: tempPath }));
+              console.log('Image pasted from clipboard:', tempPath);
+            } catch (error) {
+              console.error('Failed to paste image:', error);
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, []);
+
+  const toggleSoftware = (sw: string) => {
+    setFormData(prev => ({
+      ...prev,
+      software: prev.software.includes(sw)
+        ? prev.software.filter(s => s !== sw)
+        : [...prev.software, sw]
+    }));
+  };
+
+  const handleCreate = async () => {
+    if (!formData.name || !formData.path) return;
+
+    // If there's a new client name entered but not yet created, create it first
+    let finalClientId = formData.clientId;
+    if (newClientName.trim() && !formData.clientId) {
+      const clientName = newClientName.trim();
+      const newClientId = addClient({ name: clientName, color: generateBrightColor() });
+      console.log('Auto-created new client with ID:', newClientId);
+      finalClientId = newClientId;
+    }
+
+    // Auto-fill deadline if only day is entered
+    let finalDeadline = formData.deadline;
+    if (finalDeadline && deadlineFieldsFilled.day) {
+      // If only day is entered (partial date), auto-fill with current month and year
+      if (!deadlineFieldsFilled.month || !deadlineFieldsFilled.year) {
+        const parts = finalDeadline.split('-');
+        const now = new Date();
+        const currentYear = String(now.getFullYear());
+        const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+        const day = parts[2];
+
+        finalDeadline = `${currentYear}-${currentMonth}-${day.padStart(2, '0')}`;
+      }
+    }
+
+    console.log('Creating project with formData:', formData);
+    console.log('finalClientId value:', finalClientId);
+    console.log('finalClientId type:', typeof finalClientId);
+
+    const projectData = {
+      ...formData,
+      deadline: finalDeadline || undefined,
+      cost: formData.cost ? parseFloat(formData.cost) : undefined,
+      prepaymentAmount: formData.prepaymentAmount ? parseFloat(formData.prepaymentAmount) : undefined,
+      paymentStatus: formData.paymentStatus || undefined,
+      clientId: finalClientId || undefined,
+      hasShots: formData.hasShots
+    };
+    console.log('Project data being sent:', projectData);
+    console.log('projectData.clientId:', projectData.clientId);
+
+    await onCreate(projectData);
+
+    // If thumbnail was selected, set it after project creation
+    if (formData.thumbnailPath) {
+      try {
+        const thumbnailName = await invoke<string>('set_project_thumbnail', {
+          projectPath: formData.path,
+          imagePath: formData.thumbnailPath
+        });
+        console.log('Thumbnail set:', thumbnailName);
+
+        // Update the project with the thumbnail
+        const { loadProjects } = useProjectStore.getState();
+        await loadProjects();
+      } catch (error) {
+        console.error('Failed to set thumbnail:', error);
+      }
+    }
+
+    onClose();
+  };
+
+  const handleBrowse = async () => {
+    console.log('Browse clicked');
+    const selected = await selectProjectDirectory();
+    console.log('Selected:', selected);
+    if (selected) {
+      setFormData(prev => ({ ...prev, path: selected }));
+      setUseDefaultPath(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
+        }
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
+          onClose();
+        }
+        delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
+      }}
+    >
+      <div className="bg-zinc-900 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
+          <h2 className="text-lg font-semibold">Create New Project</h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
+            <X className="w-5 h-5 close-button-red" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4 overflow-y-auto flex-1">
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Project Name</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="My Awesome Project"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Brief description of your project..."
+              rows={2}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Client</label>
+              <select
+                value={formData.clientId}
+                onChange={(e) => {
+                  console.log('Select changed to:', e.target.value);
+                  setFormData(prev => ({ ...prev, clientId: e.target.value }));
+                }}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+              >
+                <option value="">No client</option>
+                {clients.map(client => (
+                  <option key={client.id} value={client.id}>{client.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Or Add New</label>
+              <input
+                type="text"
+                value={newClientName}
+                onChange={(e) => setNewClientName(e.target.value)}
+                placeholder="Client name (Enter)"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newClientName.trim()) {
+                    e.preventDefault();
+                    const clientName = newClientName.trim();
+
+                    // Add client and get the generated ID
+                    const newClientId = addClient({ name: clientName, color: generateBrightColor() });
+                    console.log('Created new client with ID:', newClientId);
+
+                    // Set the clientId immediately
+                    setFormData(prev => {
+                      console.log('Setting formData.clientId to:', newClientId);
+                      const newData = { ...prev, clientId: newClientId };
+                      console.log('New formData:', newData);
+                      return newData;
+                    });
+
+                    setNewClientName('');
+                    console.log('Clients after add:', useProjectStore.getState().clients);
+                  }
+                }}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Deadline</label>
+              <div className="flex gap-2 items-center">
+                <div className="relative w-14">
+                <input
+                  type="text"
+                  placeholder="ДД"
+                  value={formData.deadline ? formData.deadline.split('-')[2] : ''}
+                  onKeyDown={(e) => {
+                  if (e.key >= '0' && e.key <= '9') {
+                    e.preventDefault();
+                    const parts = formData.deadline ? formData.deadline.split('-') : ['', '', ''];
+                    const currentDay = parts[2] || '';
+
+                    let newDay;
+                    if (currentDay.length >= 2) {
+                      // Shift: берем последнюю цифру и добавляем новую
+                      newDay = currentDay.slice(-1) + e.key;
+                    } else {
+                      // Просто добавляем
+                      newDay = currentDay + e.key;
+                    }
+
+                    const now = new Date();
+                    const year = parts[0] || String(now.getFullYear());
+                    const month = parts[1] || String(now.getMonth() + 1).padStart(2, '0');
+
+                    // Получаем максимальное количество дней в выбранном месяце
+                    const maxDays = new Date(parseInt(year), parseInt(month), 0).getDate();
+
+                    let dayNum = parseInt(newDay);
+                    // Если больше максимума для этого месяца, ставим максимум
+                    if (dayNum > maxDays) {
+                      dayNum = maxDays;
+                      newDay = String(maxDays);
+                    }
+                    // Если меньше 1, ставим 01
+                    if (dayNum < 1) {
+                      dayNum = 1;
+                      newDay = '01';
+                    }
+
+                    setFormData(prev => ({ ...prev, deadline: `${year}-${month}-${newDay.padStart(2, '0')}` }));
+                    setDeadlineFieldsFilled(prev => ({ ...prev, day: true }));
+                  } else if (e.key === 'Backspace') {
+                    e.preventDefault();
+                    setFormData(prev => ({ ...prev, deadline: '' }));
+                    setDeadlineFieldsFilled({ day: false, month: false, year: false });
+                  }
+                }}
+                onChange={() => {}}
+                className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+              />
+              </div>
+              <span className="text-zinc-500">.</span>
+              <div className="relative w-14">
+              {(() => {
+                const showAutofill = deadlineFieldsFilled.day && !deadlineFieldsFilled.month;
+                const now = new Date();
+                const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+
+                return showAutofill ? (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white" style={{ opacity: 0.3 }}>
+                    {currentMonth}
+                  </div>
+                ) : null;
+              })()}
+              <input
+                type="text"
+                placeholder="ММ"
+                value={formData.deadline ? formData.deadline.split('-')[1] : ''}
+                onKeyDown={(e) => {
+                  if (e.key >= '0' && e.key <= '9') {
+                    e.preventDefault();
+                    const parts = formData.deadline ? formData.deadline.split('-') : ['', '', ''];
+                    const currentMonth = parts[1] || '';
+
+                    let newMonth;
+                    if (currentMonth.length >= 2) {
+                      // Shift: берем последнюю цифру и добавляем новую
+                      newMonth = currentMonth.slice(-1) + e.key;
+                    } else {
+                      // Просто добавляем
+                      newMonth = currentMonth + e.key;
+                    }
+
+                    let monthNum = parseInt(newMonth);
+                    // Если больше 12, ставим 12
+                    if (monthNum > 12) {
+                      monthNum = 12;
+                      newMonth = '12';
+                    }
+                    // Если меньше 1, ставим 01
+                    if (monthNum < 1) {
+                      monthNum = 1;
+                      newMonth = '01';
+                    }
+
+                    const now = new Date();
+                    const year = parts[0] || String(now.getFullYear());
+                    let day = parts[2] || '01';
+
+                    // Корректируем день, если он больше максимального для нового месяца
+                    const maxDays = new Date(parseInt(year), parseInt(newMonth.padStart(2, '0')), 0).getDate();
+                    const dayNum = parseInt(day);
+                    if (dayNum > maxDays) {
+                      day = String(maxDays).padStart(2, '0');
+                    }
+
+                    setFormData(prev => ({ ...prev, deadline: `${year}-${newMonth.padStart(2, '0')}-${day}` }));
+                    setDeadlineFieldsFilled(prev => ({ ...prev, month: true }));
+                  } else if (e.key === 'Backspace') {
+                    e.preventDefault();
+                    const parts = formData.deadline ? formData.deadline.split('-') : ['', '', ''];
+                    if (parts[1]) {
+                      const newMonth = parts[1].slice(0, -1);
+                      if (newMonth && parts[0] && parts[2]) {
+                        setFormData(prev => ({ ...prev, deadline: `${parts[0]}-${newMonth.padStart(2, '0')}-${parts[2]}` }));
+                      } else {
+                        setDeadlineFieldsFilled(prev => ({ ...prev, month: false }));
+                      }
+                    }
+                  }
+                }}
+                onChange={() => {}}
+                className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+              />
+              </div>
+              <span className="text-zinc-500">.</span>
+              <div className="relative w-14">
+              {(() => {
+                const showAutofill = deadlineFieldsFilled.day && !deadlineFieldsFilled.year;
+                const now = new Date();
+                const currentYear = String(now.getFullYear()).slice(-2);
+
+                return showAutofill ? (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white" style={{ opacity: 0.3 }}>
+                    {currentYear}
+                  </div>
+                ) : null;
+              })()}
+              <input
+                type="text"
+                placeholder="ГГ"
+                value={formData.deadline ? formData.deadline.split('-')[0].slice(-2) : ''}
+                onKeyDown={(e) => {
+                  if (e.key >= '0' && e.key <= '9') {
+                    e.preventDefault();
+                    const parts = formData.deadline ? formData.deadline.split('-') : ['', '', ''];
+                    const currentYear = parts[0] ? parts[0].slice(-2) : '';
+
+                    let newYear;
+                    if (currentYear.length >= 2) {
+                      // Shift: берем последнюю цифру и добавляем новую
+                      newYear = currentYear.slice(-1) + e.key;
+                    } else {
+                      // Просто добавляем
+                      newYear = currentYear + e.key;
+                    }
+
+                    const now = new Date();
+                    const currentYearFull = now.getFullYear();
+                    const maxYearFull = currentYearFull + 1;
+                    const maxYearShort = String(maxYearFull).slice(-2);
+
+                    let fullYear = '20' + newYear.padStart(2, '0');
+                    let fullYearNum = parseInt(fullYear);
+
+                    // Если год больше чем на 1 год позже текущего, ставим максимальный
+                    if (fullYearNum > maxYearFull) {
+                      fullYear = String(maxYearFull);
+                      newYear = maxYearShort;
+                    }
+
+                    const month = parts[1] || String(now.getMonth() + 1).padStart(2, '0');
+                    let day = parts[2] || '01';
+
+                    // Корректируем день, если он больше максимального для выбранного месяца и года
+                    const maxDays = new Date(parseInt(fullYear), parseInt(month), 0).getDate();
+                    const dayNum = parseInt(day);
+                    if (dayNum > maxDays) {
+                      day = String(maxDays).padStart(2, '0');
+                    }
+
+                    setFormData(prev => ({ ...prev, deadline: `${fullYear}-${month}-${day}` }));
+                    setDeadlineFieldsFilled(prev => ({ ...prev, year: true }));
+                  } else if (e.key === 'Backspace') {
+                    e.preventDefault();
+                    const parts = formData.deadline ? formData.deadline.split('-') : ['', '', ''];
+                    if (parts[0]) {
+                      const currentYear = parts[0].slice(-2);
+                      const newYear = currentYear.slice(0, -1);
+                      if (newYear && parts[1] && parts[2]) {
+                        const fullYear = '20' + newYear.padStart(2, '0');
+                        setFormData(prev => ({ ...prev, deadline: `${fullYear}-${parts[1]}-${parts[2]}` }));
+                      } else {
+                        setDeadlineFieldsFilled(prev => ({ ...prev, year: false }));
+                      }
+                    }
+                  }
+                }}
+                onChange={() => {}}
+                className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+              />
+              </div>
+              <div className="relative w-8 h-8 flex items-center justify-center calendar-icon-wrapper">
+                <style>{`
+                  .calendar-icon-wrapper {
+                    cursor: pointer !important;
+                  }
+                  .calendar-icon-wrapper input[type="date"] {
+                    cursor: pointer !important;
+                  }
+                  .calendar-icon-wrapper input[type="date"]::-webkit-calendar-picker-indicator {
+                    cursor: pointer !important;
+                  }
+                `}</style>
+                <input
+                  type="date"
+                  value={formData.deadline || ''}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, deadline: e.target.value }));
+                    if (e.target.value) {
+                      setDeadlineFieldsFilled({ day: true, month: true, year: true });
+                    }
+                  }}
+                  className="absolute opacity-0"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    zIndex: 10
+                  }}
+                />
+                <svg
+                  className="w-5 h-5 text-zinc-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  style={{ pointerEvents: 'none', position: 'relative', zIndex: 5 }}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Cost</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={formData.cost}
+                  onChange={(e) => setFormData(prev => ({ ...prev, cost: e.target.value }))}
+                  placeholder="0"
+                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                />
+                <select
+                  value={formData.currency}
+                  onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value as 'USD' | 'RUB' | 'EUR' }))}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                >
+                  <option value="USD">USD</option>
+                  <option value="RUB">RUB</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Software Tools</label>
+            <div className="grid grid-cols-3 gap-2">
+              {SOFTWARE_OPTIONS.map(sw => (
+                <button
+                  key={sw}
+                  onClick={() => toggleSoftware(sw)}
+                  className={`px-3 py-2 rounded-lg border transition-colors text-sm flex items-center gap-2 ${
+                    formData.software.includes(sw)
+                      ? 'bg-accent border-accent'
+                      : 'bg-zinc-800 border-zinc-700 hover:border-zinc-600'
+                  }`}
+                >
+                  <SoftwareIcon name={sw} />
+                  <span className="truncate">{sw}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Project Thumbnail <span className="text-xs text-zinc-500">(Ctrl+V to paste)</span></label>
+            <div className="flex gap-2 items-center">
+              {formData.thumbnailPath && (
+                <div className="w-16 h-16 rounded-lg overflow-hidden border border-zinc-700 flex-shrink-0 bg-zinc-800">
+                  <img
+                    src={convertFileSrc(formData.thumbnailPath)}
+                    alt="Thumbnail preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      console.error('Failed to load thumbnail preview:', formData.thumbnailPath);
+                      console.error('Converted src:', convertFileSrc(formData.thumbnailPath));
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
+              <div className="flex gap-2 flex-1">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const { selectImageFile } = await import('../../utils/tauri');
+                    const imagePath = await selectImageFile();
+                    if (imagePath) {
+                      // If there's already a thumbnail, clear it first to ensure React updates
+                      if (formData.thumbnailPath) {
+                        setFormData(prev => ({ ...prev, thumbnailPath: '' }));
+                        // Use setTimeout to ensure state update completes before setting new path
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                      }
+                      setFormData(prev => ({ ...prev, thumbnailPath: imagePath }));
+                    }
+                  }}
+                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+                >
+                  Choose Image
+                </button>
+                {formData.thumbnailPath && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, thumbnailPath: '' }))}
+                    className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.hasShots}
+                onChange={(e) => setFormData(prev => ({ ...prev, hasShots: e.target.checked }))}
+                className="w-4 h-4"
+              />
+              <span className="text-sm">Has shots</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useDefaultPath}
+                onChange={(e) => setUseDefaultPath(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm">Use default path</span>
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Project Path</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={formData.path}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, path: e.target.value }));
+                  setUseDefaultPath(false);
+                }}
+                disabled={useDefaultPath}
+                placeholder="/home/user/projects/my-project"
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50"
+              />
+              <button
+                onClick={handleBrowse}
+                className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+              >
+                Browse
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-zinc-800 flex justify-end gap-2 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleCreate}
+            disabled={!formData.name || !formData.path}
+            className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors font-medium animate-button text-sm"
+          >
+            Create Project
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
