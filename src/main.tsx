@@ -4,7 +4,8 @@ import App from "./App";
 import "./App.css";  
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
+  // StrictMode temporarily disabled to measure real render count (causes double renders in dev)
+  // <React.StrictMode>
     <App />
-  </React.StrictMode>,
+  // </React.StrictMode>,
 );
