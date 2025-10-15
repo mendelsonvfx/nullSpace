@@ -779,7 +779,7 @@ struct FileNode {
 
 #[tauri::command]
 fn get_folder_structure(path: String) -> Result<Vec<FileNode>, String> {
-    read_dir_recursive(&path, 2) // Limit depth to 2 levels
+    read_dir_recursive(&path, 5) // Increased depth to 5 levels for better subfolder visibility
 }
 
 fn read_dir_recursive(path: &str, max_depth: usize) -> Result<Vec<FileNode>, String> {
@@ -877,6 +877,7 @@ struct ProjectVersion {
     path: String,
     software: Vec<String>,
     created_at: u64, // Unix timestamp in seconds
+    is_versioned: bool, // true if file has _v### pattern, false otherwise
 }
 
 #[tauri::command]
@@ -917,35 +918,44 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                     if file_type.is_file() {
                         let file_name = entry.file_name();
                         let file_name_str = file_name.to_string_lossy();
+                        let file_path = entry.path();
 
-                        // Check if file matches pattern: BaseName_v###.ext
-                        if file_name_str.starts_with(&base_name) && file_name_str.contains("_v") {
-                            let file_path = entry.path();
+                        // Determine software by extension
+                        let extension = file_path.extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("");
 
-                            // Determine software by extension
-                            let extension = file_path.extension()
-                                .and_then(|e| e.to_str())
-                                .unwrap_or("");
+                        // Skip .blend1 backup files
+                        if extension == "blend1" {
+                            continue;
+                        }
 
-                            // Skip .blend1 backup files
-                            if extension == "blend1" {
-                                continue;
-                            }
+                        // Check if file matches known software extensions
+                        let software_name = match extension {
+                            "blend" => Some("Blender"),
+                            "hip" => Some("Houdini"),
+                            "ma" | "mb" => Some("Maya"),
+                            "aep" => Some("After Effects"),
+                            "c4d" => Some("Cinema 4D"),
+                            "spp" => Some("Substance"),
+                            "uproject" => Some("Unreal"),
+                            "unity" => Some("Unity"),
+                            "zpr" => Some("ZBrush"),
+                            "tbscene" => Some("Marmoset"),
+                            _ => None,
+                        };
 
-                            let software_name = match extension {
-                                "blend" => "Blender",
-                                "hip" => "Houdini",
-                                "ma" | "mb" => "Maya",
-                                "aep" => "After Effects",
-                                "c4d" => "Cinema 4D",
-                                "spp" => "Substance",
-                                "uproject" => "Unreal",
-                                "unity" => "Unity",
-                                "zpr" => "ZBrush",
-                                "tbscene" => "Marmoset",
-                                _ => "Unknown",
-                            };
+                        // Skip files with unknown extensions
+                        if software_name.is_none() {
+                            continue;
+                        }
 
+                        // Check if file has version pattern
+                        let has_version = file_name_str.contains("_v");
+                        let starts_with_base = file_name_str.starts_with(&base_name);
+
+                        // Include file if: (1) has version pattern and starts with base name, OR (2) no version pattern
+                        if (has_version && starts_with_base) || !has_version {
                             // Get file creation time
                             let created_at = if let Ok(metadata) = entry.metadata() {
                                 if let Ok(created) = metadata.created() {
@@ -962,8 +972,9 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                             versions.push(ProjectVersion {
                                 name: file_name_str.to_string(),
                                 path: file_path.to_string_lossy().to_string(),
-                                software: vec![software_name.to_string()],
+                                software: vec![software_name.unwrap().to_string()],
                                 created_at,
+                                is_versioned: has_version && starts_with_base,
                             });
                         }
                     }
@@ -1253,10 +1264,32 @@ async fn start_watching_project(
                                 if path.contains("_v") && !path.ends_with(".blend1") {
                                     println!("Version file changed: {}", path);
 
-                                    // Clean up backup files
-                                    let _ = std::process::Command::new("cmd")
-                                        .args(&["/C", &format!("del /S /Q \"{}\\*.blend1\"", project_path_clone)])
-                                        .output();
+                                    // Clean up backup files using Rust API (no CMD window)
+                                    let project_dir = PathBuf::from(&project_path_clone);
+                                    let software_folders = vec![
+                                        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
+                                        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+                                    ];
+
+                                    for software_folder in &software_folders {
+                                        let software_dir = project_dir.join(software_folder);
+                                        if software_dir.exists() {
+                                            if let Ok(entries) = fs::read_dir(&software_dir) {
+                                                for entry in entries.flatten() {
+                                                    if let Ok(file_type) = entry.file_type() {
+                                                        if file_type.is_file() {
+                                                            let file_path = entry.path();
+                                                            if let Some(extension) = file_path.extension() {
+                                                                if extension == "blend1" {
+                                                                    let _ = fs::remove_file(&file_path);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
 
                                     // Emit event to frontend
                                     let _ = app.emit_all("version-changed", ());

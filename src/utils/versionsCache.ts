@@ -6,6 +6,7 @@ export interface ProjectVersion {
   path: string;
   software: string[];
   created_at: number; // Unix timestamp in seconds
+  is_versioned: boolean; // true if file has _v### pattern
 }
 
 interface CacheEntry {

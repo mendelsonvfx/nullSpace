@@ -96,6 +96,23 @@ body.animations-disabled * {
   }
 }
 
+/* Context menu slide and fade animation */
+.animate-context-menu {
+  animation: contextMenuAppear 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top left;
+}
+
+@keyframes contextMenuAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 /* Settings icon rotation animation */
 .animate-settings-icon {
   transition: transform 0.25s linear;
