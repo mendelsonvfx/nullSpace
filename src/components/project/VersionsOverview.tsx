@@ -9,6 +9,7 @@ interface ProjectVersion {
   path: string;
   software: string[];
   created_at: number; // Unix timestamp in seconds
+  is_versioned: boolean; // true if file has _v### pattern
 }
 
 interface VersionsOverviewProps {
@@ -20,6 +21,7 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
   const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSoftware, setSelectedSoftware] = useState<string>('all');
+  const [showOnlyUnversioned, setShowOnlyUnversioned] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadingTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
@@ -149,17 +151,23 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
     return () => window.removeEventListener('version-created', handleVersionUpdate);
   }, [project.path]);
 
-  // Filter versions by shot and sort by version number (desc) then by date (desc)
+  // Filter versions by shot and sort: versioned files first (by date), then non-versioned files (by date)
   const versions = useMemo(() => {
     let filtered = currentShot
       ? allVersions.filter(v => {
           const shotPrefix = `_Shot${currentShot.number.toString().padStart(3, '0')}_`;
-          return v.name.includes(shotPrefix);
+          // Include file if: (1) it has the shot prefix, OR (2) it's unversioned (unversioned files show in all shots)
+          return v.name.includes(shotPrefix) || !v.is_versioned;
         })
       : allVersions;
 
-    // Sort only by creation date (newest left)
+    // Sort: versioned files first (by date desc), then non-versioned files (by date desc)
     const sorted = [...filtered].sort((a, b) => {
+      // First, sort by versioned status (versioned files first)
+      if (a.is_versioned !== b.is_versioned) {
+        return a.is_versioned ? -1 : 1;
+      }
+      // Then sort by creation date (newest first)
       return b.created_at - a.created_at;
     });
 
@@ -231,10 +239,19 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
     new Set(versions.flatMap((v) => v.software))
   ).sort();
 
-  // Filter versions by selected software
-  const filteredVersions = selectedSoftware === 'all'
-    ? versions
-    : versions.filter((v) => v.software.includes(selectedSoftware));
+  // Filter versions by selected software and versioned status
+  const filteredVersions = versions
+    .filter((v) => {
+      // Filter by software
+      if (selectedSoftware !== 'all' && !v.software.includes(selectedSoftware)) {
+        return false;
+      }
+      // Filter by versioned status
+      if (showOnlyUnversioned && v.is_versioned) {
+        return false;
+      }
+      return true;
+    });
 
   return (
     <div className="mb-6 overflow-hidden">
@@ -244,21 +261,40 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
       {uniqueSoftware.length > 0 && (
         <div className="flex gap-1 mb-3 overflow-x-auto pb-2">
           <button
-            onClick={() => setSelectedSoftware('all')}
+            onClick={() => {
+              setSelectedSoftware('all');
+              setShowOnlyUnversioned(false);
+            }}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
-              selectedSoftware === 'all'
+              selectedSoftware === 'all' && !showOnlyUnversioned
                 ? 'bg-accent text-white'
                 : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
             }`}
           >
             All
           </button>
+          <button
+            onClick={() => {
+              setShowOnlyUnversioned(!showOnlyUnversioned);
+              setSelectedSoftware('all');
+            }}
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+              showOnlyUnversioned
+                ? 'bg-accent text-white'
+                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+            }`}
+          >
+            Other
+          </button>
           {uniqueSoftware.map((software) => (
             <button
               key={software}
-              onClick={() => setSelectedSoftware(software)}
+              onClick={() => {
+                setSelectedSoftware(software);
+                setShowOnlyUnversioned(false);
+              }}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                selectedSoftware === software
+                selectedSoftware === software && !showOnlyUnversioned
                   ? 'bg-accent text-white'
                   : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
               }`}

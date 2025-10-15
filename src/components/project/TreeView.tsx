@@ -1,9 +1,34 @@
 import { useState, useEffect, useRef } from 'react';
-import { Folder, File, ChevronRight, ChevronDown, EyeOff } from 'lucide-react';
+import { Folder, File, ChevronRight, ChevronDown, EyeOff, Copy, FolderOpen, Palette } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
 import { listen } from '@tauri-apps/api/event';
 import { useProjectStore } from '../../store/projectStore';
+import { useContextMenuStore } from '../../store/contextMenuStore';
 import { SoftwareIcon } from '../SoftwareIcon';
+import { writeText } from '@tauri-apps/api/clipboard';
+
+// Predefined folder colors
+const FOLDER_COLORS = [
+  { name: 'Red', value: '#ef4444' },
+  { name: 'Blue', value: '#3b82f6' },
+  { name: 'Green', value: '#10b981' },
+  { name: 'Yellow', value: '#f59e0b' },
+  { name: 'Purple', value: '#a855f7' },
+  { name: 'Pink', value: '#ec4899' },
+];
+
+// Filled folder icon component
+const FolderFilled = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    style={style}
+  >
+    <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z" />
+  </svg>
+);
 
 interface FileNode {
   name: string;
@@ -18,9 +43,18 @@ interface TreeViewProps {
 }
 
 export function TreeView({ project, showHidden }: TreeViewProps) {
+  const { activeMenu, setActiveMenu } = useContextMenuStore();
   const [tree, setTree] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(`expandedDirs_${project.path}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch (error) {
+      console.error('Failed to load expanded dirs from localStorage:', error);
+      return new Set();
+    }
+  });
   const [directorySize, setDirectorySize] = useState<number | null>(null);
   const [loadingSize, setLoadingSize] = useState(true);
   const [hiddenPaths, setHiddenPaths] = useState<Set<string>>(() => {
@@ -32,13 +66,34 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
       return new Set();
     }
   });
-  const clickTimerRef = useRef<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: FileNode } | null>(null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [folderColors, setFolderColors] = useState<Map<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem(`folderColors_${project.path}`);
+      return stored ? new Map(JSON.parse(stored)) : new Map();
+    } catch (error) {
+      console.error('Failed to load folder colors from localStorage:', error);
+      return new Map();
+    }
+  });
   const loadingTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
   const debounceTimerRef = useRef<number | null>(null);
   const maxWaitTimerRef = useRef<number | null>(null);
   const isPendingReloadRef = useRef(false);
   const currentProjectPathRef = useRef(project.path);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Save expanded dirs to localStorage whenever they change
+  useEffect(() => {
+    try {
+      const dirsArray = Array.from(expandedDirs);
+      localStorage.setItem(`expandedDirs_${project.path}`, JSON.stringify(dirsArray));
+    } catch (error) {
+      console.error('Failed to save expanded dirs to localStorage:', error);
+    }
+  }, [expandedDirs, project.path]);
 
   // Save hidden paths to localStorage whenever they change
   useEffect(() => {
@@ -49,6 +104,16 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
       console.error('Failed to save hidden paths to localStorage:', error);
     }
   }, [hiddenPaths, project.path]);
+
+  // Save folder colors to localStorage whenever they change
+  useEffect(() => {
+    try {
+      const colorsArray = Array.from(folderColors.entries());
+      localStorage.setItem(`folderColors_${project.path}`, JSON.stringify(colorsArray));
+    } catch (error) {
+      console.error('Failed to save folder colors to localStorage:', error);
+    }
+  }, [folderColors, project.path]);
 
   // Load hidden paths when project changes
   useEffect(() => {
@@ -69,6 +134,29 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
   useEffect(() => {
     currentProjectPathRef.current = project.path;
   }, [project.path]);
+
+  // Close context menu when clicking outside or when another menu opens
+  useEffect(() => {
+    if (activeMenu !== 'tree' && contextMenu) {
+      setContextMenu(null);
+      setShowColorPicker(false);
+    }
+  }, [activeMenu]);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+        setShowColorPicker(false);
+        setActiveMenu(null);
+      }
+    };
+    if (contextMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [contextMenu]);
 
   const loadTree = async () => {
     // Clear any existing timer first
@@ -125,18 +213,21 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
       console.log('Setting tree with', filteredResult.length, 'items for project', projectPath);
       setTree(filteredResult);
 
-      // Auto-expand software folders on first load
+      // Auto-expand software folders on first load only if no saved state
       if (isFirstLoad) {
-        const autoExpandSoftwareFolders = (nodes: FileNode[]) => {
-          const newExpanded = new Set<string>();
-          nodes.forEach(node => {
-            if (node.is_dir && node.children && node.children.length > 0) {
-              newExpanded.add(node.path);
-            }
-          });
-          setExpandedDirs(newExpanded);
-        };
-        autoExpandSoftwareFolders(filteredResult);
+        const storedExpanded = localStorage.getItem(`expandedDirs_${projectPath}`);
+        if (!storedExpanded) {
+          const autoExpandSoftwareFolders = (nodes: FileNode[]) => {
+            const newExpanded = new Set<string>();
+            nodes.forEach(node => {
+              if (node.is_dir && node.children && node.children.length > 0) {
+                newExpanded.add(node.path);
+              }
+            });
+            setExpandedDirs(newExpanded);
+          };
+          autoExpandSoftwareFolders(filteredResult);
+        }
       }
       setLoading(false);
     } catch (error) {
@@ -288,35 +379,26 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     setExpandedDirs(newExpanded);
   };
 
-  const handleClick = (node: FileNode) => {
-    if (!node.is_dir) return;
-
-    // Clear any existing timer
-    if (clickTimerRef.current !== null) {
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-    }
-
-    // Set a new timer for single click action
-    clickTimerRef.current = window.setTimeout(() => {
-      toggleDir(node.path);
-      clickTimerRef.current = null;
-    }, 200); // 200ms delay to distinguish from double click
+  const handleChevronClick = (e: React.MouseEvent, path: string) => {
+    e.stopPropagation();
+    toggleDir(path);
   };
 
-  const handleDoubleClick = (e: React.MouseEvent, node: FileNode) => {
+  const handleDoubleClick = async (e: React.MouseEvent, node: FileNode) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // Clear the single click timer to prevent toggle
-    if (clickTimerRef.current !== null) {
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-    }
-
     if (node.is_dir) {
+      // Open folder in explorer
       const { openInExplorer } = useProjectStore.getState();
       openInExplorer(node.path);
+    } else {
+      // Open file with default application
+      try {
+        await invoke('open_file', { filePath: node.path });
+      } catch (error) {
+        console.error('Failed to open file:', error);
+      }
     }
   };
 
@@ -330,6 +412,49 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
       }
       return newSet;
     });
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, node: FileNode) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveMenu('tree');
+    setContextMenu({ x: e.clientX, y: e.clientY, node });
+    setShowColorPicker(false);
+  };
+
+  const copyPath = async (path: string) => {
+    try {
+      await writeText(path);
+      setContextMenu(null);
+    } catch (error) {
+      console.error('Failed to copy path:', error);
+    }
+  };
+
+  const openInExplorer = (path: string) => {
+    const { openInExplorer } = useProjectStore.getState();
+    openInExplorer(path);
+    setContextMenu(null);
+  };
+
+  const setFolderColor = (path: string, color: string) => {
+    setFolderColors(prev => {
+      const newMap = new Map(prev);
+      newMap.set(path, color);
+      return newMap;
+    });
+    setContextMenu(null);
+    setShowColorPicker(false);
+  };
+
+  const removeFolderColor = (path: string) => {
+    setFolderColors(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(path);
+      return newMap;
+    });
+    setContextMenu(null);
+    setShowColorPicker(false);
   };
 
   const getFileIcon = (fileName: string) => {
@@ -362,11 +487,31 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     }
   };
 
+  const getSoftwareFolderIcon = (folderName: string) => {
+    const name = folderName.toLowerCase();
+
+    // Check if folder name matches software names
+    if (name === 'blender') return 'Blender';
+    if (name === 'after effects' || name === 'aftereffects') return 'After Effects';
+    if (name === 'houdini') return 'Houdini';
+    if (name === 'maya') return 'Maya';
+    if (name === 'cinema 4d' || name === 'cinema4d') return 'Cinema 4D';
+    if (name === 'substance') return 'Substance';
+    if (name === 'unreal') return 'Unreal';
+    if (name === 'unity') return 'Unity';
+    if (name === 'zbrush') return 'ZBrush';
+    if (name === 'marmoset') return 'Marmoset';
+
+    return null;
+  };
+
   const renderNode = (node: FileNode, depth: number = 0) => {
     const isExpanded = expandedDirs.has(node.path);
     const hasChildren = node.children && node.children.length > 0;
     const fileIcon = !node.is_dir ? getFileIcon(node.name) : null;
+    const softwareFolderIcon = node.is_dir ? getSoftwareFolderIcon(node.name) : null;
     const isHidden = hiddenPaths.has(node.path);
+    const folderColor = node.is_dir ? folderColors.get(node.path) : null;
 
     // Remove file extension from display name only for project files (with icons)
     const displayName = !node.is_dir && fileIcon && node.name.includes('.')
@@ -382,33 +527,55 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
       <div key={node.path}>
         <div
           className={`flex items-center gap-1 px-2 py-1 hover:bg-zinc-800 rounded text-sm select-none group ${isHidden ? 'opacity-40' : ''}`}
-          style={{ paddingLeft: `${depth * 16 + 24}px` }}
         >
-          <div
-            className="flex items-center gap-1 flex-1 cursor-pointer"
-            onClick={() => handleClick(node)}
-            onDoubleClick={(e) => handleDoubleClick(e, node)}
-          >
-            {node.is_dir ? (
-              <>
-                {hasChildren ? (
-                  isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />
-                ) : (
-                  <div className="w-3 h-3" />
-                )}
-                <Folder className="w-4 h-4 text-blue-400" />
-              </>
-            ) : (
-              <>
+          <div className="flex items-center gap-1 flex-1">
+            <div
+              className={`flex items-center gap-1 flex-shrink-0 ${node.is_dir && hasChildren ? 'cursor-pointer' : ''}`}
+              style={{ paddingLeft: `${depth * 16 + 24}px` }}
+              onClick={node.is_dir && hasChildren ? (e) => handleChevronClick(e, node.path) : undefined}
+            >
+              {node.is_dir ? (
+                <>
+                  {hasChildren ? (
+                    isExpanded ?
+                      <ChevronDown className="w-3 h-3" /> :
+                      <ChevronRight className="w-3 h-3" />
+                  ) : (
+                    <div className="w-3 h-3" />
+                  )}
+                </>
+              ) : (
                 <div className="w-3 h-3" />
-                {fileIcon ? (
-                  <SoftwareIcon name={fileIcon} className="w-4 h-4" />
+              )}
+            </div>
+            <div
+              className="flex items-center gap-1 flex-1 cursor-pointer min-w-0"
+              onDoubleClick={(e) => handleDoubleClick(e, node)}
+              onContextMenu={(e) => handleContextMenu(e, node)}
+            >
+              {node.is_dir ? (
+                softwareFolderIcon ? (
+                  <FolderFilled
+                    className="w-4 h-4 flex-shrink-0"
+                    style={{ color: folderColor || '#60a5fa' }}
+                  />
                 ) : (
-                  <File className="w-4 h-4 text-zinc-400" />
-                )}
-              </>
-            )}
-            <span className="truncate">{displayName}</span>
+                  <Folder
+                    className="w-4 h-4 flex-shrink-0"
+                    style={{ color: folderColor || '#60a5fa' }}
+                  />
+                )
+              ) : (
+                <>
+                  {fileIcon ? (
+                    <SoftwareIcon name={fileIcon} className="w-4 h-4 flex-shrink-0" />
+                  ) : (
+                    <File className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                  )}
+                </>
+              )}
+              <span className="truncate">{displayName}</span>
+            </div>
           </div>
           <button
             onClick={(e) => {
@@ -454,6 +621,68 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
           <span>Project size: {formatSize(directorySize)}</span>
         ) : null}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
+          style={{
+            top: Math.min(contextMenu.y, window.innerHeight - 300),
+            left: Math.min(contextMenu.x, window.innerWidth - 200)
+          }}
+        >
+          <button
+            onClick={() => copyPath(contextMenu.node.path)}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+          >
+            <Copy className="w-4 h-4" />
+            Copy Path
+          </button>
+          {contextMenu.node.is_dir && (
+            <>
+              <button
+                onClick={() => openInExplorer(contextMenu.node.path)}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+              >
+                <FolderOpen className="w-4 h-4" />
+                Open in Explorer
+              </button>
+              <div className="border-t border-zinc-700 my-1" />
+              <button
+                onClick={() => setShowColorPicker(!showColorPicker)}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+              >
+                <Palette className="w-4 h-4" />
+                Set Color
+              </button>
+              {showColorPicker && (
+                <div className="px-2 py-2 space-y-1">
+                  <div className="grid grid-cols-3 gap-2">
+                    {FOLDER_COLORS.map(color => (
+                      <button
+                        key={color.value}
+                        onClick={() => setFolderColor(contextMenu.node.path, color.value)}
+                        className="w-8 h-8 rounded border-2 border-zinc-600 hover:border-white transition-colors"
+                        style={{ backgroundColor: color.value }}
+                        title={color.name}
+                      />
+                    ))}
+                  </div>
+                  {folderColors.has(contextMenu.node.path) && (
+                    <button
+                      onClick={() => removeFolderColor(contextMenu.node.path)}
+                      className="w-full px-2 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 rounded transition-colors"
+                    >
+                      Remove Color
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
