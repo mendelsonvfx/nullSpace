@@ -29,7 +29,7 @@
       "clipboard": {
         "all": false,
         "writeText": true,
-        "readText": false
+        "readText": true
       },
       "window": {
         "all": false,
