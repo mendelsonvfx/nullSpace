@@ -115,27 +115,25 @@ function App() {
     }
   }, []);
 
-  // Handle window maximize/unmaximize to remove border radius
+  // Handle window maximize/unmaximize to cover rounded corners
   useEffect(() => {
-    const updateBorderRadius = async () => {
+    const updateFullscreenClass = async () => {
       const isMaximized = await appWindow.isMaximized();
       const isFullscreen = await appWindow.isFullscreen();
 
       if (isMaximized || isFullscreen) {
-        document.body.style.borderRadius = '0px';
-        document.getElementById('root')!.style.borderRadius = '0px';
+        document.documentElement.classList.add('fullscreen');
+        document.body.classList.add('fullscreen');
       } else {
-        document.body.style.borderRadius = '8px';
-        document.getElementById('root')!.style.borderRadius = '8px';
+        document.documentElement.classList.remove('fullscreen');
+        document.body.classList.remove('fullscreen');
       }
     };
 
-    // Check initial state
-    updateBorderRadius();
+    updateFullscreenClass();
 
-    // Listen for window resize events
     const unlisten = appWindow.onResized(() => {
-      updateBorderRadius();
+      updateFullscreenClass();
     });
 
     return () => {
@@ -146,11 +144,8 @@ function App() {
   // Temporary keybind to show welcome setup (numpad decimal/dot)
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      console.log('Key pressed:', e.key, 'Code:', e.code, 'Location:', e.location);
-      // Check for numpad decimal key
       if (e.code === 'NumpadDecimal' || e.key === 'Decimal') {
         e.preventDefault();
-        console.log('Opening welcome setup');
         setShowWelcomeSetup(true);
       }
     };
@@ -171,7 +166,19 @@ function App() {
       if (e.key === 'F11') {
         e.preventDefault();
         const isFullscreen = await appWindow.isFullscreen();
-        appWindow.setFullscreen(!isFullscreen);
+        await appWindow.setFullscreen(!isFullscreen);
+
+        // Update class after state change
+        setTimeout(async () => {
+          const newFullscreenState = await appWindow.isFullscreen();
+          if (newFullscreenState) {
+            document.documentElement.classList.add('fullscreen');
+            document.body.classList.add('fullscreen');
+          } else {
+            document.documentElement.classList.remove('fullscreen');
+            document.body.classList.remove('fullscreen');
+          }
+        }, 100);
         return;
       }
 

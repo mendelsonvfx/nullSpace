@@ -149,13 +149,9 @@ button:not(:hover) .animate-settings-icon {
   }
 }
 
-/* Close button red hover effect */
+/* Close button keeps white on hover */
 .close-button-red {
-  transition: color 0.2s ease-in-out;
-}
-
-button:hover .close-button-red {
-  color: #ef4444;
+  color: white;
 }
 
 /* Tauri Drag Region */
@@ -169,15 +165,66 @@ button:hover .close-button-red {
   app-region: no-drag;
 }
 
-/* Windows 11 Style Rounded Corners */
+/* Windows 11 Style Rounded Corners - only when not fullscreen */
+html {
+  overflow: hidden;
+  border-radius: 8px;
+}
+
 body {
   overflow: hidden;
   border-radius: 8px;
+  margin: 0;
+  position: relative;
 }
 
 #root {
   border-radius: 8px;
   overflow: hidden;
+}
+
+/* Fullscreen mode - cover rounded corners with background-colored pseudo-elements */
+body.fullscreen::before,
+body.fullscreen::after,
+html.fullscreen::before,
+html.fullscreen::after {
+  content: '';
+  position: fixed;
+  background: #18181b;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Top corners */
+body.fullscreen::before {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+}
+
+/* Bottom corners */
+body.fullscreen::after {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+}
+
+/* Left side */
+html.fullscreen::before {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 10px;
+}
+
+/* Right side */
+html.fullscreen::after {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 10px;
 }
 
 /* Versions scroll container */
