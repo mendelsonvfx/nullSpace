@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Folder, File, ChevronRight, ChevronDown, EyeOff, Copy, FolderOpen, Palette } from 'lucide-react';
+import { File, ChevronRight, ChevronDown, EyeOff, Copy, FolderOpen, Palette } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
 import { listen } from '@tauri-apps/api/event';
 import { useProjectStore } from '../../store/projectStore';
@@ -16,19 +16,6 @@ const FOLDER_COLORS = [
   { name: 'Purple', value: '#a855f7' },
   { name: 'Pink', value: '#ec4899' },
 ];
-
-// Filled folder icon component
-const FolderFilled = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    className={className}
-    style={style}
-  >
-    <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z" />
-  </svg>
-);
 
 interface FileNode {
   name: string;
