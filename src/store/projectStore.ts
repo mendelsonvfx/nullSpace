@@ -56,6 +56,7 @@ interface ProjectStore {
   // Shot management
   addShot: (projectId: string, name?: string) => void;
   removeShot: (projectId: string, shotId: string) => void;
+  renameShot: (projectId: string, shotId: string, newName: string) => void;
   setCurrentShot: (projectId: string, shotId: string | null) => void;
   addShotNote: (projectId: string, shotId: string, content: string) => void;
   updateShotNote: (projectId: string, shotId: string, noteId: string, content: string) => void;
@@ -105,9 +106,28 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const project = await invoke<Project>('create_project', { input });
-      set(state => ({ 
+
+      // If project has shots, automatically create Shot 001
+      if (project.hasShots) {
+        const shot001 = {
+          id: crypto.randomUUID(),
+          number: 1,
+          name: 'Shot 001',
+          notes: [],
+          todos: [],
+          browserTabs: [],
+          links: []
+        };
+        project.shots = [shot001];
+        project.currentShotId = shot001.id;
+
+        // Save the updated project with Shot 001
+        await invoke('update_project', { project });
+      }
+
+      set(state => ({
         projects: [project, ...state.projects],
-        isLoading: false 
+        isLoading: false
       }));
     } catch (error) {
       set({ error: String(error), isLoading: false });
@@ -535,6 +555,25 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         ...project,
         shots: (project.shots || []).filter(s => s.id !== shotId),
         currentShotId: project.currentShotId === shotId ? (project.shots?.[0]?.id || undefined) : project.currentShotId
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  renameShot: (projectId: string, shotId: string, newName: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s => {
+          if (s.id === shotId) {
+            // Extract number from new name (e.g., "Shot 777" -> 777)
+            const match = newName.match(/\d+/);
+            const newNumber = match ? parseInt(match[0]) : s.number;
+            return { ...s, name: newName, number: newNumber };
+          }
+          return s;
+        })
       };
       get().updateProject(updated);
     }

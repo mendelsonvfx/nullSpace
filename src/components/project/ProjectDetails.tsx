@@ -7,6 +7,7 @@ import { VersionsOverview } from './VersionsOverview';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { ThumbnailImage } from '../ThumbnailImage';
 import { STATUS_LABELS } from '../../utils';
+import { versionsCache } from '../../utils/versionsCache';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
@@ -24,6 +25,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isShotEditMode, setIsShotEditMode] = useState(false);
   const [isFavoriteAnimating, setIsFavoriteAnimating] = useState(false);
+  const [shotToDelete, setShotToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [editingShotId, setEditingShotId] = useState<string | null>(null);
+  const [editingShotNumber, setEditingShotNumber] = useState('');
 
   // Track which date fields user has manually filled in Project Settings
   const [deadlineFieldsFilled, setDeadlineFieldsFilled] = useState({
@@ -212,7 +216,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               {(project.shots || []).map((shot: any) => (
                 <div
                   key={shot.id}
-                  className={`group relative flex items-center gap-1 rounded overflow-hidden ${
+                  className={`group relative flex items-center rounded overflow-hidden ${
                     project.currentShotId === shot.id
                       ? 'bg-accent text-white'
                       : 'bg-zinc-800 text-zinc-300'
@@ -220,28 +224,154 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 >
                   <button
                     onClick={() => {
-                      const { setCurrentShot } = useProjectStore.getState();
-                      setCurrentShot(project.id, shot.id);
+                      if (!isShotEditMode) {
+                        const { setCurrentShot } = useProjectStore.getState();
+                        setCurrentShot(project.id, shot.id);
+                      }
                     }}
-                    className="px-3 py-1 text-sm font-medium transition-all hover:brightness-110"
+                    className="px-3 py-1 text-sm font-medium transition-all hover:brightness-110 flex items-center gap-1"
                   >
-                    {shot.name}
+                    <span>Shot</span>
+                    {isShotEditMode && editingShotId === shot.id ? (
+                      <input
+                        type="text"
+                        value={editingShotNumber}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Only allow digits and max 3 characters
+                          if (/^\d{0,3}$/.test(value)) {
+                            setEditingShotNumber(value);
+                          }
+                        }}
+                        onBlur={async () => {
+                          const shotNum = parseInt(editingShotNumber);
+                          if (editingShotNumber.length === 3 && shotNum >= 1 && shotNum <= 999) {
+                            const newShotName = `Shot ${editingShotNumber}`;
+
+                            // Check if trying to change shot number
+                            const currentShotMatch = shot.name.match(/\d{3}/);
+                            const currentShotNumber = currentShotMatch ? parseInt(currentShotMatch[0]) : null;
+
+                            if (currentShotNumber && currentShotNumber !== shotNum) {
+                              // Shot number is being changed
+                              try {
+                                // Check if target shot number already exists
+                                const versions = await invoke<any[]>('get_project_versions', {
+                                  projectPath: project.path
+                                });
+
+                                const targetShotExists = versions.some(v => {
+                                  const match = v.name.match(/_Shot(\d{3})/);
+                                  return match && match[1] === editingShotNumber;
+                                });
+
+                                if (targetShotExists) {
+                                  alert(`Shot ${editingShotNumber} already has files in the project. Choose a different number.`);
+                                  setEditingShotId(null);
+                                  setEditingShotNumber('');
+                                  return;
+                                }
+
+                                // Check if current shot has files and if they are accessible
+                                const currentShotFiles = versions.filter(v => {
+                                  const match = v.name.match(/_Shot(\d{3})/);
+                                  return match && parseInt(match[1]) === currentShotNumber;
+                                });
+
+                                if (currentShotFiles.length > 0) {
+                                  // Check if files are accessible (not locked)
+                                  const accessible = await invoke<boolean>('check_shot_files_accessible', {
+                                    projectPath: project.path,
+                                    shotNumber: currentShotNumber
+                                  });
+
+                                  if (!accessible) {
+                                    alert(`Cannot rename shot ${currentShotMatch[0]} because some files are currently in use. Please close the files and try again.`);
+                                    setEditingShotId(null);
+                                    setEditingShotNumber('');
+                                    return;
+                                  }
+
+                                  // Rename files
+                                  const renamedCount = await invoke<number>('rename_shot_files', {
+                                    projectPath: project.path,
+                                    oldShotNumber: currentShotNumber,
+                                    newShotNumber: shotNum
+                                  });
+
+                                  console.log(`Renamed ${renamedCount} files for shot ${currentShotNumber} -> ${shotNum}`);
+
+                                  // Invalidate versions cache and trigger reload
+                                  versionsCache.invalidate(project.path);
+
+                                  // Wait a bit for file system to sync, then trigger version update event
+                                  setTimeout(() => {
+                                    window.dispatchEvent(new CustomEvent('version-created', {
+                                      detail: { projectPath: project.path }
+                                    }));
+                                  }, 100);
+                                }
+
+                                // Rename shot in metadata
+                                const { renameShot } = useProjectStore.getState();
+                                renameShot(project.id, shot.id, newShotName);
+                              } catch (error) {
+                                console.error('Failed to rename shot:', error);
+                                alert(`Failed to rename shot: ${error}`);
+                              }
+                            } else {
+                              // No number change, just update name
+                              const { renameShot } = useProjectStore.getState();
+                              renameShot(project.id, shot.id, newShotName);
+                            }
+                          }
+                          setEditingShotId(null);
+                          setEditingShotNumber('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          } else if (e.key === 'Escape') {
+                            setEditingShotId(null);
+                            setEditingShotNumber('');
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus
+                        className="w-12 px-1 py-0 text-sm font-medium bg-zinc-700 rounded text-center focus:outline-none focus:ring-1 focus:ring-accent"
+                        placeholder="001"
+                      />
+                    ) : (
+                      <span
+                        onClick={(e) => {
+                          if (isShotEditMode) {
+                            e.stopPropagation();
+                            // Extract number from shot name (e.g., "Shot 001" -> "001")
+                            const match = shot.name.match(/\d{3}/);
+                            if (match) {
+                              setEditingShotId(shot.id);
+                              setEditingShotNumber(match[0]);
+                            }
+                          }
+                        }}
+                        className={isShotEditMode ? 'text-zinc-400 cursor-pointer hover:text-zinc-300 underline' : ''}
+                      >
+                        {shot.name.replace('Shot ', '')}
+                      </span>
+                    )}
                   </button>
-                  {isShotEditMode && (
+                  <div className={`transition-all duration-200 ease-in-out overflow-hidden ${isShotEditMode && shot.name !== 'Shot 001' ? 'w-5 opacity-100' : 'w-0 opacity-0'}`}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Delete ${shot.name}?`)) {
-                          const { removeShot } = useProjectStore.getState();
-                          removeShot(project.id, shot.id);
-                        }
+                        setShotToDelete({ id: shot.id, name: shot.name });
                       }}
-                      className="px-2 py-1 hover:bg-red-500/20 transition-all"
+                      className="pl-0 pr-2 py-1"
                       title="Delete shot"
                     >
-                      <X className="w-3.5 h-3.5 close-button-red" />
+                      <X className="w-3 h-3 close-button-red" />
                     </button>
-                  )}
+                  </div>
                 </div>
               ))}
               <button
@@ -255,7 +385,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               </button>
               <button
                 onClick={() => setIsShotEditMode(!isShotEditMode)}
-                className={`p-1 transition-colors ${
+                className={`p-1 transition-colors relative z-10 ${
                   isShotEditMode ? 'text-accent' : 'text-zinc-400 hover:text-accent'
                 }`}
                 title={isShotEditMode ? 'Done editing' : 'Edit shots'}
@@ -1062,6 +1192,46 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Delete Shot Confirmation Dialog */}
+      {shotToDelete && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setShotToDelete(null);
+            }
+          }}
+        >
+          <div
+            className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-2">Delete Shot</h3>
+            <p className="text-zinc-400 mb-6">
+              Are you sure you want to delete "{shotToDelete.name}"? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShotToDelete(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const { removeShot } = useProjectStore.getState();
+                  removeShot(project.id, shotToDelete.id);
+                  setShotToDelete(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

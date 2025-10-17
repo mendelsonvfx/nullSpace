@@ -779,7 +779,7 @@ struct FileNode {
 
 #[tauri::command]
 fn get_folder_structure(path: String) -> Result<Vec<FileNode>, String> {
-    read_dir_recursive(&path, 5) // Increased depth to 5 levels for better subfolder visibility
+    read_dir_recursive(&path, 3) // Display up to 3 levels of folder depth
 }
 
 fn read_dir_recursive(path: &str, max_depth: usize) -> Result<Vec<FileNode>, String> {
@@ -1488,6 +1488,149 @@ fn read_feedback_full() -> Result<String, String> {
         .or_else(|_| Ok::<String, String>(String::new()))
 }
 
+// Helper function to find shot files matching a pattern
+fn find_shot_files(project_path: &PathBuf, project_name: &str, shot_number: u32) -> Result<Vec<PathBuf>, String> {
+    let base_name = project_name.replace(" ", "");
+    let shot_pattern = format!("{}_Shot{:03}", base_name, shot_number);
+    let mut found_files = Vec::new();
+
+    println!("🔍 Looking for files with pattern: {}", shot_pattern);
+
+    let software_folders = vec![
+        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
+        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+    ];
+
+    for software_folder in software_folders {
+        let software_dir = project_path.join(software_folder);
+        if !software_dir.exists() {
+            continue;
+        }
+
+        if let Ok(entries) = fs::read_dir(&software_dir) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        let file_name = entry.file_name();
+                        let file_name_str = file_name.to_string_lossy();
+
+                        // Check if file matches shot pattern
+                        if file_name_str.starts_with(&shot_pattern) && file_name_str.contains("_v") {
+                            println!("✓ Found matching file: {}", file_name_str);
+                            found_files.push(entry.path());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    println!("📦 Total files found: {}", found_files.len());
+    Ok(found_files)
+}
+
+#[tauri::command]
+async fn check_shot_files_accessible(project_path: String, shot_number: u32) -> Result<bool, String> {
+    let project_dir = PathBuf::from(&project_path);
+
+    // Get project name from metadata
+    let metadata_path = project_dir.join(".project-metadata.json");
+    let project_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+        if let Ok(project) = serde_json::from_str::<Project>(&content) {
+            project.name
+        } else {
+            return Err("Failed to parse project metadata".to_string());
+        }
+    } else {
+        return Err("Project metadata not found".to_string());
+    };
+
+    // Find all files matching the shot number
+    let files = find_shot_files(&project_dir, &project_name, shot_number)?;
+
+    if files.is_empty() {
+        return Ok(true); // No files to check, safe to rename
+    }
+
+    // Check if any file is locked by trying to open it with write access
+    for file_path in files {
+        match fs::OpenOptions::new()
+            .write(true)
+            .open(&file_path)
+        {
+            Ok(_) => {
+                // File is accessible
+                continue;
+            }
+            Err(_) => {
+                // File is locked or inaccessible
+                return Ok(false);
+            }
+        }
+    }
+
+    Ok(true)
+}
+
+#[tauri::command]
+async fn rename_shot_files(
+    project_path: String,
+    old_shot_number: u32,
+    new_shot_number: u32
+) -> Result<u32, String> {
+    let project_dir = PathBuf::from(&project_path);
+
+    // Get project name from metadata
+    let metadata_path = project_dir.join(".project-metadata.json");
+    let project_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+        if let Ok(project) = serde_json::from_str::<Project>(&content) {
+            project.name
+        } else {
+            return Err("Failed to parse project metadata".to_string());
+        }
+    } else {
+        return Err("Project metadata not found".to_string());
+    };
+
+    // Find all files with old shot number
+    let files = find_shot_files(&project_dir, &project_name, old_shot_number)?;
+
+    if files.is_empty() {
+        return Ok(0); // No files to rename
+    }
+
+    let base_name = project_name.replace(" ", "");
+    let old_pattern = format!("{}_Shot{:03}", base_name, old_shot_number);
+    let new_pattern = format!("{}_Shot{:03}", base_name, new_shot_number);
+
+    let mut renamed_count = 0u32;
+
+    // Rename each file
+    for file_path in files {
+        if let Some(file_name) = file_path.file_name() {
+            let file_name_str = file_name.to_string_lossy();
+            let new_file_name = file_name_str.replace(&old_pattern, &new_pattern);
+
+            if let Some(parent) = file_path.parent() {
+                let new_file_path = parent.join(&new_file_name);
+
+                // Rename the file
+                match fs::rename(&file_path, &new_file_path) {
+                    Ok(_) => {
+                        renamed_count += 1;
+                        println!("Renamed: {} -> {}", file_name_str, new_file_name);
+                    }
+                    Err(e) => {
+                        return Err(format!("Failed to rename file {}: {}", file_name_str, e));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(renamed_count)
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -1511,6 +1654,8 @@ fn main() {
             save_feedback,
             read_feedback,
             read_feedback_full,
+            check_shot_files_accessible,
+            rename_shot_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
