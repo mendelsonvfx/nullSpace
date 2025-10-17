@@ -220,6 +220,7 @@ function GeneralSettings() {
   const { clearAllThumbnails, getCacheSize } = useThumbnailCache();
   const [projectsDir, setProjectsDir] = useState(defaultProjectsPath);
   const [cacheCleared, setCacheCleared] = useState(false);
+  const [cacheSize, setCacheSize] = useState(0);
   const [notifications, setNotifications] = useState(() => {
     const saved = localStorage.getItem('deadlineNotifications');
     return saved !== null ? JSON.parse(saved) : true;
@@ -228,6 +229,11 @@ function GeneralSettings() {
     const saved = localStorage.getItem('deadlineNotificationDays');
     return saved !== null ? parseInt(saved) : 3;
   });
+
+  // Load cache size on mount
+  useEffect(() => {
+    getCacheSize().then(setCacheSize);
+  }, [getCacheSize]);
 
   const handleBrowseDirectory = async () => {
     const selected = await selectProjectDirectory();
@@ -248,12 +254,12 @@ function GeneralSettings() {
     }, 100);
   };
 
-  const handleClearCache = () => {
-    const cacheSize = getCacheSize();
+  const handleClearCache = async () => {
     if (cacheSize === 0) {
       return;
     }
-    clearAllThumbnails();
+    await clearAllThumbnails();
+    setCacheSize(0);
     setCacheCleared(true);
     setTimeout(() => setCacheCleared(false), 3000);
     // Reload projects to force thumbnails reload
@@ -357,11 +363,11 @@ function GeneralSettings() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleClearCache}
-            disabled={getCacheSize() === 0}
+            disabled={cacheSize === 0}
             className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 text-sm font-medium animate-button"
           >
             <RefreshCw className="w-4 h-4" />
-            Clear Cache ({getCacheSize()} thumbnails)
+            Clear Cache ({cacheSize} thumbnails)
           </button>
           {cacheCleared && (
             <div className="flex items-center gap-2 text-green-500 text-sm">
