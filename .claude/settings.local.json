@@ -44,7 +44,8 @@
       "Bash(mkdir:*)",
       "Bash(del \"e:\\Projects\\Personal\\RayHub\\src\\components\\modals\\CreateProjectModal_temp.tsx\")",
       "Bash(git log:*)",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "ask": []

@@ -490,18 +490,11 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
   const getSoftwareFolderIcon = (folderName: string) => {
     const name = folderName.toLowerCase();
 
-    // Check if folder name matches software names
-    if (name === 'blender') return 'Blender';
-    if (name === 'after effects' || name === 'aftereffects') return 'After Effects';
-    if (name === 'houdini') return 'Houdini';
-    if (name === 'maya') return 'Maya';
-    if (name === 'cinema 4d' || name === 'cinema4d') return 'Cinema 4D';
-    if (name === 'substance') return 'Substance';
-    if (name === 'unreal') return 'Unreal';
-    if (name === 'unity') return 'Unity';
-    if (name === 'zbrush') return 'ZBrush';
-    if (name === 'marmoset') return 'Marmoset';
-
+    // Map folder names to custom icon file names
+    if (name === 'blender') return '/icons/folders/blender_fol.png';
+    if (name === 'aftereffects') return '/icons/folders/after-effects_fol.png';
+    if (name === 'houdini') return '/icons/folders/houdini_fol.png';
+    // For folders without custom icons, return null
     return null;
   };
 
@@ -555,14 +548,25 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
             >
               {node.is_dir ? (
                 softwareFolderIcon ? (
-                  <FolderFilled
-                    className="w-4 h-4 flex-shrink-0"
-                    style={{ color: folderColor || '#60a5fa' }}
+                  <img
+                    src={softwareFolderIcon}
+                    alt={node.name}
+                    className="w-7 h-7 flex-shrink-0"
                   />
                 ) : (
-                  <Folder
+                  <div
                     className="w-4 h-4 flex-shrink-0"
-                    style={{ color: folderColor || '#60a5fa' }}
+                    style={{
+                      WebkitMaskImage: 'url(/icons/folders/folder.svg)',
+                      WebkitMaskSize: 'contain',
+                      WebkitMaskRepeat: 'no-repeat',
+                      WebkitMaskPosition: 'center',
+                      maskImage: 'url(/icons/folders/folder.svg)',
+                      maskSize: 'contain',
+                      maskRepeat: 'no-repeat',
+                      maskPosition: 'center',
+                      backgroundColor: folderColor || '#60a5fa'
+                    }}
                   />
                 )
               ) : (
@@ -648,14 +652,18 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
                 <FolderOpen className="w-4 h-4" />
                 Open in Explorer
               </button>
-              <div className="border-t border-zinc-700 my-1" />
-              <button
-                onClick={() => setShowColorPicker(!showColorPicker)}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
-              >
-                <Palette className="w-4 h-4" />
-                Set Color
-              </button>
+              {!getSoftwareFolderIcon(contextMenu.node.name) && (
+                <>
+                  <div className="border-t border-zinc-700 my-1" />
+                  <button
+                    onClick={() => setShowColorPicker(!showColorPicker)}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+                  >
+                    <Palette className="w-4 h-4" />
+                    Set Color
+                  </button>
+                </>
+              )}
               {showColorPicker && (
                 <div className="px-2 py-2 space-y-1">
                   <div className="grid grid-cols-3 gap-2">

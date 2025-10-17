@@ -5,6 +5,7 @@ import { useProjectStore } from './store/projectStore';
 import { useContextMenuStore } from './store/contextMenuStore';
 import { SettingsPanel } from './components/SettingsPanel';
 import { FeedbackPanel } from './components/FeedbackPanel';
+import { AboutPanel } from './components/AboutPanel';
 // MDXEditor imports moved to NotesSection component
 import { SoftwareIcon } from './components/SoftwareIcon';
 import { ProjectCard } from './components/ProjectCard';
@@ -78,6 +79,7 @@ function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const [filterView, setFilterView] = useState<'all' | 'favorites' | 'archive'>('all');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
@@ -204,6 +206,11 @@ function App() {
           setShowFeedback(false);
           return;
         }
+        if (showAbout) {
+          e.preventDefault();
+          setShowAbout(false);
+          return;
+        }
         if (deleteConfirm) {
           e.preventDefault();
           setDeleteConfirm(null);
@@ -268,7 +275,7 @@ function App() {
 
     window.addEventListener('keydown', handleGlobalHotkeys);
     return () => window.removeEventListener('keydown', handleGlobalHotkeys);
-  }, [viewMode, selectedProjectId, previousProjectId, showCreateModal, showSettings, showFeedback, showWelcomeSetup, deleteConfirm]);
+  }, [viewMode, selectedProjectId, previousProjectId, showCreateModal, showSettings, showFeedback, showAbout, showWelcomeSetup, deleteConfirm]);
 
   // Global paste handler that uses hovered project
   useEffect(() => {
@@ -662,9 +669,20 @@ function App() {
         <div
           className="flex items-center gap-2 flex-1 h-full"
           style={{ paddingLeft: '13px' }}
-          onMouseDown={() => appWindow.startDragging()}
+          onMouseDown={(e) => {
+            // Only drag if not clicking on the logo button
+            if (!(e.target as HTMLElement).closest('button')) {
+              appWindow.startDragging();
+            }
+          }}
         >
-          <img src="/icon.png" alt="Logo" className="w-4 h-4" />
+          <button
+            onClick={() => setShowAbout(true)}
+            className="p-1 hover:bg-zinc-800 rounded transition-colors"
+            title="About"
+          >
+            <img src="/icon.png" alt="Logo" className="w-4 h-4 select-none pointer-events-none" />
+          </button>
         </div>
 
         <div
@@ -819,30 +837,30 @@ function App() {
               className={`flex-1 px-2 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
                 filterView === 'all' ? 'bg-accent' : 'bg-zinc-800 hover:bg-zinc-700'
               }`}
-              title="Все проекты"
+              title="All projects"
             >
               <Grid3x3 className="w-3.5 h-3.5" />
-              <span className="text-xs">Все</span>
+              <span className="text-xs">All</span>
             </button>
             <button
               onClick={() => setFilterView('favorites')}
               className={`flex-1 px-2 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
                 filterView === 'favorites' ? 'bg-accent' : 'bg-zinc-800 hover:bg-zinc-700'
               }`}
-              title="Избранное"
+              title="Favorites"
             >
               <Star className={`w-3.5 h-3.5 ${filterView === 'favorites' ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-              <span className="text-xs">Избр.</span>
+              <span className="text-xs">Fav</span>
             </button>
             <button
               onClick={() => setFilterView('archive')}
               className={`flex-1 px-2 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
                 filterView === 'archive' ? 'bg-accent' : 'bg-zinc-800 hover:bg-zinc-700'
               }`}
-              title="Архив"
+              title="Archive"
             >
               <Archive className="w-3.5 h-3.5" />
-              <span className="text-xs">Архив</span>
+              <span className="text-xs">Archive</span>
             </button>
             <div className="relative" ref={filterMenuRef}>
               <button
@@ -853,7 +871,7 @@ function App() {
                 className={`p-1.5 rounded-lg transition-colors ${
                   showFilterMenu ? 'bg-accent' : 'bg-zinc-800 hover:bg-zinc-700'
                 }`}
-                title="Сортировка"
+                title="Sort & Filter"
               >
                 <Filter className="w-3.5 h-3.5" />
               </button>
@@ -1206,6 +1224,13 @@ function App() {
       {showFeedback && (
         <FeedbackPanel
           onClose={() => setShowFeedback(false)}
+        />
+      )}
+
+      {/* About Panel */}
+      {showAbout && (
+        <AboutPanel
+          onClose={() => setShowAbout(false)}
         />
       )}
 
