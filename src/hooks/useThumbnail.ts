@@ -1,6 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import { readBinaryFile } from '@tauri-apps/api/fs';
 import { thumbnailCache } from '../utils/thumbnailCache';
+import { indexedDBThumbnailCache } from '../utils/indexedDBCache';
+
+// Feature flag to switch between localStorage and IndexedDB
+const USE_INDEXED_DB = true;
 
 export function useThumbnail(projectPath: string, thumbnail: string | undefined) {
   const [imageSrc, setImageSrc] = useState<string>('');
@@ -17,18 +21,26 @@ export function useThumbnail(projectPath: string, thumbnail: string | undefined)
       return;
     }
 
-    // Check cache first
-    const cached = thumbnailCache.get(projectPath, thumbnail);
-    if (cached) {
-      setImageSrc(cached);
-      return;
-    }
-
     let isMounted = true;
 
     async function loadImage() {
       try {
         if (!thumbnail) return;
+
+        // Check cache first (IndexedDB or localStorage)
+        if (USE_INDEXED_DB) {
+          const cached = await indexedDBThumbnailCache.get(projectPath, thumbnail);
+          if (cached && isMounted) {
+            setImageSrc(cached);
+            return;
+          }
+        } else {
+          const cached = thumbnailCache.get(projectPath, thumbnail);
+          if (cached) {
+            setImageSrc(cached);
+            return;
+          }
+        }
 
         // Clean paths and join correctly
         const cleanPath = projectPath.trim().replace(/[\/\\]+$/, '');
@@ -56,8 +68,12 @@ export function useThumbnail(projectPath: string, thumbnail: string | undefined)
         );
         const dataUrl = `data:${mimeType};base64,${base64}`;
 
-        // Store in cache
-        thumbnailCache.set(projectPath, thumbnail, dataUrl);
+        // Store in cache (IndexedDB or localStorage)
+        if (USE_INDEXED_DB) {
+          await indexedDBThumbnailCache.set(projectPath, thumbnail, dataUrl);
+        } else {
+          thumbnailCache.set(projectPath, thumbnail, dataUrl);
+        }
 
         if (isMounted) {
           setImageSrc(dataUrl);
@@ -80,5 +96,5 @@ export function useThumbnail(projectPath: string, thumbnail: string | undefined)
   return imageSrc;
 }
 
-// Export cache for manual cache management if needed
-export { thumbnailCache };
+// Export caches for manual cache management if needed
+export { thumbnailCache, indexedDBThumbnailCache };

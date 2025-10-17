@@ -1,0 +1,12 @@
+# Log files and temporary files that should not trigger rebuilds
+*.log
+*-log.txt
+HAP-log.txt
+
+# Backup files
+*.bak
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
