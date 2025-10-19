@@ -100,6 +100,7 @@ export interface Project {
   currency?: Currency;
   paymentStatus?: PaymentStatus;
   prepaymentAmount?: number;
+  completedAt?: string; // ISO date string - when payment status was set to "paid"
   clientId?: string;
   hasShots?: boolean;
   shots?: Shot[];

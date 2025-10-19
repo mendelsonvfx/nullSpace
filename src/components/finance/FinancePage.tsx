@@ -17,6 +17,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const renderStart = performance.now();
   const renderCountRef = React.useRef(0);
   renderCountRef.current += 1;
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
   console.log('[FinancePage] RENDER START', {
     renderCount: renderCountRef.current,
@@ -70,6 +71,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const [sortBy, setSortBy] = useState<'amount' | 'name' | 'client'>('amount');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; amount: number } | null>(null);
+  const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
 
   const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
 
@@ -310,9 +312,9 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const dailyRate = totalDaysWorked > 0 ? totalPaid / totalDaysWorked : 0;
   const statistics = { totalPaid, displayCurrency, avgValue, dailyRate };
 
-  // Timeline data
+  // Timeline data - use completedAt (when payment was marked as "paid"), fallback to createdAt for old projects
   const projectsWithDates = paidProjects
-    .filter((p: any) => p.createdAt)
+    .filter((p: any) => p.completedAt || p.createdAt)  // Use completedAt or fallback to createdAt
     .map((project: any) => {
       const originalCurrency = project.currency || 'USD';
       const originalAmount = project.displayAmount || project.cost || 0;
@@ -320,7 +322,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
         : originalAmount;
       return {
-        date: new Date(project.createdAt),
+        date: new Date(project.completedAt || project.createdAt),  // Use completedAt, fallback to createdAt
         amount: displayAmount,
         name: project.name
       };
@@ -452,7 +454,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
   return (
     <div className="h-full flex flex-col bg-zinc-950 animate-mode-switch">
-      <div className="flex-1 overflow-y-auto px-8 pb-8 pt-6">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 pb-8 pt-6">
         {selectedProject ? (
           /* Project Financial Details */
           <FinanceProjectDetails
@@ -711,7 +713,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                     {hoveredPoint.amount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}
                   </div>
                 )}
-                <svg viewBox={`0 0 ${timelineData.chartWidth} ${timelineData.chartHeight}`} className="w-full h-64" preserveAspectRatio="none">
+                <svg viewBox={`0 0 ${timelineData.chartWidth} ${timelineData.chartHeight}`} className="w-full h-64" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
 
                   {/* Vertical lines from each point to bottom */}
                   {timelineData.points.map((p, i) => (
@@ -753,34 +755,55 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   />
 
                   {/* Points */}
-                  {timelineData.points.map((p, i) => (
-                    <g key={i}>
-                      <circle
-                        cx={p.x}
-                        cy={p.y}
-                        r={timelineData.pointRadius}
-                        fill="#18181b"
-                        stroke="#3b82f6"
-                        strokeWidth="1"
-                      />
-                      <circle
-                        cx={p.x}
-                        cy={p.y}
-                        r={timelineData.pointRadius / 2}
-                        fill="#3b82f6"
-                      />
-                      {/* Invisible larger circle for better hover area */}
-                      <circle
-                        cx={p.x}
-                        cy={p.y}
-                        r={timelineData.pointRadius * 2}
-                        fill="transparent"
-                        style={{ cursor: 'pointer' }}
-                        onMouseEnter={() => setHoveredPoint(p)}
-                        onMouseLeave={() => setHoveredPoint(null)}
-                      />
-                    </g>
-                  ))}
+                  {timelineData.points.map((p, i) => {
+                    const isHovered = hoveredPointIndex === i;
+                    const scale = isHovered ? 1.5 : 1;
+                    return (
+                      <g
+                        key={i}
+                        style={{
+                          filter: isHovered ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.8)) drop-shadow(0 0 16px rgba(59, 130, 246, 0.5))' : 'none',
+                          transition: 'filter 0.2s ease'
+                        }}
+                      >
+                        <ellipse
+                          cx={p.x}
+                          cy={p.y}
+                          rx={timelineData.pointRadius * 0.85 * scale}
+                          ry={timelineData.pointRadius * scale}
+                          fill="#18181b"
+                          stroke="#3b82f6"
+                          strokeWidth="1"
+                          style={{ transition: 'all 0.2s ease' }}
+                        />
+                        <ellipse
+                          cx={p.x}
+                          cy={p.y}
+                          rx={(timelineData.pointRadius / 2) * 0.85 * scale}
+                          ry={(timelineData.pointRadius / 2) * scale}
+                          fill="#3b82f6"
+                          style={{ transition: 'all 0.2s ease' }}
+                        />
+                        {/* Invisible larger circle for better hover area */}
+                        <ellipse
+                          cx={p.x}
+                          cy={p.y}
+                          rx={(timelineData.pointRadius * 2) * 0.85}
+                          ry={timelineData.pointRadius * 2}
+                          fill="transparent"
+                          style={{ cursor: 'pointer' }}
+                          onMouseEnter={() => {
+                            setHoveredPoint(p);
+                            setHoveredPointIndex(i);
+                          }}
+                          onMouseLeave={() => {
+                            setHoveredPoint(null);
+                            setHoveredPointIndex(null);
+                          }}
+                        />
+                      </g>
+                    );
+                  })}
                 </svg>
 
                 {/* Date labels */}
@@ -798,6 +821,162 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   })}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Monthly Revenue Breakdown - Last 12 months */}
+        {paidProjects.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-2xl font-medium text-zinc-400 mb-6">Monthly Revenue Breakdown</h2>
+            <div className="bg-zinc-900 rounded-xl p-8 border border-zinc-800">
+              {(() => {
+                // Get last 12 months
+                const now = new Date();
+                const months = [];
+                for (let i = 11; i >= 0; i--) {
+                  const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                  months.push({
+                    date,
+                    name: date.toLocaleDateString('en-US', { month: 'short' }),
+                    year: date.getFullYear(),
+                    monthIndex: date.getMonth()
+                  });
+                }
+
+                // Calculate revenue for each month
+                const monthlyRevenue = months.map(month => {
+                  const projectsInMonth = paidProjects.filter((p: any) => {
+                    const dateToUse = p.completedAt || p.createdAt;
+                    if (!dateToUse) return false;
+                    const completedDate = new Date(dateToUse);
+                    return completedDate.getFullYear() === month.year &&
+                           completedDate.getMonth() === month.monthIndex;
+                  });
+
+                  const revenue = projectsInMonth.reduce((sum: number, p: any) => {
+                    const originalCurrency = p.currency || 'USD';
+                    const originalAmount = p.displayAmount || p.cost || 0;
+                    const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
+                      ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
+                      : originalAmount;
+                    return sum + displayAmount;
+                  }, 0);
+
+                  return { ...month, revenue, projectCount: projectsInMonth.length };
+                });
+
+                const maxRevenue = Math.max(...monthlyRevenue.map(m => m.revenue), 1);
+                const totalYearRevenue = monthlyRevenue.reduce((sum, m) => sum + m.revenue, 0);
+                const avgMonthlyRevenue = totalYearRevenue / 12;
+
+                return (
+                  <>
+                    {/* Stats row */}
+                    <div className="grid grid-cols-3 gap-4 mb-6 pb-6 border-b border-zinc-800">
+                      <div className="text-center">
+                        <div className="text-xs text-zinc-500 mb-1">Total (12mo)</div>
+                        <div className="text-xl font-bold text-blue-400">
+                          {totalYearRevenue.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-zinc-500 mb-1">Average/Month</div>
+                        <div className="text-xl font-bold text-purple-400">
+                          {avgMonthlyRevenue.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-zinc-500 mb-1">Best Month</div>
+                        <div className="text-xl font-bold text-green-400">
+                          {Math.max(...monthlyRevenue.map(m => m.revenue)).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bar chart */}
+                    <div className="flex items-end justify-between gap-3">
+                      {monthlyRevenue.map((month, index) => {
+                        const heightPercent = maxRevenue > 0 ? (month.revenue / maxRevenue) * 100 : 0;
+                        const isCurrentMonth = month.year === now.getFullYear() && month.monthIndex === now.getMonth();
+
+                        return (
+                          <div key={index} className="flex flex-col items-center gap-3 group" style={{ flex: '1 1 0' }}>
+                            {/* Bar */}
+                            <div className="relative flex items-end justify-center" style={{ height: '240px', width: '100%' }}>
+                              {/* Bar element */}
+                              <div
+                                className={`w-8 rounded-t-lg transition-all duration-300 relative ${
+                                  isCurrentMonth
+                                    ? 'bg-gradient-to-t from-purple-600 via-purple-500 to-purple-400'
+                                    : 'bg-gradient-to-t from-blue-600 via-blue-500 to-blue-400'
+                                }`}
+                                style={{
+                                  height: `${heightPercent}%`,
+                                  minHeight: month.revenue > 0 ? '8px' : '0',
+                                  boxShadow: isCurrentMonth
+                                    ? '0 0 20px rgba(168, 85, 247, 0.5)'
+                                    : '0 0 0 rgba(0, 0, 0, 0)',
+                                  transition: 'all 0.3s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.boxShadow = isCurrentMonth
+                                    ? '0 0 30px rgba(168, 85, 247, 0.7)'
+                                    : '0 0 20px rgba(59, 130, 246, 0.5)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.boxShadow = isCurrentMonth
+                                    ? '0 0 20px rgba(168, 85, 247, 0.5)'
+                                    : '0 0 0 rgba(0, 0, 0, 0)';
+                                }}
+                              >
+                                {/* Glow effect */}
+                                {month.revenue > 0 && (
+                                  <div className={`absolute inset-0 rounded-t-lg ${
+                                    isCurrentMonth ? 'bg-purple-400' : 'bg-blue-400'
+                                  } opacity-0 group-hover:opacity-20 transition-opacity`} />
+                                )}
+
+                                {/* Tooltip */}
+                                {month.revenue > 0 && (
+                                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+                                    <div className="bg-zinc-800 text-white px-3 py-2 rounded-lg shadow-xl border border-zinc-700 whitespace-nowrap">
+                                      <div className="text-xs font-medium mb-1">
+                                        {month.revenue.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}
+                                      </div>
+                                      <div className="text-[10px] text-zinc-400">
+                                        {month.projectCount} project{month.projectCount !== 1 ? 's' : ''}
+                                      </div>
+                                    </div>
+                                    {/* Arrow */}
+                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px">
+                                      <div className="border-4 border-transparent border-t-zinc-800" />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Month label */}
+                            <div className="text-center h-10 flex flex-col items-center justify-start select-none">
+                              <div className={`text-sm font-medium transition-colors ${
+                                isCurrentMonth ? 'text-purple-400' : 'text-zinc-400'
+                              } group-hover:text-white`}>
+                                {month.name}
+                              </div>
+                              {month.year !== now.getFullYear() ? (
+                                <div className="text-[10px] text-zinc-600">'{String(month.year).slice(-2)}</div>
+                              ) : (
+                                <div className="text-[10px] text-transparent">'{String(month.year).slice(-2)}</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}

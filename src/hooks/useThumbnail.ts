@@ -6,14 +6,21 @@ import { indexedDBThumbnailCache } from '../utils/indexedDBCache';
 // Feature flag to switch between localStorage and IndexedDB
 const USE_INDEXED_DB = true;
 
-export function useThumbnail(projectPath: string, thumbnail: string | undefined) {
-  const [imageSrc, setImageSrc] = useState<string>('');
+// Global in-memory cache for instant thumbnail access
+const memoryCache = new Map<string, string>();
 
+export function useThumbnail(projectPath: string, thumbnail: string | undefined) {
   // Memoize cache key to prevent unnecessary recalculations
   const cacheKey = useMemo(() =>
     thumbnail ? `${projectPath}::${thumbnail}` : null,
     [projectPath, thumbnail]
   );
+
+  // Initialize state from memory cache if available (synchronous, no flicker)
+  const [imageSrc, setImageSrc] = useState<string>(() => {
+    if (!cacheKey) return '';
+    return memoryCache.get(cacheKey) || '';
+  });
 
   useEffect(() => {
     if (!thumbnail || !cacheKey) {
@@ -25,18 +32,31 @@ export function useThumbnail(projectPath: string, thumbnail: string | undefined)
 
     async function loadImage() {
       try {
-        if (!thumbnail) return;
+        if (!thumbnail || !cacheKey) return;
 
-        // Check cache first (IndexedDB or localStorage)
+        // Check memory cache first (synchronous, fastest)
+        const memCached = memoryCache.get(cacheKey);
+        if (memCached) {
+          if (isMounted) {
+            setImageSrc(memCached);
+          }
+          return;
+        }
+
+        // Check IndexedDB or localStorage cache
         if (USE_INDEXED_DB) {
           const cached = await indexedDBThumbnailCache.get(projectPath, thumbnail);
           if (cached && isMounted) {
+            // Store in memory cache for instant access next time
+            memoryCache.set(cacheKey, cached);
             setImageSrc(cached);
             return;
           }
         } else {
           const cached = thumbnailCache.get(projectPath, thumbnail);
           if (cached) {
+            // Store in memory cache for instant access next time
+            memoryCache.set(cacheKey, cached);
             setImageSrc(cached);
             return;
           }
@@ -68,12 +88,15 @@ export function useThumbnail(projectPath: string, thumbnail: string | undefined)
         );
         const dataUrl = `data:${mimeType};base64,${base64}`;
 
-        // Store in cache (IndexedDB or localStorage)
+        // Store in all caches
         if (USE_INDEXED_DB) {
           await indexedDBThumbnailCache.set(projectPath, thumbnail, dataUrl);
         } else {
           thumbnailCache.set(projectPath, thumbnail, dataUrl);
         }
+
+        // Store in memory cache for instant access
+        memoryCache.set(cacheKey, dataUrl);
 
         if (isMounted) {
           setImageSrc(dataUrl);
