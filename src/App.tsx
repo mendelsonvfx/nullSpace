@@ -105,6 +105,8 @@ function App() {
     return saved !== null ? JSON.parse(saved) : true;
   });
   const [showWelcomeSetup, setShowWelcomeSetup] = useState(false);
+  const [, setIsWindowVisible] = useState(true); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const [, setForceRenderKey] = useState(0); // eslint-disable-line @typescript-eslint/no-unused-vars
 
   // Check if we should show welcome setup
   useEffect(() => {
@@ -140,6 +142,61 @@ function App() {
 
     return () => {
       unlisten.then(f => f());
+    };
+  }, []);
+
+  // Handle window focus and visibility to fix blank screen on restore
+  useEffect(() => {
+    let isCleanedUp = false;
+
+    // Tauri window focus listener
+    const setupFocusListener = async () => {
+      const unlisten = await appWindow.onFocusChanged(({ payload: focused }) => {
+        if (isCleanedUp) return;
+
+        if (focused) {
+          // Window gained focus - force re-render with requestAnimationFrame
+          console.log('[Window] Focus gained - forcing re-render');
+          requestAnimationFrame(() => {
+            if (!isCleanedUp) {
+              setIsWindowVisible(true);
+              setForceRenderKey(prev => prev + 1);
+            }
+          });
+        } else {
+          console.log('[Window] Focus lost');
+          setIsWindowVisible(false);
+        }
+      });
+      return unlisten;
+    };
+
+    const unlistenPromise = setupFocusListener();
+
+    // Browser visibility change listener
+    const handleVisibilityChange = () => {
+      if (isCleanedUp) return;
+
+      if (!document.hidden) {
+        console.log('[Document] Visibility restored - forcing re-render');
+        requestAnimationFrame(() => {
+          if (!isCleanedUp) {
+            setIsWindowVisible(true);
+            setForceRenderKey(prev => prev + 1);
+          }
+        });
+      } else {
+        console.log('[Document] Hidden');
+        setIsWindowVisible(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isCleanedUp = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      unlistenPromise.then(unlisten => unlisten());
     };
   }, []);
 
@@ -1150,6 +1207,7 @@ function App() {
         )}
 
         {/* Projects view */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ display: viewMode !== 'finance' ? 'flex' : 'none' }}>
         {viewMode !== 'finance' && (
           selectedProject ? (
             <ProjectDetails
@@ -1186,6 +1244,7 @@ function App() {
             <EmptyState onCreateProject={() => setShowCreateModal(true)} />
           )
         )}
+        </div>
       </div>
 
       {/* Right Sidebar */}
@@ -1447,7 +1506,11 @@ function App() {
             onClick={() => {
               const project = projects.find(p => p.id === contextMenu.projectId);
               if (project) {
-                updateProject({ ...project, paymentStatus: 'paid' });
+                // Set completedAt only if changing TO "paid" and it's not already set
+                const completedAt = project.paymentStatus === 'paid'
+                  ? project.completedAt
+                  : (project.completedAt || new Date().toISOString());
+                updateProject({ ...project, paymentStatus: 'paid', completedAt });
               }
               setContextMenu(null);
             }}

@@ -1,7 +1,7 @@
 {
   "name": "rayhub",
   "private": true,
-  "version": "0.9.94-beta",
+  "version": "0.9.96-beta",
   "type": "module",
   "scripts": {
     "dev": "vite",

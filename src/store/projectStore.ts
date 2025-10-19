@@ -329,7 +329,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   updateStatus: (projectId: string, status: Project['status']) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project) {
-      const updated = { ...project, status };
+      // Set completedAt when status changes to 'completed' and it's not already set
+      const completedAt = status === 'completed'
+        ? (project.completedAt || new Date().toISOString())
+        : project.completedAt;
+      const updated = { ...project, status, completedAt };
       get().updateProject(updated);
     }
   },

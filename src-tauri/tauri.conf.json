@@ -7,7 +7,7 @@
   },
   "package": {
     "productName": "nullSpace",
-    "version": "0.9.94"
+    "version": "0.9.96"
   },
   "tauri": {
     "allowlist": {
@@ -74,7 +74,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "RayHub",
+        "title": "nullSpace",
         "width": 1600,
         "height": 900,
         "decorations": false,

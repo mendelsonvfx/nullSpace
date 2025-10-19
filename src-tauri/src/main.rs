@@ -65,6 +65,8 @@ struct Project {
     payment_status: Option<String>,
     #[serde(rename = "prepaymentAmount", alias = "prepayment_amount")]
     prepayment_amount: Option<f64>,
+    #[serde(rename = "completedAt", alias = "completed_at")]
+    completed_at: Option<String>,
     todos: Option<Vec<TodoItem>>,
     #[serde(rename = "hasShots", alias = "has_shots")]
     has_shots: Option<bool>,
@@ -395,6 +397,7 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
         currency: input.currency,
         payment_status: input.payment_status,
         prepayment_amount: input.prepayment_amount,
+        completed_at: None,
         todos: Some(vec![]),
         has_shots: input.has_shots,
         shots: Some(vec![]),

@@ -1247,10 +1247,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               day: 'numeric'
             }) : 'Unknown'}
           </div>
-          {project.status === 'completed' && project.updatedAt && (
+          {project.status === 'completed' && (project.completedAt || project.updatedAt) && (
             <div>
               <span className="text-zinc-500">Completed:</span>{' '}
-              {new Date(project.updatedAt).toLocaleDateString()}
+              {new Date(project.completedAt || project.updatedAt).toLocaleDateString()}
             </div>
           )}
         </div>

@@ -28,6 +28,7 @@ export const ProjectCard = memo(function ProjectCard({
       backgroundPosition: 'center',
       backgroundColor: '#000000'
     } : {
+      backgroundImage: 'linear-gradient(to left, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.95))',
       backgroundColor: '#000000'
     },
     [thumbnailSrc]
