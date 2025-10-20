@@ -73,7 +73,7 @@ export function FinanceProjectDetails({
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <div className="flex items-center justify-between mb-8">
         <h2 className="text-3xl font-bold">{project.name}</h2>
         <button

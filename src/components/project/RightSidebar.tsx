@@ -10,7 +10,7 @@ export function RightSidebar({ project }: RightSidebarProps) {
   const [showHidden, setShowHidden] = useState(false);
 
   return (
-    <div className="w-80 border-l border-zinc-800 flex flex-col">
+    <div className="w-80 border-l border-zinc-800 border-t border-zinc-800 flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-zinc-800">
         <div className="flex items-center gap-2 justify-between">

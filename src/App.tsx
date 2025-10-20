@@ -778,7 +778,7 @@ function App() {
             className="w-8 h-6 hover:bg-zinc-800 flex items-center justify-center transition-colors rounded"
             title="Minimize"
           >
-            <Minus className="w-3.5 h-3.5" />
+            <Minus className="w-3.5 h-3.5 text-zinc-400" />
           </button>
           <button
             onClick={() => {
@@ -788,7 +788,7 @@ function App() {
             className="w-8 h-6 hover:bg-zinc-800 flex items-center justify-center transition-colors rounded"
             title="Maximize"
           >
-            <Square className="w-3 h-3" />
+            <Square className="w-3 h-3 text-zinc-400" />
           </button>
           <button
             onClick={() => {
@@ -798,7 +798,7 @@ function App() {
             className="w-8 h-6 hover:bg-red-600 flex items-center justify-center transition-colors rounded"
             title="Close"
           >
-            <X className="w-3.5 h-3.5 close-button-red" />
+            <X className="w-3.5 h-3.5 text-zinc-400" />
           </button>
         </div>
       </div>
@@ -827,7 +827,7 @@ function App() {
         />
       )}
       {/* Sidebar - Project List */}
-      <div className="w-80 border-r border-zinc-800 flex flex-col">
+      <div className="w-80 border-r border-zinc-800 border-t border-zinc-800 flex flex-col">
         {/* Sidebar Header */}
         <div className="p-4 border-b border-zinc-800">
           <div className="flex items-center justify-between mb-4">
@@ -1198,7 +1198,7 @@ function App() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden border-t border-zinc-800">
         {/* Lazy load FinancePage - only mount after first use, then keep mounted but hidden */}
         {financePageMounted && (
           <div style={{ display: viewMode === 'finance' ? 'flex' : 'none', height: '100%' }} className="flex flex-col">

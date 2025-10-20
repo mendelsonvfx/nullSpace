@@ -380,7 +380,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const newTodo = {
       id: crypto.randomUUID(),
       text,
-      completed: false
+      completed: false,
+      createdAt: new Date().toISOString()
     };
 
     const project = get().projects.find(p => p.id === projectId);
@@ -648,7 +649,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const newTodo = {
       id: crypto.randomUUID(),
       text,
-      completed: false
+      completed: false,
+      createdAt: new Date().toISOString()
     };
 
     const project = get().projects.find(p => p.id === projectId);

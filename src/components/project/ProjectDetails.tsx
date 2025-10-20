@@ -555,49 +555,78 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         <div className="mb-6">
           <h3 className="text-sm font-medium text-zinc-400 mb-3">Tasks</h3>
           <div className="space-y-2">
-            {context.todos.map((todo: any) => (
-              <div key={todo.id} className="flex items-center gap-2 group">
-                <button
-                  onClick={() => {
-                    if (context.isShot && context.shotId) {
-                      const { toggleShotTodo } = useProjectStore.getState();
-                      toggleShotTodo(project.id, context.shotId, todo.id);
-                    } else {
-                      const { toggleTodo } = useProjectStore.getState();
-                      toggleTodo(project.id, todo.id);
-                    }
-                  }}
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                    todo.completed
-                      ? 'bg-accent border-accent'
-                      : 'border-zinc-600 hover:border-accent'
-                  }`}
-                >
-                  {todo.completed && <Check className="w-3 h-3 text-white" />}
-                </button>
-                <span
-                  className={`flex-1 text-sm ${
-                    todo.completed ? 'line-through text-zinc-500' : 'text-zinc-300'
-                  }`}
-                >
-                  {todo.text}
-                </span>
-                <button
-                  onClick={() => {
-                    if (context.isShot && context.shotId) {
-                      const { removeShotTodo } = useProjectStore.getState();
-                      removeShotTodo(project.id, context.shotId, todo.id);
-                    } else {
-                      const { removeTodo } = useProjectStore.getState();
-                      removeTodo(project.id, todo.id);
-                    }
-                  }}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-800 rounded transition-opacity"
-                >
-                  <X className="w-3 h-3 close-button-red" />
-                </button>
-              </div>
-            ))}
+            {(() => {
+              // Group todos by date
+              const todosByDate: { [key: string]: any[] } = {};
+              context.todos.forEach((todo: any) => {
+                const dateKey = todo.createdAt
+                  ? new Date(todo.createdAt).toLocaleDateString('en-US', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric'
+                    })
+                  : 'No Date';
+                if (!todosByDate[dateKey]) {
+                  todosByDate[dateKey] = [];
+                }
+                todosByDate[dateKey].push(todo);
+              });
+
+              return Object.entries(todosByDate).map(([date, todos]) => (
+                <div key={date} className="space-y-2">
+                  {/* Date separator */}
+                  <div className="flex items-center gap-2 mt-4 mb-2">
+                    <div className="h-px bg-zinc-700 flex-1" />
+                    <span className="text-xs text-zinc-500 font-medium">{date}</span>
+                    <div className="h-px bg-zinc-700 flex-1" />
+                  </div>
+                  {/* Tasks for this date */}
+                  {todos.map((todo: any) => (
+                    <div key={todo.id} className="flex items-center gap-2 group">
+                      <button
+                        onClick={() => {
+                          if (context.isShot && context.shotId) {
+                            const { toggleShotTodo } = useProjectStore.getState();
+                            toggleShotTodo(project.id, context.shotId, todo.id);
+                          } else {
+                            const { toggleTodo } = useProjectStore.getState();
+                            toggleTodo(project.id, todo.id);
+                          }
+                        }}
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                          todo.completed
+                            ? 'bg-accent border-accent'
+                            : 'border-zinc-600 hover:border-accent'
+                        }`}
+                      >
+                        {todo.completed && <Check className="w-3 h-3 text-white" />}
+                      </button>
+                      <span
+                        className={`flex-1 text-sm ${
+                          todo.completed ? 'line-through text-zinc-500' : 'text-zinc-300'
+                        }`}
+                      >
+                        {todo.text}
+                      </span>
+                      <button
+                        onClick={() => {
+                          if (context.isShot && context.shotId) {
+                            const { removeShotTodo } = useProjectStore.getState();
+                            removeShotTodo(project.id, context.shotId, todo.id);
+                          } else {
+                            const { removeTodo } = useProjectStore.getState();
+                            removeTodo(project.id, todo.id);
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-800 rounded transition-opacity"
+                      >
+                        <X className="w-3 h-3 close-button-red" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ));
+            })()}
             <input
               type="text"
               placeholder="+ Add task..."
