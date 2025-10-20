@@ -39,6 +39,7 @@ export interface TodoItem {
   id: string;
   text: string;
   completed: boolean;
+  createdAt?: string; // ISO date string for date separator
 }
 
 export interface Shot {

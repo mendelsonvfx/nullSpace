@@ -1209,14 +1209,14 @@ function FinanceSettings() {
     setEditingRate(null);
   };
 
-  const getCurrentRates = () => {
-    if (rateMode === 'auto' && autoRates) {
-      return autoRates;
-    }
-    return exchangeRates[baseCurrency] || exchangeRates.USD;
-  };
+  // const getCurrentRates = () => {
+  //   if (rateMode === 'auto' && autoRates) {
+  //     return autoRates;
+  //   }
+  //   return exchangeRates[baseCurrency] || exchangeRates.USD;
+  // };
 
-  const currentRates = getCurrentRates();
+  // const currentRates = getCurrentRates(); // Unused for now
 
   return (
     <div className="space-y-6">
@@ -1322,7 +1322,8 @@ function FinanceSettings() {
                 // Нужно инвертировать для отображения "сколько базовой за 1 другую"
                 rate = autoRates[currency] ? 1 / autoRates[currency] : 0;
               } else {
-                rate = currentRates[currency] || 0;
+                // В ручном режиме: exchangeRates[baseCurrency][currency] = сколько базовой за 1 другую
+                rate = exchangeRates[baseCurrency]?.[currency] || 0;
               }
 
               const isEditing = editingRate?.from === baseCurrency && editingRate?.to === currency;

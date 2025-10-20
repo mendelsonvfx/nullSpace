@@ -13,7 +13,21 @@ interface PieChartProps {
 }
 
 export function PieChart({ data, title, id }: PieChartProps) {
-  const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
+  // Find the index of the largest slice
+  const largestSliceIndex = useMemo(() => {
+    if (data.length === 0) return null;
+    let maxIndex = 0;
+    let maxValue = data[0].value;
+    data.forEach((item, index) => {
+      if (item.value > maxValue) {
+        maxValue = item.value;
+        maxIndex = index;
+      }
+    });
+    return maxIndex;
+  }, [data]);
+
+  const [hoveredSlice, setHoveredSlice] = useState<number | null>(largestSliceIndex);
 
   const total = useMemo(() => data.reduce((sum, item) => sum + item.value, 0), [data]);
   const size = 200;
@@ -23,6 +37,28 @@ export function PieChart({ data, title, id }: PieChartProps) {
   const innerRadius = 50; // Donut hole
 
   const slices = useMemo(() => {
+    // Special case: if only one item, draw full circle
+    if (data.length === 1) {
+      const item = data[0];
+      // Draw a full donut circle using two semicircle arcs
+      const pathData = [
+        `M ${center} ${center - outerRadius}`, // Start at top of outer circle
+        `A ${outerRadius} ${outerRadius} 0 0 1 ${center} ${center + outerRadius}`, // First semicircle
+        `A ${outerRadius} ${outerRadius} 0 0 1 ${center} ${center - outerRadius}`, // Second semicircle
+        `M ${center} ${center - innerRadius}`, // Move to top of inner circle
+        `A ${innerRadius} ${innerRadius} 0 0 0 ${center} ${center + innerRadius}`, // First inner semicircle (reverse direction)
+        `A ${innerRadius} ${innerRadius} 0 0 0 ${center} ${center - innerRadius}`, // Second inner semicircle (reverse direction)
+        'Z'
+      ].join(' ');
+
+      return [{
+        path: pathData,
+        color: item.color,
+        name: item.name,
+        percentage: '100.0'
+      }];
+    }
+
     let currentAngle = -90; // Start from top
 
     return data.map((item) => {
@@ -111,20 +147,50 @@ export function PieChart({ data, title, id }: PieChartProps) {
               opacity: hoveredSlice === index ? 1 : hoveredSlice !== null ? 0.6 : 1
             }}
             onMouseEnter={() => setHoveredSlice(index)}
-            onMouseLeave={() => setHoveredSlice(null)}
+            onMouseLeave={() => setHoveredSlice(largestSliceIndex)}
           />
         ))}
       </svg>
-      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none max-w-[80px]">
+      {/* Center text - percentage inside circle */}
+      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
         {hoveredSlice !== null ? (
-          <>
-            <div className="text-white text-xs font-medium truncate">{slices[hoveredSlice].name}</div>
-            <div className="text-zinc-400 text-xs">{slices[hoveredSlice].percentage}%</div>
-          </>
+          <div className="text-white text-base font-bold transition-all duration-200 ease-out" style={{ animation: 'fadeInScale 0.2s ease-out' }}>
+            {slices[hoveredSlice].percentage}%
+            <style>{`
+              @keyframes fadeInScale {
+                from {
+                  opacity: 0;
+                  transform: scale(0.95);
+                }
+                to {
+                  opacity: 1;
+                  transform: scale(1);
+                }
+              }
+            `}</style>
+          </div>
         ) : title ? (
-          <div className="text-zinc-400 text-xs font-medium whitespace-pre-line leading-tight">{title}</div>
+          <div className="text-zinc-400 text-xs font-medium whitespace-pre-line leading-tight max-w-[80px]">{title}</div>
         ) : null}
       </div>
+      {/* Name below the chart */}
+      {hoveredSlice !== null && (
+        <div className="absolute left-1/2 transform -translate-x-1/2 text-center pointer-events-none w-full" style={{ top: `${size - 5}px`, animation: 'fadeInSlide 0.2s ease-out' }}>
+          <div className="text-zinc-300 text-sm font-medium truncate px-2">{slices[hoveredSlice].name}</div>
+          <style>{`
+            @keyframes fadeInSlide {
+              from {
+                opacity: 0;
+                transform: translateY(-4px) translateX(-50%);
+              }
+              to {
+                opacity: 1;
+                transform: translateY(0) translateX(-50%);
+              }
+            }
+          `}</style>
+        </div>
+      )}
     </div>
   );
 }

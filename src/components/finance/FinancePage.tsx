@@ -18,6 +18,8 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const renderCountRef = React.useRef(0);
   renderCountRef.current += 1;
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const timelineContainerRef = React.useRef<HTMLDivElement>(null);
+  const [timelineContainerWidth, setTimelineContainerWidth] = useState(1000);
 
   console.log('[FinancePage] RENDER START', {
     renderCount: renderCountRef.current,
@@ -176,6 +178,22 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [baseCurrency]);
+
+  // Track timeline container width for responsive chart
+  useEffect(() => {
+    const updateWidth = () => {
+      if (timelineContainerRef.current) {
+        setTimelineContainerWidth(timelineContainerRef.current.offsetWidth);
+      }
+    };
+
+    // Initial width
+    updateWidth();
+
+    // Update on window resize
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
   const currencySymbols: Record<string, string> = {
     'USD': '$',
@@ -347,8 +365,12 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     const chartHeight = 300;
     const pointRadius = 3;
     const padding = pointRadius + 2;
-    const minSpacing = 50;
-    const chartWidth = Math.max(1000, cumulativeData.length * minSpacing);
+
+    // Calculate optimal spacing based on container width
+    // Min spacing: 50px (for readability), Max spacing: 120px (to prevent over-stretching)
+    const availableWidth = timelineContainerWidth - 2 * padding;
+    const optimalSpacing = Math.min(Math.max(availableWidth / Math.max(cumulativeData.length - 1, 1), 50), 120);
+    const chartWidth = Math.max(cumulativeData.length * optimalSpacing, availableWidth);
     const points = cumulativeData.map((item, index) => {
       const x = padding + (index / Math.max(cumulativeData.length - 1, 1)) * (chartWidth - 2 * padding);
       const y = padding + (chartHeight - 2 * padding) - (item.revenue / maxRevenue) * (chartHeight - 2 * padding - 40);
@@ -393,10 +415,15 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
       return char.charCodeAt(0) + ((acc << 5) - acc);
     }, 0);
     const hue = Math.abs(hash % 360);
+
+    // Use more vibrant colors: higher saturation (85-95%) and medium-high lightness (55-65%)
+    const saturation = 85 + (Math.abs(hash) % 11); // 85-95%
+    const lightness = 55 + (Math.abs(hash >> 8) % 11); // 55-65%
+
     return {
       name: project.name,
       value: displayAmount,
-      color: `hsl(${hue}, 70%, 60%)`
+      color: `hsl(${hue}, ${saturation}%, ${lightness}%)`
     };
   }).filter(item => item.value > 0);
 
@@ -453,7 +480,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   console.log('[FinancePage] RENDER END', { duration: (renderEnd - renderStart).toFixed(2) + 'ms' });
 
   return (
-    <div className="h-full flex flex-col bg-zinc-950 animate-mode-switch">
+    <div className="h-full flex flex-col bg-zinc-950 overflow-hidden animate-fade-in">
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 pb-8 pt-6">
         {selectedProject ? (
           /* Project Financial Details */
@@ -469,7 +496,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
           />
         ) : (
           /* General Finance Overview */
-          <div className="max-w-6xl mx-auto">
+          <div className="w-full">
             {/* Total Revenue and Pending */}
             <div className="grid grid-cols-2 gap-8 mb-12">
               {/* Total Revenue */}
@@ -700,7 +727,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
           <div className="mb-12">
             <h2 className="text-2xl font-medium text-zinc-400 mb-6">Revenue Timeline</h2>
             <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
-              <div className="w-full relative">
+              <div ref={timelineContainerRef} className="w-full relative">
                 {hoveredPoint && (
                   <div
                     className="absolute bg-zinc-800 text-white px-3 py-2 rounded-lg text-sm border border-zinc-700 pointer-events-none z-10"
@@ -907,13 +934,15 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                               {/* Bar element */}
                               <div
                                 className={`w-8 rounded-t-lg transition-all duration-300 relative ${
-                                  isCurrentMonth
-                                    ? 'bg-gradient-to-t from-purple-600 via-purple-500 to-purple-400'
-                                    : 'bg-gradient-to-t from-blue-600 via-blue-500 to-blue-400'
+                                  month.revenue === 0
+                                    ? 'bg-zinc-800'
+                                    : isCurrentMonth
+                                      ? 'bg-gradient-to-t from-purple-600 via-purple-500 to-purple-400'
+                                      : 'bg-gradient-to-t from-blue-600 via-blue-500 to-blue-400'
                                 }`}
                                 style={{
-                                  height: `${heightPercent}%`,
-                                  minHeight: month.revenue > 0 ? '8px' : '0',
+                                  height: month.revenue === 0 ? '3px' : `${heightPercent}%`,
+                                  minHeight: month.revenue > 0 ? '8px' : '3px',
                                   boxShadow: isCurrentMonth
                                     ? '0 0 20px rgba(168, 85, 247, 0.5)'
                                     : '0 0 0 rgba(0, 0, 0, 0)',
