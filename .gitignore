@@ -18,6 +18,11 @@ dist-ssr
 src-tauri/target
 src-tauri/gen
 
+# Portable builds and config
+nullSpace_v*.zip
+portable-build/
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
