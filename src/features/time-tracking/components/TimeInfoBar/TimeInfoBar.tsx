@@ -1,0 +1,65 @@
+// src/features/time-tracking/components/TimeInfoBar/TimeInfoBar.tsx
+import { formatTime } from '../../utils/timeFormatters';
+import type { Project } from '../../../../types/project';
+
+interface TimeInfoBarProps {
+  project: Project;
+}
+
+/**
+ * Bottom info bar showing project creation date and time spent
+ */
+export function TimeInfoBar({ project }: TimeInfoBarProps) {
+  // Calculate total PROJECT time: completed + current WorkSession time
+  const completedMinutes = project.totalMinutesSpent || 0;
+  const currentProjectMinutes = project.workSession?.elapsedMinutes || 0;
+  const totalMinutes = completedMinutes + currentProjectMinutes;
+
+  // Show green dot only when widget is visible (don't show on Finance page)
+  const hasActiveSession = (project.timeEntries || []).some(
+    (e: any) => e.isActive && e.widgetVisible === true
+  );
+
+  return (
+    <div className="border-t border-zinc-800 px-6 py-2 bg-zinc-900 text-xs text-zinc-400 flex-shrink-0">
+      <div className="flex justify-between items-center">
+        <div className="flex gap-6">
+          <div>
+            <span className="text-zinc-500">Created:</span>{' '}
+            {project.createdAt
+              ? new Date(project.createdAt).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric'
+                })
+              : 'Unknown'}
+          </div>
+
+          <div>
+            <span className="text-zinc-500">Time Spent:</span>{' '}
+            <span className="text-white font-medium">{formatTime(totalMinutes)}</span>
+            {hasActiveSession && (
+              <span className="text-green-400 ml-1 animate-pulse">●</span>
+            )}
+          </div>
+        </div>
+
+        <div>
+          {project.status === 'completed' &&
+            (project.completedAt || project.updatedAt) && (
+              <div>
+                <span className="text-zinc-500">Completed:</span>{' '}
+                {new Date(
+                  project.completedAt || project.updatedAt
+                ).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric'
+                })}
+              </div>
+            )}
+        </div>
+      </div>
+    </div>
+  );
+}

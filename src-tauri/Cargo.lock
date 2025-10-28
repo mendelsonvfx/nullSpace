@@ -2187,6 +2187,7 @@ dependencies = [
  "tauri-build",
  "url",
  "uuid",
+ "windows 0.52.0",
 ]
 
 [[package]]

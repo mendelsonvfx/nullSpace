@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod time_tracking;
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -74,6 +76,14 @@ struct Project {
     #[serde(rename = "currentShotId", alias = "current_shot_id")]
     current_shot_id: Option<String>,
     category: Option<String>,
+    #[serde(rename = "timeEntries", alias = "time_entries")]
+    time_entries: Option<Vec<serde_json::Value>>,
+    #[serde(rename = "totalMinutesSpent", alias = "total_minutes_spent")]
+    total_minutes_spent: Option<u32>,
+    #[serde(rename = "hourlyRate", alias = "hourly_rate")]
+    hourly_rate: Option<f64>,
+    #[serde(rename = "targetHourlyRate", alias = "target_hourly_rate")]
+    target_hourly_rate: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -103,7 +113,15 @@ struct Software {
 struct Note {
     id: String,
     content: String,
+    #[serde(rename = "createdAt", alias = "created_at")]
     created_at: String,
+    #[serde(rename = "updatedAt", alias = "updated_at", default = "default_updated_at")]
+    updated_at: String,
+}
+
+// Default function for updated_at - uses created_at or current time
+fn default_updated_at() -> String {
+    chrono::Utc::now().to_rfc3339()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -180,6 +198,7 @@ fn get_software_folder_name(software: &str) -> &str {
         "houdini" => "Houdini",
         "maya" => "Maya",
         "after-effects" | "after effects" => "AfterEffects",
+        "photoshop" => "Photoshop",
         "cinema4d" | "cinema 4d" => "Cinema4D",
         "substance" | "substance painter" => "Substance",
         "unreal" | "unreal engine" => "Unreal",
@@ -308,6 +327,25 @@ fn get_folder_template(software: &str) -> Vec<FolderItem> {
                 ],
             },
         ],
+        "photoshop" => vec![
+            FolderItem::Nested {
+                name: "Source".to_string(),
+                subfolders: vec![
+                    FolderItem::Simple("Drafts".to_string()),
+                    FolderItem::Simple("Final".to_string()),
+                ],
+            },
+            FolderItem::Nested {
+                name: "Assets".to_string(),
+                subfolders: vec![
+                    FolderItem::Simple("Textures".to_string()),
+                    FolderItem::Simple("Brushes".to_string()),
+                    FolderItem::Simple("Patterns".to_string()),
+                    FolderItem::Simple("Fonts".to_string()),
+                ],
+            },
+            FolderItem::Simple("Export".to_string()),
+        ],
         "maya" => vec![
             FolderItem::Simple("scenes".to_string()),
             FolderItem::Simple("images".to_string()),
@@ -357,7 +395,7 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
         }
     }
 
-    let common_folders = vec!["_GlobalReferences"];
+    let common_folders = vec!["_GlobalReferences", "_GlobalAssets"];
     for folder in common_folders {
         fs::create_dir_all(project_path.join(folder))
             .map_err(|e| format!("Failed to create common folder {}: {}", folder, e))?;
@@ -403,6 +441,10 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
         shots: Some(vec![]),
         current_shot_id: None,
         category: input.category,
+        time_entries: Some(vec![]),
+        total_minutes_spent: Some(0),
+        hourly_rate: None,
+        target_hourly_rate: None,
     };
 
     let metadata_path = project_path.join(".project-metadata.json");
@@ -485,8 +527,203 @@ fn find_hython_path(houdinifx_path: &str) -> Result<PathBuf, String> {
     }
 }
 
+#[derive(Serialize)]
+struct LaunchResult {
+    file_name: String,
+    pid: u32,
+}
+
+/// Find PID of a process that has a specific file open
+#[cfg(target_os = "windows")]
+fn find_process_with_file(_file_path: &str, process_name: &str) -> Option<u32> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    println!("[PID_SEARCH] Starting search for process containing: '{}'", process_name);
+
+    let mut system = System::new_all();
+    let search_name = process_name.to_lowercase();
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+    // Check if this is Photoshop/After Effects (they use launcher processes)
+    let is_adobe_software = search_name.contains("photoshop") || search_name.contains("afterfx");
+
+    // Wait up to 20 seconds for process to start (Houdini can be very slow)
+    for attempt in 0..40 {
+        std::thread::sleep(Duration::from_millis(500));
+        system.refresh_all();
+
+        // Find newest process matching the name (started within last 60 seconds)
+        let mut candidates: Vec<(u32, u64)> = Vec::new();
+
+        for (pid, process) in system.processes() {
+            let proc_name = process.name().to_lowercase();
+            if proc_name.contains(&search_name) {
+                let start_time = process.start_time();
+                // If process was started recently (within last 60 seconds for slow-starting apps like Houdini)
+                // Use checked subtraction to avoid underflow if start_time > now
+                if let Some(age) = now.checked_sub(start_time) {
+                    if age < 60 {
+                        candidates.push((pid.as_u32(), start_time));
+                        println!("[PID_SEARCH] Found candidate: {} (PID: {}, started: {}s ago)",
+                            process.name(), pid, age);
+                    }
+                } else if start_time.saturating_sub(now) < 5 {
+                    // Process start time is in "future" but within 5 seconds (clock skew)
+                    // This can happen due to timing differences between system clocks
+                    candidates.push((pid.as_u32(), start_time));
+                    println!("[PID_SEARCH] Found candidate: {} (PID: {}, future start time but within tolerance)",
+                        process.name(), pid);
+                } else {
+                    // Too far in future, skip it
+                    println!("[PID_SEARCH] Skipping process with future start time: {} ({}s in future)",
+                        process.name(), start_time.saturating_sub(now));
+                }
+            }
+        }
+
+        // For Adobe software: prefer OLDER stable process over brand new launcher process
+        // For others: prefer NEWEST process
+        if let Some((pid, _start_time)) = if is_adobe_software {
+            // Find oldest process that's at least 2 seconds old (to avoid launcher process)
+            candidates.iter()
+                .filter(|(_, st)| {
+                    if let Some(age) = now.checked_sub(*st) {
+                        age >= 2  // At least 2 seconds old
+                    } else {
+                        false
+                    }
+                })
+                .min_by_key(|(_, st)| st)
+                .or_else(|| candidates.iter().min_by_key(|(_, st)| st))  // Fallback to any process
+        } else {
+            candidates.iter().max_by_key(|(_, st)| st)
+        } {
+            println!("[PID_SEARCH] ✓ Selected {} process with PID: {}",
+                if is_adobe_software { "stable" } else { "newest" }, pid);
+            return Some(*pid);
+        }
+
+        println!("[PID_SEARCH] Attempt {}/40: No matching process found yet", attempt + 1);
+    }
+
+    println!("[PID_SEARCH] ✗ Failed to find process after 20 seconds");
+    None
+}
+
+/// Unified software launcher configuration
+#[cfg(target_os = "windows")]
+struct SoftwareLaunchConfig {
+    use_explorer: bool,      // Use explorer.exe to launch (e.g., Houdini)
+    needs_pid_lookup: bool,  // Need to find real PID after launch
+    process_name: &'static str,  // Process name to search for (e.g., "houdin", "afterfx")
+}
+
+#[cfg(target_os = "windows")]
+impl SoftwareLaunchConfig {
+    /// Get launch configuration based on file extension
+    fn from_extension(ext: &str) -> Self {
+        match ext {
+            "hip" => SoftwareLaunchConfig {
+                use_explorer: true,
+                needs_pid_lookup: true,
+                process_name: "houdin", // Matches "houdini.exe" or "houdinifx.exe"
+            },
+            "aep" => SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: "afterfx", // Matches "AfterFX.exe"
+            },
+            "psd" | "psb" => SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: "photoshop", // Matches "Photoshop.exe"
+            },
+            _ => SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: false,
+                process_name: "",
+            },
+        }
+    }
+
+    /// Get launch configuration based on software name
+    fn from_software_name(software: &str) -> Self {
+        let software_lower = software.to_lowercase();
+        if software_lower == "houdini" {
+            SoftwareLaunchConfig {
+                use_explorer: true,
+                needs_pid_lookup: true,
+                process_name: "houdin",
+            }
+        } else if software_lower == "after effects" || software_lower == "after-effects" {
+            SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: "afterfx",
+            }
+        } else if software_lower == "photoshop" {
+            SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: "photoshop",
+            }
+        } else {
+            SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: false,
+                process_name: "",
+            }
+        }
+    }
+
+    /// Launch software with unified logic
+    fn launch(&self, executable_path: &str, file_path: &str) -> Result<u32, String> {
+        println!("[SoftwareLauncher] use_explorer: {}, needs_pid_lookup: {}, process_name: '{}'",
+            self.use_explorer, self.needs_pid_lookup, self.process_name);
+
+        // Step 1: Spawn the process
+        let child = if self.use_explorer {
+            println!("[SoftwareLauncher] Launching via explorer.exe: {}", file_path);
+            Command::new("explorer")
+                .arg(file_path)
+                .spawn()
+                .map_err(|e| format!("Failed to open file via explorer: {}", e))?
+        } else {
+            println!("[SoftwareLauncher] Launching directly: {} {}", executable_path, file_path);
+            Command::new(executable_path)
+                .arg(file_path)
+                .spawn()
+                .map_err(|e| format!("Failed to launch software: {}", e))?
+        };
+
+        let initial_pid = child.id();
+        println!("[SoftwareLauncher] Initial PID from spawn: {}", initial_pid);
+
+        // Step 2: Find real PID if needed
+        let final_pid = if self.needs_pid_lookup {
+            println!("[SoftwareLauncher] Looking for real process: '{}'", self.process_name);
+            match find_process_with_file(file_path, self.process_name) {
+                Some(real_pid) => {
+                    println!("[SoftwareLauncher] ✓ Found real PID: {} (initial was: {})", real_pid, initial_pid);
+                    real_pid
+                }
+                None => {
+                    println!("[SoftwareLauncher] ⚠ Failed to find real PID, using initial: {}", initial_pid);
+                    initial_pid
+                }
+            }
+        } else {
+            println!("[SoftwareLauncher] No PID lookup needed, using initial PID: {}", initial_pid);
+            initial_pid
+        };
+
+        println!("[SoftwareLauncher] ==> FINAL PID: {}", final_pid);
+        Ok(final_pid)
+    }
+}
+
 #[tauri::command]
-async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
+async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, String> {
     let project_path = PathBuf::from(&input.project_path);
 
     // Determine file extension and software folder based on software
@@ -495,6 +732,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
         "houdini" => (".hip", "Houdini"),
         "maya" => (".ma", "Maya"),
         "after effects" | "after-effects" => (".aep", "AfterEffects"),
+        "photoshop" => (".psd", "Photoshop"),
         "cinema 4d" | "cinema4d" => (".c4d", "Cinema4D"),
         "substance" | "substance painter" => (".spp", "Substance"),
         "unreal" | "unreal engine" => (".uproject", "Unreal"),
@@ -564,6 +802,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         let software_lower = input.software.to_lowercase();
+        println!("[LAUNCH] Software: '{}' -> '{}'", input.software, software_lower);
 
         // For After Effects, create project from template if it doesn't exist
         if (software_lower == "after effects" || software_lower == "after-effects") && !file_path.exists() {
@@ -675,42 +914,46 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<String, String> {
             }
         }
 
-        // For Houdini on Windows, open the file through Windows Explorer
-        // This mimics double-clicking the file in Explorer and preserves all environment variables
-        if software_lower == "houdini" {
-            Command::new("explorer")
-                .arg(file_path.to_str().unwrap())
-                .spawn()
-                .map_err(|e| format!("Failed to open Houdini file: {}", e))?;
-        } else {
-            // For all other software (including Blender), launch normally
-            Command::new(&input.executable_path)
-                .arg(&file_path)
-                .spawn()
-                .map_err(|e| format!("Failed to launch software: {}", e))?;
-        }
+        // Use unified launcher for all software
+        let launcher = SoftwareLaunchConfig::from_software_name(&input.software);
+        let pid = launcher.launch(&input.executable_path, file_path.to_str().unwrap())?;
+
+        return Ok(LaunchResult {
+            file_name,
+            pid,
+        });
     }
 
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
+        let child = Command::new("open")
             .arg("-a")
             .arg(&input.executable_path)
             .arg(&file_path)
             .spawn()
             .map_err(|e| format!("Failed to launch software: {}", e))?;
+
+        let pid = child.id();
+        return Ok(LaunchResult {
+            file_name,
+            pid,
+        });
     }
 
     #[cfg(target_os = "linux")]
     {
-        Command::new(&input.executable_path)
+        let child = Command::new(&input.executable_path)
             .arg(&file_path)
             .current_dir(&project_path)
             .spawn()
             .map_err(|e| format!("Failed to launch software: {}", e))?;
-    }
 
-    Ok(file_name)
+        let pid = child.id();
+        return Ok(LaunchResult {
+            file_name,
+            pid,
+        });
+    }
 }
 
 #[tauri::command]
@@ -770,6 +1013,62 @@ async fn open_file(file_path: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct OpenFileResult {
+    file_name: String,
+    pid: u32,
+}
+
+#[tauri::command]
+async fn open_file_with_tracking(file_path: String, executable_path: String) -> Result<OpenFileResult, String> {
+    use std::path::Path;
+
+    let path = Path::new(&file_path);
+    let file_name = path.file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Invalid file name")?
+        .to_string();
+
+    #[cfg(target_os = "windows")]
+    {
+        // Detect software type from file extension
+        // Use unified launcher based on file extension
+        let file_extension = path.extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("");
+
+        let launcher = SoftwareLaunchConfig::from_extension(file_extension);
+        let pid = launcher.launch(&executable_path, &file_path)?;
+
+        Ok(OpenFileResult { file_name, pid })
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // For macOS and Linux, use open/xdg-open (no PID tracking for now)
+        #[cfg(target_os = "macos")]
+        {
+            Command::new("open")
+                .arg("-a")
+                .arg(&executable_path)
+                .arg(&file_path)
+                .spawn()
+                .map_err(|e| format!("Failed to open file: {}", e))?;
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            Command::new(&executable_path)
+                .arg(&file_path)
+                .spawn()
+                .map_err(|e| format!("Failed to open file: {}", e))?;
+        }
+
+        // Return dummy PID (0) for non-Windows platforms
+        Ok(OpenFileResult { file_name, pid: 0 })
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -904,7 +1203,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
 
     // List of software folders to search
     let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
+        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
         "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
     ];
 
@@ -939,6 +1238,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                             "hip" => Some("Houdini"),
                             "ma" | "mb" => Some("Maya"),
                             "aep" => Some("After Effects"),
+                            "psd" | "psb" => Some("Photoshop"),
                             "c4d" => Some("Cinema 4D"),
                             "spp" => Some("Substance"),
                             "uproject" => Some("Unreal"),
@@ -999,7 +1299,7 @@ async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
 
     // List of software folders to search
     let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
+        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
         "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
     ];
 
@@ -1452,6 +1752,27 @@ fn save_feedback(feedback: String, app_handle: tauri::AppHandle) -> Result<(), S
 }
 
 #[tauri::command]
+fn save_project_file(project_path: String, filename: String, contents: Vec<u8>) -> Result<String, String> {
+    use std::path::PathBuf;
+
+    let project_dir = PathBuf::from(&project_path);
+
+    // Validate that the project directory exists
+    if !project_dir.exists() {
+        return Err(format!("Project directory does not exist: {}", project_path));
+    }
+
+    // Create the full file path
+    let file_path = project_dir.join(&filename);
+
+    // Write the file
+    fs::write(&file_path, contents)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    Ok(filename)
+}
+
+#[tauri::command]
 fn read_feedback() -> Result<String, String> {
     // Get app data directory
     let app_dir = tauri::api::path::app_data_dir(&tauri::Config::default())
@@ -1644,6 +1965,7 @@ fn main() {
             launch_software,
             open_in_explorer,
             open_file,
+            open_file_with_tracking,
             get_folder_structure,
             set_project_thumbnail,
             get_project_versions,
@@ -1655,10 +1977,20 @@ fn main() {
             start_watching_project,
             stop_watching_project,
             save_feedback,
+            save_project_file,
             read_feedback,
             read_feedback_full,
             check_shot_files_accessible,
             rename_shot_files,
+            time_tracking::start_time_tracking,
+            time_tracking::stop_time_tracking,
+            time_tracking::pause_time_tracking,
+            time_tracking::resume_time_tracking,
+            time_tracking::get_active_sessions,
+            time_tracking::is_session_focused,
+            time_tracking::increment_software_stats,
+            time_tracking::check_process_alive,
+            time_tracking::get_focus_summary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

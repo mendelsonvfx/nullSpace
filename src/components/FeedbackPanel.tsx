@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Save, Copy, Check } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
+import { useModalBlur } from '../hooks/useModalBlur';
 
 interface FeedbackPanelProps {
   onClose: () => void;
@@ -11,6 +12,7 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
   const [allFeedback, setAllFeedback] = useState('');
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+  const blurClass = useModalBlur();
 
   // Load all feedback on mount
   useEffect(() => {
@@ -71,7 +73,7 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 ${blurClass}`}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >

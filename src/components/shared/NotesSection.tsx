@@ -74,11 +74,17 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
     })
   ], []); // Empty deps - plugins never change
 
+  // Create a unique key based on project and shot to reset editor on project/shot change
+  const editorKey = context.isShot && context.shotId
+    ? `${project.id}-${context.shotId}`
+    : project.id;
+
   return (
     <div>
       <h3 className="text-sm font-medium text-zinc-400 mb-3">Notes</h3>
       <div className="markdown-editor-container" onClick={handleContainerClick}>
         <MDXEditor
+          key={editorKey}
           ref={editorRef}
           markdown={noteContent}
           onChange={handleNoteChange}

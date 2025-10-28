@@ -1,8 +1,10 @@
 // src/store/projectStore.ts
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/tauri';
-import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client } from '../types/project';
+import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, TimeEntry, SoftwareName } from '../types/project';
 import { thumbnailCache } from '../utils/thumbnailCache';
+import { useTimeStatsStore, useTimeTrackingStore } from '../features/time-tracking';
+import { generateProjectColor } from '../utils/colorUtils';
 
 interface ProjectStore {
   // State
@@ -69,6 +71,11 @@ interface ProjectStore {
   addShotLink: (projectId: string, shotId: string, url: string, title: string) => string;
   updateShotLink: (projectId: string, shotId: string, linkId: string, newTitle: string) => void;
   removeShotLink: (projectId: string, shotId: string, linkId: string) => void;
+  // Time tracking (project data only - session management moved to time-tracking feature)
+  addManualTimeEntry: (projectId: string, software: SoftwareName, durationMinutes: number, date: string, shotId?: string, notes?: string, countInStats?: boolean) => void;
+  removeTimeEntry: (projectId: string, entryId: string) => void;
+  getActiveTimeEntry: (projectId: string) => TimeEntry | undefined;
+  updateTargetHourlyRate: (projectId: string, rate: number) => void;
 }
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
@@ -94,7 +101,92 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         projectsDir
       });
       console.log('Loaded projects:', projects.length);
-      set({ projects, isLoading: false });
+
+      // Clean up stale active sessions (processes that no longer exist)
+      const cleanedProjects = await Promise.all(
+        projects.map(async (project) => {
+          const activeEntries = project.timeEntries?.filter(e => e.isActive && e.pid) || [];
+
+          if (activeEntries.length === 0) {
+            return project;
+          }
+
+          console.log(`[TimeTracking] Checking ${activeEntries.length} active sessions for project "${project.name}"`);
+
+          // Check each active entry to see if process still exists
+          const updatedEntries = await Promise.all(
+            (project.timeEntries || []).map(async (entry) => {
+              if (!entry.isActive || !entry.pid) {
+                return entry;
+              }
+
+              try {
+                // Check if process is alive
+                const isAlive = await invoke<boolean>('check_process_alive', { pid: entry.pid });
+
+                if (!isAlive) {
+                  console.log(`[TimeTracking] Process ${entry.pid} no longer exists, closing session ${entry.id} with ${entry.durationMinutes}m`);
+
+                  // Close the session - keep existing durationMinutes (don't recalculate)
+                  const now = new Date().toISOString();
+
+                  return {
+                    ...entry,
+                    isActive: false,
+                    endTime: now,
+                    // Keep the existing durationMinutes - it was already being tracked
+                    widgetVisible: false
+                  };
+                }
+              } catch (error) {
+                console.error(`[TimeTracking] Error checking process ${entry.pid}:`, error);
+              }
+
+              return entry;
+            })
+          );
+
+          // If any entries were modified, update the project
+          const hasChanges = updatedEntries.some((entry, i) =>
+            entry !== (project.timeEntries || [])[i]
+          );
+
+          if (hasChanges) {
+            // Recalculate totalMinutesSpent and currentProjectTime
+            const completedMinutes = updatedEntries
+              .filter(e => !e.isActive)
+              .reduce((sum, e) => sum + e.durationMinutes, 0);
+
+            const activeMinutes = updatedEntries
+              .filter(e => e.isActive)
+              .reduce((sum, e) => sum + e.durationMinutes, 0);
+
+            const updatedProject = {
+              ...project,
+              timeEntries: updatedEntries,
+              totalMinutesSpent: completedMinutes,
+              currentProjectTime: activeMinutes,
+              updatedAt: new Date().toISOString()
+            };
+
+            // Save the updated project
+            try {
+              await invoke('update_project', { project: updatedProject });
+              console.log(`[TimeTracking] Cleaned up stale sessions for project "${project.name}". Total: ${completedMinutes}m, Active: ${activeMinutes}m`);
+              return updatedProject;
+            } catch (error) {
+              console.error(`[TimeTracking] Failed to save cleaned project:`, error);
+            }
+          }
+
+          return project;
+        })
+      );
+
+      set({ projects: cleanedProjects, isLoading: false });
+      console.log('[ProjectStore] Projects loaded successfully');
+      // NOTE: Global statistics are persisted in localStorage via timeStatsStore
+      // Stats are incremented in real-time, not recalculated from timeEntries
     } catch (error) {
       set({ error: String(error), isLoading: false });
       console.error('Failed to load projects:', error);
@@ -106,6 +198,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const project = await invoke<Project>('create_project', { input });
+
+      // Generate random color for project
+      project.color = generateProjectColor(project.id);
 
       // If project has shots, automatically create Shot 001
       if (project.hasShots) {
@@ -120,10 +215,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         };
         project.shots = [shot001];
         project.currentShotId = shot001.id;
-
-        // Save the updated project with Shot 001
-        await invoke('update_project', { project });
       }
+
+      // Save the updated project with color (and Shot 001 if applicable)
+      await invoke('update_project', { project });
 
       set(state => ({
         projects: [project, ...state.projects],
@@ -145,6 +240,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           thumbnailCache.clear(oldProject.path, oldProject.thumbnail);
         }
       }
+
+      // Log active entry durationMinutes before update
+      const oldActiveEntry = oldProject?.timeEntries?.find(e => e.isActive);
+      const newActiveEntry = project.timeEntries?.find(e => e.isActive);
+      console.log(`[updateProject] 📝 Updating project ${project.name}`);
+      console.log(`[updateProject] 📊 Active entry durationMinutes: ${oldActiveEntry?.durationMinutes} → ${newActiveEntry?.durationMinutes}`);
 
       // First update local state synchronously
       set(state => ({
@@ -201,8 +302,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }));
 
       console.log('Launching software with input:', input);
-      const result = await invoke<string>('launch_software', { input });
-      console.log('Software launched successfully, created file:', result);
+      const result = await invoke<{ file_name: string; pid: number }>('launch_software', { input });
+      console.log('Software launched successfully, created file:', result.file_name, 'PID:', result.pid);
 
       // Set success status
       set((state) => ({
@@ -220,6 +321,59 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       window.dispatchEvent(new CustomEvent('version-created', {
         detail: { projectPath: input.projectPath }
       }));
+
+      // Start time tracking using new time-tracking module (only if enabled)
+      const timeTrackingEnabled = localStorage.getItem('timeTrackingEnabled');
+      const isTimeTrackingEnabled = timeTrackingEnabled !== null ? JSON.parse(timeTrackingEnabled) : true;
+
+      if (!isTimeTrackingEnabled) {
+        console.log('[TimeTracking] ⏸️  Time tracking is disabled, skipping session creation');
+        return;
+      }
+
+      const project = get().projects.find(p => p.path === input.projectPath);
+      console.log('[TimeTracking] Found project:', project?.name, 'for path:', input.projectPath);
+
+      if (project) {
+        try {
+          const shotId = input.shotNumber
+            ? project.shots?.find(s => s.number === input.shotNumber)?.id
+            : undefined;
+
+          // input.software is already lowercase SoftwareName from Software.name
+          const softwareKey = input.software as SoftwareName;
+          console.log('[TimeTracking] Starting tracking for software:', softwareKey, 'PID:', result.pid, 'Shot:', shotId);
+
+          // Use new time-tracking module
+          const { startSession, getSession } = useTimeTrackingStore.getState();
+          const entryId = await startSession({
+            projectId: project.id,
+            projectPath: project.path,
+            software: softwareKey,
+            pid: result.pid,
+            shotId
+          });
+
+          // Get the created entry from timeTrackingStore
+          const timeEntry = getSession(entryId);
+          if (timeEntry) {
+            // Add the entry to project's timeEntries
+            const updatedProject = {
+              ...project,
+              timeEntries: [...(project.timeEntries || []), timeEntry]
+            };
+            get().updateProject(updatedProject);
+            console.log('[TimeTracking] ✓ Time entry added to project');
+          }
+
+          console.log('[TimeTracking] ✓ Time tracking started for', softwareKey);
+        } catch (error) {
+          console.error('[TimeTracking] ✗ Failed to start time tracking:', error);
+          // Don't throw - software launch was successful
+        }
+      } else {
+        console.error('[TimeTracking] ✗ Project not found for path:', input.projectPath);
+      }
     } catch (error) {
       console.error('Failed to launch software:', error);
 
@@ -857,8 +1011,188 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (typeof window !== 'undefined') {
       localStorage.setItem('selectedCategory', category);
     }
+  },
+
+  // Time tracking - project data management only
+  // Session management moved to src/features/time-tracking
+  addManualTimeEntry: (projectId: string, software: SoftwareName, durationMinutes: number, date: string, shotId?: string, notes?: string, countInStats: boolean = true) => {
+    // Check if time tracking is enabled
+    const timeTrackingEnabled = localStorage.getItem('timeTrackingEnabled');
+    const isTimeTrackingEnabled = timeTrackingEnabled !== null ? JSON.parse(timeTrackingEnabled) : true;
+
+    if (!isTimeTrackingEnabled) {
+      console.log('[ManualEntry] ⏸️  Time tracking is disabled, rejecting manual entry');
+      throw new Error('Time tracking is disabled');
+    }
+
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project) throw new Error('Project not found');
+
+    const entryId = crypto.randomUUID();
+    const timestamp = new Date(date).toISOString();
+
+    // Normalize software name to lowercase to prevent duplicates
+    const normalizedSoftware = software.toLowerCase() as SoftwareName;
+
+    const newEntry: TimeEntry = {
+      id: entryId,
+      projectId,
+      shotId,
+      software: normalizedSoftware,
+      startTime: timestamp,
+      endTime: timestamp,
+      durationMinutes,
+      elapsedSeconds: durationMinutes * 60,  // Manual entries use minutes, convert to seconds
+      isActive: false,
+      isManual: true,
+      notes,
+      countedInStats: countInStats
+    };
+
+    const updatedEntries = [...(project.timeEntries || []), newEntry];
+    const totalMinutesSpent = updatedEntries
+      .filter(e => !e.isActive)
+      .reduce((sum, e) => sum + e.durationMinutes, 0);
+
+    const hourlyRate = project.cost && totalMinutesSpent > 0
+      ? (project.cost / (totalMinutesSpent / 60))
+      : undefined;
+
+    const updatedProject = {
+      ...project,
+      timeEntries: updatedEntries,
+      totalMinutesSpent,
+      hourlyRate,
+      updatedAt: new Date().toISOString()
+    };
+
+    get().updateProject(updatedProject);
+
+    // Add time to global software statistics only if checkbox is checked
+    if (countInStats) {
+      const { addSoftwareTime } = useTimeStatsStore.getState();
+      addSoftwareTime(normalizedSoftware, durationMinutes);
+      console.log(`[ManualEntry] Added ${durationMinutes}m to ${normalizedSoftware} global stats`);
+    } else {
+      console.log(`[ManualEntry] Skipped adding ${durationMinutes}m to ${normalizedSoftware} global stats (countInStats=false)`);
+    }
+  },
+
+  removeTimeEntry: (projectId: string, entryId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project) throw new Error('Project not found');
+
+    // Find the entry to get its software and duration for logging
+    const entryToRemove = (project.timeEntries || []).find(entry => entry.id === entryId);
+
+    const updatedEntries = (project.timeEntries || []).filter(entry => entry.id !== entryId);
+    const totalMinutesSpent = updatedEntries
+      .filter(e => !e.isActive)
+      .reduce((sum, e) => sum + e.durationMinutes, 0);
+
+    const hourlyRate = project.cost && totalMinutesSpent > 0
+      ? (project.cost / (totalMinutesSpent / 60))
+      : undefined;
+
+    const updatedProject = {
+      ...project,
+      timeEntries: updatedEntries,
+      totalMinutesSpent,
+      hourlyRate,
+      updatedAt: new Date().toISOString()
+    };
+
+    get().updateProject(updatedProject);
+
+    // Remove from global statistics if this was a manual entry counted in stats
+    if (entryToRemove && entryToRemove.isManual && entryToRemove.countedInStats) {
+      const { removeSoftwareTime } = useTimeStatsStore.getState();
+      removeSoftwareTime(entryToRemove.software, entryToRemove.durationMinutes);
+      console.log(`[RemoveEntry] Removed ${entryToRemove.durationMinutes}m from ${entryToRemove.software} global stats`);
+    } else if (entryToRemove && !entryToRemove.isActive) {
+      console.log(`[RemoveEntry] Removed ${entryToRemove.durationMinutes}m entry from ${entryToRemove.software} (global stats unchanged)`);
+    }
+  },
+
+  getActiveTimeEntry: (projectId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project || !project.timeEntries) return undefined;
+
+    return project.timeEntries.find(entry => entry.isActive);
+  },
+
+  updateTargetHourlyRate: (projectId: string, rate: number) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project) throw new Error('Project not found');
+
+    const updatedProject = {
+      ...project,
+      targetHourlyRate: rate,
+      updatedAt: new Date().toISOString()
+    };
+
+    get().updateProject(updatedProject);
   }
 }));
+
+// Subscribe to timeTrackingStore to sync timeEntry updates to projectStore
+useTimeTrackingStore.subscribe((state) => {
+  const projectStoreState = useProjectStore.getState();
+
+  // Get all active sessions from timeTrackingStore
+  const activeSessions = Array.from(state.sessions.values()).filter(s => s.isActive);
+
+  // Group active sessions by project
+  const sessionsByProject = new Map<string, typeof activeSessions>();
+  activeSessions.forEach(session => {
+    const existing = sessionsByProject.get(session.projectId) || [];
+    sessionsByProject.set(session.projectId, [...existing, session]);
+  });
+
+  // Update each project that has active sessions
+  sessionsByProject.forEach((sessions, projectId) => {
+    const project = projectStoreState.projects.find(p => p.id === projectId);
+
+    if (project) {
+      // Update all active entries for this project
+      const updatedEntries = [...(project.timeEntries || [])];
+      let hasChanges = false;
+
+      sessions.forEach(session => {
+        const entryIndex = updatedEntries.findIndex(e => e.id === session.id);
+        if (entryIndex >= 0) {
+          // Preserve fields that exist only in projectStore (like widgetVisible)
+          const existingEntry = updatedEntries[entryIndex];
+          updatedEntries[entryIndex] = {
+            ...existingEntry,
+            ...session,
+            widgetVisible: existingEntry.widgetVisible // Preserve widget visibility
+          };
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        // Calculate currentProjectTime as sum of all active session durations
+        const currentProjectTime = sessions.reduce((sum, s) => sum + s.durationMinutes, 0);
+
+        const updatedProject = {
+          ...project,
+          timeEntries: updatedEntries,
+          currentProjectTime
+        };
+
+        // Update project without saving to backend (to avoid too many saves)
+        projectStoreState.projects = projectStoreState.projects.map(p =>
+          p.id === project.id ? updatedProject : p
+        );
+
+        // Trigger re-render by updating the store
+        useProjectStore.setState({ projects: projectStoreState.projects });
+      }
+    }
+  });
+});
 
 // Helper function to get default projects directory (currently unused)
 // async function getDefaultProjectsDir(): Promise<string> {

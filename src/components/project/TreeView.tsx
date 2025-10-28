@@ -200,10 +200,11 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
       console.log('Setting tree with', filteredResult.length, 'items for project', projectPath);
       setTree(filteredResult);
 
-      // Auto-expand software folders on first load only if no saved state
+      // Auto-expand software folders on first load
       if (isFirstLoad) {
         const storedExpanded = localStorage.getItem(`expandedDirs_${projectPath}`);
-        if (!storedExpanded) {
+        // If no saved state OR saved state is empty, auto-expand top-level folders
+        if (!storedExpanded || JSON.parse(storedExpanded).length === 0) {
           const autoExpandSoftwareFolders = (nodes: FileNode[]) => {
             const newExpanded = new Set<string>();
             nodes.forEach(node => {
@@ -452,6 +453,9 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
         return 'Blender';
       case 'aep':
         return 'After Effects';
+      case 'psd':
+      case 'psb':
+        return 'Photoshop';
       case 'hip':
         return 'Houdini';
       case 'ma':
@@ -480,6 +484,7 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     // Map folder names to custom icon file names
     if (name === 'blender') return '/icons/folders/blender_fol.png';
     if (name === 'aftereffects') return '/icons/folders/after-effects_fol.png';
+    if (name === 'photoshop') return '/icons/folders/photoshop_fol.png';
     if (name === 'houdini') return '/icons/folders/houdini_fol.png';
     // For folders without custom icons, return null
     return null;

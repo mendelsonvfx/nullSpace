@@ -17,7 +17,7 @@ export const STATUS_LABELS = {
 export const STATUS_CYCLE: ProjectStatus[] = ['active', 'paused', 'completed'];
 
 export const SOFTWARE_OPTIONS = [
-  'Blender', 'Houdini', 'After Effects',
+  'Blender', 'Houdini', 'After Effects', 'Photoshop',
   // 'Maya',
   // 'Cinema 4D', 'Substance', 'Unreal', 'Unity', 'ZBrush', 'Marmoset'
 ] as const;

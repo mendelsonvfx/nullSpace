@@ -6,6 +6,8 @@ import { selectProjectDirectory, selectExecutable, getSoftwarePaths } from '../u
 import type { SoftwareName } from '../types/project';
 import { useThumbnailCache } from '../hooks/useThumbnailCache';
 import { getVersion } from '@tauri-apps/api/app';
+import { useModalBlur } from '../hooks/useModalBlur';
+import { clearAllTimeTrackingData } from '../utils/clearAllData';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -25,6 +27,7 @@ const DEFAULT_SOFTWARE: Array<{ name: SoftwareName; displayName: string }> = [
   { name: 'houdini', displayName: 'Houdini' },
   // { name: 'maya', displayName: 'Maya' },
   { name: 'after-effects', displayName: 'After Effects' },
+  { name: 'photoshop', displayName: 'Photoshop' },
   // { name: 'cinema4d', displayName: 'Cinema 4D' },
   // { name: 'substance', displayName: 'Substance Painter' },
   // { name: 'unreal', displayName: 'Unreal Engine' },
@@ -41,6 +44,9 @@ export function SettingsPanel({ onClose, onDeleteClient, onDeleteCategory }: Set
     const saved = localStorage.getItem('showTagIcons');
     return saved !== null ? JSON.parse(saved) : true;
   });
+
+  // Modal blur effect
+  const blurClass = useModalBlur();
 
   const handleSave = () => {
     // Save software paths to localStorage
@@ -88,7 +94,7 @@ export function SettingsPanel({ onClose, onDeleteClient, onDeleteCategory }: Set
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 ${blurClass}`}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
@@ -221,6 +227,12 @@ function GeneralSettings() {
   const [projectsDir, setProjectsDir] = useState(defaultProjectsPath);
   const [cacheCleared, setCacheCleared] = useState(false);
   const [cacheSize, setCacheSize] = useState(0);
+  const [timeDataCleared, setTimeDataCleared] = useState(false);
+  const [showClearTimeConfirm, setShowClearTimeConfirm] = useState(false);
+  const [timeTrackingEnabled, setTimeTrackingEnabled] = useState(() => {
+    const saved = localStorage.getItem('timeTrackingEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const [notifications, setNotifications] = useState(() => {
     const saved = localStorage.getItem('deadlineNotifications');
     return saved !== null ? JSON.parse(saved) : true;
@@ -266,6 +278,15 @@ function GeneralSettings() {
     loadProjects();
   };
 
+  const handleClearTimeData = async () => {
+    await clearAllTimeTrackingData();
+    setTimeDataCleared(true);
+    setShowClearTimeConfirm(false);
+    setTimeout(() => setTimeDataCleared(false), 3000);
+    // Reload projects to update UI
+    loadProjects();
+  };
+
   return (
     <div className="space-y-6">
       {/* Projects Directory */}
@@ -295,6 +316,35 @@ function GeneralSettings() {
         >
           Apply & Reload Projects
         </button>
+      </div>
+
+      {/* Time Tracking Feature */}
+      <div className="border-t border-zinc-800 pt-6">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="font-medium mb-1">Time Tracking & Analytics</div>
+            <p className="text-sm text-zinc-400">
+              <span className="text-orange-400 font-semibold">experimental!</span> Enable automatic time tracking when launching software from projects
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              const newValue = !timeTrackingEnabled;
+              setTimeTrackingEnabled(newValue);
+              localStorage.setItem('timeTrackingEnabled', JSON.stringify(newValue));
+              window.dispatchEvent(new Event('storage'));
+            }}
+            className={`w-12 h-6 rounded-full transition-colors relative ${
+              timeTrackingEnabled ? 'bg-accent' : 'bg-zinc-700'
+            }`}
+          >
+            <div
+              className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+                timeTrackingEnabled ? 'translate-x-6' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       {/* Notifications */}
@@ -376,6 +426,67 @@ function GeneralSettings() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Time Tracking Data */}
+      <div className="border-t border-zinc-800 pt-6">
+        <div className="mb-3">
+          <div className="font-medium mb-1 text-red-400">Clear Time Tracking Data</div>
+          <p className="text-sm text-zinc-400">
+            Permanently delete all time tracking data from all projects. This includes all time entries, project time statistics, and global software statistics. This action cannot be undone.
+          </p>
+        </div>
+
+        {!showClearTimeConfirm ? (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowClearTimeConfirm(true)}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium animate-button"
+            >
+              <Trash2 className="w-4 h-4" />
+              Clear All Time Data
+            </button>
+            {timeDataCleared && (
+              <div className="flex items-center gap-2 text-green-500 text-sm">
+                <Check className="w-4 h-4" />
+                Time data cleared
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-red-950/30 border border-red-800 rounded-lg p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-medium text-red-400 mb-2">Are you sure?</div>
+                <div className="text-sm text-zinc-300 space-y-1">
+                  <p>This action will delete:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>All time entries from all projects</li>
+                    <li>Total time spent on projects</li>
+                    <li>Global software statistics</li>
+                  </ul>
+                  <p className="mt-2 font-medium text-red-300">This action is irreversible!</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleClearTimeData}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium animate-button"
+              >
+                <Trash2 className="w-4 h-4" />
+                Yes, delete all data
+              </button>
+              <button
+                onClick={() => setShowClearTimeConfirm(false)}
+                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors text-sm font-medium animate-button"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -510,6 +621,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
   const colorInputRef = useRef<HTMLInputElement>(null);
   const [animationsEnabled, setAnimationsEnabled] = useState(() => {
     const saved = localStorage.getItem('animationsEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [modalBlurEnabled, setModalBlurEnabled] = useState(() => {
+    const saved = localStorage.getItem('modalBlurEnabled');
     return saved !== null ? JSON.parse(saved) : true;
   });
 
@@ -730,6 +845,33 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
           <div
             className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
               animationsEnabled ? 'translate-x-6' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Modal Blur */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-medium mb-1">Modal Blur Effect</div>
+          <p className="text-sm text-zinc-400">
+            Add subtle blur to background when modals are open
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !modalBlurEnabled;
+            setModalBlurEnabled(newValue);
+            localStorage.setItem('modalBlurEnabled', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full transition-colors relative ${
+            modalBlurEnabled ? 'bg-accent' : 'bg-zinc-700'
+          }`}
+        >
+          <div
+            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+              modalBlurEnabled ? 'translate-x-6' : 'translate-x-0.5'
             }`}
           />
         </button>

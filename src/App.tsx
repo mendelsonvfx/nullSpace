@@ -14,6 +14,9 @@ import { DeadlineNotification } from './components/DeadlineNotification';
 // useThumbnail moved to child components
 import { CategoryTabs } from './components/CategoryTabs';
 import { WelcomeSetup } from './components/WelcomeSetup';
+import { BreakReminderContainer } from './components/time';
+import type { BreakReminder } from './components/time';
+import { useTimeTrackingStore, StatsService, TimerService } from './features/time-tracking';
 
 // Import refactored components
 import { EmptyState } from './components/shared';
@@ -107,6 +110,8 @@ function App() {
   const [showWelcomeSetup, setShowWelcomeSetup] = useState(false);
   const [, setIsWindowVisible] = useState(true); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [, setForceRenderKey] = useState(0); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const [breakReminders, setBreakReminders] = useState<BreakReminder[]>([]);
+  const [shownReminders, setShownReminders] = useState<Set<string>>(new Set());
 
   // Check if we should show welcome setup
   useEffect(() => {
@@ -210,6 +215,41 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
+  // Stop all active time tracking sessions when time tracking is disabled
+  useEffect(() => {
+    const handleTimeTrackingToggle = async () => {
+      const timeTrackingEnabled = localStorage.getItem('timeTrackingEnabled');
+      const isEnabled = timeTrackingEnabled !== null ? JSON.parse(timeTrackingEnabled) : true;
+
+      if (!isEnabled) {
+        console.log('[TimeTracking] 🛑 Time tracking disabled, stopping all active sessions');
+        const { getAllSessions, stopSession } = useTimeTrackingStore.getState();
+        const activeSessions = getAllSessions().filter(s => s.isActive);
+
+        if (activeSessions.length > 0) {
+          console.log(`[TimeTracking] 🛑 Stopping ${activeSessions.length} active session(s)`);
+
+          // Stop all active sessions
+          for (const session of activeSessions) {
+            try {
+              await stopSession(session.id);
+              console.log(`[TimeTracking] ✓ Stopped session ${session.id} (${session.software})`);
+            } catch (error) {
+              console.error(`[TimeTracking] ✗ Failed to stop session ${session.id}:`, error);
+            }
+          }
+
+          console.log('[TimeTracking] ✓ All active sessions stopped');
+        } else {
+          console.log('[TimeTracking] No active sessions to stop');
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleTimeTrackingToggle);
+    return () => window.removeEventListener('storage', handleTimeTrackingToggle);
   }, []);
 
   // Hotkeys: F to toggle Finance mode, Ctrl+N to create new project, F11 for fullscreen, Escape to close modals
@@ -334,6 +374,70 @@ function App() {
     return () => window.removeEventListener('keydown', handleGlobalHotkeys);
   }, [viewMode, selectedProjectId, previousProjectId, showCreateModal, showSettings, showFeedback, showAbout, showWelcomeSetup, deleteConfirm]);
 
+  // Break reminders - check active sessions every minute
+  useEffect(() => {
+    // Check if break reminders are enabled
+    const breakRemindersEnabled = (() => {
+      const saved = localStorage.getItem('breakRemindersEnabled');
+      return saved ? JSON.parse(saved) : true; // Default: enabled
+    })();
+
+    if (!breakRemindersEnabled) return;
+
+    // Get break intervals from settings (default: 2h, 4h, 6h)
+    const breakIntervals = (() => {
+      const saved = localStorage.getItem('breakIntervals');
+      return saved ? JSON.parse(saved) : [120, 240, 360];
+    })();
+
+    const checkBreakReminders = async () => {
+      try {
+        const sessions = await invoke<any[]>('get_active_sessions');
+
+        sessions.forEach(session => {
+          const minutesWorked = session.accumulated_minutes;
+
+          // Trigger at configured thresholds
+          const thresholds = [
+            { minutes: breakIntervals[0], breakDuration: 5 },
+            { minutes: breakIntervals[1], breakDuration: 15 },
+            { minutes: breakIntervals[2], breakDuration: 30 }
+          ];
+
+          thresholds.forEach(({ minutes, breakDuration }) => {
+            const reminderKey = `${session.entry_id}-${minutes}`;
+
+            // Only trigger once per threshold when we reach it
+            if (minutesWorked >= minutes && !shownReminders.has(reminderKey)) {
+              // Find project name
+              const project = projects.find(p => p.id === session.project_id);
+              const projectName = project?.name || 'Unknown Project';
+
+              setBreakReminders(prev => [...prev, {
+                id: crypto.randomUUID(),
+                sessionId: session.entry_id,
+                projectName,
+                duration: minutesWorked,
+                breakDuration,
+                type: 'break'
+              }]);
+
+              setShownReminders(prev => new Set(prev).add(reminderKey));
+            }
+          });
+        });
+      } catch (error) {
+        console.error('Failed to check break reminders:', error);
+      }
+    };
+
+    // Check immediately and then every minute
+    checkBreakReminders();
+    const interval = setInterval(checkBreakReminders, 60000);
+
+    return () => clearInterval(interval);
+  }, [projects, shownReminders]);
+
   // Global paste handler that uses hovered project
   useEffect(() => {
     const handleGlobalPaste = async (e: ClipboardEvent) => {
@@ -431,8 +535,27 @@ function App() {
   };
 
   useEffect(() => {
-    loadProjects();
+    console.log('[App] Loading projects and initializing time tracking...');
+    loadProjects().then(() => {
+      console.log('[App] Projects loaded');
+      // NOTE: Global statistics are persisted in localStorage via timeStatsStore
+      // No need to sync from timeEntries - stats are incremented in real-time
 
+      console.log('[App] Initializing time tracking sessions from backend...');
+      // Initialize time tracking from backend active sessions
+      const { initializeFromBackend } = useTimeTrackingStore.getState();
+      initializeFromBackend();
+    });
+
+    // Cleanup on unmount
+    return () => {
+      console.log('[App] Unmounting, stopping all timers...');
+      TimerService.stopAll();
+    };
+  }, []);
+
+  // Separate useEffect for accent color and animations
+  useEffect(() => {
     // Load accent color on mount
     const savedColor = localStorage.getItem('accentColor');
     if (savedColor) {
@@ -1223,10 +1346,27 @@ function App() {
                   ? selectedProject.shots?.find((s: any) => s.id === selectedProject.currentShotId)
                   : null;
 
+                // Convert display name to SoftwareName key
+                const nameToKey: Record<string, string> = {
+                  'Blender': 'blender',
+                  'Houdini': 'houdini',
+                  'Maya': 'maya',
+                  'After Effects': 'after-effects',
+                  'Cinema 4D': 'cinema4d',
+                  'Substance Painter': 'substance',
+                  'Substance Designer': 'substance',
+                  'Unreal Engine': 'unreal',
+                  'Unity': 'unity',
+                  'ZBrush': 'zbrush',
+                  'Marmoset': 'marmoset',
+                  'Photoshop': 'photoshop'
+                };
+                const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+
                 launchSoftware({
                   projectPath: selectedProject.path,
                   executablePath: sw.executablePath,
-                  software: sw.name,
+                  software: softwareKey,
                   projectName: selectedProject.name,
                   shotNumber: currentShot?.number
                 });
@@ -1551,6 +1691,12 @@ function App() {
           </button>
         </div>
       )}
+
+      {/* Break Reminders */}
+      <BreakReminderContainer
+        reminders={breakReminders}
+        onDismiss={(id) => setBreakReminders(prev => prev.filter(r => r.id !== id))}
+      />
       </div>
     </div>
   );

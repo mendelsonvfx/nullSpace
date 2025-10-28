@@ -20,6 +20,7 @@ const DEFAULT_SOFTWARE: Array<{ name: SoftwareName; displayName: string }> = [
   { name: 'houdini', displayName: 'Houdini' },
   // { name: 'maya', displayName: 'Maya' },
   { name: 'after-effects', displayName: 'After Effects' },
+  { name: 'photoshop', displayName: 'Photoshop' },
   // { name: 'cinema4d', displayName: 'Cinema 4D' },
   // { name: 'substance', displayName: 'Substance Painter' },
 ];

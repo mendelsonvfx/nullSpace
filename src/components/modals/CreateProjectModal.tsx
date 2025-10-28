@@ -546,7 +546,7 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
 
           <div>
             <label className="block text-sm font-medium mb-2">Software Tools</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {SOFTWARE_OPTIONS.map(sw => (
                 <button
                   key={sw}

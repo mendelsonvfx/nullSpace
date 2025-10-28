@@ -17,6 +17,7 @@ export function SoftwareIcon({ name, className = "w-5 h-5" }: SoftwareIconProps)
       'houdini': 'houdini.png',
       'after-effects': 'after-effects.png',
       'after effects': 'after-effects.png',
+      'photoshop': 'photoshop.png',
       'maya': 'maya.png',
       'cinema-4d': 'cinema4d.png',
       'cinema4d': 'cinema4d.png',

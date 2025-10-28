@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Settings, Star, FolderOpen, ExternalLink, CreditCard, Loader2, Check, Pencil } from 'lucide-react';
+import { X, Settings, Star, FolderOpen, CreditCard, Loader2, Check, Pencil, Clock } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
 import { useProjectStore } from '../../store/projectStore';
 import { LinkItem, LinkInputForm, NotesSection } from '../shared';
@@ -8,6 +8,9 @@ import { SoftwareIcon } from '../SoftwareIcon';
 import { ThumbnailImage } from '../ThumbnailImage';
 import { STATUS_LABELS } from '../../utils';
 import { versionsCache } from '../../utils/versionsCache';
+import { InlineTimer, TimeInfoBar } from '../time';
+import { ManualTimeEntryModal } from '../../features/time-tracking/components/ManualTimeEntry/ManualTimeEntryModal';
+import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
@@ -23,11 +26,22 @@ interface ProjectDetailsProps {
 export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder, onLaunchSoftware, onDeleteProject }: ProjectDetailsProps) {
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showManualTimeEntry, setShowManualTimeEntry] = useState(false);
+  const [isPaymentModalAnimating, setIsPaymentModalAnimating] = useState(false);
   const [isShotEditMode, setIsShotEditMode] = useState(false);
   const [isFavoriteAnimating, setIsFavoriteAnimating] = useState(false);
   const [shotToDelete, setShotToDelete] = useState<{ id: string; name: string } | null>(null);
   const [editingShotId, setEditingShotId] = useState<string | null>(null);
   const [editingShotNumber, setEditingShotNumber] = useState('');
+
+  // Animation effect for Payment Modal
+  useEffect(() => {
+    if (showPaymentModal) {
+      setTimeout(() => setIsPaymentModalAnimating(true), 10);
+    } else {
+      setIsPaymentModalAnimating(false);
+    }
+  }, [showPaymentModal]);
 
   // Track which date fields user has manually filled in Project Settings
   const [deadlineFieldsFilled, setDeadlineFieldsFilled] = useState({
@@ -36,11 +50,12 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
     year: false
   });
 
-  // Debug: log project data
-  useEffect(() => {
-    console.log('Project data:', project);
-    console.log('createdAt:', project.createdAt);
-  }, [project]);
+  // Get fresh project from store for real-time timer updates
+  const { updateProject } = useProjectStore();
+  const latestProject = useProjectStore(state => state.projects.find(p => p.id === project.id) || project);
+  const timeTrackingEnabled = useTimeTrackingFeature();
+
+  // Widget visibility is now handled by timeTrackingStore (after 1.5s delay)
 
   // Get current context (todos, notes, links, browserTabs) based on shot selection
   const getCurrentContext = () => {
@@ -435,34 +450,30 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         {/* Quick Actions */}
         <div className="mb-6">
           <h3 className="text-sm font-medium text-zinc-400 mb-3">Quick Actions</h3>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={onOpenFolder}
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors"
+              className="relative px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
             >
-              <FolderOpen className="w-4 h-4" />
-              Open Folder
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  await invoke('open_links_in_browser', { links: context.links });
-                } catch (error) {
-                  console.error('Failed to open browser:', error);
-                }
-              }}
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Open Browser
+              <FolderOpen className="w-4 h-4 pointer-events-none" />
+              <span className="pointer-events-none">Open Folder</span>
             </button>
             <button
               onClick={() => setShowPaymentModal(true)}
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors"
+              className="relative px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
             >
-              <CreditCard className="w-4 h-4" />
-              Payment
+              <CreditCard className="w-4 h-4 pointer-events-none" />
+              <span className="pointer-events-none">Payment</span>
             </button>
+            {timeTrackingEnabled && (
+              <button
+                onClick={() => setShowManualTimeEntry(true)}
+                className="relative px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Clock className="w-4 h-4 pointer-events-none" />
+                <span className="pointer-events-none">Add Time</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -496,11 +507,16 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               const statusKey = `${project.path}-${sw.name}`;
               const status = launchingStatus?.[statusKey] || 'idle';
 
+              // Find active session for this software (compare with softwareKey, not display name)
+              const activeEntry = latestProject.timeEntries?.find((e: any) =>
+                e.isActive && e.widgetVisible && e.software === softwareKey
+              );
+
               return (
                 <button
                   key={sw.name}
                   onClick={() => {
-                    if (status === 'launching') return; // Prevent multiple clicks while launching
+                    if (status === 'launching' || activeEntry) return;
 
                     const currentShot = project.hasShots && project.currentShotId
                       ? project.shots?.find((s: any) => s.id === project.currentShotId)
@@ -521,14 +537,18 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   <div className="text-left flex-1">
                     <div className="font-medium">{sw.name}</div>
                     <div className="text-xs text-zinc-500">
-                      {status === 'launching' ? 'Launching...' : status === 'success' ? 'Launched!' : executablePath ? 'Click to launch' : 'Path not configured'}
+                      {status === 'launching' ? 'Launching...' : status === 'success' ? 'Launched!' : activeEntry ? 'Running...' : executablePath ? 'Click to launch' : 'Path not configured'}
                     </div>
                   </div>
+
+                  {/* Inline Timer */}
+                  {timeTrackingEnabled && activeEntry && <InlineTimer activeEntry={activeEntry} />}
+
                   {/* Status indicator */}
-                  {status === 'launching' && (
+                  {!activeEntry && status === 'launching' && (
                     <Loader2 className="w-5 h-5 text-accent animate-spin" />
                   )}
-                  {status === 'success' && (
+                  {!activeEntry && status === 'success' && (
                     <Check className="w-5 h-5 text-green-500 animate-in fade-in zoom-in duration-300" />
                   )}
                 </button>
@@ -666,7 +686,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       {/* Payment Modal */}
       {showPaymentModal && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity duration-200 ${
+            isPaymentModalAnimating ? 'opacity-100' : 'opacity-0'
+          }`}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
@@ -679,17 +701,22 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
           }}
         >
-          <div className="bg-zinc-900 rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Payment Settings</h2>
+          <div
+            className={`bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl w-full max-w-md mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
+              isPaymentModalAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">Payment Settings</h2>
               <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-                <X className="w-5 h-5 close-button-red" />
+                <X className="w-5 h-5 text-zinc-400" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="flex-1 p-4 space-y-3 overflow-y-auto">
               <div>
-                <label className="block text-sm font-medium mb-2">Cost</label>
+                <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Cost *</label>
                 <div className="flex gap-2">
                   <input
                     type="number"
@@ -699,7 +726,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       updateProject({ ...project, cost: e.target.value ? parseFloat(e.target.value) : undefined });
                     }}
                     placeholder="0"
-                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent transition-colors"
                   />
                   <select
                     value={project.currency || 'USD'}
@@ -707,7 +734,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       const { updateProject } = useProjectStore.getState();
                       updateProject({ ...project, currency: e.target.value as 'USD' | 'RUB' | 'EUR' });
                     }}
-                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                    className="w-24 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent transition-colors"
                   >
                     <option value="USD">USD</option>
                     <option value="RUB">RUB</option>
@@ -717,14 +744,14 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Payment Status</label>
+                <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Payment Status</label>
                 <select
                   value={project.paymentStatus || 'unpaid'}
                   onChange={(e) => {
                     const { updateProject } = useProjectStore.getState();
                     updateProject({ ...project, paymentStatus: e.target.value as 'paid' | 'prepaid' | 'unpaid' });
                   }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent transition-colors"
                 >
                   <option value="unpaid">Unpaid</option>
                   <option value="prepaid">Prepaid</option>
@@ -734,7 +761,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
               {project.paymentStatus === 'prepaid' && (
                 <div>
-                  <label className="block text-sm font-medium mb-2">Prepayment Amount</label>
+                  <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Prepayment Amount</label>
                   <input
                     type="number"
                     value={project.prepaymentAmount || ''}
@@ -743,18 +770,18 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       updateProject({ ...project, prepaymentAmount: e.target.value ? parseFloat(e.target.value) : undefined });
                     }}
                     placeholder="0"
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent transition-colors"
                   />
                 </div>
               )}
             </div>
 
-            <div className="p-6 border-t border-zinc-800 flex justify-end">
+            <div className="flex justify-end gap-2 p-4 border-t border-zinc-800">
               <button
                 onClick={() => setShowPaymentModal(false)}
-                className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
+                className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors font-medium shadow-sm"
               >
-                Close
+                Save Changes
               </button>
             </div>
           </div>
@@ -1265,25 +1292,25 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         </div>
       )}
 
+      {/* Manual Time Entry Modal */}
+      {timeTrackingEnabled && (
+        <ManualTimeEntryModal
+          isOpen={showManualTimeEntry}
+          onClose={() => setShowManualTimeEntry(false)}
+          project={project}
+          onAddEntry={(software, durationMinutes, date, shotId, notes, countInStats) => {
+            const { addManualTimeEntry } = useProjectStore.getState();
+            addManualTimeEntry(project.id, software, durationMinutes, date, shotId, notes, countInStats);
+          }}
+          onRemoveEntry={(entryId) => {
+            const { removeTimeEntry } = useProjectStore.getState();
+            removeTimeEntry(project.id, entryId);
+          }}
+        />
+      )}
+
       {/* Project Info Bar */}
-      <div className="border-t border-zinc-800 px-6 py-2 bg-zinc-900 text-xs text-zinc-400 flex-shrink-0">
-        <div className="flex justify-between items-center">
-          <div>
-            <span className="text-zinc-500">Created:</span>{' '}
-            {project.createdAt ? new Date(project.createdAt).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric'
-            }) : 'Unknown'}
-          </div>
-          {project.status === 'completed' && (project.completedAt || project.updatedAt) && (
-            <div>
-              <span className="text-zinc-500">Completed:</span>{' '}
-              {new Date(project.completedAt || project.updatedAt).toLocaleDateString()}
-            </div>
-          )}
-        </div>
-      </div>
+      {timeTrackingEnabled && <TimeInfoBar project={latestProject} />}
     </div>
   );
 }

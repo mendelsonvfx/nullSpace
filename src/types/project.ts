@@ -1,9 +1,12 @@
 // src/types/project.ts
 
-export type SoftwareName = 
+import type { WorkSession } from '../features/time-tracking/types/workSession';
+
+export type SoftwareName =
   | 'blender'
   | 'houdini'
   | 'after-effects'
+  | 'photoshop'
   | 'maya'
   | 'cinema4d'
   | 'substance'
@@ -73,6 +76,34 @@ export interface Link {
   title: string;
 }
 
+export interface TimeEntry {
+  id: string;
+  projectId: string;
+  shotId?: string;
+  software: SoftwareName;
+  startTime: string;         // ISO timestamp
+  endTime?: string;          // ISO timestamp (undefined if active)
+  durationMinutes: number;   // Individual time since this entry started
+  elapsedSeconds: number;    // Elapsed seconds for widget display (updated every second)
+  workSessionId?: string;    // WorkSession this entry belongs to (if active)
+  softwareMinutes?: number;  // Focused time for this software (for stats)
+  isActive: boolean;         // Currently tracking
+  isManual: boolean;         // Manually added or auto-tracked
+  notes?: string;            // Optional notes for manual entries
+  pid?: number;              // Process ID for active tracking
+  widgetVisible?: boolean;   // Widget is shown (after delay)
+  countedInStats?: boolean;  // Whether this entry was counted in global software statistics
+}
+
+export interface Transaction {
+  id: string;
+  amount: number;
+  currency: Currency;
+  date: string;              // ISO date string
+  notes?: string;
+  createdAt: string;         // ISO timestamp
+}
+
 export interface FolderTemplate {
   name: string;
   subfolders?: (FolderTemplate | string)[];
@@ -97,6 +128,7 @@ export interface Project {
   deadline?: string; // ISO date string
   isFavorite?: boolean;
   isPinned?: boolean;
+  color?: string; // Random HSL color generated for project
   cost?: number;
   currency?: Currency;
   paymentStatus?: PaymentStatus;
@@ -107,6 +139,14 @@ export interface Project {
   shots?: Shot[];
   currentShotId?: string;
   category?: string;
+  timeEntries?: TimeEntry[];
+  totalMinutesSpent?: number;        // Completed sessions total
+  workSession?: WorkSession | null;  // Active WorkSession for this project
+  hourlyRate?: number;
+  targetHourlyRate?: number;
+  transactions?: Transaction[];      // Manual financial transactions history
+  isManualTransaction?: boolean;     // Manually added financial transaction (deprecated - use transactions array)
+  sourceProjectId?: string;          // ID of the project this transaction is related to (deprecated)
 }
 
 // Предустановленные шаблоны структуры папок
@@ -184,6 +224,20 @@ export const FOLDER_TEMPLATES: Record<SoftwareName, FolderTemplate> = {
       }
     ]
   },
+  photoshop: {
+    name: 'Photoshop',
+    subfolders: [
+      {
+        name: 'Source',
+        subfolders: ['Drafts', 'Final']
+      },
+      {
+        name: 'Assets',
+        subfolders: ['Textures', 'Brushes', 'Patterns', 'Fonts']
+      },
+      'Export'
+    ]
+  },
   maya: {
     name: 'Maya',
     subfolders: ['scenes', 'images', 'cache', 'sourceimages']
@@ -239,4 +293,25 @@ export interface LaunchSoftwareCommand {
   executablePath: string;
   projectName: string;
   shotNumber?: number;
+}
+
+export interface StartTimeTrackingCommand {
+  entryId: string;
+  projectId: string;
+  projectPath: string;
+  shotId?: string;
+  software: SoftwareName;
+  pid: number;
+}
+
+export interface StopTimeTrackingCommand {
+  entryId: string;
+}
+
+export interface PauseTimeTrackingCommand {
+  entryId: string;
+}
+
+export interface ResumeTimeTrackingCommand {
+  entryId: string;
 }

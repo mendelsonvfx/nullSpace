@@ -3,6 +3,9 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { versionsCache } from '../../utils/versionsCache';
+import { useProjectStore } from '../../store/projectStore';
+import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
+import type { SoftwareName } from '../../types/project';
 
 interface ProjectVersion {
   name: string;
@@ -25,6 +28,7 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadingTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
+  const startSession = useTimeTrackingStore(state => state.startSession);
 
   const loadVersions = async (skipCleanup = false, forceReload = false) => {
     // Clear any existing timer first
@@ -174,10 +178,68 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
     return sorted;
   }, [allVersions, currentShot]);
 
-  const handleVersionDoubleClick = async (versionPath: string) => {
+  const handleVersionDoubleClick = async (versionPath: string, softwareList: string[]) => {
     try {
-      // Open file with default application (e.g., Blender for .blend files)
-      await invoke('open_file', { filePath: versionPath });
+      // Determine which software to use (prefer first in list)
+      const softwareName = softwareList.length > 0 ? softwareList[0] : 'Blender';
+
+      // Get software info from project
+      const softwareInfo = project.software?.find((s: any) => s.name === softwareName);
+      if (!softwareInfo) {
+        // Fallback to just opening the file without tracking
+        await invoke('open_file', { filePath: versionPath });
+        return;
+      }
+
+      // Get executable path from project or fallback to global settings
+      let executablePath = softwareInfo.path || softwareInfo.executable_path || softwareInfo.executablePath;
+
+      // If still empty, try to get from global localStorage settings
+      if (!executablePath) {
+        const savedPaths = localStorage.getItem('softwarePaths');
+        if (savedPaths) {
+          const paths = JSON.parse(savedPaths);
+          const softwareKey = softwareName.toLowerCase().replace(/\s+/g, '-');
+          executablePath = paths[softwareKey];
+        }
+      }
+
+      if (!executablePath) {
+        await invoke('open_file', { filePath: versionPath });
+        return;
+      }
+
+      // Launch file with time tracking
+      const result = await invoke<{ file_name: string; pid: number }>('open_file_with_tracking', {
+        filePath: versionPath,
+        executablePath: executablePath
+      });
+
+      // Convert software name to SoftwareName key
+      const nameToKey: Record<string, SoftwareName> = {
+        'Blender': 'blender',
+        'Houdini': 'houdini',
+        'Maya': 'maya',
+        'Cinema 4D': 'cinema4d',
+        'Substance Painter': 'substance',
+        'Substance Designer': 'substance',
+        'ZBrush': 'zbrush',
+        'After Effects': 'after-effects',
+        'Unreal Engine': 'unreal',
+        'Unity': 'unity',
+        'Marmoset': 'marmoset'
+      };
+
+      const softwareKey = nameToKey[softwareName] || 'blender';
+
+      // Start time tracking
+      await startSession({
+        projectId: project.id,
+        projectPath: project.path,
+        software: softwareKey,
+        pid: result.pid,
+        shotId: currentShot?.id
+      });
     } catch (error) {
       console.error('Failed to open version:', error);
     }
@@ -320,7 +382,7 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
               <div
                 key={version.path}
                 className="flex-shrink-0 w-32 cursor-pointer hover:bg-zinc-800 rounded-lg p-2 transition-colors select-none"
-                onDoubleClick={() => handleVersionDoubleClick(version.path)}
+                onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
                 title="Double-click to open"
               >
                 {/* Header with software icons */}

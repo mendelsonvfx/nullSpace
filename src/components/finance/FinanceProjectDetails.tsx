@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
+import { ExportButton } from '../time';
 
 interface FinanceProjectDetailsProps {
   project: any;
@@ -33,6 +34,19 @@ export function FinanceProjectDetails({
     : projectRevenue;
 
   const displayCurrency = convertToBaseCurrency ? baseCurrency : projectCurrency;
+
+  // Calculate hourly rate
+  const completedMinutes = project.totalMinutesSpent || 0;
+  const currentProjectMinutes = project.currentProjectTime || 0;
+  const totalMinutes = completedMinutes + currentProjectMinutes;
+  const totalHours = totalMinutes / 60;
+
+  // Priority: target hourly rate > calculated from cost/time
+  // Use displayRevenue (already converted to display currency) instead of project.cost
+  const hourlyRate = project.targetHourlyRate ||
+    (displayRevenue && totalHours > 0
+      ? displayRevenue / totalHours
+      : undefined);
 
   // Используем переданный totalRevenue вместо пересчета
   const totalRevenueInDisplayCurrency = totalRevenue[displayCurrency] || 0;
@@ -203,6 +217,29 @@ export function FinanceProjectDetails({
             })()}
           </div>
         )}
+
+        {/* Hourly Rate */}
+        {hourlyRate && totalMinutes > 0 && (
+          <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+            <p className="text-sm text-zinc-500 mb-3">Hourly Rate</p>
+            <div className="flex items-baseline gap-2 mb-2">
+              <p className="text-5xl font-bold text-orange-400">
+                {hourlyRate.toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
+              </p>
+              <p className="text-2xl text-zinc-400">{currencySymbols[displayCurrency]}/h</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-zinc-500">
+                {Math.floor(totalHours)}h {Math.round((totalHours % 1) * 60)}m worked
+              </p>
+              {project.targetHourlyRate && (
+                <span className="text-xs text-accent px-2 py-0.5 bg-accent/10 rounded">
+                  target
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Project Details */}
@@ -231,6 +268,68 @@ export function FinanceProjectDetails({
           </div>
         </div>
       </div>
+
+      {/* Transaction History */}
+      {project.transactions && project.transactions.length > 0 && (
+        <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 mt-6">
+          <h3 className="text-lg font-semibold mb-4">Transaction History</h3>
+          <div className="space-y-2">
+            {project.transactions
+              .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+              .map((transaction: any) => {
+                const transactionDate = new Date(transaction.date).toLocaleDateString('en-US', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric'
+                });
+                const symbol = currencySymbols[transaction.currency] || '$';
+
+                return (
+                  <div
+                    key={transaction.id}
+                    className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg hover:bg-zinc-800 transition-colors"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm text-zinc-400">{transactionDate}</div>
+                        {transaction.notes && (
+                          <div className="text-xs text-zinc-500 italic truncate max-w-md">
+                            "{transaction.notes}"
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-lg font-bold text-green-400 whitespace-nowrap ml-4">
+                      +{symbol}{transaction.amount.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+
+          {/* Total Summary */}
+          <div className="mt-4 pt-4 border-t border-zinc-700">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-zinc-500">
+                Total ({project.transactions.length} transaction{project.transactions.length !== 1 ? 's' : ''})
+              </div>
+              <div className="text-2xl font-bold text-green-400">
+                {currencySymbols[displayCurrency]}{displayRevenue.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Time Report */}
+      {project.timeEntries && project.timeEntries.length > 0 && (
+        <div className="mt-6">
+          <ExportButton
+            project={project}
+            client={project.clientId ? clients.find(c => c.id === project.clientId) : undefined}
+          />
+        </div>
+      )}
     </div>
   );
 }

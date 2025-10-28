@@ -33,9 +33,20 @@ export default {
             'box-shadow': '0 0 13px rgba(34, 197, 94, 1)'
           },
         },
+        'slide-in-right': {
+          '0%': {
+            transform: 'translateX(20px)',
+            opacity: '0'
+          },
+          '100%': {
+            transform: 'translateX(0)',
+            opacity: '1'
+          },
+        },
       },
       animation: {
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'slide-in-right': 'slide-in-right 0.3s ease-out',
       },
     },
   },
