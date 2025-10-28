@@ -51,7 +51,6 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   });
 
   // Get fresh project from store for real-time timer updates
-  const { updateProject } = useProjectStore();
   const latestProject = useProjectStore(state => state.projects.find(p => p.id === project.id) || project);
   const timeTrackingEnabled = useTimeTrackingFeature();
 

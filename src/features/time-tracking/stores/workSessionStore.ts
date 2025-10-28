@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import type { WorkSession } from '../types/workSession';
+import type { TimeEntry } from '../../../types/project';
 
 interface WorkSessionStore {
   /** Map<projectId, WorkSession> - активные сессии по проектам */
@@ -134,6 +135,7 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
 
           // Get focus summary for all instances of this software
           for (const entry of softwareEntries) {
+            if (!entry) continue;
             try {
               const summary = await SessionService.getFocusSummary(entry.id);
               totalFocusedSeconds += summary.focused_seconds;
@@ -149,8 +151,9 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
 
             // Increment softwareMinutes for each entry of this software
             for (const entry of softwareEntries) {
+              if (!entry || !entry.id) continue;
               const currentSoftwareMinutes = entry.softwareMinutes || 0;
-              const updatedEntry = { ...entry, softwareMinutes: currentSoftwareMinutes + 1 };
+              const updatedEntry: TimeEntry = { ...entry, id: entry.id, softwareMinutes: currentSoftwareMinutes + 1 };
               timeTrackingStore.sessions.set(entry.id, updatedEntry);
             }
 

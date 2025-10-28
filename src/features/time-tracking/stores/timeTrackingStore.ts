@@ -2,7 +2,6 @@
 import { create } from 'zustand';
 import { SessionService } from '../services/SessionService';
 import { TimerService } from '../services/TimerService';
-import { StatsService } from '../services/StatsService';
 import { WorkSessionService } from '../services/WorkSessionService';
 import type { TimeEntry } from '../types/timeEntry';
 import type { SoftwareName } from '../../../types/project';
@@ -113,7 +112,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
 
     // Note: Software stats are now counted by WorkSession timer (not per-entry)
     // This timer is kept for potential future per-entry tracking needs
-    TimerService.start(entryId, params.software, async (entryId) => {
+    TimerService.start(entryId, params.software, async () => {
       // Empty callback - stats now handled by WorkSession
     }, now, 0);
 
@@ -403,7 +402,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
         TimerService.start(
           entry.id,
           entry.software,
-          async (entryId) => {
+          async () => {
             // Empty callback - stats now handled by WorkSession
             console.log('[TimeTrackingStore] ⏰ Entry minute tick (restored, stats by WorkSession)');
           },

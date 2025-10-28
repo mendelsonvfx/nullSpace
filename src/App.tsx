@@ -16,7 +16,7 @@ import { CategoryTabs } from './components/CategoryTabs';
 import { WelcomeSetup } from './components/WelcomeSetup';
 import { BreakReminderContainer } from './components/time';
 import type { BreakReminder } from './components/time';
-import { useTimeTrackingStore, StatsService, TimerService } from './features/time-tracking';
+import { useTimeTrackingStore, TimerService } from './features/time-tracking';
 
 // Import refactored components
 import { EmptyState } from './components/shared';
@@ -950,7 +950,7 @@ function App() {
         />
       )}
       {/* Sidebar - Project List */}
-      <div className="w-80 border-r border-zinc-800 border-t border-zinc-800 flex flex-col">
+      <div className="w-80 border-r border-t border-zinc-800 flex flex-col">
         {/* Sidebar Header */}
         <div className="p-4 border-b border-zinc-800">
           <div className="flex items-center justify-between mb-4">

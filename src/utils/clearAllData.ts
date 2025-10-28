@@ -1,6 +1,6 @@
 // src/utils/clearAllData.ts
 import { useProjectStore } from '../store/projectStore';
-import { useTimeStatsStore, StatsService } from '../features/time-tracking';
+import { useTimeStatsStore } from '../features/time-tracking';
 
 /**
  * Clear all time tracking data from the application

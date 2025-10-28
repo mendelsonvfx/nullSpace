@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { versionsCache } from '../../utils/versionsCache';
-import { useProjectStore } from '../../store/projectStore';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
 import type { SoftwareName } from '../../types/project';
 

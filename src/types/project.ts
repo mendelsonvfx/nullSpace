@@ -93,6 +93,8 @@ export interface TimeEntry {
   pid?: number;              // Process ID for active tracking
   widgetVisible?: boolean;   // Widget is shown (after delay)
   countedInStats?: boolean;  // Whether this entry was counted in global software statistics
+  pausedMinutes?: number;    // Minutes paused (for break tracking)
+  isPaused?: boolean;        // Whether the entry is currently paused
 }
 
 export interface Transaction {

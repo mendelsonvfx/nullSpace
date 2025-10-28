@@ -82,7 +82,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
 
   const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
-  const { updateProject, deleteProject, createProject } = useProjectStore();
+  const { updateProject } = useProjectStore();
   const timeTrackingEnabled = useTimeTrackingFeature();
 
   // Handle adding manual transaction
@@ -124,11 +124,11 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     const project = projects.find(p => p.id === projectId);
     if (!project || !project.transactions) return;
 
-    const transaction = project.transactions.find(t => t.id === transactionId);
+    const transaction = project.transactions.find((t: any) => t.id === transactionId);
     if (!transaction) return;
 
     // Remove transaction from array
-    const updatedTransactions = project.transactions.filter(t => t.id !== transactionId);
+    const updatedTransactions = project.transactions.filter((t: any) => t.id !== transactionId);
 
     // Update project: remove transaction and subtract from total cost
     const updatedProject = {
@@ -623,7 +623,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
               <div className="relative">
                 <button
                   onClick={() => setShowAllProjects(!showAllProjects)}
-                  className={`w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 transition-colors font-medium cursor-pointer relative z-20 flex items-center justify-center gap-2 transition-all duration-150 ${
+                  className={`w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 font-medium cursor-pointer relative z-20 flex items-center justify-center gap-2 transition-all duration-150 ${
                     showAllProjects ? 'rounded-t-lg' : 'rounded-lg delay-150'
                   }`}
                   style={{

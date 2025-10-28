@@ -3,6 +3,8 @@
 import type { WorkSession } from '../types/workSession';
 import type { TimeEntry } from '../types/timeEntry';
 
+type NodeJSTimeout = ReturnType<typeof setTimeout>;
+
 /**
  * Callback function that runs every minute
  * @param entryId - The time entry ID
@@ -27,17 +29,17 @@ interface TimerData {
  * Emits signals only on actual minute boundaries
  */
 export class TimerService {
-  private static timers = new Map<string, NodeJS.Timeout>();
+  private static timers = new Map<string, NodeJSTimeout>();
   private static timerData = new Map<string, TimerData>();
   private static callbacks = new Map<string, TimerCallback>();
   private static processCheckCallbacks = new Map<string, ProcessCheckCallback>();
   private static readonly PROCESS_CHECK_INTERVAL = 5000; // Check process every 5 seconds
 
   // New: WorkSession timers (tick every minute)
-  private static sessionTimers = new Map<string, NodeJS.Timeout>();
+  private static sessionTimers = new Map<string, NodeJSTimeout>();
 
   // New: Widget timers (tick every second)
-  private static widgetTimers = new Map<string, NodeJS.Timeout>();
+  private static widgetTimers = new Map<string, NodeJSTimeout>();
 
   /**
    * Start a timer for entry with callback on minute mark

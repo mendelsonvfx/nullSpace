@@ -21,7 +21,7 @@ export const SoftwareBreakdown: React.FC<SoftwareBreakdownProps> = ({
       <div className="space-y-3">
         {sortedSoftware.map(([software, minutes]) => {
           const percentage = (minutes / totalMinutes) * 100;
-          const color = getSoftwareColor(software);
+          const color = getSoftwareColor(software as any);
 
           return (
             <div key={software} className="group">

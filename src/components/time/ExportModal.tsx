@@ -40,7 +40,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     const currencySymbol = getCurrencySymbol(project.currency);
 
     const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
 
     // Title
     doc.setFontSize(20);
