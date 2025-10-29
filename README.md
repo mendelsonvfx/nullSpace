@@ -142,8 +142,8 @@ npm run tauri build
 4. Choose or customize the folder structure template
 5. Set deadlines and financial information (optional)
 
-### Managing Finances
-1. Navigate to the **Finance** page
+### Managing Statistics
+1. Navigate to the **Statistics** page
 2. View paid and pending projects
 3. Analyze revenue with interactive charts
 4. Filter by date, currency, or client
@@ -158,17 +158,12 @@ npm run tauri build
 
 ## 📌 Beta Status
 
-This is a **beta release** (v0.9.6-beta). While the application is functional and ready for testing, please note:
+This is a **beta release** (v0.9.99-beta). While the application is functional and ready for testing, please note:
 
 - Some features may be refined in future updates
 - Regular backups of your project data are recommended
 - Bug reports and feature requests are welcome!
 - **Known Limitation:** Auto-refresh for file changes is temporarily disabled (manual refresh required)
-
-### 📚 Documentation
-- [CODE_AUDIT_REPORT.md](CODE_AUDIT_REPORT.md) - Comprehensive code audit with identified issues
-- [DEVELOPMENT_HISTORY.md](DEVELOPMENT_HISTORY.md) - Development timeline and major changes
-- [KNOWN_ISSUES.md](KNOWN_ISSUES.md) - Current limitations and workarounds
 
 ---
 
