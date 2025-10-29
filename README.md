@@ -47,28 +47,15 @@
 - **Visual Status Indicators** - projects glow green (active), yellow (paused), or blue (completed)
 - **Work Session History** for detailed time analysis
 
-### 📂 File Operations
-- **Move/Copy Version Files Between Shots** via right-click context menu
-- **Auto-Copy File Paths** - right-click any file/folder in TreeView to copy path
-- **Folder Coloring System** for visual organization (6 colors: red, blue, green, yellow, purple, pink)
-- **File Visibility Toggles** to hide/show specific files
-- **Reveal in Explorer** functionality across the entire app
+### 📂 File Operationsh
 - **Smart Filename Parsing** - preserves version numbers while updating shot prefixes
 - **3-Level Directory Tree** visualization optimized for performance
 
 ### 🎨 Software Integration
 Seamlessly work with your favorite tools:
-- **3D Software**: Blender, Houdini, Maya, Cinema 4D, ZBrush, Marmoset
+- **3D Software**: Blender, Houdini
 - **Compositing**: After Effects
-- **Texturing**: Substance Designer/Painter
-- **Game Engines**: Unreal Engine, Unity
 - **2D Software**: Photoshop
-
-**New Features:**
-- **Auto-Detect Software Paths** - one-click detection via Windows Registry scanning
-- **Direct Software Launching** with file tracking
-- **Pre-Configured Folder Templates** optimized for production workflows
-- **Per-Software Time Tracking** integration
 
 ### 💰 Financial Management
 - **Project Cost Tracking** with multi-currency support (USD, RUB, EUR)
@@ -94,25 +81,12 @@ Seamlessly work with your favorite tools:
 - **Folder Coloring** in TreeView for better file organization
 - **Modern UI** with dark theme optimized for creative workflows
 - **Status Glow Effects** for active time-tracked projects
-- **Faster Animations** (0.15s) for snappier feel
 - **Enhanced Context Menus** with category submenus and auto-positioning
 
-### ⚡ Performance & Technical Features
-- **Output Caching System** - reduces redundant file system scans
-- **Smart Loading States** - prevents UI flickering during navigation
-- **Cross-Platform Support** (Windows/macOS/Linux via Tauri + Rust)
-- **Debounced File Watcher** - monitors project changes without freezing
-- **IndexedDB Caching** for thumbnails and versions
-- **Optimized Re-Renders** with React.memo throughout
-- **Rust Backend** for reliable file operations and software detection
-
 ### 🛠️ Advanced Features
-- **Context Menu System** with multi-level submenus
-- **Category Management** with "Move to..." submenu
 - **Software Folder Separation** - automatically groups software-specific folders
 - **Blender Project Structure** with Compositing/Plates folder for VFX workflows
 - **Frame Sequence Grouping** in output scanner
-- **Persistent Expanded State** for folder groups and outputs
 
 ---
 
