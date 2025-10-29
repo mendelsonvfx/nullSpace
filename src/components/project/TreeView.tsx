@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { File, ChevronRight, ChevronDown, EyeOff, Copy, FolderOpen, Palette } from 'lucide-react';
+import { File, ChevronRight, ChevronDown, EyeOff, Copy, FolderOpen, Palette, Check } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
 import { listen } from '@tauri-apps/api/event';
 import { useProjectStore } from '../../store/projectStore';
@@ -55,6 +55,7 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
   });
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: FileNode } | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [folderColors, setFolderColors] = useState<Map<string, string>>(() => {
     try {
       const stored = localStorage.getItem(`folderColors_${project.path}`);
@@ -65,7 +66,9 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     }
   });
   const loadingTimerRef = useRef<number | null>(null);
+  const loadingSizeTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
+  const isFirstSizeLoadRef = useRef(true);
   const debounceTimerRef = useRef<number | null>(null);
   const maxWaitTimerRef = useRef<number | null>(null);
   const isPendingReloadRef = useRef(false);
@@ -215,8 +218,12 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
             setExpandedDirs(newExpanded);
           };
           autoExpandSoftwareFolders(filteredResult);
+        } else {
+          // Restore saved expanded state
+          setExpandedDirs(new Set(JSON.parse(storedExpanded)));
         }
       }
+      // On subsequent loads, expandedDirs state is already preserved from React state
       setLoading(false);
     } catch (error) {
       console.error('Failed to load folder structure:', error);
@@ -231,12 +238,22 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
 
   // Initial load and reset state on project change
   useEffect(() => {
-    // Reset state when project changes
-    setTree([]);
-    setLoading(true);
-    isFirstLoadRef.current = true;
+    // Don't clear tree immediately - keep showing old tree until new one loads
+    // This prevents "No files found" flash when switching projects
+    setLoading(false); // Don't show loading immediately
+    setLoadingSize(false); // Don't show size loading immediately
+    isFirstLoadRef.current = false; // Treat as subsequent load to use delay
+    isFirstSizeLoadRef.current = false; // Treat size load as subsequent to use delay
 
     // Clear all timers when switching projects
+    if (loadingTimerRef.current !== null) {
+      clearTimeout(loadingTimerRef.current);
+      loadingTimerRef.current = null;
+    }
+    if (loadingSizeTimerRef.current !== null) {
+      clearTimeout(loadingSizeTimerRef.current);
+      loadingSizeTimerRef.current = null;
+    }
     if (debounceTimerRef.current !== null) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
@@ -291,7 +308,25 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
   }, [project.path]);
 
   const loadDirectorySize = async () => {
-    setLoadingSize(true);
+    // Clear any existing timer first
+    if (loadingSizeTimerRef.current !== null) {
+      clearTimeout(loadingSizeTimerRef.current);
+      loadingSizeTimerRef.current = null;
+    }
+
+    // Only show loading state for first load or after 300ms delay
+    const isFirstLoad = isFirstSizeLoadRef.current;
+    if (isFirstLoad) {
+      setLoadingSize(true);
+      isFirstSizeLoadRef.current = false;
+    } else {
+      // Set a delayed loading state to prevent flickering on updates
+      loadingSizeTimerRef.current = window.setTimeout(() => {
+        setLoadingSize(true);
+        loadingSizeTimerRef.current = null;
+      }, 300);
+    }
+
     try {
       const projectPath = currentProjectPathRef.current;
       const size = await invoke<number>('get_directory_size', { path: projectPath });
@@ -302,10 +337,21 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
         return;
       }
 
+      // Clear the loading timer if it hasn't fired yet
+      if (loadingSizeTimerRef.current !== null) {
+        clearTimeout(loadingSizeTimerRef.current);
+        loadingSizeTimerRef.current = null;
+      }
+
       setDirectorySize(size);
+      setLoadingSize(false);
     } catch (error) {
       console.error('Failed to load directory size:', error);
-    } finally {
+      // Clear the loading timer on error
+      if (loadingSizeTimerRef.current !== null) {
+        clearTimeout(loadingSizeTimerRef.current);
+        loadingSizeTimerRef.current = null;
+      }
       setLoadingSize(false);
     }
   };
@@ -367,11 +413,6 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     setExpandedDirs(newExpanded);
   };
 
-  const handleChevronClick = (e: React.MouseEvent, path: string) => {
-    e.stopPropagation();
-    toggleDir(path);
-  };
-
   const handleDoubleClick = async (e: React.MouseEvent, node: FileNode) => {
     e.preventDefault();
     e.stopPropagation();
@@ -402,9 +443,20 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     });
   };
 
-  const handleContextMenu = (e: React.MouseEvent, node: FileNode) => {
+  const handleContextMenu = async (e: React.MouseEvent, node: FileNode) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Auto-copy path on right-click
+    try {
+      await writeText(node.path);
+      setCopiedPath(node.path);
+      // Reset after 2 seconds
+      setTimeout(() => setCopiedPath(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy path:', error);
+    }
+
     setActiveMenu('tree');
     setContextMenu({ x: e.clientX, y: e.clientY, node });
     setShowColorPicker(false);
@@ -413,6 +465,9 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
   const copyPath = async (path: string) => {
     try {
       await writeText(path);
+      setCopiedPath(path);
+      // Reset after 2 seconds
+      setTimeout(() => setCopiedPath(null), 2000);
       setContextMenu(null);
     } catch (error) {
       console.error('Failed to copy path:', error);
@@ -511,67 +566,70 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     return (
       <div key={node.path}>
         <div
-          className={`flex items-center gap-1 px-2 py-1 hover:bg-zinc-800 rounded text-sm select-none group ${isHidden ? 'opacity-40' : ''}`}
+          className={`flex items-center gap-1 py-1 hover:bg-zinc-800 rounded text-sm select-none group ${isHidden ? 'opacity-40' : ''}`}
         >
-          <div className="flex items-center gap-1 flex-1">
-            <div
-              className={`flex items-center gap-1 flex-shrink-0 ${node.is_dir && hasChildren ? 'cursor-pointer' : ''}`}
-              style={{ paddingLeft: `${depth * 16 + 24}px` }}
-              onClick={node.is_dir && hasChildren ? (e) => handleChevronClick(e, node.path) : undefined}
-            >
-              {node.is_dir ? (
-                <>
-                  {hasChildren ? (
-                    isExpanded ?
-                      <ChevronDown className="w-3 h-3" /> :
-                      <ChevronRight className="w-3 h-3" />
-                  ) : (
-                    <div className="w-3 h-3" />
-                  )}
-                </>
-              ) : (
-                <div className="w-3 h-3" />
-              )}
-            </div>
-            <div
-              className="flex items-center gap-1 flex-1 cursor-pointer min-w-0"
-              onDoubleClick={(e) => handleDoubleClick(e, node)}
-              onContextMenu={(e) => handleContextMenu(e, node)}
-            >
-              {node.is_dir ? (
-                softwareFolderIcon ? (
-                  <img
-                    src={softwareFolderIcon}
-                    alt={node.name}
-                    className="w-7 h-7 flex-shrink-0"
-                  />
+          {/* Left clickable area - includes left padding (8px) + indentation (depth * 16px) + chevron */}
+          <div
+            className={`flex items-center justify-end gap-1 flex-shrink-0 ${node.is_dir && hasChildren ? 'cursor-pointer' : ''}`}
+            style={{ paddingLeft: '8px', width: `${depth * 16 + 8 + 12 + 4}px` }}
+            onClick={node.is_dir && hasChildren ? (e) => {
+              e.stopPropagation();
+              toggleDir(node.path);
+            } : undefined}
+          >
+            {node.is_dir ? (
+              <>
+                {hasChildren ? (
+                  isExpanded ?
+                    <ChevronDown className="w-3 h-3" /> :
+                    <ChevronRight className="w-3 h-3" />
                 ) : (
-                  <div
-                    className="w-4 h-4 flex-shrink-0"
-                    style={{
-                      WebkitMaskImage: 'url(/icons/folders/folder.svg)',
-                      WebkitMaskSize: 'contain',
-                      WebkitMaskRepeat: 'no-repeat',
-                      WebkitMaskPosition: 'center',
-                      maskImage: 'url(/icons/folders/folder.svg)',
-                      maskSize: 'contain',
-                      maskRepeat: 'no-repeat',
-                      maskPosition: 'center',
-                      backgroundColor: folderColor || '#60a5fa'
-                    }}
-                  />
-                )
+                  <div className="w-3 h-3" />
+                )}
+              </>
+            ) : (
+              <div className="w-3 h-3" />
+            )}
+          </div>
+          {/* Icon and name area - double-click to open, right-click for context menu */}
+          <div
+            className="flex items-center gap-1 flex-1 cursor-pointer min-w-0 pr-2"
+            onDoubleClick={(e) => handleDoubleClick(e, node)}
+            onContextMenu={(e) => handleContextMenu(e, node)}
+          >
+            {node.is_dir ? (
+              softwareFolderIcon ? (
+                <img
+                  src={softwareFolderIcon}
+                  alt={node.name}
+                  className="w-7 h-7 flex-shrink-0"
+                />
               ) : (
-                <>
-                  {fileIcon ? (
-                    <SoftwareIcon name={fileIcon} className="w-4 h-4 flex-shrink-0" />
-                  ) : (
-                    <File className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                  )}
-                </>
-              )}
-              <span className="truncate">{displayName}</span>
-            </div>
+                <div
+                  className="w-4 h-4 flex-shrink-0"
+                  style={{
+                    WebkitMaskImage: 'url(/icons/folders/folder.svg)',
+                    WebkitMaskSize: 'contain',
+                    WebkitMaskRepeat: 'no-repeat',
+                    WebkitMaskPosition: 'center',
+                    maskImage: 'url(/icons/folders/folder.svg)',
+                    maskSize: 'contain',
+                    maskRepeat: 'no-repeat',
+                    maskPosition: 'center',
+                    backgroundColor: folderColor || '#60a5fa'
+                  }}
+                />
+              )
+            ) : (
+              <>
+                {fileIcon ? (
+                  <SoftwareIcon name={fileIcon} className="w-4 h-4 flex-shrink-0" />
+                ) : (
+                  <File className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                )}
+              </>
+            )}
+            <span className="truncate">{displayName}</span>
           </div>
           <button
             onClick={(e) => {
@@ -601,11 +659,31 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     );
   }
 
+  // Separate software folders from global folders
+  const softwareFolderNames = ['blender', 'aftereffects', 'photoshop', 'houdini', 'maya', 'cinema4d', 'substance', 'unreal', 'unity', 'zbrush', 'marmoset'];
+  const softwareFolders = tree.filter(node =>
+    node.is_dir && softwareFolderNames.includes(node.name.toLowerCase())
+  );
+  const globalFolders = tree.filter(node =>
+    !softwareFolderNames.includes(node.name.toLowerCase())
+  );
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-auto space-y-1">
         {tree.length > 0 ? (
-          tree.map(node => renderNode(node))
+          <>
+            {/* Software folders first */}
+            {softwareFolders.map(node => renderNode(node))}
+
+            {/* Separator between software and global folders */}
+            {softwareFolders.length > 0 && globalFolders.length > 0 && (
+              <div className="my-2 mx-12 border-t border-zinc-800" />
+            )}
+
+            {/* Global folders */}
+            {globalFolders.map(node => renderNode(node))}
+          </>
         ) : (
           <p className="text-xs text-zinc-500">No files found</p>
         )}
@@ -632,8 +710,17 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
             onClick={() => copyPath(contextMenu.node.path)}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <Copy className="w-4 h-4" />
-            Copy Path
+            {copiedPath === contextMenu.node.path ? (
+              <>
+                <Check className="w-4 h-4 text-green-500" />
+                <span className="text-green-500">Path Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4" />
+                Copy Path
+              </>
+            )}
           </button>
           {contextMenu.node.is_dir && (
             <>
