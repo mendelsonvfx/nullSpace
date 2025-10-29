@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Plus, Folder, Search, X, Settings, Star, Archive, Grid3x3, ChevronRight, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, MessageSquare, Image } from 'lucide-react';
+import { Plus, Folder, Search, X, Settings, Star, Archive, Grid3x3, ChevronRight, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, MessageSquare, Image, BarChart3 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from './store/projectStore';
 import { useContextMenuStore } from './store/contextMenuStore';
@@ -23,7 +23,7 @@ import { EmptyState } from './components/shared';
 import { FinancePage } from './components/finance';
 import { ProjectDetails, RightSidebar } from './components/project';
 import { CreateProjectModal } from './components/modals';
-import { darkenColor, STATUS_COLORS, STATUS_LABELS } from './utils';
+import { darkenColor, STATUS_COLORS, STATUS_LABELS, hslStringToHex } from './utils';
 
 // darkenColor now imported from utils
 
@@ -75,6 +75,7 @@ function App() {
   } = useProjectStore();
 
   const { activeMenu, setActiveMenu } = useContextMenuStore();
+  const { getActiveSessionsForProject } = useTimeTrackingStore();
 
   //const [view, setView] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,12 +86,16 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [filterView, setFilterView] = useState<'all' | 'favorites' | 'archive'>('all');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
+  const [contextMenuMounted, setContextMenuMounted] = useState(false);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showClientSubmenu, setShowClientSubmenu] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const clientSubmenuTimeoutRef = useRef<number | null>(null);
+  const categorySubmenuTimeoutRef = useRef<number | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const filterMenuRef = useRef<HTMLDivElement>(null);
+  const categorySubmenuRef = useRef<HTMLDivElement>(null);
+  const categoryButtonRef = useRef<HTMLButtonElement>(null);
   const [sortBy, setSortBy] = useState<'name' | 'createdAt' | 'deadline' | 'cost'>('createdAt');
   const [viewMode, setViewMode] = useState<'projects' | 'finance'>('projects');
   const [financePageMounted, setFinancePageMounted] = useState(false);
@@ -112,6 +117,7 @@ function App() {
   const [, setForceRenderKey] = useState(0); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [breakReminders, setBreakReminders] = useState<BreakReminder[]>([]);
   const [shownReminders, setShownReminders] = useState<Set<string>>(new Set());
+  const [showCategorySubmenu, setShowCategorySubmenu] = useState(false);
 
   // Check if we should show welcome setup
   useEffect(() => {
@@ -265,12 +271,25 @@ function App() {
       if (e.key === 'F11') {
         e.preventDefault();
         const isFullscreen = await appWindow.isFullscreen();
-        await appWindow.setFullscreen(!isFullscreen);
+        const isMaximized = await appWindow.isMaximized();
+
+        if (isFullscreen) {
+          // Exit fullscreen mode
+          await appWindow.setFullscreen(false);
+        } else {
+          // Enter fullscreen mode - unmaximize first if needed
+          if (isMaximized) {
+            await appWindow.unmaximize();
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          await appWindow.setFullscreen(true);
+        }
 
         // Update class after state change
         setTimeout(async () => {
           const newFullscreenState = await appWindow.isFullscreen();
-          if (newFullscreenState) {
+          const newMaximizedState = await appWindow.isMaximized();
+          if (newFullscreenState || newMaximizedState) {
             document.documentElement.classList.add('fullscreen');
             document.body.classList.add('fullscreen');
           } else {
@@ -684,26 +703,44 @@ function App() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
+  // Helper function to close context menu
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+    setContextMenuMounted(false);
+  }, []);
+
   // Close context menu when another menu opens
   useEffect(() => {
     if (activeMenu !== 'projects' && contextMenu) {
-      setContextMenu(null);
+      closeContextMenu();
+      setShowCategorySubmenu(false);
     }
-  }, [activeMenu]);
+  }, [activeMenu, contextMenu, closeContextMenu]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       // Don't close if clicking on delete button
       if (target.closest('[data-delete-button]')) return;
-      setContextMenu(null);
+      closeContextMenu();
+      setShowCategorySubmenu(false);
       setActiveMenu(null);
     };
     if (contextMenu) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [contextMenu]);
+  }, [contextMenu, closeContextMenu]);
+
+  // Force re-render context menu after mount to get correct dimensions
+  useEffect(() => {
+    if (contextMenu && !contextMenuMounted) {
+      // Use RAF to ensure the menu is fully rendered
+      requestAnimationFrame(() => {
+        setContextMenuMounted(true);
+      });
+    }
+  }, [contextMenu, contextMenuMounted]);
 
   // Close filter menu when another menu opens
   useEffect(() => {
@@ -821,6 +858,27 @@ function App() {
     setSelectedProjectId(null);
   }, [selectedProjectId]);
 
+  // Prevent file drop and show correct cursor - simplified approach
+  useEffect(() => {
+    const preventDrop = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'none';
+      }
+    };
+
+    // Both dragenter and dragover are needed to prevent flashing
+    document.addEventListener('dragenter', preventDrop);
+    document.addEventListener('dragover', preventDrop);
+    document.addEventListener('drop', preventDrop);
+
+    return () => {
+      document.removeEventListener('dragenter', preventDrop);
+      document.removeEventListener('dragover', preventDrop);
+      document.removeEventListener('drop', preventDrop);
+    };
+  }, []);
+
   return (
     <div className="h-screen bg-zinc-950 text-white flex flex-col overflow-hidden rounded-lg">
       {/* Welcome Setup */}
@@ -845,7 +903,7 @@ function App() {
       </div>
 
       {/* Custom Title Bar */}
-      <div className="h-8 bg-zinc-900 flex items-center justify-between select-none flex-shrink-0 rounded-t-lg">
+      <div className="h-8 bg-zinc-900 flex items-center justify-between select-none flex-shrink-0 rounded-t-lg relative z-[60]">
         <div
           className="flex items-center gap-2 flex-1 h-full"
           style={{ paddingLeft: '13px' }}
@@ -866,14 +924,7 @@ function App() {
         </div>
 
         <div
-          className="absolute left-1/2 transform -translate-x-1/2 h-full flex items-center gap-1"
-          onMouseDown={(e) => {
-            // Prevent dragging when clicking on buttons
-            if ((e.target as HTMLElement).tagName !== 'BUTTON' &&
-                !(e.target as HTMLElement).closest('button')) {
-              appWindow.startDragging();
-            }
-          }}
+          className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-1 pointer-events-none"
         >
           <span className="text-sm font-bold">nullSpace</span>
         </div>
@@ -904,9 +955,16 @@ function App() {
             <Minus className="w-3.5 h-3.5 text-zinc-400" />
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               console.log('Maximize clicked');
-              appWindow.toggleMaximize();
+              const isFullscreen = await appWindow.isFullscreen();
+              if (isFullscreen) {
+                // Exit fullscreen if currently in fullscreen mode
+                await appWindow.setFullscreen(false);
+              } else {
+                // Normal maximize toggle
+                appWindow.toggleMaximize();
+              }
             }}
             className="w-8 h-6 hover:bg-zinc-800 flex items-center justify-center transition-colors rounded"
             title="Maximize"
@@ -954,34 +1012,17 @@ function App() {
         {/* Sidebar Header */}
         <div className="p-4 border-b border-zinc-800">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="relative bg-zinc-800 rounded-lg p-1 flex items-center gap-0 w-fit">
-                <div
-                  className="absolute top-1 w-8 h-6 bg-accent rounded-md transition-all duration-200 ease-in-out"
-                  style={{ left: viewMode === 'projects' ? '4px' : 'calc(100% - 36px)' }}
-                />
-                <button
-                  onClick={() => setViewMode('projects')}
-                  className="relative z-10 w-8 h-6 flex items-center justify-center transition-opacity duration-200"
-                  style={{ opacity: viewMode === 'projects' ? 1 : 0.75 }}
-                  title="Projects"
-                >
-                  <Folder className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleToggleFinanceMode}
-                  className="relative z-10 w-8 h-6 flex items-center justify-center transition-opacity duration-200"
-                  style={{ opacity: viewMode === 'finance' ? 1 : 0.75 }}
-                  title="Finance"
-                >
-                  <DollarSign className="w-4 h-4" />
-                </button>
-              </div>
-              <h1 className="text-xl font-semibold">
-                {viewMode === 'projects' ? 'Projects' : 'Finances'}
-              </h1>
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-zinc-900 border border-zinc-800 rounded-lg pl-10 pr-4 py-2 w-full focus:outline-none focus:border-accent transition-colors text-sm"
+              />
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 ml-2">
               <button
                 onClick={() => setShowFeedback(true)}
                 className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
@@ -997,17 +1038,6 @@ function App() {
                 <Settings className="w-5 h-5 animate-settings-icon" />
               </button>
             </div>
-          </div>
-
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-            <input
-              type="text"
-              placeholder="Search projects..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-lg pl-10 pr-4 py-2 w-full focus:outline-none focus:border-accent transition-colors text-sm"
-            />
           </div>
 
           {/* Filter Menu */}
@@ -1056,7 +1086,7 @@ function App() {
                 <Filter className="w-3.5 h-3.5" />
               </button>
               {showFilterMenu && (
-                <div className="absolute top-full mt-1 right-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[160px]">
+                <div className="absolute top-full mt-1 right-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[160px] animate-modal">
                   <div className="px-3 py-1.5 text-xs text-zinc-500 font-medium">Sort by</div>
                   <button
                     onClick={() => {
@@ -1123,7 +1153,7 @@ function App() {
                     </button>
                     {showClientSubmenu && (
                       <div
-                        className="absolute left-full top-0 ml-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[160px]"
+                        className="absolute left-full top-0 ml-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[160px] animate-modal"
                         onMouseEnter={() => {
                           if (clientSubmenuTimeoutRef.current) {
                             clearTimeout(clientSubmenuTimeoutRef.current);
@@ -1196,16 +1226,14 @@ function App() {
                     projectPath={project.path}
                     thumbnail={project.thumbnail}
                     isSelected={selectedProjectId === project.id}
+                    onClick={() => handleOpenProject(project)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setActiveMenu('projects');
                       setContextMenu({ x: e.clientX, y: e.clientY, projectId: project.id });
                     }}
                   >
-                    <div
-                      onClick={() => handleOpenProject(project)}
-                      className="cursor-pointer relative z-10"
-                    >
+                    <div className="relative z-10">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-bold text-base truncate flex-1">{project.name}</h3>
                       {project.isPinned && (
@@ -1219,7 +1247,17 @@ function App() {
                           e.stopPropagation();
                           cycleStatus(project.id, project.status as ProjectStatus);
                         }}
-                        className={`w-3 h-3 rounded-full ${STATUS_COLORS[project.status as keyof typeof STATUS_COLORS]} ${project.status === 'active' ? 'animate-pulse-glow' : ''} hover:ring-2 hover:ring-white/50 transition-all cursor-pointer`}
+                        className={`w-3 h-3 rounded-full ${STATUS_COLORS[project.status as keyof typeof STATUS_COLORS]} ${
+                          getActiveSessionsForProject(project.id).length > 0 && project.status !== 'archived'
+                            ? project.status === 'active'
+                              ? 'status-glow-green brightness-150'
+                              : project.status === 'paused'
+                              ? 'status-glow-yellow brightness-150'
+                              : project.status === 'completed'
+                              ? 'status-glow-blue brightness-150'
+                              : ''
+                            : ''
+                        } hover:ring-2 hover:ring-white/50 transition-all cursor-pointer`}
                         title={`Status: ${STATUS_LABELS[project.status as keyof typeof STATUS_LABELS]} (click to change)`}
                       />
                     </div>
@@ -1240,7 +1278,7 @@ function App() {
                             <span
                               key="client"
                               className="px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1"
-                              style={{ backgroundColor: darkenColor(client.color || '#808080', 60), color: '#ffffff' }}
+                              style={{ backgroundColor: darkenColor(hslStringToHex(client.color || '#808080'), 60), color: '#ffffff' }}
                             >
                               {showTagIcons && <User className="w-3 h-3 fill-current opacity-30" />}
                               {client.name}
@@ -1309,7 +1347,7 @@ function App() {
         </div>
 
         {/* Sidebar Footer */}
-        <div className="border-t border-zinc-800 p-4">
+        <div className="border-t border-zinc-800 px-4 py-2 space-y-2">
           <button
             onClick={() => setShowCreateModal(true)}
             className="w-full bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium text-white animate-button"
@@ -1317,6 +1355,34 @@ function App() {
             <Plus className="w-5 h-5" />
             New Project
           </button>
+
+          {/* Mode Switcher */}
+          <div className="flex items-center bg-zinc-900 rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('projects')}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
+                viewMode === 'projects'
+                  ? 'bg-zinc-800 text-white'
+                  : 'bg-transparent text-zinc-500 hover:text-zinc-400'
+              }`}
+              title="Projects"
+            >
+              <Folder className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium">Projects</span>
+            </button>
+            <button
+              onClick={handleToggleFinanceMode}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
+                viewMode === 'finance'
+                  ? 'bg-zinc-800 text-white'
+                  : 'bg-transparent text-zinc-500 hover:text-zinc-400'
+              }`}
+              title="Statistics"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium">Statistics</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1395,6 +1461,7 @@ function App() {
         <CreateProjectModal
           onClose={() => setShowCreateModal(false)}
           onCreate={createProject}
+          onProjectCreated={(projectId) => setSelectedProjectId(projectId)}
         />
       )}
 
@@ -1495,7 +1562,7 @@ function App() {
           className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
           style={{
             top: (() => {
-              const menuHeight = contextMenuRef.current?.offsetHeight || 500;
+              const menuHeight = contextMenuRef.current?.offsetHeight || 450;
               const windowHeight = window.innerHeight;
               const wouldOverflow = contextMenu.y + menuHeight > windowHeight;
               return wouldOverflow ? windowHeight - menuHeight - 10 : contextMenu.y;
@@ -1512,7 +1579,7 @@ function App() {
           <button
             onClick={() => {
               togglePin(contextMenu.projectId);
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
@@ -1522,7 +1589,7 @@ function App() {
           <button
             onClick={() => {
               toggleFavorite(contextMenu.projectId);
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
@@ -1547,7 +1614,7 @@ function App() {
                   console.error('Failed to paste thumbnail from clipboard:', error);
                 }
               }
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
@@ -1560,7 +1627,7 @@ function App() {
               if (project) {
                 updateProject({ ...project, thumbnail: undefined });
               }
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
@@ -1574,7 +1641,7 @@ function App() {
           <button
             onClick={() => {
               updateStatus(contextMenu.projectId, 'active');
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
@@ -1584,7 +1651,7 @@ function App() {
           <button
             onClick={() => {
               updateStatus(contextMenu.projectId, 'paused');
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
@@ -1594,7 +1661,7 @@ function App() {
           <button
             onClick={() => {
               updateStatus(contextMenu.projectId, 'completed');
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
@@ -1604,7 +1671,7 @@ function App() {
           <button
             onClick={() => {
               updateStatus(contextMenu.projectId, 'archived');
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
@@ -1620,9 +1687,10 @@ function App() {
             onClick={() => {
               const project = projects.find(p => p.id === contextMenu.projectId);
               if (project) {
-                updateProject({ ...project, paymentStatus: 'unpaid' });
+                // Clear completedAt when changing to unpaid
+                updateProject({ ...project, paymentStatus: 'unpaid', completedAt: undefined });
               }
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
@@ -1633,9 +1701,13 @@ function App() {
             onClick={() => {
               const project = projects.find(p => p.id === contextMenu.projectId);
               if (project) {
-                updateProject({ ...project, paymentStatus: 'prepaid' });
+                // Set completedAt only if changing TO "prepaid" and it's not already set
+                const completedAt = project.paymentStatus === 'prepaid'
+                  ? project.completedAt
+                  : (project.completedAt || new Date().toISOString());
+                updateProject({ ...project, paymentStatus: 'prepaid', completedAt });
               }
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
@@ -1652,13 +1724,105 @@ function App() {
                   : (project.completedAt || new Date().toISOString());
                 updateProject({ ...project, paymentStatus: 'paid', completedAt });
               }
-              setContextMenu(null);
+              closeContextMenu();
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
             <DollarSign className="w-4 h-4 text-green-500" />
             Paid
           </button>
+
+          <div className="border-t border-zinc-700 my-1" />
+
+          {/* Move to Category submenu */}
+          <div
+            className="relative"
+            onMouseEnter={() => {
+              if (categorySubmenuTimeoutRef.current) {
+                clearTimeout(categorySubmenuTimeoutRef.current);
+              }
+              setShowCategorySubmenu(true);
+            }}
+            onMouseLeave={() => {
+              categorySubmenuTimeoutRef.current = window.setTimeout(() => {
+                setShowCategorySubmenu(false);
+              }, 100);
+            }}
+          >
+            <button
+              ref={categoryButtonRef}
+              className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between gap-2"
+            >
+              <div className="flex items-center gap-2">
+                <Folder className="w-4 h-4" />
+                Move to...
+              </div>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {/* Category submenu */}
+            {showCategorySubmenu && (
+              <div
+                ref={categorySubmenuRef}
+                className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 w-auto animate-context-menu"
+                onMouseEnter={() => {
+                  if (categorySubmenuTimeoutRef.current) {
+                    clearTimeout(categorySubmenuTimeoutRef.current);
+                  }
+                }}
+                onMouseLeave={() => {
+                  categorySubmenuTimeoutRef.current = window.setTimeout(() => {
+                    setShowCategorySubmenu(false);
+                  }, 100);
+                }}
+                style={{
+                  bottom: (() => {
+                    const buttonRect = categoryButtonRef.current?.getBoundingClientRect();
+                    if (!buttonRect) return 'auto';
+                    const windowHeight = window.innerHeight;
+                    // Distance from bottom of window to bottom of button
+                    const bottomSpace = windowHeight - buttonRect.bottom;
+                    return bottomSpace;
+                  })(),
+                  left: (() => {
+                    const menuRect = contextMenuRef.current?.getBoundingClientRect();
+                    if (!menuRect) return 0;
+                    const submenuWidth = categorySubmenuRef.current?.offsetWidth || 120;
+                    const windowWidth = window.innerWidth;
+                    // Try to position to the right of the main menu
+                    const rightPosition = menuRect.right + 4;
+                    const wouldOverflow = rightPosition + submenuWidth > windowWidth;
+                    // If would overflow, position to the left of the main menu
+                    return wouldOverflow ? menuRect.left - submenuWidth - 4 : rightPosition;
+                  })()
+                }}
+              >
+                {categories.map((category) => {
+                  const project = projects.find(p => p.id === contextMenu.projectId);
+                  const isCurrentCategory = project?.category === category;
+
+                  return (
+                    <button
+                      key={category}
+                      onClick={() => {
+                        if (project && !isCurrentCategory) {
+                          updateProject({ ...project, category });
+                        }
+                        closeContextMenu();
+                        setShowCategorySubmenu(false);
+                      }}
+                      className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 whitespace-nowrap ${
+                        isCurrentCategory ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                      disabled={isCurrentCategory}
+                    >
+                      {category}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           <div className="border-t border-zinc-700 my-1" />
           <button
@@ -1671,12 +1835,12 @@ function App() {
               const project = projects.find(p => p.id === projectId);
 
               if (!project) {
-                setContextMenu(null);
+                closeContextMenu();
                 return;
               }
 
               // Close menu and show custom confirm dialog
-              setContextMenu(null);
+              closeContextMenu();
               setDeleteConfirm({
                 type: 'project',
                 name: project.name,

@@ -82,7 +82,7 @@ body.animations-disabled * {
 
 /* Scale animation for modals */
 .animate-modal {
-  animation: scaleIn 0.3s var(--animation-timing);
+  animation: scaleIn 0.15s var(--animation-timing);
 }
 
 @keyframes scaleIn {
@@ -105,7 +105,7 @@ body.animations-disabled * {
 @keyframes contextMenuAppear {
   from {
     opacity: 0;
-    transform: scale(0.95) translateY(-5px);
+    transform: scale(0.98) translateY(4px);
   }
   to {
     opacity: 1;
@@ -232,6 +232,46 @@ html.fullscreen::after {
   overscroll-behavior: contain;
 }
 
+/* Status glow effects */
+@keyframes pulse-glow-green {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(34, 197, 94, 1);
+  }
+  50% {
+    box-shadow: 0 0 13px rgba(34, 197, 94, 1);
+  }
+}
+
+@keyframes pulse-glow-yellow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(234, 179, 8, 1);
+  }
+  50% {
+    box-shadow: 0 0 13px rgba(234, 179, 8, 1);
+  }
+}
+
+@keyframes pulse-glow-blue {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(59, 130, 246, 1);
+  }
+  50% {
+    box-shadow: 0 0 13px rgba(59, 130, 246, 1);
+  }
+}
+
+.status-glow-green {
+  animation: pulse-glow-green 2s ease-in-out infinite !important;
+}
+
+.status-glow-yellow {
+  animation: pulse-glow-yellow 2s ease-in-out infinite !important;
+}
+
+.status-glow-blue {
+  animation: pulse-glow-blue 2s ease-in-out infinite !important;
+}
+
 /* Hide number input arrows */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
@@ -278,6 +318,17 @@ input[type="number"] {
   --accentBase: #a855f7;
   --baseBackground: #18181b;
   --admonitionTipBackground: #1e293b;
+}
+
+/* Text selection color - much darker gray for better contrast with toolbar */
+.markdown-editor-container ::selection {
+  background: #27272a;
+  color: #ffffff;
+}
+
+.markdown-editor-container ::-moz-selection {
+  background: #27272a;
+  color: #ffffff;
 }
 
 .markdown-editor-container [class*='_rootContentEditableWrapper'] {
@@ -359,20 +410,20 @@ input[type="number"] {
 
 .markdown-editor-container button[class*='_toolbarButton']:hover {
   background: #27272a;
-  color: #ffffff !important;
+  color: #a1a1aa !important;
   opacity: 1;
 }
 
 .markdown-editor-container button[class*='_toolbarButton']:hover svg {
-  color: #ffffff !important;
-  fill: #ffffff !important;
-  stroke: #ffffff !important;
+  color: #a1a1aa !important;
+  fill: #a1a1aa !important;
+  stroke: #a1a1aa !important;
 }
 
 .markdown-editor-container button[class*='_toolbarButton'][data-active='true'] {
-  background: #27272a;
+  background: #3f3f46 !important;
   color: #a855f7 !important;
-  opacity: 1;
+  opacity: 1 !important;
 }
 
 .markdown-editor-container button[class*='_toolbarButton'][data-active='true'] svg {
@@ -404,6 +455,99 @@ input[type="number"] {
   color: #e4e4e7;
   border-radius: 4px;
   padding: 4px 8px;
+}
+
+/* Block type select button - compact size */
+.markdown-editor-container button[class*='_selectTrigger'],
+.markdown-editor-container [role='combobox'] {
+  padding: 4px 4px 4px 6px !important;
+  gap: 4px !important;
+  min-width: auto !important;
+  max-width: fit-content !important;
+}
+
+.markdown-editor-container button[class*='_selectTrigger'] svg,
+.markdown-editor-container [role='combobox'] svg {
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+}
+
+.markdown-editor-container button[class*='_selectTrigger'] span,
+.markdown-editor-container [role='combobox'] span {
+  white-space: nowrap !important;
+}
+
+/* Dropdown menu/popover - aggressive override */
+[class*='_selectPopover'],
+[class*='_popoverContent'],
+[class*='Popover'],
+[role='listbox'],
+[role='menu'],
+div[data-radix-popper-content-wrapper] {
+  background: #27272a !important;
+  background-color: #27272a !important;
+  border: 1px solid #3f3f46 !important;
+  color: #e4e4e7 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+/* Remove hover effect from dropdown container */
+[class*='_selectPopover']:hover,
+[class*='_popoverContent']:hover,
+[class*='Popover']:hover,
+[role='listbox']:hover,
+[role='menu']:hover,
+div[data-radix-popper-content-wrapper]:hover {
+  background: #27272a !important;
+  background-color: #27272a !important;
+}
+
+/* Dropdown wrapper */
+div[data-radix-popper-content-wrapper] > div {
+  background: #27272a !important;
+  background-color: #27272a !important;
+  border: 1px solid #3f3f46 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+/* Dropdown menu items */
+[class*='_selectPopover'] [role='option'],
+[class*='_popoverContent'] [role='option'],
+[role='listbox'] [role='option'],
+[role='menu'] [role='menuitem'],
+[role='listbox'] > div,
+[class*='_selectItem'] {
+  background: transparent !important;
+  color: #f4f4f5 !important;
+  padding: 8px 12px !important;
+}
+
+/* Dropdown menu items hover - only on direct items, not container */
+[role='listbox'] > [role='option']:hover,
+[role='menu'] > [role='menuitem']:hover,
+[class*='_selectItem']:hover,
+[role='listbox'] > div[role='option']:hover {
+  background: #3f3f46 !important;
+  background-color: #3f3f46 !important;
+  border-radius: 4px !important;
+}
+
+/* Prevent hover on container */
+[role='listbox']:hover,
+[role='menu']:hover {
+  background: #27272a !important;
+}
+
+/* Dropdown menu items selected */
+[class*='_selectPopover'] [role='option'][data-selected='true'],
+[class*='_popoverContent'] [role='option'][aria-selected='true'],
+[role='listbox'] [role='option'][aria-selected='true'],
+[class*='_selectItem'][data-state='checked'] {
+  background: #52525b !important;
+  background-color: #52525b !important;
+  border-radius: 4px !important;
 }
 
 /* Headings */
@@ -494,35 +638,98 @@ input[type="number"] {
 }
 
 /* Dialog overlays */
-.markdown-editor-container [class*='_dialogOverlay'] {
-  background: rgba(0, 0, 0, 0.5);
+.markdown-editor-container [class*='_dialogOverlay'],
+[class*='_dialogOverlay'] {
+  background: rgba(0, 0, 0, 0.5) !important;
 }
 
-.markdown-editor-container [class*='_dialogContent'] {
-  background: #18181b;
-  border: 1px solid #27272a;
-  border-radius: 8px;
-  color: #e4e4e7;
+/* Dialog styling - colors only, let MDXEditor handle positioning */
+.markdown-editor-container [class*='_dialogContent'],
+[class*='_dialogContent'],
+[role='dialog'] {
+  background: #27272a !important;
+  background-color: #27272a !important;
+  border: 1px solid #3f3f46 !important;
+  border-radius: 8px !important;
+  color: #e4e4e7 !important;
 }
 
 .markdown-editor-container [class*='_dialogContent'] input,
-.markdown-editor-container [class*='_dialogContent'] textarea {
-  background: #09090b;
-  border: 1px solid #27272a;
-  color: #e4e4e7;
-  border-radius: 4px;
-  padding: 8px;
+.markdown-editor-container [class*='_dialogContent'] textarea,
+[class*='_dialogContent'] input,
+[class*='_dialogContent'] textarea,
+[role='dialog'] input,
+[role='dialog'] textarea {
+  background: #18181b !important;
+  background-color: #18181b !important;
+  border: 1px solid #3f3f46 !important;
+  color: #f4f4f5 !important;
+  border-radius: 4px !important;
+  padding: 8px !important;
 }
 
-.markdown-editor-container [class*='_dialogContent'] button {
-  background: #a855f7;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
-  cursor: pointer;
+.markdown-editor-container [class*='_dialogContent'] input:focus,
+.markdown-editor-container [class*='_dialogContent'] textarea:focus,
+[class*='_dialogContent'] input:focus,
+[class*='_dialogContent'] textarea:focus,
+[role='dialog'] input:focus,
+[role='dialog'] textarea:focus {
+  outline: none !important;
+  border-color: var(--accent-color) !important;
 }
 
-.markdown-editor-container [class*='_dialogContent'] button:hover {
-  background: #9333ea;
+.markdown-editor-container [class*='_dialogContent'] button,
+[class*='_dialogContent'] button,
+[role='dialog'] button {
+  background: var(--accent-color) !important;
+  background-color: var(--accent-color) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 8px 16px !important;
+  cursor: pointer !important;
+}
+
+.markdown-editor-container [class*='_dialogContent'] button:hover,
+[class*='_dialogContent'] button:hover,
+[role='dialog'] button:hover {
+  background: var(--accent-color-hover) !important;
+  background-color: var(--accent-color-hover) !important;
+}
+
+/* Cancel button */
+.markdown-editor-container [class*='_dialogContent'] button[type='button']:not([type='submit']),
+[class*='_dialogContent'] button:last-child,
+[role='dialog'] button:last-child {
+  background: #27272a !important;
+  background-color: #27272a !important;
+}
+
+.markdown-editor-container [class*='_dialogContent'] button[type='button']:not([type='submit']):hover,
+[class*='_dialogContent'] button:last-child:hover,
+[role='dialog'] button:last-child:hover {
+  background: #3f3f46 !important;
+  background-color: #3f3f46 !important;
+}
+
+/* Dialog labels */
+[class*='_dialogContent'] label,
+[role='dialog'] label {
+  color: #71717a !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+
+/* Override active/selected button state - force gray background */
+.markdown-editor-container [class*='_toolbarRoot'] button[data-active='true'],
+.markdown-editor-container [class*='_toolbarRoot'] button[aria-pressed='true'],
+.markdown-editor-container [class*='_toolbarRoot'] button[data-state='on'] {
+  background: #52525b !important;
+  background-color: #52525b !important;
+}
+
+/* Override hover state for toolbar buttons */
+.markdown-editor-container [class*='_toolbarRoot'] button:hover {
+  background: #3f3f46 !important;
+  background-color: #3f3f46 !important;
 }

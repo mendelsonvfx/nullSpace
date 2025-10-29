@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
-import { X, Settings, Star, FolderOpen, CreditCard, Loader2, Check, Pencil, Clock } from 'lucide-react';
+import { X, Settings, Star, FolderOpen, CreditCard, Loader2, Check, Pencil, Clock, Plus, Trash2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
 import { useProjectStore } from '../../store/projectStore';
 import { LinkItem, LinkInputForm, NotesSection } from '../shared';
 import { VersionsOverview } from './VersionsOverview';
+import { OutputOverview } from './OutputOverview';
 import { SoftwareIcon } from '../SoftwareIcon';
-import { ThumbnailImage } from '../ThumbnailImage';
 import { STATUS_LABELS } from '../../utils';
 import { versionsCache } from '../../utils/versionsCache';
 import { InlineTimer, TimeInfoBar } from '../time';
 import { ManualTimeEntryModal } from '../../features/time-tracking/components/ManualTimeEntry/ManualTimeEntryModal';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
+import { useThumbnail } from '../../hooks/useThumbnail';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
@@ -53,6 +54,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   // Get fresh project from store for real-time timer updates
   const latestProject = useProjectStore(state => state.projects.find(p => p.id === project.id) || project);
   const timeTrackingEnabled = useTimeTrackingFeature();
+
+  // Load cached thumbnail for Project Settings modal
+  const thumbnailSrc = useThumbnail(project.path, project.thumbnail);
 
   // Widget visibility is now handled by timeTrackingStore (after 1.5s delay)
 
@@ -230,23 +234,28 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               {(project.shots || []).map((shot: any) => (
                 <div
                   key={shot.id}
-                  className={`group relative flex items-center rounded overflow-hidden ${
+                  onClick={() => {
+                    if (!isShotEditMode) {
+                      const { setCurrentShot } = useProjectStore.getState();
+                      setCurrentShot(project.id, shot.id);
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    const { toggleShotCompleted } = useProjectStore.getState();
+                    toggleShotCompleted(project.id, shot.id);
+                  }}
+                  className={`group relative flex items-center rounded overflow-hidden cursor-pointer transition-all hover:brightness-110 ${
                     project.currentShotId === shot.id
                       ? 'bg-accent text-white'
                       : 'bg-zinc-800 text-zinc-300'
                   }`}
                 >
-                  <button
-                    onClick={() => {
-                      if (!isShotEditMode) {
-                        const { setCurrentShot } = useProjectStore.getState();
-                        setCurrentShot(project.id, shot.id);
-                      }
-                    }}
-                    className="px-3 py-1 text-sm font-medium transition-all hover:brightness-110 flex items-center gap-1"
+                  <div
+                    className={`py-1 pl-3 text-sm font-medium flex items-center gap-1 transition-all ${shot.completed ? 'pr-1' : 'pr-3'}`}
                   >
-                    <span>Shot</span>
-                    {isShotEditMode && editingShotId === shot.id ? (
+                    {shot.name !== 'Main' && <span>Shot</span>}
+                    {isShotEditMode && editingShotId === shot.id && shot.name !== 'Main' ? (
                       <input
                         type="text"
                         value={editingShotNumber}
@@ -358,7 +367,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     ) : (
                       <span
                         onClick={(e) => {
-                          if (isShotEditMode) {
+                          if (isShotEditMode && shot.name !== 'Main') {
                             e.stopPropagation();
                             // Extract number from shot name (e.g., "Shot 001" -> "001")
                             const match = shot.name.match(/\d{3}/);
@@ -368,13 +377,16 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             }
                           }
                         }}
-                        className={isShotEditMode ? 'text-zinc-400 cursor-pointer hover:text-zinc-300 underline' : ''}
+                        className={isShotEditMode && shot.name !== 'Main' ? 'text-zinc-400 cursor-pointer hover:text-zinc-300 underline' : ''}
                       >
                         {shot.name.replace('Shot ', '')}
                       </span>
                     )}
-                  </button>
-                  <div className={`transition-all duration-200 ease-in-out overflow-hidden ${isShotEditMode && shot.name !== 'Shot 001' ? 'w-5 opacity-100' : 'w-0 opacity-0'}`}>
+                  </div>
+                  <div className={`transition-all duration-200 ease-in-out overflow-hidden flex items-center ${shot.completed ? 'w-7 opacity-100' : 'w-0 opacity-0'}`}>
+                    <Check className="w-4 h-4 text-green-500 mx-auto" />
+                  </div>
+                  <div className={`transition-all duration-200 ease-in-out overflow-hidden ${isShotEditMode && shot.name !== 'Main' ? 'w-5 opacity-100' : 'w-0 opacity-0'}`}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -559,6 +571,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         {/* Versions Overview */}
         <VersionsOverview project={project} currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null} />
 
+        {/* Output Overview */}
+        <OutputOverview project={project} currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null} />
+
         {/* Links Section */}
         <div className="mb-6">
           <h3 className="text-sm font-medium text-zinc-400 mb-3">Links</h3>
@@ -685,7 +700,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       {/* Payment Modal */}
       {showPaymentModal && (
         <div
-          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity duration-200 ${
+          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity duration-200 rounded-lg ${
             isPaymentModalAnimating ? 'opacity-100' : 'opacity-0'
           }`}
           onMouseDown={(e) => {
@@ -748,7 +763,20 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   value={project.paymentStatus || 'unpaid'}
                   onChange={(e) => {
                     const { updateProject } = useProjectStore.getState();
-                    updateProject({ ...project, paymentStatus: e.target.value as 'paid' | 'prepaid' | 'unpaid' });
+                    const newStatus = e.target.value as 'paid' | 'prepaid' | 'unpaid';
+
+                    // Set completedAt when changing TO paid or prepaid (if not already set)
+                    // Clear completedAt when changing TO unpaid
+                    let completedAt = project.completedAt;
+                    if (newStatus === 'paid' || newStatus === 'prepaid') {
+                      if (project.paymentStatus !== newStatus) {
+                        completedAt = completedAt || new Date().toISOString();
+                      }
+                    } else if (newStatus === 'unpaid') {
+                      completedAt = undefined;
+                    }
+
+                    updateProject({ ...project, paymentStatus: newStatus, completedAt });
                   }}
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent transition-colors"
                 >
@@ -790,7 +818,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       {/* Project Settings Modal */}
       {showProjectSettings && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 rounded-lg"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
@@ -811,7 +839,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               </button>
             </div>
 
-            <div className="p-4 space-y-4 overflow-y-auto flex-1">
+            <div className="p-4 space-y-2.5 overflow-y-auto flex-1">
               <div>
                 <label className="block text-sm font-medium mb-1.5">Project Name</label>
                 <input
@@ -825,44 +853,44 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Description</label>
-                <textarea
-                  value={project.description}
-                  onChange={(e) => {
-                    const { updateProject } = useProjectStore.getState();
-                    updateProject({ ...project, description: e.target.value });
-                  }}
-                  rows={2}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Project Path</label>
-                <input
-                  type="text"
-                  value={project.path}
-                  readOnly
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent opacity-60"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Project Thumbnail <span className="text-xs text-zinc-500">(Ctrl+V to paste)</span></label>
-                <div className="flex gap-2 items-center">
-                  {project.thumbnail && (
-                    <div className="w-16 h-16 rounded-lg overflow-hidden border border-zinc-700 bg-zinc-800 flex-shrink-0">
-                      <ThumbnailImage
-                        projectPath={project.path}
-                        thumbnail={project.thumbnail}
-                        className="w-full h-full object-cover"
-                        alt="Project thumbnail"
-                      />
+              <div className="flex gap-3 items-start">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium mb-1.5">Description</label>
+                  <textarea
+                    value={project.description}
+                    onChange={(e) => {
+                      const { updateProject } = useProjectStore.getState();
+                      updateProject({ ...project, description: e.target.value });
+                    }}
+                    rows={2}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none h-[60px]"
+                  />
+                </div>
+                <div className="w-32">
+                  <label className="block text-sm font-medium mb-1.5">Thumbnail <span className="text-xs text-zinc-500">(Ctrl+V)</span></label>
+                  {project.thumbnail ? (
+                    <div className="relative h-[60px] rounded-lg overflow-hidden border border-zinc-700 bg-zinc-800">
+                      {thumbnailSrc && (
+                        <img
+                          src={thumbnailSrc}
+                          alt="Project thumbnail"
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const { updateProject } = useProjectStore.getState();
+                          updateProject({ ...project, thumbnail: undefined });
+                        }}
+                        className="absolute top-1 right-1 w-6 h-6 bg-red-600 hover:bg-red-700 rounded transition-colors text-sm flex items-center justify-center"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
                     </div>
-                  )}
-                  <div className="flex gap-2 flex-1">
+                  ) : (
                     <button
+                      type="button"
                       onClick={async () => {
                         const { selectImageFile } = await import('../../utils/tauri');
                         const imagePath = await selectImageFile();
@@ -879,24 +907,15 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           }
                         }
                       }}
-                      className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+                      className="h-[60px] w-full bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm border border-zinc-700 flex items-center justify-center"
                     >
-                      Choose Image
+                      <Plus className="w-5 h-5" />
                     </button>
-                    {project.thumbnail && (
-                      <button
-                        onClick={() => {
-                          const { updateProject } = useProjectStore.getState();
-                          updateProject({ ...project, thumbnail: undefined });
-                        }}
-                        className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
+
+              <div className="border-t border-zinc-800 pt-2"></div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -935,6 +954,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   </select>
                 </div>
               </div>
+
+              <div className="border-t border-zinc-800 pt-2"></div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1203,7 +1224,20 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     value={project.paymentStatus || 'unpaid'}
                     onChange={(e) => {
                       const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, paymentStatus: e.target.value as 'paid' | 'prepaid' | 'unpaid' });
+                      const newStatus = e.target.value as 'paid' | 'prepaid' | 'unpaid';
+
+                      // Set completedAt when changing TO paid or prepaid (if not already set)
+                      // Clear completedAt when changing TO unpaid
+                      let completedAt = project.completedAt;
+                      if (newStatus === 'paid' || newStatus === 'prepaid') {
+                        if (project.paymentStatus !== newStatus) {
+                          completedAt = completedAt || new Date().toISOString();
+                        }
+                      } else if (newStatus === 'unpaid') {
+                        completedAt = undefined;
+                      }
+
+                      updateProject({ ...project, paymentStatus: newStatus, completedAt });
                     }}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
                   >
@@ -1228,25 +1262,53 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-zinc-800">
+              <div className="border-t border-zinc-800 pt-2"></div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Project Path</label>
+                <input
+                  type="text"
+                  value={project.path}
+                  readOnly
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent opacity-60"
+                />
+              </div>
+
+              <div className="border-t border-zinc-800 pt-4">
+                <div className="mb-3">
+                  <div className="font-medium mb-1 text-red-400">Delete Project</div>
+                  <p className="text-sm text-zinc-400">
+                    Permanently delete this project and all its data. This action cannot be undone.
+                  </p>
+                </div>
                 <button
                   onClick={() => {
-                    // Close modal first to prevent UI glitches
-                    setShowProjectSettings(false);
-                    onClose();
-
-                    // Then show custom confirmation dialog
-                    setTimeout(() => {
-                      onDeleteProject(project);
-                    }, 100);
+                    // Show custom confirmation dialog on top of settings modal
+                    onDeleteProject(project);
                   }}
-                  className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium text-sm"
+                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
                 >
+                  <Trash2 className="w-4 h-4" />
                   Delete Project
                 </button>
               </div>
             </div>
 
+            {/* Footer */}
+            <div className="border-t border-zinc-800 px-4 py-4 flex justify-end gap-3 flex-shrink-0">
+              <button
+                onClick={() => setShowProjectSettings(false)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => setShowProjectSettings(false)}
+                className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium text-sm"
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </div>
       )}

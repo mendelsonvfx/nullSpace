@@ -64,7 +64,7 @@ export const ManualTimeEntryModal: React.FC<ManualTimeEntryModalProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity duration-200 ${blurClass} ${
+      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity duration-200 rounded-lg ${blurClass} ${
         isAnimating ? 'opacity-100' : 'opacity-0'
       }`}
       onClick={onClose}

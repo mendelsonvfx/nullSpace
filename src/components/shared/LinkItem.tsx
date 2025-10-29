@@ -84,11 +84,11 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId }: Link
     <div className="flex items-center gap-2 group bg-zinc-900 hover:bg-zinc-800 rounded-lg px-3 py-2 transition-colors">
       <button
         onClick={handleOpenUrl}
-        className="flex items-center gap-2 flex-1 text-left"
+        className="flex items-center gap-2 flex-1 text-left min-w-0"
         title={link.url}
       >
         <LinkIcon className="w-4 h-4 text-accent flex-shrink-0" />
-        <span className="text-sm text-zinc-300 truncate">{link.title}</span>
+        <span className="text-sm text-zinc-300 truncate block">{link.title}</span>
       </button>
       <button
         onClick={() => setIsEditing(true)}

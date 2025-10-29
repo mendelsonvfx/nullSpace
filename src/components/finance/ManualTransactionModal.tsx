@@ -8,6 +8,7 @@ interface ManualTransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
   projects: Project[];
+  otherProjectTransactions: any[];
   onAddTransaction: (
     projectId: string,
     amount: number,
@@ -22,6 +23,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
   isOpen,
   onClose,
   projects,
+  otherProjectTransactions,
   onAddTransaction,
   onRemoveTransaction
 }) => {
@@ -118,10 +120,11 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
     setMouseDownOnBackdrop(false);
   };
 
-  // Get manual transactions from all active projects
+  // Get manual transactions from all active projects + Other Project
   const manualTransactions = useMemo(() => {
-    const allTransactions: Array<{ transaction: any; project: Project }> = [];
+    const allTransactions: Array<{ transaction: any; project: Project | { id: string; name: string } }> = [];
 
+    // Add transactions from active projects
     projects
       .filter(p => p.status === 'active' && p.transactions && p.transactions.length > 0)
       .forEach(project => {
@@ -130,11 +133,19 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
         });
       });
 
+    // Add "Other Project" transactions
+    otherProjectTransactions.forEach(transaction => {
+      allTransactions.push({
+        transaction,
+        project: { id: 'other', name: 'Other Project' }
+      });
+    });
+
     // Sort by creation date (newest first)
     return allTransactions.sort((a, b) =>
       new Date(b.transaction.createdAt).getTime() - new Date(a.transaction.createdAt).getTime()
     );
-  }, [projects]);
+  }, [projects, otherProjectTransactions]);
 
   const blurClass = useModalBlur();
 
@@ -143,13 +154,12 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
   const currencySymbols: Record<string, string> = {
     USD: '$',
     EUR: '€',
-    RUB: '₽',
-    GBP: '£'
+    RUB: '₽'
   };
 
   return (
     <div
-      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity duration-200 ${blurClass} ${
+      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity duration-200 rounded-lg ${blurClass} ${
         isAnimating ? 'opacity-100' : 'opacity-0'
       }`}
       onMouseDown={handleBackdropMouseDown}
@@ -189,7 +199,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                   value={selectedProjectId}
                   onChange={(e) => setSelectedProjectId(e.target.value)}
                 >
-                  <option value="">Select a project</option>
+                  <option value="" disabled hidden>Select a Project</option>
                   {projects
                     .filter(project => project.status === 'active')
                     .map(project => (
@@ -197,6 +207,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                         {project.name}
                       </option>
                     ))}
+                  <option value="other">— Other Project —</option>
                 </select>
               </div>
 
@@ -237,7 +248,6 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                     <option value="USD">USD</option>
                     <option value="EUR">EUR</option>
                     <option value="RUB">RUB</option>
-                    <option value="GBP">GBP</option>
                   </select>
                 </div>
               </div>

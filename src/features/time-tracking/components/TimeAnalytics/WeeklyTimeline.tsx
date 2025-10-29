@@ -53,9 +53,14 @@ export const WeeklyTimeline: React.FC<WeeklyTimelineProps> = ({ weeklyData }) =>
                 className="relative flex items-end justify-center"
                 style={{ height: '240px', width: '100%' }}
               >
+                {/* Background bar (подложка) */}
+                <div
+                  className="absolute bottom-0 w-8 h-full rounded-t-lg bg-zinc-800 opacity-20"
+                />
+
                 {/* Bar element */}
                 <div
-                  className={`w-8 rounded-t-lg transition-all duration-300 relative ${
+                  className={`w-8 rounded-t-lg transition-all duration-300 relative z-10 ${
                     week.minutes === 0
                       ? 'bg-zinc-800'
                       : isCurrentWeek

@@ -199,7 +199,7 @@ export function CategoryTabs({
           <button
             onClick={() => setIsAdding(true)}
             className="w-full flex items-center justify-center bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors duration-200 border-t border-zinc-800"
-            style={{ height: '73px' }}
+            style={{ height: '93px' }}
             title="Add category"
           >
             <Plus size={14} className="text-zinc-500" />
@@ -212,7 +212,7 @@ export function CategoryTabs({
         <div
           className="absolute left-0 right-0 pointer-events-none transition-opacity duration-300"
           style={{
-            bottom: onAddCategory ? '73px' : '0',
+            bottom: onAddCategory ? '93px' : '0',
             height: '60px',
             background: 'linear-gradient(to top, rgba(0, 0, 0, 0.3), transparent)',
             zIndex: 10

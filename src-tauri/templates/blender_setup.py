@@ -27,6 +27,13 @@ def setup_blender_project(blend_file_path, project_root):
     bpy.context.scene.render.filepath = "//Render/Preview/v001/"
     print("✓ Render output path set to: //Render/Preview/v001/")
 
+    # === FRAME RANGE ===
+    # Set frame range to 1001-1250
+    bpy.context.scene.frame_start = 1001
+    bpy.context.scene.frame_end = 1250
+    bpy.context.scene.frame_current = 1001
+    print("✓ Frame range set to: 1001-1250")
+
     # === FILE OUTPUT SETTINGS ===
     # Enable relative paths by default
     bpy.context.preferences.filepaths.use_relative_paths = True
@@ -45,9 +52,10 @@ def setup_blender_project(blend_file_path, project_root):
     print(f"✓ Project saved: {blend_file_path}")
 
     print("\n=== Blender Project Setup Complete ===")
-    print("Configured paths:")
-    print(f"  - Render:     //Render/Preview/v001/")
-    print(f"  - Cache:      //Cache/")
+    print("Configured settings:")
+    print(f"  - Render:       //Render/Preview/v001/")
+    print(f"  - Cache:        //Cache/")
+    print(f"  - Frame Range:  1001-1250")
     print("All other settings (render format, fps, units, etc.) remain default")
     print("=====================================\n")
 

@@ -2,12 +2,13 @@
 import { useProjectStore } from '../store/projectStore';
 import { useState, useEffect, useRef } from 'react';
 import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw } from 'lucide-react';
-import { selectProjectDirectory, selectExecutable, getSoftwarePaths } from '../utils/tauri';
+import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../utils/tauri';
 import type { SoftwareName } from '../types/project';
 import { useThumbnailCache } from '../hooks/useThumbnailCache';
 import { getVersion } from '@tauri-apps/api/app';
 import { useModalBlur } from '../hooks/useModalBlur';
 import { clearAllTimeTrackingData } from '../utils/clearAllData';
+import { hslStringToHex } from '../utils/colorUtils';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -19,7 +20,6 @@ interface SoftwarePathConfig {
   name: SoftwareName;
   displayName: string;
   path: string;
-  isValid: boolean;
 }
 
 const DEFAULT_SOFTWARE: Array<{ name: SoftwareName; displayName: string }> = [
@@ -35,6 +35,12 @@ const DEFAULT_SOFTWARE: Array<{ name: SoftwareName; displayName: string }> = [
   // { name: 'zbrush', displayName: 'ZBrush' },
   // { name: 'marmoset', displayName: 'Marmoset Toolbag' },
 ];
+
+// Helper function to check if path is a valid executable
+function isValidExecutablePath(path: string): boolean {
+  if (!path) return false;
+  return path.toLowerCase().endsWith('.exe');
+}
 
 export function SettingsPanel({ onClose, onDeleteClient, onDeleteCategory }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<'general' | 'software' | 'appearance' | 'clients' | 'finance' | 'categories'>('general');
@@ -506,8 +512,7 @@ function SoftwareSettings({
 
     const initialPaths = DEFAULT_SOFTWARE.map(sw => ({
       ...sw,
-      path: pathsMap[sw.name] || '',
-      isValid: !!pathsMap[sw.name]
+      path: pathsMap[sw.name] || ''
     }));
 
     setSoftwarePaths(initialPaths);
@@ -518,15 +523,34 @@ function SoftwareSettings({
     if (selected) {
       setSoftwarePaths(prev => {
         const updated = [...prev];
-        updated[index] = { ...updated[index], path: selected, isValid: true };
+        updated[index] = { ...updated[index], path: selected };
         return updated;
       });
     }
   };
 
+  const [isDetecting, setIsDetecting] = useState(false);
+
   const handleAutoDetect = async () => {
-    // Здесь будет логика автоопределения установленного софта
-    console.log('Auto-detecting software...');
+    setIsDetecting(true);
+    try {
+      const detected = await detectInstalledSoftware();
+      console.log('Detected software:', detected);
+
+      // Update software paths with detected ones
+      setSoftwarePaths(prev => {
+        return prev.map(sw => {
+          if (detected[sw.name]) {
+            return { ...sw, path: detected[sw.name] };
+          }
+          return sw;
+        });
+      });
+    } catch (error) {
+      console.error('Failed to auto-detect software:', error);
+    } finally {
+      setIsDetecting(false);
+    }
   };
 
   return (
@@ -537,9 +561,11 @@ function SoftwareSettings({
         </p>
         <button
           onClick={handleAutoDetect}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium animate-button"
+          disabled={isDetecting}
+          className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:bg-accent/50 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-medium animate-button flex items-center gap-2"
         >
-          Auto-Detect
+          {isDetecting && <RefreshCw className="w-4 h-4 animate-spin" />}
+          {isDetecting ? 'Detecting...' : 'Auto-Detect'}
         </button>
       </div>
 
@@ -549,12 +575,8 @@ function SoftwareSettings({
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <h4 className="font-medium">{sw.displayName}</h4>
-                {sw.path && (
-                  sw.isValid ? (
-                    <Check className="w-4 h-4 text-green-500" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-yellow-500" />
-                  )
+                {isValidExecutablePath(sw.path) && (
+                  <Check className="w-4 h-4 text-green-500" />
                 )}
               </div>
             </div>
@@ -564,9 +586,15 @@ function SoftwareSettings({
                 type="text"
                 value={sw.path}
                 onChange={(e) => {
+                  // Remove quotes from path if present
+                  let cleanPath = e.target.value.trim();
+                  if ((cleanPath.startsWith('"') && cleanPath.endsWith('"')) ||
+                      (cleanPath.startsWith("'") && cleanPath.endsWith("'"))) {
+                    cleanPath = cleanPath.slice(1, -1);
+                  }
                   setSoftwarePaths(prev => {
                     const updated = [...prev];
-                    updated[index] = { ...updated[index], path: e.target.value };
+                    updated[index] = { ...updated[index], path: cleanPath };
                     return updated;
                   });
                 }}
@@ -580,30 +608,6 @@ function SoftwareSettings({
                 <FolderOpen className="w-4 h-4" />
               </button>
             </div>
-
-            {/* Suggested paths */}
-            {!sw.path && (
-              <div className="mt-2">
-                <p className="text-xs text-zinc-500 mb-1">Common locations:</p>
-                <div className="flex flex-wrap gap-1">
-                  {getSoftwarePaths(sw.name).slice(0, 2).map((path, i) => (
-                    <button
-                      key={i}
-                      onClick={() => {
-                        setSoftwarePaths(prev => {
-                          const updated = [...prev];
-                          updated[index] = { ...updated[index], path, isValid: true };
-                          return updated;
-                        });
-                      }}
-                      className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs transition-colors"
-                    >
-                      {path}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         ))}
       </div>
@@ -1033,56 +1037,75 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
             </div>
 
             {editingClient === client.id && (
-              <div className="mt-3 pt-3 border-t border-zinc-700 space-y-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1.5">Color</label>
-                  <input
-                    type="color"
-                    value={client.color || '#ffffff'}
-                    onChange={(e) => updateClient(client.id, { color: e.target.value })}
-                    className="w-full h-8 bg-zinc-900 border border-zinc-700 rounded-lg cursor-pointer"
-                  />
+              <div className="mt-3 space-y-4">
+                {/* Color Picker Section */}
+                <div className="relative overflow-hidden rounded-lg" style={{ backgroundColor: client.color || '#ffffff' }}>
+                  <div className="absolute inset-0 bg-gradient-to-br from-black/20 to-transparent pointer-events-none" />
+                  <div className="relative p-3">
+                    <div className="relative">
+                      <input
+                        type="color"
+                        value={hslStringToHex(client.color || '#ffffff')}
+                        onChange={(e) => updateClient(client.id, { color: e.target.value })}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      />
+                      <div className="bg-white/10 backdrop-blur-sm border border-white/30 rounded-md px-3 py-2 cursor-pointer hover:bg-white/20 transition-all flex items-center justify-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-white/90 shadow-lg" />
+                        <span className="text-xs font-medium text-white drop-shadow">
+                          Click to change color
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5">Description</label>
-                  <textarea
-                    value={client.description || ''}
-                    onChange={(e) => updateClient(client.id, { description: e.target.value })}
-                    placeholder="Brief description..."
-                    rows={2}
-                    className="w-full text-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:border-accent resize-none"
-                  />
+
+                {/* Form Fields */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-zinc-400">Description</label>
+                    <textarea
+                      value={client.description || ''}
+                      onChange={(e) => updateClient(client.id, { description: e.target.value })}
+                      placeholder="Brief description..."
+                      rows={2}
+                      className="w-full text-sm bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2 focus:outline-none focus:border-accent focus:bg-zinc-900 resize-none transition-all placeholder:text-zinc-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5 text-zinc-400">Website</label>
+                    <input
+                      type="url"
+                      value={client.website || ''}
+                      onChange={(e) => updateClient(client.id, { website: e.target.value })}
+                      placeholder="https://..."
+                      className="w-full text-sm bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2 focus:outline-none focus:border-accent focus:bg-zinc-900 transition-all placeholder:text-zinc-600"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5 text-zinc-400">Telegram</label>
+                      <input
+                        type="text"
+                        value={client.telegram || ''}
+                        onChange={(e) => updateClient(client.id, { telegram: e.target.value })}
+                        placeholder="@username"
+                        className="w-full text-sm bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2 focus:outline-none focus:border-accent focus:bg-zinc-900 transition-all placeholder:text-zinc-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5 text-zinc-400">Instagram</label>
+                      <input
+                        type="text"
+                        value={client.instagram || ''}
+                        onChange={(e) => updateClient(client.id, { instagram: e.target.value })}
+                        placeholder="@username"
+                        className="w-full text-sm bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2 focus:outline-none focus:border-accent focus:bg-zinc-900 transition-all placeholder:text-zinc-600"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5">Website</label>
-                  <input
-                    type="url"
-                    value={client.website || ''}
-                    onChange={(e) => updateClient(client.id, { website: e.target.value })}
-                    placeholder="https://..."
-                    className="w-full text-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:border-accent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5">Telegram</label>
-                  <input
-                    type="text"
-                    value={client.telegram || ''}
-                    onChange={(e) => updateClient(client.id, { telegram: e.target.value })}
-                    placeholder="@username"
-                    className="w-full text-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:border-accent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5">Instagram</label>
-                  <input
-                    type="text"
-                    value={client.instagram || ''}
-                    onChange={(e) => updateClient(client.id, { instagram: e.target.value })}
-                    placeholder="@username"
-                    className="w-full text-sm bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 focus:outline-none focus:border-accent"
-                  />
-                </div>
+
+                {/* Delete Button */}
                 <button
                   onClick={(e) => {
                     e.preventDefault();
@@ -1104,7 +1127,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
                       }
                     }
                   }}
-                  className="w-full px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium"
+                  className="w-full px-4 py-2.5 text-sm bg-red-600/90 hover:bg-red-600 rounded-lg transition-all font-medium shadow-lg shadow-red-900/20 hover:shadow-red-900/40"
                 >
                   Delete Client
                 </button>
@@ -1266,6 +1289,14 @@ function FinanceSettings() {
   const [isLoadingRates, setIsLoadingRates] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [editingRate, setEditingRate] = useState<{ from: string; to: string } | null>(null);
+  const [revenueThresholds, setRevenueThresholds] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('revenueNormalizationThresholds');
+    return saved ? JSON.parse(saved) : {
+      RUB: 250000,
+      USD: 2500,
+      EUR: 2500
+    };
+  });
 
   const currencySymbols: Record<string, string> = {
     USD: '$',
@@ -1528,6 +1559,34 @@ function FinanceSettings() {
           )}
         </div>
       )}
+
+      {/* Revenue Normalization Threshold */}
+      <div className="border-t border-zinc-800 pt-6">
+        <label className="block text-sm font-medium mb-2">Revenue Normalization Threshold</label>
+        <p className="text-sm text-zinc-400 mb-4">
+          Set minimum threshold for revenue chart normalization. Charts will scale to at least this value.
+        </p>
+
+        <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-4 py-2.5">
+          <span className="text-sm">
+            {baseCurrency} ({currencySymbols[baseCurrency]})
+          </span>
+          <input
+            type="number"
+            min="0"
+            step={baseCurrency === 'RUB' ? '10000' : '100'}
+            value={revenueThresholds[baseCurrency]}
+            onChange={(e) => {
+              const newValue = parseInt(e.target.value) || 0;
+              const updated = { ...revenueThresholds, [baseCurrency]: newValue };
+              setRevenueThresholds(updated);
+              localStorage.setItem('revenueNormalizationThresholds', JSON.stringify(updated));
+              window.dispatchEvent(new Event('storage'));
+            }}
+            className="w-32 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent text-right"
+          />
+        </div>
+      </div>
     </div>
   );
 }

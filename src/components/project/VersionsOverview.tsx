@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { versionsCache } from '../../utils/versionsCache';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
+import { useContextMenuStore } from '../../store/contextMenuStore';
 import type { SoftwareName } from '../../types/project';
 
 interface ProjectVersion {
@@ -24,10 +25,15 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
   const [loading, setLoading] = useState(true);
   const [selectedSoftware, setSelectedSoftware] = useState<string>('all');
   const [showOnlyUnversioned, setShowOnlyUnversioned] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; version: ProjectVersion } | null>(null);
+  const [showShotSubmenu, setShowShotSubmenu] = useState(false);
+  const [submenuAction, setSubmenuAction] = useState<'move' | 'copy' | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadingTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const startSession = useTimeTrackingStore(state => state.startSession);
+  const { activeMenu, setActiveMenu } = useContextMenuStore();
 
   const loadVersions = async (skipCleanup = false, forceReload = false) => {
     // Clear any existing timer first
@@ -97,6 +103,11 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
 
   // Load all versions and start watcher when project changes
   useEffect(() => {
+    // Reset context menu when project changes
+    setContextMenu(null);
+    setShowShotSubmenu(false);
+    setSubmenuAction(null);
+
     loadVersions();
 
     // ✅ RE-ENABLED: File watcher now has proper shutdown mechanism
@@ -154,11 +165,41 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
     return () => window.removeEventListener('version-created', handleVersionUpdate);
   }, [project.path]);
 
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+        setShowShotSubmenu(false);
+        setSubmenuAction(null);
+        if (activeMenu === 'version-context-menu') {
+          setActiveMenu(null);
+        }
+      }
+    };
+
+    if (contextMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [contextMenu, activeMenu, setActiveMenu]);
+
+  // Close menu when another menu opens
+  useEffect(() => {
+    if (activeMenu && activeMenu !== 'version-context-menu') {
+      setContextMenu(null);
+      setShowShotSubmenu(false);
+      setSubmenuAction(null);
+    }
+  }, [activeMenu]);
+
   // Filter versions by shot and sort: versioned files first (by date), then non-versioned files (by date)
   const versions = useMemo(() => {
     let filtered = currentShot
       ? allVersions.filter(v => {
-          const shotPrefix = `_Shot${currentShot.number.toString().padStart(3, '0')}_`;
+          const shotPrefix = currentShot.number === 0
+            ? '_main_'
+            : `_Shot${currentShot.number.toString().padStart(3, '0')}_`;
           // Include file if: (1) it has the shot prefix, OR (2) it's unversioned (unversioned files show in all shots)
           return v.name.includes(shotPrefix) || !v.is_versioned;
         })
@@ -245,10 +286,77 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
+    if (e.cancelable) {
+      e.preventDefault();
+    }
     e.stopPropagation();
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollLeft += e.deltaY;
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, version: ProjectVersion) => {
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+    e.stopPropagation();
+
+    // Only show context menu for versioned files
+    if (!version.is_versioned) {
+      return;
+    }
+
+    setContextMenu({ x: e.clientX, y: e.clientY, version });
+    setShowShotSubmenu(false);
+    setSubmenuAction(null);
+    setActiveMenu('version-context-menu');
+  };
+
+  const handleMoveToShot = async (shotNumber: number) => {
+    if (!contextMenu) return;
+
+    try {
+      await invoke('move_version_to_shot', {
+        versionPath: contextMenu.version.path,
+        projectPath: project.path,
+        targetShotNumber: shotNumber
+      });
+
+      // Reload versions after moving
+      versionsCache.invalidate(project.path);
+      await loadVersions(false, true);
+
+      setContextMenu(null);
+      setShowShotSubmenu(false);
+      setSubmenuAction(null);
+      setActiveMenu(null);
+    } catch (error) {
+      console.error('Failed to move version to shot:', error);
+      alert(`Failed to move version: ${error}`);
+    }
+  };
+
+  const handleCopyToShot = async (shotNumber: number) => {
+    if (!contextMenu) return;
+
+    try {
+      await invoke('copy_version_to_shot', {
+        versionPath: contextMenu.version.path,
+        projectPath: project.path,
+        targetShotNumber: shotNumber
+      });
+
+      // Reload versions after copying
+      versionsCache.invalidate(project.path);
+      await loadVersions(false, true);
+
+      setContextMenu(null);
+      setShowShotSubmenu(false);
+      setSubmenuAction(null);
+      setActiveMenu(null);
+    } catch (error) {
+      console.error('Failed to copy version to shot:', error);
+      alert(`Failed to copy version: ${error}`);
     }
   };
 
@@ -295,7 +403,7 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
     return nameWithoutExt;
   };
 
-  // Get unique software list
+  // Get unique software list and sort alphabetically
   const uniqueSoftware = Array.from(
     new Set(versions.flatMap((v) => v.software))
   ).sort();
@@ -320,52 +428,54 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
 
       {/* Software Tabs */}
       {uniqueSoftware.length > 0 && (
-        <div className="flex gap-1 mb-3 overflow-x-auto pb-2">
-          <button
-            onClick={() => {
-              setSelectedSoftware('all');
-              setShowOnlyUnversioned(false);
-            }}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
-              selectedSoftware === 'all' && !showOnlyUnversioned
-                ? 'bg-accent text-white'
-                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-            }`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => {
-              setShowOnlyUnversioned(!showOnlyUnversioned);
-              setSelectedSoftware('all');
-            }}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
-              showOnlyUnversioned
-                ? 'bg-accent text-white'
-                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-            }`}
-          >
-            Other
-          </button>
-          {uniqueSoftware.map((software) => (
+        <div className="flex gap-2 mb-3">
+          <div className="flex gap-1 bg-zinc-800/50 rounded-lg p-1">
             <button
-              key={software}
               onClick={() => {
-                setSelectedSoftware(software);
+                setSelectedSoftware('all');
                 setShowOnlyUnversioned(false);
               }}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                selectedSoftware === software && !showOnlyUnversioned
-                  ? 'bg-accent text-white'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+              className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${
+                selectedSoftware === 'all' && !showOnlyUnversioned
+                  ? 'bg-zinc-700 text-white'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
-              <div className="w-4 h-4 flex items-center justify-center">
-                <SoftwareIcon name={software} />
-              </div>
-              {software}
+              All
             </button>
-          ))}
+            <button
+              onClick={() => {
+                setShowOnlyUnversioned(!showOnlyUnversioned);
+                setSelectedSoftware('all');
+              }}
+              className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${
+                showOnlyUnversioned
+                  ? 'bg-zinc-700 text-white'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Other
+            </button>
+          </div>
+          <div className="flex gap-1 bg-zinc-800/50 rounded-lg p-1 overflow-x-auto">
+            {uniqueSoftware.map((software) => (
+              <button
+                key={software}
+                onClick={() => {
+                  setSelectedSoftware(software);
+                  setShowOnlyUnversioned(false);
+                }}
+                className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                  selectedSoftware === software && !showOnlyUnversioned
+                    ? 'bg-zinc-700 text-white'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <SoftwareIcon name={software} className="w-3.5 h-3.5" />
+                {software}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -382,6 +492,7 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
                 key={version.path}
                 className="flex-shrink-0 w-32 cursor-pointer hover:bg-zinc-800 rounded-lg p-2 transition-colors select-none"
                 onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
+                onContextMenu={(e) => handleContextMenu(e, version)}
                 title="Double-click to open"
               >
                 {/* Header with software icons */}
@@ -405,6 +516,83 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
           </div>
         )}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && project.shots && project.shots.length > 0 && (
+        <div
+          ref={contextMenuRef}
+          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-50 py-1 min-w-[180px] animate-context-menu"
+          style={{
+            top: (() => {
+              const menuHeight = contextMenuRef.current?.offsetHeight || 200;
+              const windowHeight = window.innerHeight;
+              const wouldOverflow = contextMenu.y + menuHeight > windowHeight;
+              return wouldOverflow ? windowHeight - menuHeight - 10 : contextMenu.y;
+            })(),
+            left: (() => {
+              const menuWidth = contextMenuRef.current?.offsetWidth || 180;
+              const windowWidth = window.innerWidth;
+              const wouldOverflow = contextMenu.x + menuWidth > windowWidth;
+              return wouldOverflow ? windowWidth - menuWidth - 10 : contextMenu.x;
+            })(),
+          }}
+        >
+          <button
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between"
+            onMouseEnter={() => {
+              setShowShotSubmenu(true);
+              setSubmenuAction('move');
+            }}
+          >
+            <span>Move to shot...</span>
+            <span className="text-zinc-500">›</span>
+          </button>
+          <button
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between"
+            onMouseEnter={() => {
+              setShowShotSubmenu(true);
+              setSubmenuAction('copy');
+            }}
+          >
+            <span>Copy to shot...</span>
+            <span className="text-zinc-500">›</span>
+          </button>
+
+          {/* Shot Submenu */}
+          {showShotSubmenu && submenuAction && project.shots && contextMenu && (
+            <div
+              className="absolute left-full top-0 ml-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[140px] animate-context-menu"
+              onMouseLeave={() => setShowShotSubmenu(false)}
+            >
+              {(() => {
+                // Extract current shot number from version filename
+                const shotMatch = contextMenu.version.name.match(/_Shot(\d{3})_/);
+                const mainMatch = contextMenu.version.name.includes('_main_');
+                const currentShotNumber = mainMatch ? 0 : (shotMatch ? parseInt(shotMatch[1]) : null);
+
+                // Filter out current shot
+                return project.shots
+                  .filter((shot: any) => shot.number !== currentShotNumber)
+                  .map((shot: any) => (
+                    <button
+                      key={shot.id}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700"
+                      onClick={() => {
+                        if (submenuAction === 'move') {
+                          handleMoveToShot(shot.number);
+                        } else {
+                          handleCopyToShot(shot.number);
+                        }
+                      }}
+                    >
+                      {shot.number === 0 ? 'Main' : `Shot ${shot.number.toString().padStart(3, '0')}`}
+                    </button>
+                  ));
+              })()}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

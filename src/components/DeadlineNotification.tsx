@@ -8,9 +8,14 @@ interface DeadlineNotificationProps {
 }
 
 export function DeadlineNotification({ projectName, daysRemaining, onClose }: DeadlineNotificationProps) {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    // Start animation after mount
+    requestAnimationFrame(() => {
+      setIsVisible(true);
+    });
+
     // Auto-hide after 10 seconds
     const timer = setTimeout(() => {
       handleClose();

@@ -20,7 +20,20 @@ export function darkenColor(hex: string, percent: number): string {
 }
 
 export const generateBrightColor = () => {
-  const hue = Math.floor(Math.random() * 360);
+  // Exclude brown/muddy colors (30-60 degrees range)
+  // Available ranges: 0-30 (red/pink), 60-360 (green to red)
+  const excludedStart = 30;
+  const excludedEnd = 60;
+  const totalAvailableRange = 360 - (excludedEnd - excludedStart); // 330 degrees
+
+  // Generate random value in available range
+  let hue = Math.floor(Math.random() * totalAvailableRange);
+
+  // If hue would fall in excluded range, shift it past the exclusion
+  if (hue >= excludedStart) {
+    hue += (excludedEnd - excludedStart);
+  }
+
   const saturation = 70 + Math.floor(Math.random() * 20); // 70-90%
   const lightness = 50 + Math.floor(Math.random() * 10);  // 50-60%
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
@@ -36,6 +49,30 @@ export function hslToHex(h: number, s: number, l: number): string {
     return Math.round(255 * color).toString(16).padStart(2, '0');
   };
   return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/**
+ * Convert HSL string to Hex string
+ * @param hslString - HSL color string (e.g., "hsl(180, 85%, 60%)")
+ * @returns Hex color string (e.g., "#14D4D4") or original string if not HSL
+ */
+export function hslStringToHex(hslString: string): string {
+  // If it's already a hex color, return as-is
+  if (hslString.startsWith('#')) {
+    return hslString;
+  }
+
+  // Parse HSL string: hsl(180, 85%, 60%) -> [180, 85, 60]
+  const match = hslString.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+  if (match) {
+    const h = parseInt(match[1]);
+    const s = parseInt(match[2]);
+    const l = parseInt(match[3]);
+    return hslToHex(h, s, l);
+  }
+
+  // If can't parse, return original
+  return hslString;
 }
 
 /**

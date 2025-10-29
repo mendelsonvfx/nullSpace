@@ -2178,6 +2178,7 @@ dependencies = [
  "notify",
  "notify-debouncer-mini",
  "parking_lot",
+ "regex",
  "reqwest",
  "scraper",
  "serde",
@@ -2188,6 +2189,7 @@ dependencies = [
  "url",
  "uuid",
  "windows 0.52.0",
+ "winreg 0.52.0",
 ]
 
 [[package]]

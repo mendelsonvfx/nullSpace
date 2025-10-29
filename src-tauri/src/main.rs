@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use tauri::Manager;
+use regex;
 
 // Global state for file watcher
 struct WatcherHandle {
@@ -224,6 +225,7 @@ fn get_folder_template(software: &str) -> Vec<FolderItem> {
                 subfolders: vec![
                     FolderItem::Simple("Exported".to_string()),
                     FolderItem::Simple("Imported".to_string()),
+                    FolderItem::Simple("Plates".to_string()),
                 ],
             },
             FolderItem::Nested {
@@ -242,17 +244,6 @@ fn get_folder_template(software: &str) -> Vec<FolderItem> {
                     FolderItem::Simple("Passes".to_string()),
                 ],
             },
-            FolderItem::Nested {
-                name: "Assets".to_string(),
-                subfolders: vec![
-                    FolderItem::Simple("Shaders".to_string()),
-                    FolderItem::Simple("Materials".to_string()),
-                    FolderItem::Simple("Models".to_string()),
-                    FolderItem::Simple("HDRI".to_string()),
-                    FolderItem::Simple("Presets".to_string()),
-                ],
-            },
-            FolderItem::Simple("Notes".to_string()),
         ],
         "houdini" => vec![
             FolderItem::Nested {
@@ -754,7 +745,11 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
     // Build base name with optional shot number
     let base_name = input.project_name.replace(" ", "");
     let base_name_with_shot = if let Some(shot_num) = input.shot_number {
-        format!("{}_Shot{:03}", base_name, shot_num)
+        if shot_num == 0 {
+            format!("{}_main", base_name)
+        } else {
+            format!("{}_Shot{:03}", base_name, shot_num)
+        }
     } else {
         base_name.clone()
     };
@@ -980,6 +975,67 @@ async fn open_in_explorer(path: String) -> Result<(), String> {
             .arg(&path)
             .spawn()
             .map_err(|e| format!("Failed to open file manager: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn reveal_in_explorer(path: String) -> Result<(), String> {
+    use std::path::Path;
+    let path_obj = Path::new(&path);
+
+    #[cfg(target_os = "windows")]
+    {
+        // Check if path is a directory or file
+        if path_obj.is_dir() {
+            // For directories, just open them directly
+            Command::new("explorer")
+                .arg(&path)
+                .spawn()
+                .map_err(|e| format!("Failed to open folder in explorer: {}", e))?;
+        } else {
+            // For files, use /select to highlight the file
+            Command::new("explorer")
+                .arg("/select,")
+                .arg(&path)
+                .spawn()
+                .map_err(|e| format!("Failed to reveal in explorer: {}", e))?;
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to reveal in finder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // For Linux, try to use the file manager's reveal functionality
+        // Different DEs have different commands, so we try common ones
+        let result = Command::new("dbus-send")
+            .arg("--session")
+            .arg("--dest=org.freedesktop.FileManager1")
+            .arg("--type=method_call")
+            .arg("/org/freedesktop/FileManager1")
+            .arg("org.freedesktop.FileManager1.ShowItems")
+            .arg(format!("array:string:file://{}", path))
+            .arg("string:")
+            .spawn();
+
+        if result.is_err() {
+            // Fallback to opening parent directory
+            let parent = path_obj.parent()
+                .ok_or_else(|| "Failed to get parent directory".to_string())?;
+            Command::new("xdg-open")
+                .arg(parent)
+                .spawn()
+                .map_err(|e| format!("Failed to open file manager: {}", e))?;
+        }
     }
 
     Ok(())
@@ -1336,6 +1392,134 @@ async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
 }
 
 #[tauri::command]
+async fn move_version_to_shot(
+    version_path: String,
+    _project_path: String,
+    target_shot_number: u32,
+) -> Result<String, String> {
+    let version_file = PathBuf::from(&version_path);
+
+    if !version_file.exists() {
+        return Err("Version file not found".to_string());
+    }
+
+    let file_name = version_file.file_name()
+        .ok_or("Invalid file name")?
+        .to_str()
+        .ok_or("Invalid file name encoding")?;
+
+    // Parse current shot number from filename
+    let shot_pattern = regex::Regex::new(r"_Shot(\d{3})_").unwrap();
+    let main_pattern = regex::Regex::new(r"_main_").unwrap();
+
+    // Generate new filename with target shot number
+    let new_file_name = if let Some(caps) = shot_pattern.captures(file_name) {
+        // Replace existing shot number
+        let current_shot = &caps[1];
+        let target_shot_str = if target_shot_number == 0 {
+            "main".to_string()
+        } else {
+            format!("Shot{:03}", target_shot_number)
+        };
+        file_name.replace(
+            &format!("_Shot{}_", current_shot),
+            &format!("_{}_", target_shot_str)
+        )
+    } else if main_pattern.is_match(file_name) {
+        // Replace main with shot number
+        let target_shot_str = if target_shot_number == 0 {
+            "main".to_string()
+        } else {
+            format!("Shot{:03}", target_shot_number)
+        };
+        file_name.replace("_main_", &format!("_{}_", target_shot_str))
+    } else {
+        // Add shot number if not present
+        let name_without_ext = file_name.rsplit_once('.').map(|(n, _)| n).unwrap_or(file_name);
+        let ext = version_file.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let target_shot_str = if target_shot_number == 0 {
+            "main".to_string()
+        } else {
+            format!("Shot{:03}", target_shot_number)
+        };
+        format!("{}_{}.{}", name_without_ext, target_shot_str, ext)
+    };
+
+    let parent_dir = version_file.parent().ok_or("No parent directory")?;
+    let new_path = parent_dir.join(&new_file_name);
+
+    // Move the file
+    fs::rename(&version_file, &new_path)
+        .map_err(|e| format!("Failed to move file: {}", e))?;
+
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn copy_version_to_shot(
+    version_path: String,
+    _project_path: String,
+    target_shot_number: u32,
+) -> Result<String, String> {
+    let version_file = PathBuf::from(&version_path);
+
+    if !version_file.exists() {
+        return Err("Version file not found".to_string());
+    }
+
+    let file_name = version_file.file_name()
+        .ok_or("Invalid file name")?
+        .to_str()
+        .ok_or("Invalid file name encoding")?;
+
+    // Parse current shot number from filename
+    let shot_pattern = regex::Regex::new(r"_Shot(\d{3})_").unwrap();
+    let main_pattern = regex::Regex::new(r"_main_").unwrap();
+
+    // Generate new filename with target shot number
+    let new_file_name = if let Some(caps) = shot_pattern.captures(file_name) {
+        // Replace existing shot number
+        let current_shot = &caps[1];
+        let target_shot_str = if target_shot_number == 0 {
+            "main".to_string()
+        } else {
+            format!("Shot{:03}", target_shot_number)
+        };
+        file_name.replace(
+            &format!("_Shot{}_", current_shot),
+            &format!("_{}_", target_shot_str)
+        )
+    } else if main_pattern.is_match(file_name) {
+        // Replace main with shot number
+        let target_shot_str = if target_shot_number == 0 {
+            "main".to_string()
+        } else {
+            format!("Shot{:03}", target_shot_number)
+        };
+        file_name.replace("_main_", &format!("_{}_", target_shot_str))
+    } else {
+        // Add shot number if not present
+        let name_without_ext = file_name.rsplit_once('.').map(|(n, _)| n).unwrap_or(file_name);
+        let ext = version_file.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let target_shot_str = if target_shot_number == 0 {
+            "main".to_string()
+        } else {
+            format!("Shot{:03}", target_shot_number)
+        };
+        format!("{}_{}.{}", name_without_ext, target_shot_str, ext)
+    };
+
+    let parent_dir = version_file.parent().ok_or("No parent directory")?;
+    let new_path = parent_dir.join(&new_file_name);
+
+    // Copy the file
+    fs::copy(&version_file, &new_path)
+        .map_err(|e| format!("Failed to copy file: {}", e))?;
+
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 async fn get_directory_size(path: String) -> Result<u64, String> {
     fn calculate_size(dir: &PathBuf) -> Result<u64, std::io::Error> {
         let mut total_size = 0u64;
@@ -1396,8 +1580,12 @@ async fn open_links_in_browser(links: Vec<Link>) -> Result<(), String> {
         // If no links provided, open default browser with empty page
         #[cfg(target_os = "windows")]
         {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+
             Command::new("cmd")
                 .args(&["/c", "start", "http://"])
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn()
                 .map_err(|e| format!("Failed to open browser: {}", e))?;
         }
@@ -1423,8 +1611,12 @@ async fn open_links_in_browser(links: Vec<Link>) -> Result<(), String> {
         for link in links {
             #[cfg(target_os = "windows")]
             {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+
                 Command::new("cmd")
                     .args(&["/c", "start", &link.url])
+                    .creation_flags(CREATE_NO_WINDOW)
                     .spawn()
                     .map_err(|e| format!("Failed to open URL {}: {}", link.url, e))?;
             }
@@ -1815,7 +2007,11 @@ fn read_feedback_full() -> Result<String, String> {
 // Helper function to find shot files matching a pattern
 fn find_shot_files(project_path: &PathBuf, project_name: &str, shot_number: u32) -> Result<Vec<PathBuf>, String> {
     let base_name = project_name.replace(" ", "");
-    let shot_pattern = format!("{}_Shot{:03}", base_name, shot_number);
+    let shot_pattern = if shot_number == 0 {
+        format!("{}_main", base_name)
+    } else {
+        format!("{}_Shot{:03}", base_name, shot_number)
+    };
     let mut found_files = Vec::new();
 
     println!("🔍 Looking for files with pattern: {}", shot_pattern);
@@ -1924,8 +2120,16 @@ async fn rename_shot_files(
     }
 
     let base_name = project_name.replace(" ", "");
-    let old_pattern = format!("{}_Shot{:03}", base_name, old_shot_number);
-    let new_pattern = format!("{}_Shot{:03}", base_name, new_shot_number);
+    let old_pattern = if old_shot_number == 0 {
+        format!("{}_main", base_name)
+    } else {
+        format!("{}_Shot{:03}", base_name, old_shot_number)
+    };
+    let new_pattern = if new_shot_number == 0 {
+        format!("{}_main", base_name)
+    } else {
+        format!("{}_Shot{:03}", base_name, new_shot_number)
+    };
 
     let mut renamed_count = 0u32;
 
@@ -1955,6 +2159,404 @@ async fn rename_shot_files(
     Ok(renamed_count)
 }
 
+#[tauri::command]
+async fn detect_software_paths() -> Result<std::collections::HashMap<String, String>, String> {
+    use std::collections::HashMap;
+
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::*;
+        use winreg::RegKey;
+
+        let mut detected_paths = HashMap::new();
+
+        // Helper function to check if path exists
+        fn path_exists(path: &str) -> bool {
+            std::path::Path::new(path).exists()
+        }
+
+        // 1. Detect Blender
+        // Check registry
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        if let Ok(blender_key) = hklm.open_subkey(r"SOFTWARE\BlenderFoundation") {
+            if let Ok(subkeys) = blender_key.enum_keys().collect::<Result<Vec<_>, _>>() {
+                for key_name in subkeys {
+                    if let Ok(version_key) = blender_key.open_subkey(&key_name) {
+                        if let Ok(install_dir) = version_key.get_value::<String, _>("InstallDir") {
+                            let blender_exe = format!("{}\\blender.exe", install_dir);
+                            if path_exists(&blender_exe) {
+                                detected_paths.insert("blender".to_string(), blender_exe);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check default paths for Blender
+        if !detected_paths.contains_key("blender") {
+            let default_blender_paths = vec![
+                r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
+                r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
+                r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
+                r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
+                r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
+            ];
+
+            for path in default_blender_paths {
+                if path_exists(path) {
+                    detected_paths.insert("blender".to_string(), path.to_string());
+                    break;
+                }
+            }
+        }
+
+        // 2. Detect Houdini
+        if let Ok(houdini_key) = hklm.open_subkey(r"SOFTWARE\Side Effects Software") {
+            if let Ok(subkeys) = houdini_key.enum_keys().collect::<Result<Vec<_>, _>>() {
+                for key_name in subkeys {
+                    if key_name.starts_with("Houdini") {
+                        if let Ok(version_key) = houdini_key.open_subkey(&key_name) {
+                            if let Ok(install_path) = version_key.get_value::<String, _>("InstallPath") {
+                                let houdini_exe = format!("{}\\bin\\houdinifx.exe", install_path);
+                                if path_exists(&houdini_exe) {
+                                    detected_paths.insert("houdini".to_string(), houdini_exe);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check default paths for Houdini
+        if !detected_paths.contains_key("houdini") {
+            let default_houdini_paths = vec![
+                r"C:\Program Files\Side Effects Software\Houdini 20.5.370\bin\houdinifx.exe",
+                r"C:\Program Files\Side Effects Software\Houdini 20.0.688\bin\houdinifx.exe",
+                r"C:\Program Files\Side Effects Software\Houdini 19.5.805\bin\houdinifx.exe",
+            ];
+
+            for path in default_houdini_paths {
+                if path_exists(path) {
+                    detected_paths.insert("houdini".to_string(), path.to_string());
+                    break;
+                }
+            }
+        }
+
+        // 3. Detect Adobe After Effects
+        if let Ok(adobe_key) = hklm.open_subkey(r"SOFTWARE\Adobe\After Effects") {
+            if let Ok(subkeys) = adobe_key.enum_keys().collect::<Result<Vec<_>, _>>() {
+                for key_name in subkeys {
+                    if let Ok(version_key) = adobe_key.open_subkey(&key_name) {
+                        if let Ok(install_path) = version_key.get_value::<String, _>("InstallPath") {
+                            let ae_exe = format!("{}\\AfterFX.exe", install_path);
+                            if path_exists(&ae_exe) {
+                                detected_paths.insert("after-effects".to_string(), ae_exe);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check default paths for After Effects
+        if !detected_paths.contains_key("after-effects") {
+            let default_ae_paths = vec![
+                r"C:\Program Files\Adobe\Adobe After Effects 2024\Support Files\AfterFX.exe",
+                r"C:\Program Files\Adobe\Adobe After Effects 2025\Support Files\AfterFX.exe",
+                r"C:\Program Files\Adobe\Adobe After Effects 2023\Support Files\AfterFX.exe",
+            ];
+
+            for path in default_ae_paths {
+                if path_exists(path) {
+                    detected_paths.insert("after-effects".to_string(), path.to_string());
+                    break;
+                }
+            }
+        }
+
+        // 4. Detect Adobe Photoshop
+        if let Ok(adobe_key) = hklm.open_subkey(r"SOFTWARE\Adobe\Photoshop") {
+            if let Ok(subkeys) = adobe_key.enum_keys().collect::<Result<Vec<_>, _>>() {
+                for key_name in subkeys {
+                    if let Ok(version_key) = adobe_key.open_subkey(&key_name) {
+                        if let Ok(install_path) = version_key.get_value::<String, _>("ApplicationPath") {
+                            if path_exists(&install_path) {
+                                detected_paths.insert("photoshop".to_string(), install_path);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check default paths for Photoshop
+        if !detected_paths.contains_key("photoshop") {
+            let default_ps_paths = vec![
+                r"C:\Program Files\Adobe\Adobe Photoshop 2024\Photoshop.exe",
+                r"C:\Program Files\Adobe\Adobe Photoshop 2025\Photoshop.exe",
+                r"C:\Program Files\Adobe\Adobe Photoshop 2023\Photoshop.exe",
+            ];
+
+            for path in default_ps_paths {
+                if path_exists(path) {
+                    detected_paths.insert("photoshop".to_string(), path.to_string());
+                    break;
+                }
+            }
+        }
+
+        Ok(detected_paths)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // For non-Windows platforms, return empty map for now
+        Ok(HashMap::new())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct OutputFile {
+    name: String,
+    path: String,
+    software: String,
+    render_type: String, // "preview" or "final"
+    created_at: u64,
+    size: u64,
+    is_sequence: bool,
+    frame_range: Option<String>, // e.g., "0001-0008"
+    frame_count: Option<u32>,
+}
+
+// Helper function to extract frame number from filename
+fn extract_frame_number(filename: &str) -> Option<(String, u32, String)> {
+    use regex::Regex;
+    // Match patterns like: name.0001.exr, name_0001.png, 0001.exr, etc.
+    let re = Regex::new(r"^(.*)[\._]?(\d{4,})\.([a-zA-Z0-9]+)$").ok()?;
+    if let Some(caps) = re.captures(filename) {
+        let prefix = caps.get(1).map_or("", |m| m.as_str()).to_string();
+        let frame_str = caps.get(2)?.as_str();
+        let frame_num = frame_str.parse::<u32>().ok()?;
+        let ext = caps.get(3)?.as_str().to_string();
+        return Some((prefix, frame_num, ext));
+    }
+    None
+}
+
+// Helper function to group image sequences
+fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
+    use std::collections::HashMap;
+
+    let mut sequences: HashMap<String, Vec<OutputFile>> = HashMap::new();
+    let mut standalone_files = Vec::new();
+
+    // Group files by prefix, extension, software, and render_type (to keep Preview and Final separate)
+    for file in files {
+        println!("Processing file: {} (path: {}, render_type: {})", file.name, file.path, file.render_type);
+        if let Some((prefix, frame_num, ext)) = extract_frame_number(&file.name) {
+            println!("  -> Detected as sequence: prefix='{}', frame={}, ext='{}'", prefix, frame_num, ext);
+            let key = format!("{}_{}_{}_{}",prefix, ext, file.software, file.render_type);
+            sequences.entry(key).or_insert_with(Vec::new).push(file);
+        } else {
+            println!("  -> Not a sequence, standalone file");
+            standalone_files.push(file);
+        }
+    }
+
+    println!("Found {} sequences and {} standalone files", sequences.len(), standalone_files.len());
+
+    let mut result = Vec::new();
+
+    // Process sequences
+    for (key, mut seq_files) in sequences {
+        if seq_files.len() > 1 {
+            // Sort by frame number
+            seq_files.sort_by(|a, b| {
+                let frame_a = extract_frame_number(&a.name).map(|(_, n, _)| n).unwrap_or(0);
+                let frame_b = extract_frame_number(&b.name).map(|(_, n, _)| n).unwrap_or(0);
+                frame_a.cmp(&frame_b)
+            });
+
+            let first = seq_files.first().unwrap();
+            let last = seq_files.last().unwrap();
+
+            let first_frame = extract_frame_number(&first.name).map(|(_, n, _)| n).unwrap_or(0);
+            let last_frame = extract_frame_number(&last.name).map(|(_, n, _)| n).unwrap_or(0);
+
+            // Get the directory path
+            let dir_path = std::path::Path::new(&first.path)
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Extract prefix and extension from key (format: prefix_ext_software_rendertype)
+            // Split from the right to get the components
+            let parts: Vec<&str> = key.splitn(4, '_').collect();
+            let prefix = parts.get(0).unwrap_or(&"");
+            let ext = parts.get(1).unwrap_or(&"");
+
+            // Create display name with frame range (only prefix + frame range + ext, no render_type)
+            let display_name = if prefix.is_empty() {
+                format!("{:04}-{:04}.{}", first_frame, last_frame, ext)
+            } else {
+                format!("{}.{:04}-{:04}.{}", prefix, first_frame, last_frame, ext)
+            };
+
+            // Sum up total size
+            let total_size: u64 = seq_files.iter().map(|f| f.size).sum();
+
+            result.push(OutputFile {
+                name: display_name,
+                path: dir_path,
+                software: first.software.clone(),
+                render_type: first.render_type.clone(),
+                created_at: first.created_at,
+                size: total_size,
+                is_sequence: true,
+                frame_range: Some(format!("{:04}-{:04}", first_frame, last_frame)),
+                frame_count: Some(seq_files.len() as u32),
+            });
+        } else if let Some(file) = seq_files.into_iter().next() {
+            // Single file, treat as standalone
+            standalone_files.push(file);
+        }
+    }
+
+    // Add standalone files
+    for file in standalone_files {
+        result.push(OutputFile {
+            name: file.name,
+            path: file.path,
+            software: file.software,
+            render_type: file.render_type,
+            created_at: file.created_at,
+            size: file.size,
+            is_sequence: false,
+            frame_range: None,
+            frame_count: None,
+        });
+    }
+
+    result
+}
+
+// Helper function to recursively scan directory for output files
+fn scan_output_dir_recursive(
+    dir: &PathBuf,
+    software: &str,
+    render_type: &str,
+    outputs: &mut Vec<OutputFile>,
+    depth: usize
+) {
+    // Prevent infinite recursion with depth limit
+    if depth > 10 {
+        return;
+    }
+
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if let Ok(metadata) = entry.metadata() {
+                let path = entry.path();
+
+                // Recursively scan subdirectories
+                if metadata.is_dir() {
+                    scan_output_dir_recursive(&path, software, render_type, outputs, depth + 1);
+                } else if metadata.is_file() {
+                    let file_name = entry.file_name().to_string_lossy().to_string();
+                    // Skip hidden files and system files
+                    if file_name.starts_with('.') || file_name.starts_with('~') {
+                        continue;
+                    }
+
+                    if let Ok(created) = metadata.created().or_else(|_| metadata.modified()) {
+                        if let Ok(duration) = created.duration_since(std::time::UNIX_EPOCH) {
+                            outputs.push(OutputFile {
+                                name: file_name,
+                                path: path.to_string_lossy().to_string(),
+                                software: software.to_lowercase().replace("aftereffects", "after-effects"),
+                                render_type: render_type.to_string(),
+                                created_at: duration.as_secs(),
+                                size: metadata.len(),
+                                is_sequence: false,
+                                frame_range: None,
+                                frame_count: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[tauri::command]
+async fn get_project_outputs(project_path: String) -> Result<Vec<OutputFile>, String> {
+    let project_dir = PathBuf::from(&project_path);
+    let mut outputs = Vec::new();
+
+    println!("Scanning for outputs in: {}", project_path);
+
+    // Define software folders to scan
+    let software_folders = vec![
+        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
+        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset", "Photoshop"
+    ];
+
+    // Scan each software folder for Render/Preview and Render/Final
+    for software in &software_folders {
+        let software_dir = project_dir.join(software);
+        if !software_dir.exists() {
+            continue;
+        }
+
+        // Check Render/Preview (recursively scan all subdirs)
+        let preview_dir = software_dir.join("Render").join("Preview");
+        if preview_dir.exists() {
+            println!("Scanning Preview dir: {:?}", preview_dir);
+            scan_output_dir_recursive(&preview_dir, software, "preview", &mut outputs, 0);
+        }
+
+        // Check Render/Final (recursively scan all subdirs)
+        let final_dir = software_dir.join("Render").join("Final");
+        if final_dir.exists() {
+            println!("Scanning Final dir: {:?}", final_dir);
+            scan_output_dir_recursive(&final_dir, software, "final", &mut outputs, 0);
+        }
+    }
+
+    // Also check for Output/Preview and Output/Final (for After Effects, recursively)
+    let output_dir = project_dir.join("AfterEffects").join("Output");
+    if output_dir.exists() {
+        // Preview
+        let preview_dir = output_dir.join("Preview");
+        if preview_dir.exists() {
+            scan_output_dir_recursive(&preview_dir, "AfterEffects", "preview", &mut outputs, 0);
+        }
+
+        // Final
+        let final_dir = output_dir.join("Final");
+        if final_dir.exists() {
+            scan_output_dir_recursive(&final_dir, "AfterEffects", "final", &mut outputs, 0);
+        }
+    }
+
+    println!("Found {} raw output files before grouping", outputs.len());
+
+    // Group image sequences
+    let grouped_outputs = group_sequences(outputs);
+
+    println!("After grouping: {} outputs", grouped_outputs.len());
+
+    Ok(grouped_outputs)
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -1964,12 +2566,15 @@ fn main() {
             delete_project,
             launch_software,
             open_in_explorer,
+            reveal_in_explorer,
             open_file,
             open_file_with_tracking,
             get_folder_structure,
             set_project_thumbnail,
             get_project_versions,
             cleanup_backup_files,
+            move_version_to_shot,
+            copy_version_to_shot,
             get_directory_size,
             open_url,
             open_links_in_browser,
@@ -1991,6 +2596,8 @@ fn main() {
             time_tracking::increment_software_stats,
             time_tracking::check_process_alive,
             time_tracking::get_focus_summary,
+            detect_software_paths,
+            get_project_outputs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

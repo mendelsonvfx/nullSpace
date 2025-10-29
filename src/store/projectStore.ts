@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, TimeEntry, SoftwareName } from '../types/project';
 import { thumbnailCache } from '../utils/thumbnailCache';
 import { useTimeStatsStore, useTimeTrackingStore } from '../features/time-tracking';
-import { generateProjectColor } from '../utils/colorUtils';
+import { generateProjectColor, generateBrightColor } from '../utils/colorUtils';
 
 interface ProjectStore {
   // State
@@ -60,6 +60,7 @@ interface ProjectStore {
   removeShot: (projectId: string, shotId: string) => void;
   renameShot: (projectId: string, shotId: string, newName: string) => void;
   setCurrentShot: (projectId: string, shotId: string | null) => void;
+  toggleShotCompleted: (projectId: string, shotId: string) => void;
   addShotNote: (projectId: string, shotId: string, content: string) => void;
   updateShotNote: (projectId: string, shotId: string, noteId: string, content: string) => void;
   deleteShotNote: (projectId: string, shotId: string, noteId: string) => void;
@@ -202,19 +203,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Generate random color for project
       project.color = generateProjectColor(project.id);
 
-      // If project has shots, automatically create Shot 001
+      // If project has shots, automatically create 'Main' shot
       if (project.hasShots) {
-        const shot001 = {
+        const mainShot = {
           id: crypto.randomUUID(),
-          number: 1,
-          name: 'Shot 001',
+          number: 0,
+          name: 'Main',
           notes: [],
           todos: [],
           browserTabs: [],
           links: []
         };
-        project.shots = [shot001];
-        project.currentShotId = shot001.id;
+        project.shots = [mainShot];
+        project.currentShotId = mainShot.id;
       }
 
       // Save the updated project with color (and Shot 001 if applicable)
@@ -222,6 +223,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       set(state => ({
         projects: [project, ...state.projects],
+        selectedProject: project,
         isLoading: false
       }));
     } catch (error) {
@@ -637,7 +639,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const newClient: Client = {
       id: client.id || crypto.randomUUID(),
       name: client.name,
-      color: client.color,
+      color: client.color || generateBrightColor(),
       description: client.description,
       website: client.website,
       telegram: client.telegram,
@@ -688,7 +690,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   addShot: (projectId: string, name?: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
-      const shotNumber = (project.shots?.length || 0) + 1;
+      // Count existing numbered shots (exclude 'main' shot which has number 0)
+      const numberedShots = (project.shots || []).filter(s => s.number > 0);
+      const shotNumber = numberedShots.length + 1;
       const newShot = {
         id: crypto.randomUUID(),
         number: shotNumber,
@@ -710,6 +714,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   removeShot: (projectId: string, shotId: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
+      // Prevent removing 'Main' shot
+      const shotToRemove = (project.shots || []).find(s => s.id === shotId);
+      if (shotToRemove?.name === 'Main') {
+        console.warn('Cannot remove Main shot');
+        return;
+      }
+
       const updated = {
         ...project,
         shots: (project.shots || []).filter(s => s.id !== shotId),
@@ -722,6 +733,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   renameShot: (projectId: string, shotId: string, newName: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
+      // Prevent renaming 'Main' shot
+      const shotToRename = (project.shots || []).find(s => s.id === shotId);
+      if (shotToRename?.name === 'Main') {
+        console.warn('Cannot rename Main shot');
+        return;
+      }
+
       const updated = {
         ...project,
         shots: (project.shots || []).map(s => {
@@ -742,6 +760,22 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
       const updated = { ...project, currentShotId: shotId || undefined };
+      get().updateProject(updated);
+    }
+  },
+
+  toggleShotCompleted: (projectId: string, shotId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s => {
+          if (s.id === shotId) {
+            return { ...s, completed: !s.completed };
+          }
+          return s;
+        })
+      };
       get().updateProject(updated);
     }
   },

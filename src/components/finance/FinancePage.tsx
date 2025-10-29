@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import * as React from 'react';
-import { Filter, Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Filter, Plus, ChevronDown, ChevronUp, TrendingUp, Check } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
+import { useContextMenuStore } from '../../store/contextMenuStore';
 import { ProjectBreakdownCard } from './ProjectBreakdownCard';
 import { FinanceProjectDetails } from './FinanceProjectDetails';
 import { PieChart } from '../shared';
 import { getCurrentRates, getManualRates, getRateMode, getCachedRatesSync } from '../../utils/exchangeRates';
+import { getThresholdForCurrency } from '../../utils/financeSettings';
 import { TimeAnalytics } from '../time';
 import { ManualTransactionModal } from './ManualTransactionModal';
 import { Currency } from '../../types/project';
@@ -24,6 +26,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   renderCountRef.current += 1;
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const timelineContainerRef = React.useRef<HTMLDivElement>(null);
+  const timelineContextMenuRef = React.useRef<HTMLDivElement>(null);
   const [timelineContainerWidth, setTimelineContainerWidth] = useState(1000);
 
   console.log('[FinancePage] RENDER START', {
@@ -75,14 +78,22 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   });
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'unpaid'>('all');
-  const [sortBy, setSortBy] = useState<'amount' | 'name' | 'client'>('amount');
+  const [sortBy, setSortBy] = useState<'amount' | 'name' | 'client' | 'date'>('date');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showManualTransactionModal, setShowManualTransactionModal] = useState(false);
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; amount: number } | null>(null);
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
+  const [otherProjectTransactions, setOtherProjectTransactions] = useState<any[]>(() => {
+    const saved = localStorage.getItem('otherProjectTransactions');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showScrollGradient, setShowScrollGradient] = useState(true);
+  const [showMinMaxTooltips, setShowMinMaxTooltips] = useState(false);
+  const [timelineContextMenu, setTimelineContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
   const { updateProject } = useProjectStore();
+  const { activeMenu, setActiveMenu } = useContextMenuStore();
   const timeTrackingEnabled = useTimeTrackingFeature();
 
   // Handle adding manual transaction
@@ -93,9 +104,6 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     currency: string,
     notes?: string
   ) => {
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return;
-
     // Create new transaction
     const newTransaction = {
       id: `transaction_${Date.now()}`,
@@ -105,6 +113,18 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
       notes,
       createdAt: new Date().toISOString()
     };
+
+    // Handle "Other Project" separately
+    if (projectId === 'other') {
+      const updatedTransactions = [...otherProjectTransactions, newTransaction];
+      setOtherProjectTransactions(updatedTransactions);
+      localStorage.setItem('otherProjectTransactions', JSON.stringify(updatedTransactions));
+      return;
+    }
+
+    // Handle regular project
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
 
     // Add transaction to project's transactions array
     const updatedProject = {
@@ -121,6 +141,15 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
   // Handle removing manual transaction
   const handleRemoveTransaction = async (projectId: string, transactionId: string) => {
+    // Handle "Other Project" separately
+    if (projectId === 'other') {
+      const updatedTransactions = otherProjectTransactions.filter(t => t.id !== transactionId);
+      setOtherProjectTransactions(updatedTransactions);
+      localStorage.setItem('otherProjectTransactions', JSON.stringify(updatedTransactions));
+      return;
+    }
+
+    // Handle regular project
     const project = projects.find(p => p.id === projectId);
     if (!project || !project.transactions) return;
 
@@ -187,6 +216,24 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     };
     loadRates();
   }, [baseCurrency]);
+
+  // Close filter menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showFilterMenu && !target.closest('.filter-menu-container')) {
+        setShowFilterMenu(false);
+      }
+    };
+
+    if (showFilterMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFilterMenu]);
 
   // Listen for storage changes
   useEffect(() => {
@@ -259,6 +306,28 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
 
+  // Close timeline context menu on click outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (timelineContextMenu) {
+        setTimelineContextMenu(null);
+        setActiveMenu(null);
+      }
+    };
+
+    if (timelineContextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [timelineContextMenu, setActiveMenu]);
+
+  // Close timeline context menu when other menus open
+  useEffect(() => {
+    if (activeMenu && activeMenu !== 'timeline' && timelineContextMenu) {
+      setTimelineContextMenu(null);
+    }
+  }, [activeMenu, timelineContextMenu]);
+
   const currencySymbols: Record<string, string> = {
     'USD': '$',
     'RUB': '₽',
@@ -317,6 +386,18 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     }
   });
 
+  // Add "Other Project" transactions to total revenue
+  otherProjectTransactions.forEach(transaction => {
+    const currency = transaction.currency || 'USD';
+
+    if (convertToBaseCurrency) {
+      const convertedAmount = convertCurrency(transaction.amount, currency, baseCurrency);
+      totalRevenue[baseCurrency] = (totalRevenue[baseCurrency] || 0) + convertedAmount;
+    } else {
+      totalRevenue[currency] = (totalRevenue[currency] || 0) + transaction.amount;
+    }
+  });
+
   // Подсчет ожидающих доходов (неоплаченные проекты)
   const pendingRevenue: Record<string, number> = {};
   const pendingProjects: any[] = [];
@@ -358,17 +439,34 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   // Simple calculations without useMemo - computed on every render (as before refactoring)
   const { clients } = useProjectStore();
 
-  // Sorted/filtered projects for full list
-  const allProjects = [...paidProjects, ...pendingProjects];
+  // Sorted/filtered projects for full list + Other Project transactions
+  const otherProjectItems = otherProjectTransactions.map((transaction: any) => ({
+    id: transaction.id,
+    name: 'Other Project',
+    cost: transaction.amount,
+    displayAmount: transaction.amount,
+    currency: transaction.currency || 'USD',
+    paymentStatus: 'paid',
+    client: '',
+    isOtherProject: true,
+    date: transaction.date,
+    completedAt: transaction.date
+  }));
+
+  const allProjects = [...paidProjects, ...pendingProjects, ...otherProjectItems];
   let filtered = allProjects;
   if (filterStatus === 'paid') {
-    filtered = paidProjects;
+    filtered = [...paidProjects, ...otherProjectItems];
   } else if (filterStatus === 'unpaid') {
     filtered = pendingProjects;
   }
   const sortedFilteredProjects = [...filtered].sort((a, b) => {
     if (sortBy === 'amount') {
       return ((b.displayAmount || b.cost) || 0) - ((a.displayAmount || a.cost) || 0);
+    } else if (sortBy === 'date') {
+      const dateA = new Date(a.completedAt || a.createdAt || 0).getTime();
+      const dateB = new Date(b.completedAt || b.createdAt || 0).getTime();
+      return dateB - dateA; // Newest first
     } else if (sortBy === 'client') {
       return (a.client || '').localeCompare(b.client || '');
     } else {
@@ -395,33 +493,57 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const statistics = { totalPaid, displayCurrency, avgValue, dailyRate };
 
   // Timeline data - use completedAt (when payment was marked as "paid"), fallback to createdAt for old projects
-  const projectsWithDates = paidProjects
-    .filter((p: any) => p.completedAt || p.createdAt)  // Use completedAt or fallback to createdAt
-    .map((project: any) => {
-      const originalCurrency = project.currency || 'USD';
-      const originalAmount = project.displayAmount || project.cost || 0;
+  const projectsWithDates = [
+    ...paidProjects
+      .filter((p: any) => p.completedAt || p.createdAt)  // Use completedAt or fallback to createdAt
+      .map((project: any) => {
+        const originalCurrency = project.currency || 'USD';
+        const originalAmount = project.displayAmount || project.cost || 0;
+        const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
+          ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
+          : originalAmount;
+        return {
+          date: new Date(project.completedAt || project.createdAt),  // Use completedAt, fallback to createdAt
+          amount: displayAmount,
+          name: project.name
+        };
+      }),
+    // Add "Other Project" transactions
+    ...otherProjectTransactions.map((transaction: any) => {
+      const originalCurrency = transaction.currency || 'USD';
       const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
-        ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
-        : originalAmount;
+        ? convertCurrency(transaction.amount, originalCurrency, baseCurrency)
+        : transaction.amount;
       return {
-        date: new Date(project.completedAt || project.createdAt),  // Use completedAt, fallback to createdAt
+        date: new Date(transaction.date),
         amount: displayAmount,
-        name: project.name
+        name: 'Other Project'
       };
     })
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
   let timelineData = null;
   if (projectsWithDates.length > 0) {
+    // Group projects by date (same day) and sum their amounts
+    const groupedByDate = projectsWithDates.reduce((acc, item) => {
+      const dateKey = item.date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+      if (!acc[dateKey]) {
+        acc[dateKey] = { date: dateKey, amount: 0 };
+      }
+      acc[dateKey].amount += item.amount;
+      return acc;
+    }, {} as Record<string, { date: string; amount: number }>);
+
+    // Convert to array and calculate cumulative revenue
     let cumulativeRevenue = 0;
-    const cumulativeData = projectsWithDates.map((item) => {
+    const cumulativeData = Object.values(groupedByDate).map((item) => {
       cumulativeRevenue += item.amount;
       return {
-        date: item.date.toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        }),
+        date: item.date,
         revenue: cumulativeRevenue
       };
     });
@@ -623,14 +745,14 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
               <div className="relative">
                 <button
                   onClick={() => setShowAllProjects(!showAllProjects)}
-                  className={`w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 font-medium cursor-pointer relative z-20 flex items-center justify-center gap-2 transition-all duration-150 ${
-                    showAllProjects ? 'rounded-t-lg' : 'rounded-lg delay-150'
+                  className={`w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 font-medium cursor-pointer relative z-20 flex items-center justify-center gap-2 ${
+                    showAllProjects ? 'rounded-t-lg' : 'rounded-lg transition-all duration-150 delay-150'
                   }`}
                   style={{
                     transitionProperty: 'background-color, border-radius'
                   }}
                 >
-                  <span>All Payments</span>
+                  <span>Statement</span>
                   {showAllProjects ? (
                     <ChevronUp className="w-4 h-4 text-zinc-400" />
                   ) : (
@@ -688,24 +810,23 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                       </button>
                     </div>
 
-                    <div className="flex gap-2 ml-auto relative">
+                    <div className="flex gap-2 ml-auto relative filter-menu-container">
                       <button
                         onClick={() => setShowFilterMenu(!showFilterMenu)}
                         className="px-3 py-1.5 text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-md transition-all flex items-center gap-2 font-medium"
                       >
                         <Filter className="w-4 h-4" />
-                        <span>Sort</span>
+                        <span>Sort by: {sortBy === 'amount' ? 'Cost' : sortBy === 'name' ? 'Name' : sortBy === 'client' ? 'Client' : 'Date'}</span>
                       </button>
 
                       {showFilterMenu && (
-                        <div className="absolute top-full mt-2 right-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 z-50 min-w-[140px]">
-                          <div className="px-3 py-2 text-xs text-zinc-500 font-semibold uppercase tracking-wide">Sort by</div>
+                        <div className="absolute top-full mt-2 right-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-0 z-50 min-w-[140px] animate-modal">
                           <button
                             onClick={() => {
                               setSortBy('amount');
                               setShowFilterMenu(false);
                             }}
-                            className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                            className={`w-full px-3 py-2 text-left text-sm transition-colors rounded-t-lg ${
                               sortBy === 'amount' ? 'bg-accent text-white' : 'text-zinc-300 hover:bg-zinc-700'
                             }`}
                           >
@@ -733,18 +854,43 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                           >
                             Client
                           </button>
+                          <button
+                            onClick={() => {
+                              setSortBy('date');
+                              setShowFilterMenu(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm transition-colors rounded-b-lg ${
+                              sortBy === 'date' ? 'bg-accent text-white' : 'text-zinc-300 hover:bg-zinc-700'
+                            }`}
+                          >
+                            Date
+                          </button>
                         </div>
                       )}
                     </div>
                   </div>
 
                   {/* Список всех проектов */}
-                  <div className="space-y-1.5 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="relative">
+                    <div
+                      className="space-y-1.5 max-h-96 overflow-y-auto pr-2 custom-scrollbar"
+                      onScroll={(e) => {
+                        const target = e.currentTarget;
+                        const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 10;
+                        setShowScrollGradient(!isAtBottom);
+                      }}
+                    >
                     {sortedFilteredProjects.map((project: any) => {
                         const originalCurrency = project.currency || 'USD';
                         const originalAmount = project.displayAmount || project.cost;
                         const showConversion = convertToBaseCurrency && originalCurrency !== baseCurrency;
                         const isPaid = project.paymentStatus === 'paid' || project.isPrepaidPart;
+                        const projectDate = project.completedAt || project.createdAt || project.date;
+                        const formattedDate = projectDate ? new Date(projectDate).toLocaleDateString('ru-RU', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric'
+                        }) : null;
 
                         return (
                           <div
@@ -763,6 +909,9 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                               }`}>
                                 {project.name}
                               </div>
+                              {formattedDate && (
+                                <div className="text-xs text-zinc-500 mt-0.5">{formattedDate}</div>
+                              )}
                               {project.isPrepaidPart && (
                                 <div className="text-xs text-yellow-500 mt-0.5">Prepayment</div>
                               )}
@@ -790,6 +939,13 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                           </div>
                         );
                     })}
+                    </div>
+                    {/* Fade gradient at bottom */}
+                    <div
+                      className={`absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none transition-opacity duration-300 ${
+                        showScrollGradient ? 'opacity-100' : 'opacity-0'
+                      }`}
+                    ></div>
                   </div>
                 </div>
               </div>
@@ -835,7 +991,37 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
           <div className="mb-12">
             <h2 className="text-2xl font-medium text-zinc-400 mb-6">Revenue Timeline</h2>
             <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
-              <div ref={timelineContainerRef} className="w-full relative">
+              <div
+                ref={timelineContainerRef}
+                className="w-full relative"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setActiveMenu('timeline');
+                  setTimelineContextMenu({ x: e.clientX, y: e.clientY });
+                }}
+              >
+                {/* Min/Max value tooltips */}
+                {showMinMaxTooltips && (() => {
+                  const minPoint = timelineData.points.reduce((min, p) => p.amount < min.amount ? p : min);
+                  const maxPoint = timelineData.points.reduce((max, p) => p.amount > max.amount ? p : max);
+                  return (
+                    <>
+                      {/* Min value - top left */}
+                      <div
+                        className="absolute top-0 left-0 text-red-400 text-xs font-medium pointer-events-none"
+                      >
+                        Min: {minPoint.amount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}
+                      </div>
+                      {/* Max value - top right */}
+                      <div
+                        className="absolute top-0 right-0 text-green-400 text-xs font-medium pointer-events-none"
+                      >
+                        Max: {maxPoint.amount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}
+                      </div>
+                    </>
+                  );
+                })()}
+                {/* Hover tooltip */}
                 {hoveredPoint && (
                   <div
                     className="absolute bg-zinc-800 text-white px-3 py-2 rounded-lg text-sm border border-zinc-700 pointer-events-none z-10"
@@ -860,8 +1046,8 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                       y2={timelineData.chartHeight}
                       stroke="#3f3f46"
                       strokeWidth="0.5"
-                      strokeDasharray="2,2"
-                      opacity="0.3"
+                      strokeDasharray="2.5,4"
+                      opacity="0.6"
                     />
                   ))}
 
@@ -960,6 +1146,56 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
           </div>
         )}
 
+        {/* Timeline Context Menu */}
+        {timelineContextMenu && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setTimelineContextMenu(null)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setTimelineContextMenu(null);
+              }}
+            />
+            <div
+              ref={timelineContextMenuRef}
+              className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
+              style={{
+                top: (() => {
+                  const menuHeight = timelineContextMenuRef.current?.offsetHeight || 100;
+                  const windowHeight = window.innerHeight;
+                  const wouldOverflow = timelineContextMenu.y + menuHeight > windowHeight;
+                  return wouldOverflow ? windowHeight - menuHeight - 10 : timelineContextMenu.y;
+                })(),
+                left: (() => {
+                  const menuWidth = timelineContextMenuRef.current?.offsetWidth || 180;
+                  const windowWidth = window.innerWidth;
+                  const wouldOverflow = timelineContextMenu.x + menuWidth > windowWidth;
+                  return wouldOverflow ? windowWidth - menuWidth - 10 : timelineContextMenu.x;
+                })()
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => {
+                  setShowMinMaxTooltips(!showMinMaxTooltips);
+                  setTimelineContextMenu(null);
+                  setActiveMenu(null);
+                }}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  <span>Show Min/Max Values</span>
+                </div>
+                {showMinMaxTooltips && (
+                  <Check className="w-3.5 h-3.5 text-zinc-200 flex-shrink-0" />
+                )}
+              </button>
+            </div>
+          </>
+        )}
+
         {/* Monthly Revenue Breakdown - Last 12 months */}
         {paidProjects.length > 0 && (
           <div className="mb-12">
@@ -1001,7 +1237,11 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   return { ...month, revenue, projectCount: projectsInMonth.length };
                 });
 
-                const maxRevenue = Math.max(...monthlyRevenue.map(m => m.revenue), 1);
+                // Threshold normalization like Weekly Timeline
+                const actualMaxRevenue = Math.max(...monthlyRevenue.map(m => m.revenue), 0);
+                const threshold = getThresholdForCurrency(convertToBaseCurrency ? baseCurrency : 'USD');
+                const maxRevenue = Math.max(actualMaxRevenue, threshold);
+
                 const totalYearRevenue = monthlyRevenue.reduce((sum, m) => sum + m.revenue, 0);
                 const avgMonthlyRevenue = totalYearRevenue / 12;
 
@@ -1039,9 +1279,14 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                           <div key={index} className="flex flex-col items-center gap-3 group" style={{ flex: '1 1 0' }}>
                             {/* Bar */}
                             <div className="relative flex items-end justify-center" style={{ height: '240px', width: '100%' }}>
+                              {/* Background bar (подложка) */}
+                              <div
+                                className="absolute bottom-0 w-8 h-full rounded-t-lg bg-zinc-800 opacity-20"
+                              />
+
                               {/* Bar element */}
                               <div
-                                className={`w-8 rounded-t-lg transition-all duration-300 relative ${
+                                className={`w-8 rounded-t-lg transition-all duration-300 relative z-10 ${
                                   month.revenue === 0
                                     ? 'bg-zinc-800'
                                     : isCurrentMonth
@@ -1254,6 +1499,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         isOpen={showManualTransactionModal}
         onClose={() => setShowManualTransactionModal(false)}
         projects={projects}
+        otherProjectTransactions={otherProjectTransactions}
         onAddTransaction={handleAddTransaction}
         onRemoveTransaction={handleRemoveTransaction}
       />

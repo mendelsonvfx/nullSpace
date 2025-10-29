@@ -200,7 +200,8 @@ export function FinanceProjectDetails({
             <p className="text-sm text-zinc-500 mb-3">Revenue per Day</p>
             {(() => {
               const createdDate = new Date(project.createdAt);
-              const completedDate = new Date();
+              // Use completedAt (when payment was marked as paid) or current date as fallback
+              const completedDate = project.completedAt ? new Date(project.completedAt) : new Date();
               const daysWorked = Math.max(1, Math.ceil(
                 (completedDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)
               ));

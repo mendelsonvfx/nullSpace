@@ -53,6 +53,7 @@ export interface Shot {
   notes: Note[];
   browserTabs: BrowserTab[];
   links: Link[];
+  completed?: boolean;
 }
 
 export interface Note {
@@ -162,7 +163,7 @@ export const FOLDER_TEMPLATES: Record<SoftwareName, FolderTemplate> = {
       },
       {
         name: 'Tex',
-        subfolders: ['Exported', 'Imported']
+        subfolders: ['Exported', 'Imported', 'Plates']
       },
       {
         name: 'Cache',
@@ -171,12 +172,7 @@ export const FOLDER_TEMPLATES: Record<SoftwareName, FolderTemplate> = {
       {
         name: 'Render',
         subfolders: ['Preview', 'Final', 'Passes']
-      },
-      {
-        name: 'Assets',
-        subfolders: ['Shaders', 'Materials', 'Models', 'HDRI', 'Presets']
-      },
-      'Notes'
+      }
     ]
   },
   houdini: {

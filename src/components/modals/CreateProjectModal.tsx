@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
-import { invoke, convertFileSrc } from '@tauri-apps/api/tauri';
+import { X, Plus } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/tauri';
 import { selectProjectDirectory } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import { SoftwareIcon } from '../SoftwareIcon';
@@ -9,12 +9,14 @@ import { generateBrightColor, SOFTWARE_OPTIONS } from '../../utils';
 interface CreateProjectModalProps {
   onClose: () => void;
   onCreate: (projectData: any) => Promise<void>;
+  onProjectCreated?: (projectId: string) => void;
 }
 
-export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProps) {
+export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: CreateProjectModalProps) {
   const { defaultProjectsPath, clients, addClient, selectedCategory } = useProjectStore();
   const [useDefaultPath, setUseDefaultPath] = useState(true);
   const [newClientName, setNewClientName] = useState('');
+  const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
 
   // Get base currency from settings
   const baseCurrency = (localStorage.getItem('baseCurrency') || 'USD') as 'USD' | 'RUB' | 'EUR';
@@ -67,6 +69,13 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
               // Convert blob to array buffer
               const arrayBuffer = await blob.arrayBuffer();
               const uint8Array = new Uint8Array(arrayBuffer);
+
+              // Create data URL for preview
+              const base64 = btoa(
+                uint8Array.reduce((data, byte) => data + String.fromCharCode(byte), '')
+              );
+              const dataUrl = `data:${blob.type};base64,${base64}`;
+              setThumbnailPreview(dataUrl);
 
               // Save to temp file using Tauri
               const { writeBinaryFile, BaseDirectory } = await import('@tauri-apps/api/fs');
@@ -146,8 +155,12 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
 
     await onCreate(projectData);
 
+    // Get the created project and select it
+    const { projects, selectProject } = useProjectStore.getState();
+    const createdProject = projects.find(p => p.path === formData.path);
+
     // If thumbnail was selected, set it after project creation
-    if (formData.thumbnailPath) {
+    if (formData.thumbnailPath && createdProject) {
       try {
         const thumbnailName = await invoke<string>('set_project_thumbnail', {
           projectPath: formData.path,
@@ -155,12 +168,23 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
         });
         console.log('Thumbnail set:', thumbnailName);
 
-        // Update the project with the thumbnail
-        const { loadProjects } = useProjectStore.getState();
-        await loadProjects();
+        // Update the project with the thumbnail immediately
+        const { updateProject } = useProjectStore.getState();
+        updateProject({ ...createdProject, thumbnail: thumbnailName });
+
+        // Select the updated project
+        selectProject({ ...createdProject, thumbnail: thumbnailName });
+        onProjectCreated?.(createdProject.id);
       } catch (error) {
         console.error('Failed to set thumbnail:', error);
+        // Still select the project even if thumbnail fails
+        selectProject(createdProject);
+        onProjectCreated?.(createdProject.id);
       }
+    } else if (createdProject) {
+      // Select the project if no thumbnail
+      selectProject(createdProject);
+      onProjectCreated?.(createdProject.id);
     }
 
     onClose();
@@ -178,7 +202,7 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 rounded-lg"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
@@ -199,28 +223,108 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
           </button>
         </div>
 
-        <div className="p-4 space-y-4 overflow-y-auto flex-1">
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Project Name</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="My Awesome Project"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
-            />
+        <div className="p-4 space-y-2.5 overflow-y-auto flex-1">
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1.5">Project Name</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="My Awesome Project"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+              />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer h-[38px] px-3">
+              <span className="text-sm whitespace-nowrap">Has shots</span>
+              <input
+                type="checkbox"
+                checked={formData.hasShots}
+                onChange={(e) => setFormData(prev => ({ ...prev, hasShots: e.target.checked }))}
+                className="w-4 h-4"
+              />
+            </label>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Description</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Brief description of your project..."
-              rows={2}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none"
-            />
+          <div className="flex gap-3 items-start">
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1.5">Description</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Brief description of your project..."
+                rows={2}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none h-[60px]"
+              />
+            </div>
+            <div className="w-32">
+              <label className="block text-sm font-medium mb-1.5">Thumbnail <span className="text-xs text-zinc-500">(Ctrl+V)</span></label>
+              {formData.thumbnailPath ? (
+                <div className="relative h-[60px] rounded-lg overflow-hidden border border-zinc-700 bg-zinc-800">
+                  {thumbnailPreview && (
+                    <img
+                      src={thumbnailPreview}
+                      alt="Thumbnail preview"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, thumbnailPath: '' }));
+                      setThumbnailPreview('');
+                    }}
+                    className="absolute top-1 right-1 w-6 h-6 bg-red-600 hover:bg-red-700 rounded transition-colors text-sm flex items-center justify-center"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const { selectImageFile } = await import('../../utils/tauri');
+                    const imagePath = await selectImageFile();
+                    if (imagePath) {
+                      try {
+                        // Read file and create data URL for preview
+                        const { readBinaryFile } = await import('@tauri-apps/api/fs');
+                        const fileData = await readBinaryFile(imagePath);
+
+                        // Determine MIME type
+                        const extension = imagePath.split('.').pop()?.toLowerCase();
+                        const mimeTypes: Record<string, string> = {
+                          'jpg': 'image/jpeg',
+                          'jpeg': 'image/jpeg',
+                          'png': 'image/png',
+                          'gif': 'image/gif',
+                          'webp': 'image/webp',
+                          'bmp': 'image/bmp'
+                        };
+                        const mimeType = mimeTypes[extension || 'jpg'] || 'image/jpeg';
+
+                        // Convert to base64
+                        const base64 = btoa(
+                          fileData.reduce((data, byte) => data + String.fromCharCode(byte), '')
+                        );
+                        const dataUrl = `data:${mimeType};base64,${base64}`;
+                        setThumbnailPreview(dataUrl);
+
+                        setFormData(prev => ({ ...prev, thumbnailPath: imagePath }));
+                      } catch (error) {
+                        console.error('Failed to load image:', error);
+                      }
+                    }
+                  }}
+                  className="h-[60px] w-full bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm border border-zinc-700 flex items-center justify-center"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              )}
+            </div>
           </div>
+
+          <div className="border-t border-zinc-800 pt-2"></div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -246,6 +350,7 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
                 value={newClientName}
                 onChange={(e) => setNewClientName(e.target.value)}
                 placeholder="Client name (Enter)"
+                disabled={!!formData.clientId}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && newClientName.trim()) {
                     e.preventDefault();
@@ -267,7 +372,7 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
                     console.log('Clients after add:', useProjectStore.getState().clients);
                   }
                 }}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
           </div>
@@ -544,6 +649,8 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
             </div>
           </div>
 
+          <div className="border-t border-zinc-800 pt-2"></div>
+
           <div>
             <label className="block text-sm font-medium mb-2">Software Tools</label>
             <div className="grid grid-cols-4 gap-2">
@@ -564,99 +671,40 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Project Thumbnail <span className="text-xs text-zinc-500">(Ctrl+V to paste)</span></label>
-            <div className="flex gap-2 items-center">
-              {formData.thumbnailPath && (
-                <div className="w-16 h-16 rounded-lg overflow-hidden border border-zinc-700 flex-shrink-0 bg-zinc-800">
-                  <img
-                    src={convertFileSrc(formData.thumbnailPath)}
-                    alt="Thumbnail preview"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      console.error('Failed to load thumbnail preview:', formData.thumbnailPath);
-                      console.error('Converted src:', convertFileSrc(formData.thumbnailPath));
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </div>
-              )}
-              <div className="flex gap-2 flex-1">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const { selectImageFile } = await import('../../utils/tauri');
-                    const imagePath = await selectImageFile();
-                    if (imagePath) {
-                      // If there's already a thumbnail, clear it first to ensure React updates
-                      if (formData.thumbnailPath) {
-                        setFormData(prev => ({ ...prev, thumbnailPath: '' }));
-                        // Use setTimeout to ensure state update completes before setting new path
-                        await new Promise(resolve => setTimeout(resolve, 0));
-                      }
-                      setFormData(prev => ({ ...prev, thumbnailPath: imagePath }));
-                    }
-                  }}
-                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
-                >
-                  Choose Image
-                </button>
-                {formData.thumbnailPath && (
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, thumbnailPath: '' }))}
-                    className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.hasShots}
-                onChange={(e) => setFormData(prev => ({ ...prev, hasShots: e.target.checked }))}
-                className="w-4 h-4"
-              />
-              <span className="text-sm">Has shots</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useDefaultPath}
-                onChange={(e) => setUseDefaultPath(e.target.checked)}
-                className="w-4 h-4"
-              />
-              <span className="text-sm">Use default path</span>
-            </label>
-          </div>
+          <div className="border-t border-zinc-800 pt-2"></div>
 
           <div>
             <label className="block text-sm font-medium mb-1.5">Project Path</label>
             <div className="flex gap-2">
-              <input
-                type="text"
-                value={formData.path}
-                onChange={(e) => {
-                  setFormData(prev => ({ ...prev, path: e.target.value }));
-                  setUseDefaultPath(false);
-                }}
-                disabled={useDefaultPath}
-                placeholder="/home/user/projects/my-project"
-                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50"
-              />
-              <button
-                onClick={handleBrowse}
-                className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
-              >
-                Browse
-              </button>
+                <input
+                  type="text"
+                  value={formData.path}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, path: e.target.value }));
+                    setUseDefaultPath(false);
+                  }}
+                  disabled={useDefaultPath}
+                  placeholder="/home/user/projects/my-project"
+                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50"
+                />
+                <button
+                  onClick={handleBrowse}
+                  disabled={useDefaultPath}
+                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Browse
+                </button>
+                <label className="flex items-center gap-2 cursor-pointer px-3 py-2">
+                  <span className="text-sm whitespace-nowrap">Use default</span>
+                  <input
+                    type="checkbox"
+                    checked={useDefaultPath}
+                    onChange={(e) => setUseDefaultPath(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                </label>
+              </div>
             </div>
-          </div>
         </div>
 
         <div className="p-4 border-t border-zinc-800 flex justify-end gap-2 flex-shrink-0">
@@ -668,7 +716,7 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
           </button>
           <button
             onClick={handleCreate}
-            disabled={!formData.name || !formData.path}
+            disabled={!formData.name || !formData.path || formData.software.length === 0}
             className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors font-medium animate-button text-sm"
           >
             Create Project

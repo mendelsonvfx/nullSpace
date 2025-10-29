@@ -1,7 +1,7 @@
 // src/components/WelcomeSetup.tsx
 import { useState } from 'react';
-import { FolderOpen, Rocket, Check } from 'lucide-react';
-import { selectProjectDirectory, selectExecutable } from '../utils/tauri';
+import { FolderOpen, Rocket, Check, RefreshCw } from 'lucide-react';
+import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../utils/tauri';
 import { useProjectStore } from '../store/projectStore';
 import type { SoftwareName } from '../types/project';
 
@@ -25,6 +25,12 @@ const DEFAULT_SOFTWARE: Array<{ name: SoftwareName; displayName: string }> = [
   // { name: 'substance', displayName: 'Substance Painter' },
 ];
 
+// Helper function to check if path is a valid executable
+function isValidExecutablePath(path: string): boolean {
+  if (!path) return false;
+  return path.toLowerCase().endsWith('.exe');
+}
+
 export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
   const { setDefaultProjectsPath, loadProjects } = useProjectStore();
   const [step, setStep] = useState(1);
@@ -36,6 +42,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
   const [softwarePaths, setSoftwarePaths] = useState<SoftwarePathConfig[]>(
     DEFAULT_SOFTWARE.map(sw => ({ ...sw, path: '' }))
   );
+  const [isDetecting, setIsDetecting] = useState(false);
 
   const handleBrowseDirectory = async () => {
     const selected = await selectProjectDirectory();
@@ -52,6 +59,28 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
         updated[index] = { ...updated[index], path: selected };
         return updated;
       });
+    }
+  };
+
+  const handleAutoDetect = async () => {
+    setIsDetecting(true);
+    try {
+      const detected = await detectInstalledSoftware();
+      console.log('Detected software:', detected);
+
+      // Update software paths with detected ones
+      setSoftwarePaths(prev => {
+        return prev.map(sw => {
+          if (detected[sw.name]) {
+            return { ...sw, path: detected[sw.name] };
+          }
+          return sw;
+        });
+      });
+    } catch (error) {
+      console.error('Failed to auto-detect software:', error);
+    } finally {
+      setIsDetecting(false);
     }
   };
 
@@ -273,12 +302,23 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                 </p>
               </div>
 
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={handleAutoDetect}
+                  disabled={isDetecting}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                >
+                  {isDetecting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  {isDetecting ? 'Detecting...' : 'Auto-Detect'}
+                </button>
+              </div>
+
               <div className="space-y-2 max-h-[240px] overflow-y-auto pr-2">
                 {softwarePaths.map((sw, index) => (
                   <div key={sw.name} className="bg-zinc-800 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <h4 className="text-sm font-medium">{sw.displayName}</h4>
-                      {sw.path && <Check className="w-3 h-3 text-green-500" />}
+                      {isValidExecutablePath(sw.path) && <Check className="w-3 h-3 text-green-500" />}
                     </div>
 
                     <div className="flex gap-2">
@@ -286,9 +326,15 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                         type="text"
                         value={sw.path}
                         onChange={(e) => {
+                          // Remove quotes from path if present
+                          let cleanPath = e.target.value.trim();
+                          if ((cleanPath.startsWith('"') && cleanPath.endsWith('"')) ||
+                              (cleanPath.startsWith("'") && cleanPath.endsWith("'"))) {
+                            cleanPath = cleanPath.slice(1, -1);
+                          }
                           setSoftwarePaths(prev => {
                             const updated = [...prev];
-                            updated[index] = { ...updated[index], path: e.target.value };
+                            updated[index] = { ...updated[index], path: cleanPath };
                             return updated;
                           });
                         }}

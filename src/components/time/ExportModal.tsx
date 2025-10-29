@@ -29,8 +29,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     const symbols: Record<string, string> = {
       'USD': '$',
       'RUB': '₽',
-      'EUR': '€',
-      'GBP': '£'
+      'EUR': '€'
     };
     return symbols[currency || 'USD'] || currency || '$';
   };

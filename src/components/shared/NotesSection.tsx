@@ -1,5 +1,5 @@
 import { useRef, useCallback, memo, useMemo } from 'react';
-import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin, linkPlugin, linkDialogPlugin, codeBlockPlugin, codeMirrorPlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles, BlockTypeSelect, CreateLink, InsertCodeBlock, ListsToggle } from '@mdxeditor/editor';
+import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin, linkPlugin, codeBlockPlugin, codeMirrorPlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles, BlockTypeSelect, InsertCodeBlock, ListsToggle } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
 import { useProjectStore } from '../../store/projectStore';
 
@@ -57,7 +57,6 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
     thematicBreakPlugin(),
     markdownShortcutPlugin(),
     linkPlugin(),
-    linkDialogPlugin(),
     codeBlockPlugin({ defaultCodeBlockLanguage: 'js' }),
     codeMirrorPlugin({ codeBlockLanguages: { js: 'JavaScript', ts: 'TypeScript', css: 'CSS', python: 'Python', rust: 'Rust' } }),
     toolbarPlugin({
@@ -66,7 +65,6 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
           <UndoRedo />
           <BoldItalicUnderlineToggles />
           <BlockTypeSelect />
-          <CreateLink />
           <InsertCodeBlock />
           <ListsToggle />
         </>
