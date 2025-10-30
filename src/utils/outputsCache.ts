@@ -221,6 +221,54 @@ class OutputsCache {
     this.saveOutputStateToStorage(projectPath, entry);
   }
 
+  // Add or update a single file in cache
+  addFile(projectPath: string, file: OutputFile): void {
+    const entry = this.cache.get(projectPath);
+    if (entry) {
+      // Check if file already exists
+      const existingIndex = entry.data.findIndex(f => f.path === file.path && f.name === file.name);
+      if (existingIndex >= 0) {
+        // Update existing file
+        entry.data[existingIndex] = file;
+      } else {
+        // Add new file
+        entry.data.push(file);
+      }
+      entry.timestamp = Date.now();
+      this.cache.set(projectPath, entry);
+      this.saveToStorage(projectPath, entry);
+    }
+  }
+
+  // Remove a single file from cache
+  removeFile(projectPath: string, filePath: string, fileName: string): void {
+    const entry = this.cache.get(projectPath);
+    if (entry) {
+      entry.data = entry.data.filter(f => !(f.path === filePath && f.name === fileName));
+      entry.timestamp = Date.now();
+      this.cache.set(projectPath, entry);
+      this.saveToStorage(projectPath, entry);
+    }
+  }
+
+  // Update multiple files in cache (batch operation)
+  updateFiles(projectPath: string, files: OutputFile[]): void {
+    const entry = this.cache.get(projectPath);
+    if (entry) {
+      for (const file of files) {
+        const existingIndex = entry.data.findIndex(f => f.path === file.path && f.name === file.name);
+        if (existingIndex >= 0) {
+          entry.data[existingIndex] = file;
+        } else {
+          entry.data.push(file);
+        }
+      }
+      entry.timestamp = Date.now();
+      this.cache.set(projectPath, entry);
+      this.saveToStorage(projectPath, entry);
+    }
+  }
+
   // Invalidate cache for a specific project
   invalidate(projectPath: string): void {
     this.cache.delete(projectPath);

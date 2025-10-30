@@ -16,6 +16,7 @@ interface OutputFile {
   is_sequence: boolean;
   frame_range?: string;
   frame_count?: number;
+  missing_frames?: string;
 }
 
 interface OutputOverviewProps {
@@ -131,12 +132,40 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
   // Listen for version changes from file system watcher (also catches output changes)
   useEffect(() => {
     let unlisten: any;
+    let debounceTimer: number | null = null;
+    let maxWaitTimer: number | null = null;
 
     // Import listen function
     import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('version-changed', () => {
-        // Reload outputs
-        loadOutputs();
+      // Listen to output-changed event (specific for output files)
+      listen('output-changed', () => {
+        // Clear existing timers
+        if (debounceTimer !== null) {
+          clearTimeout(debounceTimer);
+        }
+
+        // Set max wait timer (ensures update happens within 1 second)
+        if (maxWaitTimer === null) {
+          maxWaitTimer = window.setTimeout(() => {
+            outputsCache.invalidate(project.path);
+            loadOutputs(true);
+            maxWaitTimer = null;
+            debounceTimer = null;
+          }, 1000);
+        }
+
+        // Debounce with 300ms delay
+        debounceTimer = window.setTimeout(() => {
+          // Clear max wait timer if debounce triggers first
+          if (maxWaitTimer !== null) {
+            clearTimeout(maxWaitTimer);
+            maxWaitTimer = null;
+          }
+
+          outputsCache.invalidate(project.path);
+          loadOutputs(true);
+          debounceTimer = null;
+        }, 300);
       }).then((fn) => {
         unlisten = fn;
       });
@@ -144,6 +173,8 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
 
     return () => {
       if (unlisten) unlisten();
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      if (maxWaitTimer !== null) clearTimeout(maxWaitTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.path]);
@@ -576,6 +607,9 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                         {output.is_sequence && output.frame_count && (
                           <span className="text-xs text-zinc-500">
                             {output.frame_count} frames
+                            {output.missing_frames && (
+                              <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
+                            )}
                           </span>
                         )}
                       </div>
@@ -659,6 +693,9 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                         {output.is_sequence && output.frame_count && (
                           <span className="text-xs text-zinc-500">
                             {output.frame_count} frames
+                            {output.missing_frames && (
+                              <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
+                            )}
                           </span>
                         )}
                       </div>

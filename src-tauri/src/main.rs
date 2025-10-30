@@ -1725,8 +1725,6 @@ async fn start_watching_project(
     app_handle: tauri::AppHandle,
     project_path: String,
 ) -> Result<(), String> {
-    println!("📁 Starting file watcher for: {}", project_path);
-
     // Stop old watcher if exists
     stop_watching_project().await?;
 
@@ -1745,51 +1743,68 @@ async fn start_watching_project(
     let project_path_clone = project_path.clone();
 
     let thread = std::thread::spawn(move || {
-        println!("📁 File watcher thread started");
-
-        // Create debouncer
+        // Create debouncer (500ms - balance between grouping events and responsiveness)
         let mut debouncer = match new_debouncer(
             Duration::from_millis(500),
             move |res: DebounceEventResult| {
                 match res {
                     Ok(events) => {
+                        let mut has_version_changes = false;
+                        let mut has_output_changes = false;
+
+                        // Collect all changes in batch
                         for event in events {
                             if let Some(path) = event.path.to_str() {
-                                // Check if it's a version file (not .blend1)
-                                if path.contains("_v") && !path.ends_with(".blend1") {
-                                    println!("Version file changed: {}", path);
+                                let is_version_file = path.contains("_v") && !path.ends_with(".blend1");
+                                let is_output_file = path.contains("\\Render\\") ||
+                                                    path.contains("/Render/") ||
+                                                    path.contains("\\Output\\") ||
+                                                    path.contains("/Output/");
 
-                                    // Clean up backup files using Rust API (no CMD window)
-                                    let project_dir = PathBuf::from(&project_path_clone);
-                                    let software_folders = vec![
-                                        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-                                        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
-                                    ];
+                                if is_version_file {
+                                    has_version_changes = true;
+                                } else if is_output_file {
+                                    has_output_changes = true;
+                                }
+                            }
+                        }
 
-                                    for software_folder in &software_folders {
-                                        let software_dir = project_dir.join(software_folder);
-                                        if software_dir.exists() {
-                                            if let Ok(entries) = fs::read_dir(&software_dir) {
-                                                for entry in entries.flatten() {
-                                                    if let Ok(file_type) = entry.file_type() {
-                                                        if file_type.is_file() {
-                                                            let file_path = entry.path();
-                                                            if let Some(extension) = file_path.extension() {
-                                                                if extension == "blend1" {
-                                                                    let _ = fs::remove_file(&file_path);
-                                                                }
-                                                            }
+                        // Clean up backup files only if version files changed
+                        if has_version_changes {
+                            let project_dir = PathBuf::from(&project_path_clone);
+                            let software_folders = vec![
+                                "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
+                                "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+                            ];
+
+                            for software_folder in &software_folders {
+                                let software_dir = project_dir.join(software_folder);
+                                if software_dir.exists() {
+                                    if let Ok(entries) = fs::read_dir(&software_dir) {
+                                        for entry in entries.flatten() {
+                                            if let Ok(file_type) = entry.file_type() {
+                                                if file_type.is_file() {
+                                                    let file_path = entry.path();
+                                                    if let Some(extension) = file_path.extension() {
+                                                        if extension == "blend1" {
+                                                            let _ = fs::remove_file(&file_path);
                                                         }
                                                     }
                                                 }
                                             }
                                         }
                                     }
-
-                                    // Emit event to frontend
-                                    let _ = app.emit_all("version-changed", ());
                                 }
                             }
+                        }
+
+                        // Emit events without throttling (debounce provides protection)
+                        if has_version_changes {
+                            let _ = app.emit_all("version-changed", ());
+                        }
+
+                        if has_output_changes {
+                            let _ = app.emit_all("output-changed", ());
                         }
                     }
                     Err(e) => println!("Watch error: {:?}", e),
@@ -1807,20 +1822,26 @@ async fn start_watching_project(
         for software_folder in &software_folders {
             let software_dir = project_dir.join(software_folder);
             if software_dir.exists() {
-                if let Err(e) = debouncer.watcher().watch(&software_dir, RecursiveMode::Recursive) {
-                    eprintln!("Failed to watch {}: {}", software_folder, e);
-                } else {
-                    println!("Watching: {:?}", software_dir);
-                }
+                let _ = debouncer.watcher().watch(&software_dir, RecursiveMode::Recursive);
             }
         }
 
-        // ✅ FIXED: Loop with shutdown check (not infinite!)
+        // Also watch Render folders for output files
+        let render_dir = project_dir.join("Render");
+        if render_dir.exists() {
+            let _ = debouncer.watcher().watch(&render_dir, RecursiveMode::Recursive);
+        }
+
+        // Watch AfterEffects/Output folder
+        let ae_output_dir = project_dir.join("AfterEffects").join("Output");
+        if ae_output_dir.exists() {
+            let _ = debouncer.watcher().watch(&ae_output_dir, RecursiveMode::Recursive);
+        }
+
+        // Loop with shutdown check
         while !shutdown_clone.load(Ordering::Relaxed) {
             std::thread::sleep(Duration::from_millis(100));
         }
-
-        println!("📁 File watcher thread stopped gracefully");
     });
 
     // Store handle globally
@@ -1829,15 +1850,11 @@ async fn start_watching_project(
         thread: Some(thread),
         shutdown,
     });
-
-    println!("✅ File watcher started successfully");
     Ok(())
 }
 
 #[tauri::command]
 async fn stop_watching_project() -> Result<(), String> {
-    println!("Stopping file watcher...");
-
     let mut handle_guard = WATCHER_HANDLE.lock();
 
     if let Some(mut handle) = handle_guard.take() {
@@ -1846,27 +1863,22 @@ async fn stop_watching_project() -> Result<(), String> {
 
         // Wait for thread to finish (with timeout)
         if let Some(thread) = handle.thread.take() {
-            // Give thread 2 seconds to finish
             let timeout = Duration::from_secs(2);
             let start = std::time::Instant::now();
 
             loop {
                 if thread.is_finished() {
                     let _ = thread.join();
-                    println!("✅ File watcher stopped successfully");
                     break;
                 }
 
                 if start.elapsed() > timeout {
-                    println!("⚠️  File watcher thread timeout (force dropping)");
                     break;
                 }
 
                 std::thread::sleep(Duration::from_millis(100));
             }
         }
-    } else {
-        println!("ℹ️  No file watcher running");
     }
 
     Ok(())
@@ -2333,6 +2345,7 @@ struct OutputFile {
     is_sequence: bool,
     frame_range: Option<String>, // e.g., "0001-0008"
     frame_count: Option<u32>,
+    missing_frames: Option<String>, // e.g., "(0002-0004), 0007"
 }
 
 // Helper function to extract frame number from filename
@@ -2348,6 +2361,49 @@ fn extract_frame_number(filename: &str) -> Option<(String, u32, String)> {
         return Some((prefix, frame_num, ext));
     }
     None
+}
+
+// Helper function to detect missing frames in a sequence
+fn detect_missing_frames(frames: &[u32], first_frame: u32, last_frame: u32) -> Option<String> {
+    let mut missing = Vec::new();
+
+    for frame_num in first_frame..=last_frame {
+        if !frames.contains(&frame_num) {
+            missing.push(frame_num);
+        }
+    }
+
+    if missing.is_empty() {
+        return None;
+    }
+
+    // Group consecutive missing frames
+    let mut groups = Vec::new();
+    let mut start = missing[0];
+    let mut prev = missing[0];
+
+    for &frame in &missing[1..] {
+        if frame == prev + 1 {
+            prev = frame;
+        } else {
+            if start == prev {
+                groups.push(format!("{:04}", start));
+            } else {
+                groups.push(format!("({:04}-{:04})", start, prev));
+            }
+            start = frame;
+            prev = frame;
+        }
+    }
+
+    // Add the last group
+    if start == prev {
+        groups.push(format!("{:04}", start));
+    } else {
+        groups.push(format!("({:04}-{:04})", start, prev));
+    }
+
+    Some(groups.join(", "))
 }
 
 // Helper function to group image sequences
@@ -2375,7 +2431,7 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
     let mut result = Vec::new();
 
     // Process sequences
-    for (key, mut seq_files) in sequences {
+    for (_key, mut seq_files) in sequences {
         if seq_files.len() > 1 {
             // Sort by frame number
             seq_files.sort_by(|a, b| {
@@ -2396,21 +2452,25 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
 
-            // Extract prefix and extension from key (format: prefix_ext_software_rendertype)
-            // Split from the right to get the components
-            let parts: Vec<&str> = key.splitn(4, '_').collect();
-            let prefix = parts.get(0).unwrap_or(&"");
-            let ext = parts.get(1).unwrap_or(&"");
+            // Extract prefix and extension directly from the first file's name
+            let (prefix, _, ext) = extract_frame_number(&first.name)
+                .unwrap_or((String::new(), 0, String::new()));
 
             // Create display name with frame range (only prefix + frame range + ext, no render_type)
             let display_name = if prefix.is_empty() {
-                format!("{:04}-{:04}.{}", first_frame, last_frame, ext)
+                format!("{:04}-{:04}.{}", first_frame, last_frame, &ext)
             } else {
-                format!("{}.{:04}-{:04}.{}", prefix, first_frame, last_frame, ext)
+                format!("{}.{:04}-{:04}.{}", &prefix, first_frame, last_frame, &ext)
             };
 
             // Sum up total size
             let total_size: u64 = seq_files.iter().map(|f| f.size).sum();
+
+            // Detect missing frames
+            let existing_frames: Vec<u32> = seq_files.iter()
+                .filter_map(|f| extract_frame_number(&f.name).map(|(_, n, _)| n))
+                .collect();
+            let missing = detect_missing_frames(&existing_frames, first_frame, last_frame);
 
             result.push(OutputFile {
                 name: display_name,
@@ -2422,6 +2482,7 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
                 is_sequence: true,
                 frame_range: Some(format!("{:04}-{:04}", first_frame, last_frame)),
                 frame_count: Some(seq_files.len() as u32),
+                missing_frames: missing,
             });
         } else if let Some(file) = seq_files.into_iter().next() {
             // Single file, treat as standalone
@@ -2441,6 +2502,7 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
             is_sequence: false,
             frame_range: None,
             frame_count: None,
+            missing_frames: None,
         });
     }
 
@@ -2487,6 +2549,7 @@ fn scan_output_dir_recursive(
                                 is_sequence: false,
                                 frame_range: None,
                                 frame_count: None,
+                                missing_frames: None,
                             });
                         }
                     }
