@@ -31,7 +31,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in"
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 rounded-lg animate-fade-in"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
@@ -104,7 +104,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
           </div>
 
           <div className="text-center text-xs text-zinc-500">
-            <p>Version 0.9.99-beta</p>
+            <p>Version 0.9.995-beta</p>
             <p className="mt-1">Made with passion by Vision One</p>
           </div>
         </div>

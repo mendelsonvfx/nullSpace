@@ -29,7 +29,7 @@ export const WeeklyTimeline: React.FC<WeeklyTimelineProps> = ({ weeklyData }) =>
   }, [weeklyData]);
 
   return (
-    <div className="bg-zinc-900 rounded-xl p-8 border border-zinc-800 mb-6">
+    <div data-time-analytics className="bg-zinc-900 rounded-xl p-8 border border-zinc-800 mb-6">
       <h3 className="text-lg font-semibold mb-6 text-zinc-200">
         Weekly Timeline (Last 12 Weeks)
       </h3>

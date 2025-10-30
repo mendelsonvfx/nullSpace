@@ -379,7 +379,7 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-zinc-400 mb-3">Versions Overview</h3>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+        <div data-versions-overview className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
           <p className="text-xs text-zinc-500 text-center">No versions found (looking for folders like ProjectName_v001)</p>
         </div>
       </div>
@@ -482,6 +482,7 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
       <div
         ref={scrollContainerRef}
         onWheel={handleWheel}
+        data-versions-overview
         className="versions-scroll-container bg-zinc-900 border border-zinc-800 rounded-lg p-4 overflow-x-auto">
         {filteredVersions.length === 0 ? (
           <p className="text-xs text-zinc-500 text-center">No versions found for {selectedSoftware}</p>

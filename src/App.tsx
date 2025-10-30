@@ -3,9 +3,9 @@ import { Plus, Folder, Search, X, Settings, Star, Archive, Grid3x3, ChevronRight
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from './store/projectStore';
 import { useContextMenuStore } from './store/contextMenuStore';
-import { SettingsPanel } from './components/SettingsPanel';
-import { FeedbackPanel } from './components/FeedbackPanel';
-import { AboutPanel } from './components/AboutPanel';
+import { SettingsPanel } from './components/modals/SettingsPanel';
+import { FeedbackPanel } from './components/modals/FeedbackPanel';
+import { AboutPanel } from './components/modals/AboutPanel';
 // MDXEditor imports moved to NotesSection component
 import { SoftwareIcon } from './components/SoftwareIcon';
 import { ProjectCard } from './components/ProjectCard';
@@ -13,7 +13,7 @@ import { appWindow } from '@tauri-apps/api/window';
 import { DeadlineNotification } from './components/DeadlineNotification';
 // useThumbnail moved to child components
 import { CategoryTabs } from './components/CategoryTabs';
-import { WelcomeSetup } from './components/WelcomeSetup';
+import { WelcomeSetup } from './components/modals/WelcomeSetup';
 import { BreakReminderContainer } from './components/time';
 import type { BreakReminder } from './components/time';
 import { useTimeTrackingStore, TimerService } from './features/time-tracking';
@@ -601,6 +601,12 @@ function App() {
       document.body.classList.add('animations-disabled');
     }
 
+    // Initialize borders state
+    const bordersEnabled = localStorage.getItem('bordersEnabled');
+    if (bordersEnabled === null || !JSON.parse(bordersEnabled)) {
+      document.body.classList.add('borders-disabled');
+    }
+
     // Disable default Windows context menu globally
     const disableContextMenu = (e: MouseEvent) => {
       // Allow context menu only on project cards (for custom menu)
@@ -1019,6 +1025,7 @@ function App() {
                 placeholder="Search projects..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                data-search-bar
                 className="bg-zinc-900 border border-zinc-800 rounded-lg pl-10 pr-4 py-2 w-full focus:outline-none focus:border-accent transition-colors text-sm"
               />
             </div>
@@ -1041,36 +1048,42 @@ function App() {
           </div>
 
           {/* Filter Menu */}
-          <div className="flex gap-1 items-center">
+          <div className="flex gap-1 items-center w-full">
             <button
               onClick={() => setFilterView('all')}
-              className={`flex-1 px-2 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
-                filterView === 'all' ? 'bg-accent' : 'bg-zinc-800 hover:bg-zinc-700'
+              className={`flex-1 px-3 py-1 rounded-lg text-xs transition-colors font-medium flex items-center justify-center gap-1.5 ${
+                filterView === 'all'
+                  ? 'bg-zinc-700 text-white'
+                  : 'bg-zinc-800/50 text-zinc-400 hover:text-white'
               }`}
               title="All projects"
             >
               <Grid3x3 className="w-3.5 h-3.5" />
-              <span className="text-xs">All</span>
+              <span>All</span>
             </button>
             <button
               onClick={() => setFilterView('favorites')}
-              className={`flex-1 px-2 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
-                filterView === 'favorites' ? 'bg-accent' : 'bg-zinc-800 hover:bg-zinc-700'
+              className={`flex-1 px-3 py-1 rounded-lg text-xs transition-colors font-medium flex items-center justify-center gap-1.5 ${
+                filterView === 'favorites'
+                  ? 'bg-zinc-700 text-white'
+                  : 'bg-zinc-800/50 text-zinc-400 hover:text-white'
               }`}
               title="Favorites"
             >
               <Star className={`w-3.5 h-3.5 ${filterView === 'favorites' ? 'fill-yellow-400 text-yellow-400' : ''}`} />
-              <span className="text-xs">Fav</span>
+              <span>Fav</span>
             </button>
             <button
               onClick={() => setFilterView('archive')}
-              className={`flex-1 px-2 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors ${
-                filterView === 'archive' ? 'bg-accent' : 'bg-zinc-800 hover:bg-zinc-700'
+              className={`flex-1 px-3 py-1 rounded-lg text-xs transition-colors font-medium flex items-center justify-center gap-1.5 ${
+                filterView === 'archive'
+                  ? 'bg-zinc-700 text-white'
+                  : 'bg-zinc-800/50 text-zinc-400 hover:text-white'
               }`}
               title="Archive"
             >
               <Archive className="w-3.5 h-3.5" />
-              <span className="text-xs">Archive</span>
+              <span>Archive</span>
             </button>
             <div className="relative" ref={filterMenuRef}>
               <button
@@ -1079,7 +1092,7 @@ function App() {
                   setShowFilterMenu(!showFilterMenu);
                 }}
                 className={`p-1.5 rounded-lg transition-colors ${
-                  showFilterMenu ? 'bg-accent' : 'bg-zinc-800 hover:bg-zinc-700'
+                  showFilterMenu ? 'bg-zinc-700 text-white' : 'bg-zinc-800/50 text-zinc-400 hover:text-white'
                 }`}
                 title="Sort & Filter"
               >

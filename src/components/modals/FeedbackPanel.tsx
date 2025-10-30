@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Save, Copy, Check } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { useModalBlur } from '../hooks/useModalBlur';
+import { useModalBlur } from '../../hooks/useModalBlur';
 
 interface FeedbackPanelProps {
   onClose: () => void;
@@ -73,7 +73,7 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
 
   return (
     <div
-      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 ${blurClass}`}
+      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 rounded-lg ${blurClass}`}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
@@ -103,12 +103,12 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               placeholder="Enter your feedback here..."
-              className="w-full h-32 bg-zinc-800 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full h-32 bg-zinc-800 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent"
             />
             <button
               onClick={handleSave}
               disabled={!feedback.trim() || saving}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg transition-colors animate-button"
+              className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg transition-colors animate-button"
             >
               <Save className="w-4 h-4" />
               {saving ? 'Saving...' : 'Save'}

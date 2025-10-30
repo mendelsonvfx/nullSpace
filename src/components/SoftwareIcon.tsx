@@ -1,6 +1,12 @@
 // src/components/SoftwareIcon.tsx
 import { useState } from 'react';
 
+// Import software logos
+import blenderLogo from '/logos/blender.png';
+import houdiniLogo from '/logos/houdini.png';
+import afterEffectsLogo from '/logos/after-effects.png';
+import photoshopLogo from '/logos/photoshop.png';
+
 interface SoftwareIconProps {
   name: string;
   className?: string;
@@ -10,26 +16,17 @@ export function SoftwareIcon({ name, className = "w-5 h-5" }: SoftwareIconProps)
   const [imageError, setImageError] = useState(false);
   const normalizedName = name.toLowerCase().replace(/\s+/g, '-');
 
-  // Map software names to logo filenames
-  const getLogoPath = (softwareName: string): string => {
+  // Map software names to imported logo assets
+  const getLogoPath = (softwareName: string): string | null => {
     const logoMap: Record<string, string> = {
-      'blender': 'blender.png',
-      'houdini': 'houdini.png',
-      'after-effects': 'after-effects.png',
-      'after effects': 'after-effects.png',
-      'photoshop': 'photoshop.png',
-      'maya': 'maya.png',
-      'cinema-4d': 'cinema4d.png',
-      'cinema4d': 'cinema4d.png',
-      'cinema 4d': 'cinema4d.png',
-      'substance': 'substance.png',
-      'unreal': 'unreal.png',
-      'unity': 'unity.png',
-      'zbrush': 'zbrush.png',
-      'marmoset': 'marmoset.png',
+      'blender': blenderLogo,
+      'houdini': houdiniLogo,
+      'after-effects': afterEffectsLogo,
+      'after effects': afterEffectsLogo,
+      'photoshop': photoshopLogo,
     };
 
-    return `/logos/${logoMap[softwareName.toLowerCase()] || `${softwareName.toLowerCase()}.png`}`;
+    return logoMap[softwareName.toLowerCase()] || null;
   };
 
   // Fallback SVG icon for when image fails to load
@@ -39,7 +36,9 @@ export function SoftwareIcon({ name, className = "w-5 h-5" }: SoftwareIconProps)
     </div>
   );
 
-  if (imageError) {
+  const logoPath = getLogoPath(normalizedName);
+
+  if (imageError || !logoPath) {
     return (
       <div className="w-5 h-5 flex items-center justify-center" title={name}>
         <FallbackIcon />
@@ -50,7 +49,7 @@ export function SoftwareIcon({ name, className = "w-5 h-5" }: SoftwareIconProps)
   return (
     <div className="w-5 h-5 flex items-center justify-center" title={name}>
       <img
-        src={getLogoPath(normalizedName)}
+        src={logoPath}
         alt={name}
         className={`${className} object-contain`}
         onError={() => setImageError(true)}

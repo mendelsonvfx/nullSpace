@@ -1,14 +1,14 @@
-// src/components/SettingsPanel.tsx
-import { useProjectStore } from '../store/projectStore';
+// src/components/modals/SettingsPanel.tsx
+import { useProjectStore } from '../../store/projectStore';
 import { useState, useEffect, useRef } from 'react';
 import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw } from 'lucide-react';
-import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../utils/tauri';
-import type { SoftwareName } from '../types/project';
-import { useThumbnailCache } from '../hooks/useThumbnailCache';
+import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../../utils/tauri';
+import type { SoftwareName } from '../../types/project';
+import { useThumbnailCache } from '../../hooks/useThumbnailCache';
 import { getVersion } from '@tauri-apps/api/app';
-import { useModalBlur } from '../hooks/useModalBlur';
-import { clearAllTimeTrackingData } from '../utils/clearAllData';
-import { hslStringToHex } from '../utils/colorUtils';
+import { useModalBlur } from '../../hooks/useModalBlur';
+import { clearAllTimeTrackingData } from '../../utils/clearAllData';
+import { hslStringToHex } from '../../utils/colorUtils';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -100,7 +100,7 @@ export function SettingsPanel({ onClose, onDeleteClient, onDeleteCategory }: Set
 
   return (
     <div
-      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 ${blurClass}`}
+      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 rounded-lg ${blurClass}`}
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
@@ -631,6 +631,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     const saved = localStorage.getItem('modalBlurEnabled');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [bordersEnabled, setBordersEnabled] = useState(() => {
+    const saved = localStorage.getItem('bordersEnabled');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
 
   const defaultAccentColors = [
     { name: 'Purple', value: '#9103c6' },
@@ -705,6 +709,15 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       document.documentElement.style.setProperty('--accent-color-hover', hoverColor);
     }
   }, []);
+
+  useEffect(() => {
+    // Apply borders setting on mount
+    if (!bordersEnabled) {
+      document.body.classList.add('borders-disabled');
+    } else {
+      document.body.classList.remove('borders-disabled');
+    }
+  }, [bordersEnabled]);
 
   return (
     <div className="space-y-6">
@@ -919,6 +932,38 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
           <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
             showTagIcons ? 'translate-x-6' : 'translate-x-0.5'
           }`} />
+        </button>
+      </div>
+
+      {/* UI Borders */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-medium mb-1">UI Borders</div>
+          <p className="text-sm text-zinc-400">
+            Show borders around components and containers
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !bordersEnabled;
+            setBordersEnabled(newValue);
+            localStorage.setItem('bordersEnabled', JSON.stringify(newValue));
+            if (newValue) {
+              document.body.classList.remove('borders-disabled');
+            } else {
+              document.body.classList.add('borders-disabled');
+            }
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full transition-colors relative ${
+            bordersEnabled ? 'bg-accent' : 'bg-zinc-700'
+          }`}
+        >
+          <div
+            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+              bordersEnabled ? 'translate-x-6' : 'translate-x-0.5'
+            }`}
+          />
         </button>
       </div>
     </div>

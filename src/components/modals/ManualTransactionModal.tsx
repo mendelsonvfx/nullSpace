@@ -1,4 +1,4 @@
-// src/components/finance/ManualTransactionModal.tsx
+// src/components/modals/ManualTransactionModal.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Project } from '../../types/project';
