@@ -78,8 +78,9 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-zinc-900 rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl animate-modal"
+        className="bg-zinc-900 border border-zinc-800 rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl animate-modal"
         data-feedback-panel
+        data-modal-window
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-800">

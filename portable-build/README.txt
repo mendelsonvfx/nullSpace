@@ -1,4 +1,4 @@
-nullSpace v0.9.997-beta - Portable Version
+nullSpace v0.9.998-beta - Portable Version
 =========================================
 
 This is a portable version of nullSpace that doesn't require installation.
@@ -8,7 +8,7 @@ To run:
 2. Run nullSpace.exe
 3. Your settings and projects will be stored in the same folder
 
-Version: 0.9.997-beta
+Version: 0.9.998-beta
 Build Date: 2025-10-30
 
 For more information, visit: https://github.com/mendelsonvfx

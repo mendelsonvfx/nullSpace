@@ -43,6 +43,11 @@ body.borders-disabled [data-finance-container] {
   border-color: transparent !important;
 }
 
+/* Modal windows */
+body.borders-disabled [data-modal-window] {
+  border-color: transparent !important;
+}
+
 /* Notes - MDXEditor borders */
 body.borders-disabled .markdown-editor-container [class*='_toolbarRoot'] {
   border-color: transparent !important;

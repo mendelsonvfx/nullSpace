@@ -658,6 +658,12 @@ impl SoftwareLaunchConfig {
                 needs_pid_lookup: true,
                 process_name: "photoshop",
             }
+        } else if software_lower == "blender" {
+            SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: "blender",
+            }
         } else {
             SoftwareLaunchConfig {
                 use_explorer: false,

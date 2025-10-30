@@ -74,6 +74,7 @@ export const ManualTimeEntryModal: React.FC<ManualTimeEntryModalProps> = ({
           isAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
         }`}
         onClick={handleModalClick}
+        data-modal-window
       >
         {/* Two columns */}
         <div className="grid grid-cols-2 divide-x divide-zinc-800 h-full">

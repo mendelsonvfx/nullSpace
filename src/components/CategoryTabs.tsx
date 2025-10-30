@@ -1,5 +1,7 @@
 import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { AddCategoryModal } from './modals/AddCategoryModal';
+import { RenameCategoryModal } from './modals/RenameCategoryModal';
 
 interface CategoryTabsProps {
   categories: string[];
@@ -21,21 +23,11 @@ export function CategoryTabs({
   accentColor = '#a855f7'
 }: CategoryTabsProps) {
   const [isAdding, setIsAdding] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; category: string } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
-  const [editedName, setEditedName] = useState('');
   const [showScrollShadow, setShowScrollShadow] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  const handleAddCategory = () => {
-    if (newCategoryName.trim() && onAddCategory) {
-      onAddCategory(newCategoryName.trim());
-      setNewCategoryName('');
-      setIsAdding(false);
-    }
-  };
 
   // Close context menu on click outside
   useEffect(() => {
@@ -90,7 +82,6 @@ export function CategoryTabs({
   const handleRename = () => {
     if (contextMenu) {
       setEditingCategory(contextMenu.category);
-      setEditedName(contextMenu.category);
       setContextMenu(null);
     }
   };
@@ -99,14 +90,6 @@ export function CategoryTabs({
     if (contextMenu && onDeleteCategory) {
       onDeleteCategory(contextMenu.category);
       setContextMenu(null);
-    }
-  };
-
-  const handleRenameSubmit = () => {
-    if (editingCategory && editedName.trim() && onRenameCategory) {
-      onRenameCategory(editingCategory, editedName.trim());
-      setEditingCategory(null);
-      setEditedName('');
     }
   };
 
@@ -248,123 +231,19 @@ export function CategoryTabs({
       )}
 
       {/* Rename Modal */}
-      {editingCategory && onRenameCategory && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
-              (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
-            }
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget && (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
-              // If there's a valid new name, rename the category, otherwise just close
-              if (editedName.trim() && editedName.trim() !== editingCategory) {
-                handleRenameSubmit();
-              } else {
-                setEditingCategory(null);
-                setEditedName('');
-              }
-            }
-            delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
-          }}
-        >
-          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">Rename Category</h3>
-            <input
-              type="text"
-              value={editedName}
-              onChange={(e) => setEditedName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleRenameSubmit();
-                if (e.key === 'Escape') {
-                  setEditingCategory(null);
-                  setEditedName('');
-                }
-              }}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-accent"
-              autoFocus
-            />
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setEditingCategory(null);
-                  setEditedName('');
-                }}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors animate-button"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleRenameSubmit}
-                className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
-              >
-                Rename
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RenameCategoryModal
+        isOpen={!!editingCategory}
+        categoryName={editingCategory || ''}
+        onClose={() => setEditingCategory(null)}
+        onRename={onRenameCategory || (() => {})}
+      />
 
       {/* Add Category Modal */}
-      {isAdding && onAddCategory && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
-              (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
-            }
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget && (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
-              // If there's a name, create the category, otherwise just close
-              if (newCategoryName.trim()) {
-                handleAddCategory();
-              } else {
-                setIsAdding(false);
-                setNewCategoryName('');
-              }
-            }
-            delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
-          }}
-        >
-          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">Add Category</h3>
-            <input
-              type="text"
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddCategory();
-                if (e.key === 'Escape') {
-                  setIsAdding(false);
-                  setNewCategoryName('');
-                }
-              }}
-              placeholder="Category name..."
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-accent"
-              autoFocus
-            />
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setIsAdding(false);
-                  setNewCategoryName('');
-                }}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors animate-button"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddCategory}
-                className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
-              >
-                Add
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AddCategoryModal
+        isOpen={isAdding}
+        onClose={() => setIsAdding(false)}
+        onAdd={onAddCategory || (() => {})}
+      />
     </div>
   );
 }

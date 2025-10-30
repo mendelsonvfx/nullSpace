@@ -1224,13 +1224,16 @@ useTimeTrackingStore.subscribe((state) => {
           currentProjectTime
         };
 
-        // Update project without saving to backend (to avoid too many saves)
-        projectStoreState.projects = projectStoreState.projects.map(p =>
-          p.id === project.id ? updatedProject : p
-        );
+        // ✅ OPTIMIZATION: Use functional update to maintain array reference stability
+        // Only the affected project is updated, rest remain the same object references
+        useProjectStore.setState((prev) => ({
+          projects: prev.projects.map(p =>
+            p.id === project.id ? updatedProject : p
+          )
+        }));
 
-        // Trigger re-render by updating the store
-        useProjectStore.setState({ projects: projectStoreState.projects });
+        // Update local reference for next iteration
+        projectStoreState.projects = useProjectStore.getState().projects;
       }
     }
   });

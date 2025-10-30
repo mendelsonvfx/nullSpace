@@ -594,7 +594,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
-      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 w-full max-w-2xl shadow-2xl animate-modal">
+      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 w-full max-w-2xl shadow-2xl animate-modal" data-modal-window>
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-zinc-800">
           <div>

@@ -99,6 +99,7 @@ export class SessionService {
   static async checkProcessAlive(pid: number): Promise<boolean> {
     try {
       const isAlive = await invoke<boolean>('check_process_alive', { pid });
+      console.log(`[SessionService] Process ${pid} check result: ${isAlive ? '✅ ALIVE' : '❌ DEAD'}`);
       return isAlive;
     } catch (error) {
       console.error('[SessionService] ❌ Failed to check process:', error);

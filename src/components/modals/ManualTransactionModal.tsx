@@ -171,6 +171,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
         }`}
         onMouseDown={handleModalMouseDown}
         onClick={handleModalClick}
+        data-modal-window
       >
         {/* Two columns */}
         <div className="grid grid-cols-2 divide-x divide-zinc-800 h-full">

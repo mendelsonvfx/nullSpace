@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Plus, Folder, Search, X, Settings, Star, Archive, Grid3x3, ChevronRight, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, MessageSquare, Image, BarChart3 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from './store/projectStore';
 import { useContextMenuStore } from './store/contextMenuStore';
+import { useShallow } from 'zustand/react/shallow';
 import { SettingsPanel } from './components/modals/SettingsPanel';
 import { FeedbackPanel } from './components/modals/FeedbackPanel';
 import { AboutPanel } from './components/modals/AboutPanel';
@@ -52,8 +53,15 @@ function App() {
   renderCountRef.current += 1;
   console.log('[App] RENDER', { renderCount: renderCountRef.current, timestamp: performance.now() });
 
-    const {
-    projects,
+  // ✅ OPTIMIZATION APPROACH:
+  // Problem: state.projects array is recreated every second when timer updates timeEntries
+  // Solution: Subscribe to projects but use useMemo to prevent unnecessary re-renders downstream
+
+  // Get full projects array (will update every second, but that's OK)
+  const projects = useProjectStore((state) => state.projects);
+
+  // Get other store values with useShallow for shallow comparison
+  const {
     isLoading,
     loadProjects,
     selectProject,
@@ -72,7 +80,28 @@ function App() {
     setSelectedCategory,
     addCategory,
     launchingStatus
-  } = useProjectStore();
+  } = useProjectStore(
+    useShallow((state) => ({
+      isLoading: state.isLoading,
+      loadProjects: state.loadProjects,
+      selectProject: state.selectProject,
+      openInExplorer: state.openInExplorer,
+      launchSoftware: state.launchSoftware,
+      createProject: state.createProject,
+      updateStatus: state.updateStatus,
+      deleteProject: state.deleteProject,
+      togglePin: state.togglePin,
+      toggleFavorite: state.toggleFavorite,
+      updateProject: state.updateProject,
+      clients: state.clients,
+      deleteClient: state.deleteClient,
+      categories: state.categories,
+      selectedCategory: state.selectedCategory,
+      setSelectedCategory: state.setSelectedCategory,
+      addCategory: state.addCategory,
+      launchingStatus: state.launchingStatus,
+    }))
+  );
 
   const { activeMenu, setActiveMenu } = useContextMenuStore();
   const { getActiveSessionsForProject } = useTimeTrackingStore();
@@ -771,53 +800,57 @@ function App() {
     }
   }, [showFilterMenu]);
 
+  // ✅ OPTIMIZATION: Memoize expensive filter/sort operations
+  // Only recalculates when dependencies actually change
+  const filteredProjects = useMemo(() => {
+    return projects
+      .filter(p => {
+        // Filter by category
+        const matchesCategory = p.category === selectedCategory || !p.category && selectedCategory === 'Personal';
 
-  const filteredProjects = projects
-    .filter(p => {
-      // Filter by category
-      const matchesCategory = p.category === selectedCategory || !p.category && selectedCategory === 'Personal';
+        // Filter by search query
+        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      // Filter by search query
-      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+        // Filter by client
+        const matchesClient = selectedClientId ? p.clientId === selectedClientId : true;
 
-      // Filter by client
-      const matchesClient = selectedClientId ? p.clientId === selectedClientId : true;
+        // Filter by view
+        if (filterView === 'archive') {
+          return matchesCategory && matchesSearch && matchesClient && p.status === 'archived';
+        } else if (filterView === 'favorites') {
+          return matchesCategory && matchesSearch && matchesClient && p.isFavorite && p.status !== 'archived';
+        } else {
+          // 'all' - show all except archived
+          return matchesCategory && matchesSearch && matchesClient && p.status !== 'archived';
+        }
+      })
+      .sort((a, b) => {
+        // Pinned projects first
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
 
-      // Filter by view
-      if (filterView === 'archive') {
-        return matchesCategory && matchesSearch && matchesClient && p.status === 'archived';
-      } else if (filterView === 'favorites') {
-        return matchesCategory && matchesSearch && matchesClient && p.isFavorite && p.status !== 'archived';
-      } else {
-        // 'all' - show all except archived
-        return matchesCategory && matchesSearch && matchesClient && p.status !== 'archived';
-      }
-    })
-    .sort((a, b) => {
-      // Pinned projects first
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
+        // Then sort by selected criteria
+        switch (sortBy) {
+          case 'name':
+            return a.name.localeCompare(b.name);
+          case 'createdAt':
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          case 'deadline':
+            if (!a.deadline && !b.deadline) return 0;
+            if (!a.deadline) return 1;
+            if (!b.deadline) return -1;
+            return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+          case 'cost':
+            return (b.cost || 0) - (a.cost || 0);
+          default:
+            return 0;
+        }
+      });
+  }, [projects, searchQuery, selectedCategory, selectedClientId, filterView, sortBy]);
 
-      // Then sort by selected criteria
-      switch (sortBy) {
-        case 'name':
-          return a.name.localeCompare(b.name);
-        case 'createdAt':
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        case 'deadline':
-          if (!a.deadline && !b.deadline) return 0;
-          if (!a.deadline) return 1;
-          if (!b.deadline) return -1;
-          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-        case 'cost':
-          return (b.cost || 0) - (a.cost || 0);
-        default:
-          return 0;
-      }
-    });
-
-  const handleOpenProject = (project: any) => {
+  // ✅ OPTIMIZATION: Memoize event handlers to maintain stable function references
+  const handleOpenProject = useCallback((project: any) => {
     setSelectedProjectId(project.id);
     selectProject(project);
 
@@ -828,18 +861,41 @@ function App() {
         detail: { projectPath: project.path }
       }));
     }, 100);
-  };
+  }, [selectProject]);
 
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const selectedProject = useMemo(() =>
+    projects.find(p => p.id === selectedProjectId),
+    [projects, selectedProjectId]
+  );
 
-  const cycleStatus = (projectId: string, currentStatus: ProjectStatus) => {
+  const cycleStatus = useCallback((projectId: string, currentStatus: ProjectStatus) => {
     const currentIndex = STATUS_CYCLE.indexOf(currentStatus);
     const nextIndex = (currentIndex + 1) % STATUS_CYCLE.length;
     const nextStatus = STATUS_CYCLE[nextIndex];
     updateStatus(projectId, nextStatus);
-  };
+  }, [updateStatus]);
 
-  const getDaysRemaining = (deadline?: string): number | null => {
+  // ✅ OPTIMIZATION: Memoize expensive computations to avoid recalculating on every render
+  // Create a Map of clients by ID for O(1) lookup instead of O(n) find operations
+  const clientsById = useMemo(() => {
+    const map = new Map();
+    clients.forEach(client => map.set(client.id, client));
+    return map;
+  }, [clients]);
+
+  // Memoize active sessions lookup to avoid O(n*m) complexity in render loop
+  const activeSessionsByProject = useMemo(() => {
+    const map = new Map();
+    filteredProjects.forEach(project => {
+      const activeSessions = getActiveSessionsForProject(project.id);
+      if (activeSessions.length > 0) {
+        map.set(project.id, true);
+      }
+    });
+    return map;
+  }, [filteredProjects, getActiveSessionsForProject]);
+
+  const getDaysRemaining = useCallback((deadline?: string): number | null => {
     if (!deadline) return null;
     const deadlineDate = new Date(deadline);
     const today = new Date();
@@ -848,7 +904,7 @@ function App() {
     const diffTime = deadlineDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
-  };
+  }, []);
 
   // Memoize the onClose callback to prevent unnecessary re-renders
   const handleCloseFinance = useCallback(() => {
@@ -1261,7 +1317,7 @@ function App() {
                           cycleStatus(project.id, project.status as ProjectStatus);
                         }}
                         className={`w-3 h-3 rounded-full ${STATUS_COLORS[project.status as keyof typeof STATUS_COLORS]} ${
-                          getActiveSessionsForProject(project.id).length > 0 && project.status !== 'archived'
+                          activeSessionsByProject.get(project.id) && project.status !== 'archived'
                             ? project.status === 'active'
                               ? 'status-glow-green brightness-150'
                               : project.status === 'paused'
@@ -1284,20 +1340,16 @@ function App() {
                     )}
                     <div className="flex items-end justify-between">
                       <div className="flex gap-1 flex-wrap">
-                        {project.clientId && (() => {
-                          const { getClientById } = useProjectStore.getState();
-                          const client = getClientById(project.clientId);
-                          return client ? (
-                            <span
-                              key="client"
-                              className="px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1"
-                              style={{ backgroundColor: darkenColor(hslStringToHex(client.color || '#808080'), 60), color: '#ffffff' }}
-                            >
-                              {showTagIcons && <User className="w-3 h-3 fill-current opacity-30" />}
-                              {client.name}
-                            </span>
-                          ) : null;
-                        })()}
+                        {project.clientId && clientsById.get(project.clientId) && (
+                          <span
+                            key="client"
+                            className="px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1"
+                            style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
+                          >
+                            {showTagIcons && <User className="w-3 h-3 fill-current opacity-30" />}
+                            {clientsById.get(project.clientId)!.name}
+                          </span>
+                        )}
                         {project.tags.slice(0, 2).map(tag => (
                           <span key={tag} className="px-2 py-0.5 bg-zinc-800/80 rounded-full text-xs">
                             {tag}

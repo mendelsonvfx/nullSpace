@@ -118,11 +118,27 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
 
     // Set up process check callback to auto-stop session if process dies
     TimerService.setProcessCheckCallback(entryId, async (id) => {
-      const isAlive = await SessionService.verifySession(id);
-      if (!isAlive) {
-        await get().stopSession(id);
+      const session = get().sessions.get(id);
+      if (!session || !session.pid) {
+        console.log(`[TimeTrackingStore] ⚠️ No session or PID for ${id}, stopping process check`);
+        return false;
       }
-      return isAlive;
+
+      try {
+        // Check the actual PID directly (more reliable than backend session check)
+        const isAlive = await SessionService.checkProcessAlive(session.pid);
+        console.log(`[TimeTrackingStore] 🔍 Process check for ${session.software} (PID: ${session.pid}): ${isAlive ? '✅ ALIVE' : '❌ DEAD'}`);
+
+        if (!isAlive) {
+          console.log(`[TimeTrackingStore] ❌ Process died for ${session.software}, auto-stopping session`);
+          await get().stopSession(id);
+        }
+
+        return isAlive;
+      } catch (error) {
+        console.error('[TimeTrackingStore] ❌ Process check failed:', error);
+        return false;
+      }
     });
 
     // Save WorkSession to project

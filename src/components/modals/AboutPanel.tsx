@@ -47,6 +47,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
       <div
         className="bg-zinc-900 border border-zinc-800 rounded-lg w-full max-w-md mx-4 overflow-hidden animate-modal-in"
         onClick={(e) => e.stopPropagation()}
+        data-modal-window
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-zinc-800">
@@ -104,7 +105,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
           </div>
 
           <div className="text-center text-xs text-zinc-500">
-            <p>Version 0.9.997-beta</p>
+            <p>Version 0.9.998-beta</p>
             <p className="mt-1">Made with passion by Vision One</p>
           </div>
         </div>
