@@ -41,13 +41,13 @@ export const ProjectBreakdownCard = memo(function ProjectBreakdownCard({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-lg py-2 isolate ${thumbnailSrc ? 'border border-zinc-700/50' : ''}`}
+      className="relative overflow-hidden rounded-lg py-2 isolate border border-zinc-900"
       style={{ backgroundColor: '#18181b' }}
     >
       {thumbnailSrc && (
         <>
-          <div className="absolute inset-0 z-0" style={backgroundStyle} />
-          <div className="absolute inset-0 pointer-events-none z-0" style={overlayStyle} />
+          <div className="absolute inset-0 rounded-lg z-0" style={backgroundStyle} />
+          <div className="absolute inset-0 rounded-lg pointer-events-none z-0" style={overlayStyle} />
         </>
       )}
       <div className="relative z-10 flex justify-between items-center px-4">

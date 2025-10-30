@@ -1,4 +1,4 @@
-// src/components/time/ExportModal.tsx
+// src/components/modals/ExportModal.tsx
 import React, { useState } from 'react';
 import { X, FileSpreadsheet, FileText, FileDown } from 'lucide-react';
 import { Project, Client } from '../../types/project';
@@ -28,53 +28,136 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
   const getCurrencySymbol = (currency?: string) => {
     const symbols: Record<string, string> = {
       'USD': '$',
-      'RUB': '₽',
-      'EUR': '€'
+      'RUB': 'RUB ',
+      'EUR': 'EUR '
     };
     return symbols[currency || 'USD'] || currency || '$';
   };
 
   const exportPDF = async () => {
-    const entries = project.timeEntries?.filter(e => !e.isActive) || [];
+    const entries = project.timeEntries?.filter(e => !e.isActive && e.durationMinutes > 0) || [];
     const currencySymbol = getCurrencySymbol(project.currency);
 
+    // Load logo image
+    const logoImg = new Image();
+    logoImg.src = '/icon.png';
+    await new Promise((resolve) => {
+      logoImg.onload = resolve;
+    });
+
     const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    const primaryColor = [139, 92, 246]; // Purple accent
+    const darkBg = [24, 24, 27]; // zinc-900
+    const cardBg = [39, 39, 42]; // zinc-800
+    const lightText = [161, 161, 170]; // zinc-400
+    const whiteText = [255, 255, 255]; // white
 
-    // Title
-    doc.setFontSize(20);
-    doc.text(`Time Report: ${project.name}`, 14, 22);
+    // Dark background for entire page
+    doc.setFillColor(darkBg[0], darkBg[1], darkBg[2]);
+    doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
-    // Metadata
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30);
-    if (client) {
-      doc.text(`Client: ${client.name}`, 14, 36);
-    }
+    // Header with accent bar
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(0, 0, pageWidth, 8, 'F');
 
-    // Summary section
-    let yPos = client ? 46 : 40;
+    // Project name (main title)
+    doc.setFontSize(28);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    doc.text(project.name, 14, 22);
+
+    // Subtitle
     doc.setFontSize(14);
-    doc.setTextColor(0);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+    doc.text('Project Report', 14, 30);
+
+    // nullSpace branding in top right with "Generated in:" prefix
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+    const generatedInText = 'Generated in: ';
+    const generatedInWidth = doc.getTextWidth(generatedInText);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    const brandText = 'nullSpace';
+    const brandTextWidth = doc.getTextWidth(brandText);
+
+    const totalWidth = generatedInWidth + brandTextWidth;
+    const startX = pageWidth - totalWidth - 14;
+
+    // Draw "Generated in: " text
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+    doc.text(generatedInText, startX, 22);
+
+    // Draw nullSpace text
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    const brandTextX = startX + generatedInWidth;
+    doc.text(brandText, brandTextX, 22);
+
+    // Add logo after nullSpace text (slightly bigger than text height)
+    const textHeight = 10; // Font size 10
+    const logoSize = 4; 
+    const logoX = brandTextX + brandTextWidth + 1; // 1mm gap after text
+    const logoY = 24.3 - (logoSize / 2) - (textHeight * 0.35); // Vertically centered with text
+    doc.addImage(logoImg, 'PNG', logoX, logoY, logoSize, logoSize);
+
+    // Summary Cards
+    let yPos = 40;
+    doc.setFontSize(14);
+    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
     doc.text('Summary', 14, yPos);
 
     yPos += 8;
-    doc.setFontSize(10);
-    doc.text(`Total Time: ${formatTime(project.totalMinutesSpent || 0)}`, 14, yPos);
+    const cardWidth = (pageWidth - 28 - 8) / 3;
+    const cardHeight = 24;
 
-    if (project.hourlyRate) {
-      yPos += 6;
-      doc.text(`Hourly Rate (Actual): ${currencySymbol}${project.hourlyRate.toFixed(2)}/h`, 14, yPos);
-    }
+    // Time Card
+    doc.setFillColor(cardBg[0], cardBg[1], cardBg[2]);
+    doc.roundedRect(14, yPos, cardWidth, cardHeight, 2, 2, 'F');
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(14, yPos, cardWidth, 3, 'F');
 
-    if (project.targetHourlyRate) {
-      yPos += 6;
-      doc.text(`Hourly Rate (Target): ${currencySymbol}${project.targetHourlyRate.toFixed(2)}/h`, 14, yPos);
-    }
+    doc.setFontSize(9);
+    doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+    doc.text('Total Time', 18, yPos + 10);
+    doc.setFontSize(14);
+    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    doc.text(formatTime(project.totalMinutesSpent || 0), 18, yPos + 18);
 
+    // Cost Card
     if (project.cost) {
-      yPos += 6;
-      doc.text(`Total Cost: ${currencySymbol}${project.cost.toFixed(2)}`, 14, yPos);
+      doc.setFillColor(cardBg[0], cardBg[1], cardBg[2]);
+      doc.roundedRect(14 + cardWidth + 4, yPos, cardWidth, cardHeight, 2, 2, 'F');
+      doc.setFillColor(34, 197, 94);
+      doc.rect(14 + cardWidth + 4, yPos, cardWidth, 3, 'F');
+
+      doc.setFontSize(9);
+      doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+      doc.text('Total Cost', 18 + cardWidth + 4, yPos + 10);
+      doc.setFontSize(14);
+      doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+      doc.text(`${currencySymbol}${Math.round(project.cost)}`, 18 + cardWidth + 4, yPos + 18);
+    }
+
+    // Rate Card
+    if (project.hourlyRate) {
+      doc.setFillColor(cardBg[0], cardBg[1], cardBg[2]);
+      doc.roundedRect(14 + (cardWidth + 4) * 2, yPos, cardWidth, cardHeight, 2, 2, 'F');
+      doc.setFillColor(251, 191, 36);
+      doc.rect(14 + (cardWidth + 4) * 2, yPos, cardWidth, 3, 'F');
+
+      doc.setFontSize(9);
+      doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+      doc.text('Hourly Rate', 18 + (cardWidth + 4) * 2, yPos + 10);
+      doc.setFontSize(14);
+      doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+      doc.text(`${currencySymbol}${Math.round(project.hourlyRate)}/h`, 18 + (cardWidth + 4) * 2, yPos + 18);
     }
 
     // Software Breakdown
@@ -85,20 +168,55 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     });
 
     if (bySoftware.size > 0) {
-      yPos += 12;
+      yPos += 36;
       doc.setFontSize(14);
+      doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
       doc.text('Software Breakdown', 14, yPos);
 
-      yPos += 6;
-      doc.setFontSize(10);
-      bySoftware.forEach((minutes, software) => {
-        yPos += 6;
-        doc.text(`${software}: ${formatTime(minutes)}`, 20, yPos);
+      yPos += 4;
+      const softwareData = Array.from(bySoftware.entries()).map(([software, minutes]) => [
+        software,
+        formatTime(minutes),
+        `${((minutes / (project.totalMinutesSpent || 1)) * 100).toFixed(1)}%`
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Software', 'Time', 'Percentage']],
+        body: softwareData,
+        theme: 'plain',
+        headStyles: {
+          fillColor: [primaryColor[0], primaryColor[1], primaryColor[2]],
+          textColor: 255,
+          fontSize: 10,
+          fontStyle: 'bold',
+          cellPadding: 4
+        },
+        styles: {
+          fontSize: 9,
+          cellPadding: 4,
+          lineColor: [63, 63, 70],
+          lineWidth: 0.5,
+          textColor: [212, 212, 216],
+          fillColor: [cardBg[0], cardBg[1], cardBg[2]]
+        },
+        columnStyles: {
+          0: { cellWidth: 60 },
+          1: { cellWidth: 40, halign: 'right' },
+          2: { cellWidth: 30, halign: 'right' }
+        },
+        margin: { left: 14, right: 14 }
       });
+
+      yPos = (doc as any).lastAutoTable.finalY + 10;
     }
 
     // Time Entries Table
-    yPos += 12;
+    doc.setFontSize(14);
+    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    doc.text('Detailed Time Entries', 14, yPos);
+
+    yPos += 4;
     const tableData = entries
       .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
       .map(entry => {
@@ -118,23 +236,66 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
       startY: yPos,
       head: [['Date', 'Software', 'Duration', 'Shot', 'Type', 'Notes']],
       body: tableData,
-      theme: 'grid',
-      headStyles: { fillColor: [59, 130, 246], textColor: 255 },
-      styles: { fontSize: 9, cellPadding: 3 },
+      theme: 'striped',
+      headStyles: {
+        fillColor: [primaryColor[0], primaryColor[1], primaryColor[2]],
+        textColor: 255,
+        fontSize: 9,
+        fontStyle: 'bold',
+        cellPadding: 3
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        textColor: [212, 212, 216],
+        fillColor: [cardBg[0], cardBg[1], cardBg[2]],
+        lineColor: [63, 63, 70],
+        lineWidth: 0.5
+      },
+      alternateRowStyles: {
+        fillColor: [32, 32, 35]
+      },
       columnStyles: {
         0: { cellWidth: 25 },
-        1: { cellWidth: 30 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 20 },
+        1: { cellWidth: 28 },
+        2: { cellWidth: 20, halign: 'right' },
+        3: { cellWidth: 22 },
+        4: { cellWidth: 18 },
         5: { cellWidth: 'auto' }
-      }
+      },
+      margin: { left: 14, right: 14 }
     });
+
+    // Footer with metadata
+    yPos = (doc as any).lastAutoTable.finalY + 16;
+    doc.setFillColor(cardBg[0], cardBg[1], cardBg[2]);
+    doc.roundedRect(14, yPos, pageWidth - 28, client ? 18 : 12, 2, 2, 'F');
+
+    yPos += 7;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+    doc.text(`Generated: ${new Date().toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`, 18, yPos);
+
+    if (client) {
+      yPos += 5;
+      doc.text(`Client: ${client.name}`, 18, yPos);
+    }
 
     // Save PDF to project folder
     const pdfBytes = doc.output('arraybuffer');
     const uint8Array = new Uint8Array(pdfBytes);
-    const filename = `${project.name}_time_report_${Date.now()}.pdf`;
+
+    // Format date as DDMMYY
+    const now = new Date();
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
+    const filename = `${project.name}_report_${dateStr}.pdf`;
 
     try {
       await invoke('save_project_file', {
@@ -151,10 +312,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
   };
 
   const exportCSV = async () => {
-    const entries = project.timeEntries || [];
+    const entries = project.timeEntries?.filter(e => !e.isActive && e.durationMinutes > 0) || [];
     const currencySymbol = getCurrencySymbol(project.currency);
 
-    let csv = `Time Report: ${project.name}\n`;
+    let csv = `Project Report: ${project.name}\n`;
     csv += `Generated: ${new Date().toLocaleDateString()}\n`;
     if (client) {
       csv += `Client: ${client.name}\n`;
@@ -164,7 +325,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     csv += 'Date,Software,Duration (hours),Shot,Type,Notes\n';
 
     entries
-      .filter(e => !e.isActive)
       .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
       .forEach(entry => {
         const date = new Date(entry.startTime).toLocaleDateString();
@@ -182,11 +342,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     csv += 'SUMMARY\n';
     csv += `Total Hours,${((project.totalMinutesSpent || 0) / 60).toFixed(2)}\n`;
     csv += `Currency,${project.currency || 'USD'}\n`;
-    csv += `Hourly Rate (Actual),${currencySymbol}${project.hourlyRate?.toFixed(2) || 'N/A'}\n`;
-    csv += `Hourly Rate (Target),${currencySymbol}${project.targetHourlyRate?.toFixed(2) || 'N/A'}\n`;
-    csv += `Total Cost,${currencySymbol}${project.cost || 0}\n`;
+    csv += `Hourly Rate,${currencySymbol}${Math.round(project.hourlyRate || 0)}\n`;
+    csv += `Total Cost,${currencySymbol}${Math.round(project.cost || 0)}\n`;
 
-    const filename = `${project.name}_time_report_${Date.now()}.csv`;
+    // Format date as DDMMYY
+    const now = new Date();
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
+    const filename = `${project.name}_report_${dateStr}.csv`;
     const encoder = new TextEncoder();
     const bytes = encoder.encode(csv);
 
@@ -205,7 +367,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
   };
 
   const exportJSON = async () => {
-    const entries = project.timeEntries || [];
+    const entries = project.timeEntries?.filter(e => !e.isActive && e.durationMinutes > 0) || [];
 
     const report = {
       project: {
@@ -216,12 +378,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
       generated: new Date().toISOString(),
       summary: {
         totalHours: (project.totalMinutesSpent || 0) / 60,
-        hourlyRateActual: project.hourlyRate || null,
-        hourlyRateTarget: project.targetHourlyRate || null,
-        totalCost: project.cost || 0
+        hourlyRate: Math.round(project.hourlyRate || 0),
+        totalCost: Math.round(project.cost || 0),
+        currency: project.currency || 'USD'
       },
       entries: entries
-        .filter(e => !e.isActive)
         .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
         .map(entry => ({
           date: new Date(entry.startTime).toISOString(),
@@ -236,7 +397,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
         }))
     };
 
-    const filename = `${project.name}_time_report_${Date.now()}.json`;
+    // Format date as DDMMYY
+    const now = new Date();
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
+    const filename = `${project.name}_report_${dateStr}.json`;
     const encoder = new TextEncoder();
     const bytes = encoder.encode(JSON.stringify(report, null, 2));
 
@@ -255,10 +419,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
   };
 
   const exportMarkdown = async () => {
-    const entries = project.timeEntries || [];
+    const entries = project.timeEntries?.filter(e => !e.isActive && e.durationMinutes > 0) || [];
     const currencySymbol = getCurrencySymbol(project.currency);
 
-    let md = `# Time Report: ${project.name}\n\n`;
+    let md = `# Project Report: ${project.name}\n\n`;
     md += `**Generated:** ${new Date().toLocaleDateString()}\n`;
     if (client) {
       md += `**Client:** ${client.name}\n`;
@@ -269,13 +433,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     md += `- **Total Time:** ${formatTime(project.totalMinutesSpent || 0)}\n`;
     md += `- **Currency:** ${project.currency || 'USD'}\n`;
     if (project.hourlyRate) {
-      md += `- **Hourly Rate (Actual):** ${currencySymbol}${project.hourlyRate.toFixed(2)}/h\n`;
-    }
-    if (project.targetHourlyRate) {
-      md += `- **Hourly Rate (Target):** ${currencySymbol}${project.targetHourlyRate.toFixed(2)}/h\n`;
+      md += `- **Hourly Rate:** ${currencySymbol}${Math.round(project.hourlyRate)}/h\n`;
     }
     if (project.cost) {
-      md += `- **Total Cost:** ${currencySymbol}${project.cost.toFixed(2)}\n`;
+      md += `- **Total Cost:** ${currencySymbol}${Math.round(project.cost)}\n`;
     }
     md += '\n';
 
@@ -298,7 +459,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     md += '|------|----------|----------|------|------|-------|\n';
 
     entries
-      .filter(e => !e.isActive)
       .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
       .forEach(entry => {
         const date = new Date(entry.startTime).toLocaleDateString();
@@ -313,7 +473,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
         md += `| ${date} | ${software} | ${duration} | ${shot} | ${type} | ${notes} |\n`;
       });
 
-    const filename = `${project.name}_time_report_${Date.now()}.md`;
+    // Format date as DDMMYY
+    const now = new Date();
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
+    const filename = `${project.name}_report_${dateStr}.md`;
     const encoder = new TextEncoder();
     const bytes = encoder.encode(md);
 
@@ -427,11 +590,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-modal-backdrop"
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
-      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 w-full max-w-2xl shadow-2xl">
+      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 w-full max-w-2xl shadow-2xl animate-modal">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-zinc-800">
           <div>
@@ -462,13 +625,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
                   className={`
                     p-4 rounded-xl border-2 transition-all text-left
                     ${isSelected
-                      ? 'border-blue-500 bg-blue-500/10'
+                      ? 'border-accent shadow-lg shadow-accent/20'
                       : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700 hover:bg-zinc-800'
                     }
                   `}
+                  style={isSelected ? {
+                    backgroundColor: 'rgba(139, 92, 246, 0.08)'
+                  } : undefined}
                 >
-                  <div className="flex items-start gap-3">
-                    <Icon className={`w-5 h-5 ${format.color} flex-shrink-0 mt-0.5`} />
+                  <div className="flex items-center gap-3">
+                    <Icon className={`w-6 h-6 ${format.color} flex-shrink-0`} />
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-white text-sm mb-1">
                         {format.title}

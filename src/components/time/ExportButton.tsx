@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Download } from 'lucide-react';
 import { Project, Client } from '../../types/project';
-import { ExportModal } from './ExportModal';
+import { ExportModal } from '../modals/ExportModal';
 
 interface ExportButtonProps {
   project: Project;

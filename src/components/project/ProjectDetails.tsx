@@ -9,7 +9,7 @@ import { SoftwareIcon } from '../SoftwareIcon';
 import { STATUS_LABELS } from '../../utils';
 import { versionsCache } from '../../utils/versionsCache';
 import { InlineTimer, TimeInfoBar } from '../time';
-import { ManualTimeEntryModal } from '../../features/time-tracking/components/ManualTimeEntry/ManualTimeEntryModal';
+import { ManualTimeEntryModal } from '../modals/ManualTimeEntryModal';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
 import { useThumbnail } from '../../hooks/useThumbnail';
 
@@ -438,7 +438,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             }`}
             title={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
-            <Star className={`w-5 h-5 text-zinc-300 transition-all ${project.isFavorite ? 'fill-yellow-400' : 'group-hover:fill-zinc-600'} ${isFavoriteAnimating ? 'animate-favorite-star-bounce' : ''}`} />
+            <Star className={`w-5 h-5 transition-all ${project.isFavorite ? 'text-yellow-400 fill-yellow-400' : 'text-zinc-300 group-hover:fill-zinc-600'} ${isFavoriteAnimating ? 'animate-favorite-star-bounce' : ''}`} />
           </button>
           <button
             onClick={() => setShowProjectSettings(true)}
@@ -540,6 +540,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     });
                   }}
                   disabled={status === 'launching'}
+                  data-launch-software
                   className="p-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg flex items-center gap-3 transition-all duration-200 group active:scale-[0.98] active:brightness-95 select-none disabled:opacity-60 disabled:cursor-not-allowed relative"
                 >
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center">

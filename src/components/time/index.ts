@@ -5,6 +5,6 @@ export { TimeInfoBar, InlineTimer, TimeAnalytics, ManualTimeEntryModal } from '.
 export { ActiveTimer } from './ActiveTimer';
 export { BreakReminderNotification, BreakReminderContainer } from './BreakReminderNotification';
 export { ExportButton } from './ExportButton';
-export { ExportModal } from './ExportModal';
+export { ExportModal } from '../modals/ExportModal';
 
 export type { BreakReminder } from './BreakReminderNotification';

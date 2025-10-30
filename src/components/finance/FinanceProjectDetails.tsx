@@ -100,7 +100,7 @@ export function FinanceProjectDetails({
       </div>
 
       {/* Main Revenue Card */}
-      <div className={`bg-gradient-to-br ${project.paymentStatus === 'paid' ? 'from-green-900 to-green-800' : 'from-zinc-900 to-zinc-800'} rounded-2xl p-8 mb-6 border border-zinc-700`}>
+      <div data-finance-container className={`bg-gradient-to-br ${project.paymentStatus === 'paid' ? 'from-green-900 to-green-800' : 'from-zinc-900 to-zinc-800'} rounded-2xl p-8 mb-6 border border-zinc-700`}>
         <div className="flex items-center justify-between mb-6">
           <div>
             <p className="text-sm text-zinc-400 mb-2">Project Revenue</p>
@@ -130,7 +130,7 @@ export function FinanceProjectDetails({
       <div className="grid grid-cols-2 gap-6 mb-8">
         {/* Percentage of Total Revenue */}
         {project.paymentStatus === 'paid' && percentageOfTotal > 0 && (
-          <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+          <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
             <p className="text-sm text-zinc-500 mb-3">Percentage of Total Revenue</p>
             <div className="flex items-end gap-3 mb-4">
               <p className="text-5xl font-bold text-accent">{Math.round(percentageOfTotal)}%</p>
@@ -147,7 +147,7 @@ export function FinanceProjectDetails({
 
         {/* Client Total Revenue */}
         {client && clientRevenue > 0 && (
-          <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+          <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
             <p className="text-sm text-zinc-500 mb-3">Total from Client</p>
             <div className="flex items-center gap-2 mb-3">
               <div
@@ -165,7 +165,7 @@ export function FinanceProjectDetails({
 
         {/* Deadline */}
         {project.deadline && (
-          <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+          <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
             <p className="text-sm text-zinc-500 mb-3">Deadline</p>
             <p className="text-3xl font-bold text-zinc-300 mb-2">
               {new Date(project.deadline).toLocaleDateString('en-US', {
@@ -196,7 +196,7 @@ export function FinanceProjectDetails({
 
         {/* Revenue per Day */}
         {project.paymentStatus === 'paid' && project.createdAt && (
-          <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+          <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
             <p className="text-sm text-zinc-500 mb-3">Revenue per Day</p>
             {(() => {
               const createdDate = new Date(project.createdAt);
@@ -221,7 +221,7 @@ export function FinanceProjectDetails({
 
         {/* Hourly Rate */}
         {hourlyRate && totalMinutes > 0 && (
-          <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+          <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
             <p className="text-sm text-zinc-500 mb-3">Hourly Rate</p>
             <div className="flex items-baseline gap-2 mb-2">
               <p className="text-5xl font-bold text-orange-400">
@@ -244,7 +244,7 @@ export function FinanceProjectDetails({
       </div>
 
       {/* Project Details */}
-      <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+      <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
         <h3 className="text-lg font-semibold mb-4">Project Details</h3>
         <div className="space-y-3 text-sm">
           {project.description && (
@@ -272,7 +272,7 @@ export function FinanceProjectDetails({
 
       {/* Transaction History */}
       {project.transactions && project.transactions.length > 0 && (
-        <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 mt-6">
+        <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 mt-6">
           <h3 className="text-lg font-semibold mb-4">Transaction History</h3>
           <div className="space-y-2">
             {project.transactions

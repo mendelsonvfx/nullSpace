@@ -44,10 +44,10 @@ export const ProjectCard = memo(function ProjectCard({
   return (
     <div
       data-project-card
-      className={`w-full text-left rounded-lg transition-all relative overflow-hidden border group animate-card cursor-pointer ${
+      className={`w-full text-left rounded-lg transition-all relative border group animate-card cursor-pointer ${
         isSelected
           ? 'border-accent'
-          : 'hover:border-accent border-white/10'
+          : 'hover:border-accent border-zinc-800'
       }`}
       onClick={onClick}
       onContextMenu={onContextMenu}
@@ -55,10 +55,7 @@ export const ProjectCard = memo(function ProjectCard({
       tabIndex={-1}
     >
       {/* Background image with gradient */}
-      <div className="absolute inset-0" style={backgroundStyle} />
-
-      {/* Gray outline overlay on top of background */}
-      <div className="absolute inset-0 border border-zinc-700/30 rounded-lg pointer-events-none z-10" />
+      <div className="absolute inset-0 rounded-lg overflow-hidden" style={backgroundStyle} />
 
       {/* Bottom gradient overlay (accent color, appears on hover) */}
       <div

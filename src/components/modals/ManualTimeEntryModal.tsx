@@ -1,9 +1,9 @@
-// src/features/time-tracking/components/ManualTimeEntry/ManualTimeEntryModal.tsx
+// src/components/modals/ManualTimeEntryModal.tsx
 import React, { useEffect, useState } from 'react';
-import { Project, SoftwareName } from '../../../../types/project';
-import { useModalBlur } from '../../../../hooks/useModalBlur';
-import { TimeEntryForm } from './TimeEntryForm';
-import { TimeEntryHistory } from './TimeEntryHistory';
+import { Project, SoftwareName } from '../../types/project';
+import { useModalBlur } from '../../hooks/useModalBlur';
+import { TimeEntryForm } from '../../features/time-tracking/components/ManualTimeEntry/TimeEntryForm';
+import { TimeEntryHistory } from '../../features/time-tracking/components/ManualTimeEntry/TimeEntryHistory';
 
 interface ManualTimeEntryModalProps {
   isOpen: boolean;

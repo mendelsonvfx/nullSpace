@@ -9,7 +9,7 @@ import { PieChart } from '../shared';
 import { getCurrentRates, getManualRates, getRateMode, getCachedRatesSync } from '../../utils/exchangeRates';
 import { getThresholdForCurrency } from '../../utils/financeSettings';
 import { TimeAnalytics } from '../time';
-import { ManualTransactionModal } from './ManualTransactionModal';
+import { ManualTransactionModal } from '../modals/ManualTransactionModal';
 import { Currency } from '../../types/project';
 import { getProjectColor, createSoftGradient } from '../../utils/colorUtils';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
@@ -382,7 +382,13 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         totalRevenue[currency] = (totalRevenue[currency] || 0) + project.prepaymentAmount;
       }
 
-      paidProjects.push({ ...project, displayAmount: project.prepaymentAmount, isPrepaidPart: true });
+      // Вместо добавления prepayment как отдельной карточки, добавляем полный проект с флагом
+      paidProjects.push({
+        ...project,
+        displayAmount: project.prepaymentAmount,
+        remainingAmount: project.cost - project.prepaymentAmount,
+        isPrepaidProject: true
+      });
     }
   });
 
@@ -426,7 +432,14 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         pendingRevenue[currency] = (pendingRevenue[currency] || 0) + remainingAmount;
       }
 
-      pendingProjects.push({ ...project, displayAmount: remainingAmount, isPrepaidRemaining: true });
+      // Добавляем в pending с акцентом на remaining
+      pendingProjects.push({
+        ...project,
+        displayAmount: remainingAmount,
+        prepaidAmount: project.prepaymentAmount,
+        isPrepaidProject: true,
+        showRemainingFirst: true
+      });
     }
   });
 
@@ -453,12 +466,33 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     completedAt: transaction.date
   }));
 
-  const allProjects = [...paidProjects, ...pendingProjects, ...otherProjectItems];
-  let filtered = allProjects;
+  // Для "All" объединяем, но убираем дубликаты prepaid проектов
+  let filtered: any[] = [];
   if (filterStatus === 'paid') {
     filtered = [...paidProjects, ...otherProjectItems];
   } else if (filterStatus === 'unpaid') {
-    filtered = pendingProjects;
+    // Убираем дубликаты в pending тоже
+    const seenIds = new Set();
+    filtered = pendingProjects.filter(item => {
+      if (seenIds.has(item.id)) {
+        return false;
+      }
+      seenIds.add(item.id);
+      return true;
+    });
+  } else {
+    // "All" - объединяем все, но prepaid проекты показываем только один раз
+    const seenIds = new Set();
+    const allItems = [...paidProjects, ...pendingProjects, ...otherProjectItems];
+    filtered = allItems.filter(item => {
+      if (item.isPrepaidProject) {
+        if (seenIds.has(item.id)) {
+          return false; // Уже добавили этот prepaid проект
+        }
+        seenIds.add(item.id);
+      }
+      return true;
+    });
   }
   const sortedFilteredProjects = [...filtered].sort((a, b) => {
     if (sortBy === 'amount') {
@@ -745,11 +779,11 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
               <div className="relative">
                 <button
                   onClick={() => setShowAllProjects(!showAllProjects)}
-                  className={`w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 font-medium cursor-pointer relative z-20 flex items-center justify-center gap-2 ${
-                    showAllProjects ? 'rounded-t-lg' : 'rounded-lg transition-all duration-150 delay-150'
+                  className={`w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 font-medium cursor-pointer relative z-20 flex items-center justify-center gap-2 transition-colors ${
+                    showAllProjects ? 'rounded-t-lg' : 'rounded-lg'
                   }`}
                   style={{
-                    transitionProperty: 'background-color, border-radius'
+                    transition: showAllProjects ? 'background-color 150ms' : 'background-color 150ms, border-radius 150ms 250ms'
                   }}
                 >
                   <span>Statement</span>
@@ -759,13 +793,6 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                     <ChevronDown className="w-4 h-4 text-zinc-400" />
                   )}
                 </button>
-                <button
-                  onClick={() => setShowManualTransactionModal(true)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-accent hover:bg-accent-hover rounded-lg transition-colors z-30 group"
-                  title="Add manual transaction"
-                >
-                  <Plus className="w-4 h-4 text-white" />
-                </button>
               </div>
 
               {/* Dropdown menu */}
@@ -774,36 +801,36 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   showAllProjects ? 'max-h-[2000px]' : 'max-h-0'
                 }`}
               >
-                <div className="bg-zinc-900 rounded-b-lg p-6 border border-zinc-800 border-t-0">
+                <div className="bg-zinc-900 rounded-b-lg p-6">
                   {/* Фильтры */}
                   <div className="flex flex-wrap gap-3 mb-6 pb-4 border-b border-zinc-800">
-                    <div className="flex gap-2">
+                    <div className="flex gap-1 bg-zinc-800/50 rounded-lg p-1">
                       <button
                         onClick={() => setFilterStatus('all')}
-                        className={`px-3 py-1.5 text-sm rounded-md transition-all font-medium ${
+                        className={`px-3 py-1 rounded text-sm transition-colors font-medium ${
                           filterStatus === 'all'
-                            ? 'bg-accent text-white shadow-lg shadow-accent/20'
-                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                            ? 'bg-zinc-700 text-white'
+                            : 'text-zinc-400 hover:text-white'
                         }`}
                       >
                         All
                       </button>
                       <button
                         onClick={() => setFilterStatus('paid')}
-                        className={`px-3 py-1.5 text-sm rounded-md transition-all font-medium ${
+                        className={`px-3 py-1 rounded text-sm transition-colors font-medium ${
                           filterStatus === 'paid'
-                            ? 'bg-green-600 text-white shadow-lg shadow-green-600/20'
-                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                            ? 'bg-zinc-700 text-green-400'
+                            : 'text-zinc-400 hover:text-white'
                         }`}
                       >
                         Paid
                       </button>
                       <button
                         onClick={() => setFilterStatus('unpaid')}
-                        className={`px-3 py-1.5 text-sm rounded-md transition-all font-medium ${
+                        className={`px-3 py-1 rounded text-sm transition-colors font-medium ${
                           filterStatus === 'unpaid'
-                            ? 'bg-yellow-600 text-white shadow-lg shadow-yellow-600/20'
-                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                            ? 'bg-zinc-700 text-yellow-400'
+                            : 'text-zinc-400 hover:text-white'
                         }`}
                       >
                         Pending
@@ -811,6 +838,14 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                     </div>
 
                     <div className="flex gap-2 ml-auto relative filter-menu-container">
+                      <button
+                        onClick={() => setShowManualTransactionModal(true)}
+                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors group flex items-center gap-2"
+                        title="Add manual transaction"
+                      >
+                        <Plus className="w-4 h-4 text-white" />
+                        <span className="text-sm text-zinc-400 group-hover:text-zinc-200 font-medium">Add Payment</span>
+                      </button>
                       <button
                         onClick={() => setShowFilterMenu(!showFilterMenu)}
                         className="px-3 py-1.5 text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-md transition-all flex items-center gap-2 font-medium"
@@ -820,7 +855,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                       </button>
 
                       {showFilterMenu && (
-                        <div className="absolute top-full mt-2 right-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-0 z-50 min-w-[140px] animate-modal">
+                        <div className="absolute top-full mt-2 right-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-0 z-50 w-[120px] animate-modal">
                           <button
                             onClick={() => {
                               setSortBy('amount');
@@ -884,7 +919,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                         const originalCurrency = project.currency || 'USD';
                         const originalAmount = project.displayAmount || project.cost;
                         const showConversion = convertToBaseCurrency && originalCurrency !== baseCurrency;
-                        const isPaid = project.paymentStatus === 'paid' || project.isPrepaidPart;
+                        const isPaid = project.paymentStatus === 'paid' || project.isPrepaidProject;
                         const projectDate = project.completedAt || project.createdAt || project.date;
                         const formattedDate = projectDate ? new Date(projectDate).toLocaleDateString('ru-RU', {
                           day: '2-digit',
@@ -894,46 +929,98 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
                         return (
                           <div
-                            key={`${project.id}-${project.isPrepaidPart ? 'prepaid' : project.isPrepaidRemaining ? 'remaining' : 'full'}`}
-                            className={`group flex justify-between items-center py-3 px-4 rounded-lg transition-all cursor-pointer border ${
+                            key={`${project.id}-${project.isPrepaidProject ? 'prepaid' : 'full'}`}
+                            className={`group flex justify-between items-center py-2 px-4 rounded-lg transition-all cursor-pointer border ${
                               isPaid
                                 ? 'bg-zinc-800/50 border-zinc-700/50 hover:bg-zinc-800 hover:border-zinc-600 hover:shadow-lg'
                                 : 'bg-zinc-800/30 border-zinc-700/30 hover:bg-zinc-800/50 hover:border-zinc-700/50'
                             }`}
                           >
                             <div className="flex-1 min-w-0 mr-4">
-                              <div className={`font-medium truncate transition-colors ${
-                                isPaid
-                                  ? 'text-zinc-200 group-hover:text-white'
-                                  : 'text-zinc-400 group-hover:text-zinc-300'
-                              }`}>
-                                {project.name}
+                              <div className="flex items-center gap-2">
+                                <div className={`font-medium truncate transition-colors ${
+                                  isPaid
+                                    ? 'text-zinc-200 group-hover:text-white'
+                                    : 'text-zinc-400 group-hover:text-zinc-300'
+                                }`}>
+                                  {project.name}
+                                </div>
+                                {!project.isOtherProject && (
+                                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                    project.status === 'active'
+                                      ? 'bg-green-500'
+                                      : project.status === 'paused'
+                                      ? 'bg-yellow-500'
+                                      : project.status === 'completed'
+                                      ? 'bg-blue-500'
+                                      : 'bg-zinc-500'
+                                  }`} />
+                                )}
                               </div>
                               {formattedDate && (
                                 <div className="text-xs text-zinc-500 mt-0.5">{formattedDate}</div>
                               )}
-                              {project.isPrepaidPart && (
-                                <div className="text-xs text-yellow-500 mt-0.5">Prepayment</div>
-                              )}
-                              {project.isPrepaidRemaining && (
-                                <div className="text-xs text-zinc-500 mt-0.5">Remaining</div>
-                              )}
                             </div>
                             <div className="text-right flex-shrink-0">
-                              <div className={`font-bold text-base transition-colors ${
-                                isPaid
-                                  ? 'text-green-400 group-hover:text-green-300'
-                                  : 'text-zinc-500 group-hover:text-zinc-400'
-                              }`}>
-                                {convertToBaseCurrency
-                                  ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
-                                  : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`
-                                }
-                              </div>
-                              {showConversion && (
-                                <div className="text-xs text-zinc-500 mt-0.5">
-                                  ({originalAmount?.toLocaleString()} {currencySymbols[originalCurrency]})
-                                </div>
+                              {project.isPrepaidProject ? (
+                                project.showRemainingFirst ? (
+                                  // В pending показываем remaining первым
+                                  <>
+                                    <div className="font-bold text-base text-zinc-500 group-hover:text-zinc-400 transition-colors">
+                                      <span className="text-xs text-yellow-500 mr-1.5">Remaining:</span>
+                                      {convertToBaseCurrency
+                                        ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
+                                        : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`
+                                      }
+                                    </div>
+                                    <div className="text-sm text-zinc-500 mt-0.5">
+                                      <span className="text-xs mr-1.5">Prepayment:</span>
+                                      {convertToBaseCurrency
+                                        ? `${convertCurrency(project.prepaidAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
+                                        : `${project.prepaidAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`
+                                      }
+                                    </div>
+                                  </>
+                                ) : (
+                                  // В paid показываем prepayment первым
+                                  <>
+                                    <div className="font-bold text-base text-green-400 group-hover:text-green-300 transition-colors">
+                                      <span className="text-xs text-yellow-500 mr-1.5">Prepayment:</span>
+                                      {convertToBaseCurrency
+                                        ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
+                                        : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`
+                                      }
+                                    </div>
+                                    <div className="text-sm text-zinc-500 mt-0.5">
+                                      <span className="text-xs mr-1.5">Remaining:</span>
+                                      {convertToBaseCurrency
+                                        ? `${convertCurrency(project.remainingAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
+                                        : `${project.remainingAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`
+                                      }
+                                    </div>
+                                  </>
+                                )
+                              ) : (
+                                <>
+                                  <div className={`font-bold text-base transition-colors ${
+                                    isPaid
+                                      ? 'text-green-400 group-hover:text-green-300'
+                                      : 'text-zinc-500 group-hover:text-zinc-400'
+                                  }`}>
+                                    {!isPaid && (
+                                      <span className="text-xs text-zinc-500 mr-1.5">Remaining:</span>
+                                    )}
+                                    {convertToBaseCurrency
+                                      ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
+                                      : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`
+                                    }
+                                  </div>
+                                  {showConversion && (
+                                    <div className="text-xs text-zinc-500 mt-0.5">
+                                      ({originalAmount?.toLocaleString()} {currencySymbols[originalCurrency]})
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                           </div>
@@ -956,7 +1043,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
           <h2 className="text-2xl font-medium text-zinc-400 mb-6">Statistics</h2>
           <div className="grid grid-cols-3 gap-6">
             {/* Total Projects */}
-            <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+            <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
               <p className="text-sm text-zinc-500 mb-2">Total Projects</p>
               <p className="text-5xl font-bold text-blue-400 mb-2">{projects.length}</p>
               <div className="flex gap-2 text-xs text-zinc-500">
@@ -968,7 +1055,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
             {/* Average Project Value */}
             {paidProjects.length > 0 && (
-              <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
                 <p className="text-sm text-zinc-500 mb-2">Average Project Value</p>
                 <p className="text-5xl font-bold text-purple-400">
                   {statistics.avgValue.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} <span className="text-purple-400">{currencySymbols[statistics.displayCurrency]}</span>
@@ -977,7 +1064,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             )}
 
             {/* Revenue per Day */}
-            <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+            <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
               <p className="text-sm text-zinc-500 mb-2">Revenue per Day</p>
               <p className="text-5xl font-bold text-accent">
                 {statistics.dailyRate.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} <span className="text-accent">{currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}</span>
@@ -986,11 +1073,15 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
           </div>
         </div>
 
-        {/* Revenue Timeline Chart */}
+        {/* Finance Analytics */}
         {paidProjects.length > 0 && timelineData && (
-          <div className="mb-12">
-            <h2 className="text-2xl font-medium text-zinc-400 mb-6">Revenue Timeline</h2>
-            <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+          <>
+            <h2 className="text-2xl font-medium text-zinc-400 mb-6">Finance Analytics</h2>
+
+            {/* Revenue Timeline Chart */}
+            <div className="mb-6">
+              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+                <h3 className="text-lg font-semibold mb-4 text-zinc-200">Revenue Timeline</h3>
               <div
                 ref={timelineContainerRef}
                 className="w-full relative"
@@ -1142,65 +1233,64 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   })}
                 </div>
               </div>
+              </div>
             </div>
-          </div>
-        )}
 
-        {/* Timeline Context Menu */}
-        {timelineContextMenu && (
-          <>
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => setTimelineContextMenu(null)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setTimelineContextMenu(null);
-              }}
-            />
-            <div
-              ref={timelineContextMenuRef}
-              className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
-              style={{
-                top: (() => {
-                  const menuHeight = timelineContextMenuRef.current?.offsetHeight || 100;
-                  const windowHeight = window.innerHeight;
-                  const wouldOverflow = timelineContextMenu.y + menuHeight > windowHeight;
-                  return wouldOverflow ? windowHeight - menuHeight - 10 : timelineContextMenu.y;
-                })(),
-                left: (() => {
-                  const menuWidth = timelineContextMenuRef.current?.offsetWidth || 180;
-                  const windowWidth = window.innerWidth;
-                  const wouldOverflow = timelineContextMenu.x + menuWidth > windowWidth;
-                  return wouldOverflow ? windowWidth - menuWidth - 10 : timelineContextMenu.x;
-                })()
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => {
-                  setShowMinMaxTooltips(!showMinMaxTooltips);
-                  setTimelineContextMenu(null);
-                  setActiveMenu(null);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4" />
-                  <span>Show Min/Max Values</span>
+            {/* Timeline Context Menu */}
+            {timelineContextMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setTimelineContextMenu(null)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setTimelineContextMenu(null);
+                  }}
+                />
+                <div
+                  ref={timelineContextMenuRef}
+                  className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
+                  style={{
+                    top: (() => {
+                      const menuHeight = timelineContextMenuRef.current?.offsetHeight || 100;
+                      const windowHeight = window.innerHeight;
+                      const wouldOverflow = timelineContextMenu.y + menuHeight > windowHeight;
+                      return wouldOverflow ? windowHeight - menuHeight - 10 : timelineContextMenu.y;
+                    })(),
+                    left: (() => {
+                      const menuWidth = timelineContextMenuRef.current?.offsetWidth || 180;
+                      const windowWidth = window.innerWidth;
+                      const wouldOverflow = timelineContextMenu.x + menuWidth > windowWidth;
+                      return wouldOverflow ? windowWidth - menuWidth - 10 : timelineContextMenu.x;
+                    })()
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => {
+                      setShowMinMaxTooltips(!showMinMaxTooltips);
+                      setTimelineContextMenu(null);
+                      setActiveMenu(null);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      <span>Show Min/Max Values</span>
+                    </div>
+                    {showMinMaxTooltips && (
+                      <Check className="w-3.5 h-3.5 text-zinc-200 flex-shrink-0" />
+                    )}
+                  </button>
                 </div>
-                {showMinMaxTooltips && (
-                  <Check className="w-3.5 h-3.5 text-zinc-200 flex-shrink-0" />
-                )}
-              </button>
-            </div>
-          </>
-        )}
+              </>
+            )}
 
-        {/* Monthly Revenue Breakdown - Last 12 months */}
-        {paidProjects.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-2xl font-medium text-zinc-400 mb-6">Monthly Revenue Breakdown</h2>
-            <div className="bg-zinc-900 rounded-xl p-8 border border-zinc-800">
+            {/* Monthly Revenue Breakdown - Last 12 months */}
+            {paidProjects.length > 0 && (
+              <div className="mb-6">
+                <div data-finance-container className="bg-zinc-900 rounded-xl p-8 border border-zinc-800">
+                  <h3 className="text-lg font-semibold mb-4 text-zinc-200">Monthly Revenue Breakdown</h3>
               {(() => {
                 // Get last 12 months
                 const now = new Date();
@@ -1360,16 +1450,16 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   </>
                 );
               })()}
-            </div>
-          </div>
-        )}
+                </div>
+              </div>
+            )}
 
         {/* Top 3 Projects by Revenue */}
         {paidProjects.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-2xl font-medium text-zinc-400 mb-6">Top 3 Projects by Revenue</h2>
+          <div className="mb-6">
             <div className="grid grid-cols-[1fr,300px] gap-6 items-start">
-              <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+                <h3 className="text-lg font-semibold mb-4 text-zinc-200">Top 3 Projects by Revenue</h3>
                 <div className="space-y-4">
                   {top3Projects.map(({ project, displayAmount, displayCurr, percentage }) => {
                     const projectColor = getProjectColor(project);
@@ -1402,7 +1492,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             </div>
 
               {/* Pie Chart */}
-              <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 flex items-center justify-center h-full">
+              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 flex items-center justify-center h-full">
                 {projectsPieChartData.length > 0 ? (
                   <PieChart data={projectsPieChartData} title="All&#10;Projects" id="projects" />
                 ) : (
@@ -1415,10 +1505,10 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
         {/* Top 3 Clients by Revenue */}
         {paidProjects.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-2xl font-medium text-zinc-400 mb-6">Top 3 Clients by Revenue</h2>
+          <div className="mb-6">
             <div className="grid grid-cols-[1fr,300px] gap-6 items-start">
-              <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 min-h-[280px]">
+              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 min-h-[280px]">
+                <h3 className="text-lg font-semibold mb-4 text-zinc-200">Top 3 Clients by Revenue</h3>
                 <div className="space-y-4">
                   {top3Clients.map(({ clientId, data, percentage }) => {
                     const clientColor = data.client.color || '#8b5cf6'; // fallback to purple
@@ -1470,7 +1560,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             </div>
 
               {/* Pie Chart */}
-              <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 flex items-center justify-center h-full">
+              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 flex items-center justify-center h-full">
                 {clientsPieChartData.length > 0 ? (
                   <PieChart data={clientsPieChartData} title="All&#10;Clients" id="clients" />
                 ) : (
@@ -1479,6 +1569,8 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
               </div>
             </div>
           </div>
+        )}
+          </>
         )}
 
         {/* Time Analytics Section */}

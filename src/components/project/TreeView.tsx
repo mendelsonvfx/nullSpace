@@ -7,6 +7,25 @@ import { useContextMenuStore } from '../../store/contextMenuStore';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { writeText } from '@tauri-apps/api/clipboard';
 
+// Import folder icons
+import blenderFolIcon from '/icons/folders/blender_fol.png';
+import houdiniFolIcon from '/icons/folders/houdini_fol.png';
+import photoshopFolIcon from '/icons/folders/photoshop_fol.png';
+import afterEffectsFolIcon from '/icons/folders/after-effects_fol.png';
+
+// Folder SVG component
+const FolderIcon = ({ color }: { color: string }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M3 6V16.8C3 17.9201 3 18.4798 3.21799 18.9076C3.40973 19.2839 3.71547 19.5905 4.0918 19.7822C4.5192 20 5.07899 20 6.19691 20H17.8031C18.921 20 19.48 20 19.9074 19.7822C20.2837 19.5905 20.5905 19.2841 20.7822 18.9078C21.0002 18.48 21.0002 17.9199 21.0002 16.7998L21.0002 9.19978C21.0002 8.07967 21.0002 7.51962 20.7822 7.0918C20.5905 6.71547 20.2839 6.40973 19.9076 6.21799C19.4798 6 18.9201 6 17.8 6H12M3 6H12M3 6C3 4.89543 3.89543 4 5 4H8.67452C9.1637 4 9.40886 4 9.63904 4.05526C9.84311 4.10425 10.0379 4.18526 10.2168 4.29492C10.4186 4.41857 10.5918 4.59182 10.9375 4.9375L12 6"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 // Predefined folder colors
 const FOLDER_COLORS = [
   { name: 'Red', value: '#ef4444' },
@@ -537,10 +556,10 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     const name = folderName.toLowerCase();
 
     // Map folder names to custom icon file names
-    if (name === 'blender') return '/icons/folders/blender_fol.png';
-    if (name === 'aftereffects') return '/icons/folders/after-effects_fol.png';
-    if (name === 'photoshop') return '/icons/folders/photoshop_fol.png';
-    if (name === 'houdini') return '/icons/folders/houdini_fol.png';
+    if (name === 'blender') return blenderFolIcon;
+    if (name === 'aftereffects') return afterEffectsFolIcon;
+    if (name === 'photoshop') return photoshopFolIcon;
+    if (name === 'houdini') return houdiniFolIcon;
     // For folders without custom icons, return null
     return null;
   };
@@ -605,20 +624,7 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
                   className="w-7 h-7 flex-shrink-0"
                 />
               ) : (
-                <div
-                  className="w-4 h-4 flex-shrink-0"
-                  style={{
-                    WebkitMaskImage: 'url(/icons/folders/folder.svg)',
-                    WebkitMaskSize: 'contain',
-                    WebkitMaskRepeat: 'no-repeat',
-                    WebkitMaskPosition: 'center',
-                    maskImage: 'url(/icons/folders/folder.svg)',
-                    maskSize: 'contain',
-                    maskRepeat: 'no-repeat',
-                    maskPosition: 'center',
-                    backgroundColor: folderColor || '#60a5fa'
-                  }}
-                />
+                <FolderIcon color={folderColor || '#60a5fa'} />
               )
             ) : (
               <>

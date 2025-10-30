@@ -1,9 +1,9 @@
-// src/components/WelcomeSetup.tsx
+// src/components/modals/WelcomeSetup.tsx
 import { useState } from 'react';
 import { FolderOpen, Rocket, Check, RefreshCw } from 'lucide-react';
-import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../utils/tauri';
-import { useProjectStore } from '../store/projectStore';
-import type { SoftwareName } from '../types/project';
+import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../../utils/tauri';
+import { useProjectStore } from '../../store/projectStore';
+import type { SoftwareName } from '../../types/project';
 
 interface WelcomeSetupProps {
   onComplete: () => void;
@@ -140,7 +140,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
   const hasSoftwarePathsConfigured = softwarePaths.some(sw => sw.path.trim() !== '');
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4 rounded-lg">
       <div className="bg-zinc-900 rounded-xl max-w-3xl w-full overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-purple-700 to-zinc-800 px-6 py-4">

@@ -23,6 +23,9 @@ nullSpace_v*.zip
 portable-build/
 .claude/
 
+# Accidental file from Windows commands
+nul
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

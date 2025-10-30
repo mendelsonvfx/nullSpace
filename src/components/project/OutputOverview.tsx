@@ -44,6 +44,9 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
 
   // Format software name for display
   const formatSoftwareName = (software: string): string => {
+    if (software === 'after-effects') {
+      return 'After Effects';
+    }
     return software
       .split('-')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -448,7 +451,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-zinc-400 mb-3">Output Overview</h3>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+        <div data-output-overview className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
           <div className="flex items-center justify-center">
             <div className="animate-spin w-5 h-5 border-2 border-accent border-t-transparent rounded-full" />
           </div>
@@ -461,7 +464,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-zinc-400 mb-3">Output Overview</h3>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+        <div data-output-overview className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
           <p className="text-xs text-red-400 text-center">Error: {error}</p>
         </div>
       </div>
@@ -472,7 +475,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-zinc-400 mb-3">Output Overview</h3>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+        <div data-output-overview className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
           <p className="text-xs text-zinc-500 text-center">No outputs found. Outputs should be in Render/Preview or Render/Final folders.</p>
         </div>
       </div>
@@ -535,11 +538,11 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
       {/* Outputs Grid */}
       <div className="space-y-4">
         {Object.entries(groupedOutputs).map(([software, types]) => (
-          <div key={software} className="bg-zinc-800/30 rounded-lg overflow-hidden">
+          <div data-output-overview key={software} className="bg-zinc-800/30 border border-zinc-800 rounded-lg overflow-hidden">
             {/* Software Header */}
             <div className="bg-zinc-800/50 px-4 py-2 flex items-center gap-2 border-b border-zinc-700/50">
               <SoftwareIcon name={software} className="w-4 h-4" />
-              <span className="text-sm font-medium capitalize">{software}</span>
+              <span className="text-sm font-medium">{formatSoftwareName(software)}</span>
               <span className="text-xs text-zinc-500 ml-auto">
                 {types.preview.length + types.final.length} outputs
               </span>
@@ -718,7 +721,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
       </div>
 
       {filteredOutputs.length === 0 && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+        <div data-output-overview className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
           <p className="text-xs text-zinc-500 text-center">No outputs match the selected filters.</p>
         </div>
       )}
