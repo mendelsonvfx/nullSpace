@@ -91,4 +91,18 @@ export class SessionService {
       return { focused_seconds: 0, total_checks: 0 };
     }
   }
+
+  /**
+   * Check if a process with given PID is alive
+   * Returns true if process exists
+   */
+  static async checkProcessAlive(pid: number): Promise<boolean> {
+    try {
+      const isAlive = await invoke<boolean>('check_process_alive', { pid });
+      return isAlive;
+    } catch (error) {
+      console.error('[SessionService] ❌ Failed to check process:', error);
+      return false;
+    }
+  }
 }

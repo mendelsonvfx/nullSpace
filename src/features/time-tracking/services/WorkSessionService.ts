@@ -86,20 +86,20 @@ export class WorkSessionService {
     const { TimerService } = await import('./TimerService');
     TimerService.stopSessionTimer(sessionId);
 
-    // 2. Записать накопленное время в проект
+    // 2. Очистить WorkSession из проекта (totalMinutesSpent уже записан в incrementMinute)
     const { useProjectStore } = await import('../../../store/projectStore');
     const project = useProjectStore.getState().projects.find(p => p.id === session.projectId);
 
     if (project) {
       const updatedProject = {
         ...project,
-        totalMinutesSpent: (project.totalMinutesSpent || 0) + session.elapsedMinutes,
-        workSession: null, // Удаляем WorkSession из проекта
+        // НЕ добавляем elapsedMinutes - они уже записаны пошагово в incrementMinute()
+        workSession: null, // Просто очищаем WorkSession
         updatedAt: new Date().toISOString()
       };
 
       await useProjectStore.getState().updateProject(updatedProject);
-      console.log(`[WorkSessionService] 💾 Saved ${session.elapsedMinutes}m to project total (new total: ${updatedProject.totalMinutesSpent}m)`);
+      console.log(`[WorkSessionService] 💾 Cleared WorkSession (totalMinutesSpent already up-to-date: ${project.totalMinutesSpent}m)`);
     }
 
     // 3. Помечаем сессию как неактивную
@@ -156,13 +156,46 @@ export class WorkSessionService {
 
       useWorkSessionStore.getState().createSession(updatedSession);
 
-      // Записываем мертвые сессии в статистику и останавливаем их
+      // CRITICAL FIX: Update TimeEntry.workSessionId to match new WorkSession.id
+      // This prevents the "WorkSession not found" bug when software closes
       const { useTimeTrackingStore } = await import('../stores/timeTrackingStore');
+      const timeTrackingStore = useTimeTrackingStore.getState();
+
+      // Update in-memory TimeEntries with new workSessionId
+      for (const entryId of aliveSessions) {
+        const entry = timeTrackingStore.sessions.get(entryId);
+        if (entry) {
+          timeTrackingStore.sessions.set(entryId, {
+            ...entry,
+            workSessionId: updatedSession.id
+          });
+        }
+      }
+      console.log(`[WorkSessionService] 🔗 Updated ${aliveSessions.length} TimeEntries with new workSessionId: ${updatedSession.id}`);
+
+      // Update on-disk TimeEntries for persistence
+      const { useProjectStore } = await import('../../../store/projectStore');
+      const currentProject = useProjectStore.getState().projects.find(p => p.id === session.projectId);
+      if (currentProject) {
+        const updatedTimeEntries = (currentProject.timeEntries || []).map((e: TimeEntry) =>
+          aliveSessions.includes(e.id) ? { ...e, workSessionId: updatedSession.id } : e
+        );
+
+        await useProjectStore.getState().updateProject({
+          ...currentProject,
+          timeEntries: updatedTimeEntries,
+          workSession: updatedSession,
+          updatedAt: new Date().toISOString()
+        });
+        console.log(`[WorkSessionService] 💾 Updated project TimeEntries with new workSessionId`);
+      }
+
+      // Записываем мертвые сессии в статистику и останавливаем их
       for (const deadEntryId of deadSessions) {
         const entry = project.timeEntries?.find((e: TimeEntry) => e.id === deadEntryId);
         if (entry) {
           // Останавливаем entry и записываем в статистику
-          await useTimeTrackingStore.getState().stopSession(deadEntryId);
+          await timeTrackingStore.stopSession(deadEntryId);
         }
       }
 

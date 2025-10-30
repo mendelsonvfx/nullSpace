@@ -79,6 +79,9 @@ interface ProjectStore {
   updateTargetHourlyRate: (projectId: string, rate: number) => void;
 }
 
+// Private update queue to prevent race conditions
+let updateQueue: Promise<void> = Promise.resolve();
+
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   // Initial state
   projects: [],
@@ -153,11 +156,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           );
 
           if (hasChanges) {
-            // Recalculate totalMinutesSpent and currentProjectTime
-            const completedMinutes = updatedEntries
-              .filter(e => !e.isActive)
-              .reduce((sum, e) => sum + e.durationMinutes, 0);
-
+            // DON'T recalculate totalMinutesSpent - it's now updated in real-time!
+            // Only update activeMinutes
             const activeMinutes = updatedEntries
               .filter(e => e.isActive)
               .reduce((sum, e) => sum + e.durationMinutes, 0);
@@ -165,7 +165,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             const updatedProject = {
               ...project,
               timeEntries: updatedEntries,
-              totalMinutesSpent: completedMinutes,
+              // Keep existing totalMinutesSpent - it's already up-to-date from real-time updates
               currentProjectTime: activeMinutes,
               updatedAt: new Date().toISOString()
             };
@@ -173,7 +173,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             // Save the updated project
             try {
               await invoke('update_project', { project: updatedProject });
-              console.log(`[TimeTracking] Cleaned up stale sessions for project "${project.name}". Total: ${completedMinutes}m, Active: ${activeMinutes}m`);
+              console.log(`[TimeTracking] Cleaned up stale sessions for project "${project.name}". Total: ${updatedProject.totalMinutesSpent}m, Active: ${activeMinutes}m`);
               return updatedProject;
             } catch (error) {
               console.error(`[TimeTracking] Failed to save cleaned project:`, error);
@@ -234,37 +234,45 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   // Update existing project
   updateProject: async (project: Project) => {
-    try {
-      // Clear thumbnail cache if thumbnail changed
-      const oldProject = get().projects.find(p => p.id === project.id);
-      if (oldProject && oldProject.thumbnail !== project.thumbnail) {
-        if (oldProject.thumbnail) {
-          thumbnailCache.clear(oldProject.path, oldProject.thumbnail);
+    // Queue updates to prevent race conditions (multiple parallel writes)
+    updateQueue = updateQueue
+      .then(async () => {
+        try {
+          // Clear thumbnail cache if thumbnail changed
+          const oldProject = get().projects.find(p => p.id === project.id);
+          if (oldProject && oldProject.thumbnail !== project.thumbnail) {
+            if (oldProject.thumbnail) {
+              thumbnailCache.clear(oldProject.path, oldProject.thumbnail);
+            }
+          }
+
+          // Log active entry durationMinutes before update
+          const oldActiveEntry = oldProject?.timeEntries?.find(e => e.isActive);
+          const newActiveEntry = project.timeEntries?.find(e => e.isActive);
+          console.log(`[updateProject] 📝 Updating project ${project.name}`);
+          console.log(`[updateProject] 📊 Active entry durationMinutes: ${oldActiveEntry?.durationMinutes} → ${newActiveEntry?.durationMinutes}`);
+
+          // First update local state synchronously
+          set(state => ({
+            projects: state.projects.map(p =>
+              p.id === project.id ? project : p
+            ),
+            selectedProject: state.selectedProject?.id === project.id
+              ? project
+              : state.selectedProject
+          }));
+
+          // Then save to backend asynchronously
+          await invoke('update_project', { project });
+        } catch (error) {
+          set({ error: String(error) });
+          console.error('[updateProject] ❌ Failed to update project:', error);
         }
-      }
+      })
+      .catch(err => console.error('[updateProject] ❌ Queue error:', err));
 
-      // Log active entry durationMinutes before update
-      const oldActiveEntry = oldProject?.timeEntries?.find(e => e.isActive);
-      const newActiveEntry = project.timeEntries?.find(e => e.isActive);
-      console.log(`[updateProject] 📝 Updating project ${project.name}`);
-      console.log(`[updateProject] 📊 Active entry durationMinutes: ${oldActiveEntry?.durationMinutes} → ${newActiveEntry?.durationMinutes}`);
-
-      // First update local state synchronously
-      set(state => ({
-        projects: state.projects.map(p =>
-          p.id === project.id ? project : p
-        ),
-        selectedProject: state.selectedProject?.id === project.id
-          ? project
-          : state.selectedProject
-      }));
-
-      // Then save to backend asynchronously
-      await invoke('update_project', { project });
-    } catch (error) {
-      set({ error: String(error) });
-      throw error;
-    }
+    // Wait for the queued update to complete
+    return updateQueue;
   },
 
   // Delete project

@@ -239,6 +239,9 @@ export class TimerService {
     if (timer) {
       clearInterval(timer);
       this.sessionTimers.delete(sessionId);
+      console.log(`[TimerService] ⏹️  Stopped WorkSession timer for ${sessionId}`);
+    } else {
+      console.warn(`[TimerService] ⚠️  Tried to stop WorkSession timer ${sessionId} but it wasn't running`);
     }
   }
 

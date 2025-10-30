@@ -357,9 +357,15 @@ pub fn check_active_windows() {
         }
 
         // Check if process has any visible windows (not in background)
-        // Give new processes 30 seconds to open a window (grace period for slow-starting apps like After Effects)
+        // Give new processes time to open a window (grace period for slow-starting apps)
+        // Blender needs longer due to splash screen (45s), others use 30s
         let session_age = now.signed_duration_since(session.start_time);
-        let in_grace_period = session_age.num_seconds() < 30;
+        let grace_period_seconds = if session.software.to_lowercase() == "blender" {
+            45
+        } else {
+            30
+        };
+        let in_grace_period = session_age.num_seconds() < grace_period_seconds;
 
         let has_window = has_visible_window(session.pid);
         println!("[TimeTracking] PID {} has_visible_window: {}, in_grace_period: {}", session.pid, has_window, in_grace_period);
@@ -370,10 +376,11 @@ pub fn check_active_windows() {
                 session.process_alive = false;
                 // Reset last_cpu_check to prevent counting extra time on next minute mark
                 session.last_cpu_check = now;
+                continue; // Only skip if actually dead
             } else {
-                println!("[TimeTracking] PID {} has no window but in grace period, skipping", session.pid);
+                println!("[TimeTracking] PID {} has no window but in grace period, assuming active", session.pid);
+                // Don't skip - continue to focus tracking with assumption of activity during startup
             }
-            continue;
         }
 
         // Skip paused sessions for time counting

@@ -103,6 +103,27 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
         }
       })();
 
+      // Update totalMinutesSpent IMMEDIATELY (same pattern as softwareMinutes)
+      (async () => {
+        try {
+          const { useProjectStore } = await import('../../../store/projectStore');
+          const projectStore = useProjectStore.getState();
+          const project = projectStore.projects.find(p => p.id === session.projectId);
+
+          if (project) {
+            const updatedProject = {
+              ...project,
+              totalMinutesSpent: (project.totalMinutesSpent || 0) + 1,
+              updatedAt: new Date().toISOString()
+            };
+            await projectStore.updateProject(updatedProject);
+            console.log(`[WorkSession] 📊 totalMinutesSpent +1min (total: ${updatedProject.totalMinutesSpent}m)`);
+          }
+        } catch (error) {
+          console.error('[WorkSessionStore] ❌ Failed to update totalMinutesSpent:', error);
+        }
+      })();
+
       // Count software statistics using focus history (last 60 seconds) - runs in parallel
       try {
         const { useTimeTrackingStore } = await import('./timeTrackingStore');

@@ -10,10 +10,9 @@ interface TimeInfoBarProps {
  * Bottom info bar showing project creation date and time spent
  */
 export function TimeInfoBar({ project }: TimeInfoBarProps) {
-  // Calculate total PROJECT time: completed + current WorkSession time
-  const completedMinutes = project.totalMinutesSpent || 0;
-  const currentProjectMinutes = project.workSession?.elapsedMinutes || 0;
-  const totalMinutes = completedMinutes + currentProjectMinutes;
+  // totalMinutesSpent now includes current WorkSession time (updated every minute)
+  // No need to add workSession.elapsedMinutes - it would cause double counting
+  const totalMinutes = project.totalMinutesSpent || 0;
 
   // Show green dot only when widget is visible (don't show on Finance page)
   const hasActiveSession = (project.timeEntries || []).some(

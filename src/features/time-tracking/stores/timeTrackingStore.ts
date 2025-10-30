@@ -343,89 +343,182 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
    * Initialize sessions from backend on app startup
    * Restores timers for active sessions and WorkSessions
    * IMPORTANT: Must be called AFTER projectStore.loadProjects() to get accurate data
+   *
+   * NEW APPROACH: Restore from project.timeEntries instead of backend
+   * Backend loses session data on app close, so we use frontend data as source of truth
    */
   initializeFromBackend: async () => {
-    console.log('[TimeTrackingStore] Initializing from backend...');
+    console.log('[TimeTrackingStore] Initializing from projects...');
 
     try {
-      // Import projectStore to get accurate timeEntry data
+      // Import projectStore to get timeEntry data
       const { useProjectStore } = await import('../../../store/projectStore');
       const projects = useProjectStore.getState().projects;
-
-      const backendSessions = await SessionService.getActiveSessions();
-      console.log('[TimeTrackingStore] Found', backendSessions.length, 'backend session(s)');
 
       const sessions = new Map<string, TimeEntry>();
       let timerCount = 0;
 
-      for (const backendSession of backendSessions) {
-        if (!backendSession.process_alive) {
-          console.log('[TimeTrackingStore] ⏭️ Skipping dead session:', backendSession.software);
-          continue;
-        }
+      // Find all active timeEntries across all projects
+      for (const project of projects) {
+        if (!project.timeEntries) continue;
 
-        // Find the actual timeEntry in projectStore to get accurate data
-        const project = projects.find(p => p.id === backendSession.project_id);
-        const existingEntry = project?.timeEntries?.find(e => e.id === backendSession.entry_id);
+        const activeEntries = project.timeEntries.filter(e => e.isActive && !e.isManual && e.pid);
 
-        // Use data from projectStore if available
-        const durationMinutes = existingEntry?.durationMinutes ?? 0;
-        const softwareMinutes = existingEntry?.softwareMinutes ?? 0;
-        const elapsedSeconds = existingEntry?.elapsedSeconds ?? durationMinutes * 60;
-        const workSessionId = existingEntry?.workSessionId;
+        for (const existingEntry of activeEntries) {
+          console.log(`[TimeTrackingStore] Restoring ${existingEntry.software} for project ${project.name}: ${existingEntry.durationMinutes}m total, ${existingEntry.softwareMinutes}m focused`);
 
-        console.log(`[TimeTrackingStore] Restoring ${backendSession.software}: ${durationMinutes}m total, ${softwareMinutes}m focused (from ${existingEntry ? 'projectStore' : 'backend'})`);
+          // Check if process is still alive before restoring
+          const isProcessAlive = await SessionService.checkProcessAlive(existingEntry.pid!);
+          console.log(`[TimeTrackingStore] 🔍 Pre-restore check: PID ${existingEntry.pid} alive? ${isProcessAlive}`);
 
-        // Create TimeEntry from backend session
-        const entry: TimeEntry = {
-          id: backendSession.entry_id,
-          projectId: backendSession.project_id,
-          shotId: backendSession.shot_id || undefined,
-          software: backendSession.software as SoftwareName,
-          startTime: backendSession.start_time,
-          durationMinutes,
-          softwareMinutes,
-          elapsedSeconds,
-          workSessionId,
-          isActive: true,
-          isManual: false,
-          pid: backendSession.pid,
-          countedInStats: true
-        };
+          if (!isProcessAlive) {
+            console.log(`[TimeTrackingStore] ❌ Process ${existingEntry.pid} (${existingEntry.software}) is dead, stopping and recording time`);
 
-        sessions.set(entry.id, entry);
+            // Stop this session properly (records time to totalMinutesSpent)
+            const { useProjectStore } = await import('../../../store/projectStore');
+            const currentProject = useProjectStore.getState().projects.find(p => p.id === project.id);
 
-        // Start widget timer (ticks every second)
-        TimerService.startWidgetTimer(entry);
+            if (currentProject && existingEntry.workSessionId) {
+              // Find the WorkSession
+              const workSession = currentProject.workSession;
 
-        // Start minute timer (stats now handled by WorkSession)
-        TimerService.start(
-          entry.id,
-          entry.software,
-          async () => {
-            // Empty callback - stats now handled by WorkSession
-            console.log('[TimeTrackingStore] ⏰ Entry minute tick (restored, stats by WorkSession)');
-          },
-          entry.startTime,
-          entry.durationMinutes
-        );
+              if (workSession && workSession.id === existingEntry.workSessionId) {
+                // Remove this software from WorkSession
+                await WorkSessionService.removeSoftware(workSession, existingEntry.id);
+              }
+            }
 
-        // Set up process check callback to auto-stop session if process dies
-        TimerService.setProcessCheckCallback(entry.id, async (id) => {
-          const isAlive = await SessionService.verifySession(id);
-          if (!isAlive) {
-            console.log(`[TimeTrackingStore] ❌ Process died for ${entry.software}, auto-stopping restored session`);
-            await get().stopSession(id);
+            // Mark as inactive
+            if (currentProject) {
+              const updatedEntry = { ...existingEntry, isActive: false };
+              const updatedTimeEntries = currentProject.timeEntries?.map(e =>
+                e.id === existingEntry.id ? updatedEntry : e
+              );
+              await useProjectStore.getState().updateProject({
+                ...currentProject,
+                timeEntries: updatedTimeEntries,
+                updatedAt: new Date().toISOString()
+              });
+            }
+
+            continue; // Skip this entry
           }
-          return isAlive;
-        });
 
-        timerCount++;
-        console.log('[TimeTrackingStore] ✅ Restored timer for', entry.software);
+          // Restart backend tracking for this entry
+          try {
+            await SessionService.start({
+              entryId: existingEntry.id,
+              projectId: project.id,
+              projectPath: project.path,
+              shotId: existingEntry.shotId,
+              software: existingEntry.software,
+              pid: existingEntry.pid!
+            });
+            console.log(`[TimeTrackingStore] ✅ Restarted backend tracking for ${existingEntry.software} (PID: ${existingEntry.pid})`);
+          } catch (error) {
+            console.error(`[TimeTrackingStore] ❌ Failed to restart backend tracking for ${existingEntry.software}:`, error);
+            // Continue anyway - we'll still restore the frontend timer
+          }
+
+          // Create TimeEntry with widgetVisible
+          const entry: TimeEntry = {
+            ...existingEntry,
+            widgetVisible: true  // Show widget immediately on restored sessions
+          };
+
+          sessions.set(entry.id, entry);
+
+          // Start widget timer (ticks every second)
+          TimerService.startWidgetTimer(entry);
+
+          // Start minute timer (stats now handled by WorkSession)
+          TimerService.start(
+            entry.id,
+            entry.software,
+            async () => {
+              // Empty callback - stats now handled by WorkSession
+              console.log('[TimeTrackingStore] ⏰ Entry minute tick (restored, stats by WorkSession)');
+            },
+            entry.startTime,
+            entry.durationMinutes
+          );
+
+          // Set up process check callback to auto-stop session if process dies
+          TimerService.setProcessCheckCallback(entry.id, async (id) => {
+            const session = get().sessions.get(id);
+            if (!session || !session.pid) {
+              console.log(`[TimeTrackingStore] ⚠️ No session or PID for ${id}, stopping process check`);
+              return false;
+            }
+
+            // Check the actual PID directly
+            const isAlive = await SessionService.checkProcessAlive(session.pid);
+            console.log(`[TimeTrackingStore] 🔍 Process check for ${session.software} (PID: ${session.pid}): ${isAlive ? '✅ ALIVE' : '❌ DEAD'}`);
+
+            if (!isAlive) {
+              console.log(`[TimeTrackingStore] ❌ Process died for ${session.software}, auto-stopping restored session`);
+              await get().stopSession(id);
+            }
+            return isAlive;
+          });
+
+          timerCount++;
+          console.log('[TimeTrackingStore] ✅ Restored timer for', entry.software);
+        }
       }
 
       set({ sessions });
       console.log(`[TimeTrackingStore] ✅ Initialized ${sessions.size} session(s), ${timerCount} timer(s)`);
+
+      // Restore WorkSessions for projects with active sessions
+      console.log('[TimeTrackingStore] Restoring WorkSessions...');
+      let restoredWorkSessions = 0;
+      for (const project of projects) {
+        // Check if project has active timeEntries (not just workSession flag)
+        const hasActiveEntries = project.timeEntries?.some(e => e.isActive && !e.isManual && e.pid);
+
+        if (hasActiveEntries) {
+          try {
+            // If workSession exists, restore it; otherwise create new one
+            if (project.workSession && project.workSession.isActive) {
+              await WorkSessionService.restoreFromProject(project);
+            } else {
+              // Create new WorkSession from active entries
+              console.log(`[TimeTrackingStore] Creating new WorkSession for project: ${project.name}`);
+
+              const activeEntries = project.timeEntries?.filter(e => e.isActive && !e.isManual && e.pid) || [];
+
+              // Restore elapsedMinutes from saved WorkSession (NOT from sum of TimeEntry durations)
+              // This is critical: TimeEntry.durationMinutes is per-software, WorkSession.elapsedMinutes is project-level
+              const savedElapsedMinutes = project.workSession?.elapsedMinutes || 0;
+              console.log(`[TimeTrackingStore] Restoring elapsedMinutes: ${savedElapsedMinutes}m from saved WorkSession (${activeEntries.length} active entries)`);
+
+              // Create WorkSession manually to set elapsedMinutes
+              const { createWorkSession } = await import('../utils/workSessionUtils');
+              const { useWorkSessionStore } = await import('./workSessionStore');
+
+              const newSession = createWorkSession(project.id);
+              newSession.elapsedMinutes = savedElapsedMinutes; // Restore from WorkSession, NOT sum
+
+              useWorkSessionStore.getState().createSession(newSession);
+
+              // Add all active entries to the session
+              for (const entry of activeEntries) {
+                WorkSessionService.addSoftware(newSession, entry.id);
+              }
+
+              // Start session timer
+              TimerService.startSessionTimer(newSession);
+            }
+
+            restoredWorkSessions++;
+            console.log(`[TimeTrackingStore] ✅ Restored WorkSession for project: ${project.name}`);
+          } catch (error) {
+            console.error(`[TimeTrackingStore] ❌ Failed to restore WorkSession for ${project.name}:`, error);
+          }
+        }
+      }
+      console.log(`[TimeTrackingStore] ✅ Restored ${restoredWorkSessions} WorkSession(s)`);
     } catch (error) {
       console.error('[TimeTrackingStore] ❌ Failed to initialize from backend:', error);
     }

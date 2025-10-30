@@ -47,9 +47,8 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
   // Calculate total time from ALL projects (all time spent, focused + unfocused)
   const totalMinutesAllProjects = useMemo(() => {
     return projects.reduce((sum, p) => {
-      const completed = p.totalMinutesSpent || 0;
-      const current = p.workSession?.elapsedMinutes || 0;
-      return sum + completed + current;
+      // totalMinutesSpent now includes current WorkSession time (no need to add elapsedMinutes)
+      return sum + (p.totalMinutesSpent || 0);
     }, 0);
   }, [projects]);
 
@@ -115,7 +114,8 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
       .map(p => ({
         id: p.id,
         name: p.name,
-        totalMinutes: (p.totalMinutesSpent || 0) + (p.workSession?.elapsedMinutes || 0),
+        // totalMinutesSpent now includes current WorkSession time (no need to add elapsedMinutes)
+        totalMinutes: p.totalMinutesSpent || 0,
         color: p.color
       }))
       .filter(p => p.totalMinutes > 0)

@@ -2415,18 +2415,13 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
 
     // Group files by prefix, extension, software, and render_type (to keep Preview and Final separate)
     for file in files {
-        println!("Processing file: {} (path: {}, render_type: {})", file.name, file.path, file.render_type);
-        if let Some((prefix, frame_num, ext)) = extract_frame_number(&file.name) {
-            println!("  -> Detected as sequence: prefix='{}', frame={}, ext='{}'", prefix, frame_num, ext);
+        if let Some((prefix, _frame_num, ext)) = extract_frame_number(&file.name) {
             let key = format!("{}_{}_{}_{}",prefix, ext, file.software, file.render_type);
             sequences.entry(key).or_insert_with(Vec::new).push(file);
         } else {
-            println!("  -> Not a sequence, standalone file");
             standalone_files.push(file);
         }
     }
-
-    println!("Found {} sequences and {} standalone files", sequences.len(), standalone_files.len());
 
     let mut result = Vec::new();
 
@@ -2564,8 +2559,6 @@ async fn get_project_outputs(project_path: String) -> Result<Vec<OutputFile>, St
     let project_dir = PathBuf::from(&project_path);
     let mut outputs = Vec::new();
 
-    println!("Scanning for outputs in: {}", project_path);
-
     // Define software folders to scan
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
@@ -2610,12 +2603,8 @@ async fn get_project_outputs(project_path: String) -> Result<Vec<OutputFile>, St
         }
     }
 
-    println!("Found {} raw output files before grouping", outputs.len());
-
     // Group image sequences
     let grouped_outputs = group_sequences(outputs);
-
-    println!("After grouping: {} outputs", grouped_outputs.len());
 
     Ok(grouped_outputs)
 }
