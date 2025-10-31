@@ -43,6 +43,9 @@ export interface ActiveSession {
 
   /** Last time user interacted with window */
   last_input_time: string;
+
+  /** ISO timestamp when window disappeared (for adaptive grace period tracking) */
+  window_disappeared_at: string | null;
 }
 
 /**

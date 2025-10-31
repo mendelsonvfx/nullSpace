@@ -157,6 +157,8 @@ struct Shot {
     #[serde(rename = "browserTabs")]
     browser_tabs: Vec<BrowserTab>,
     links: Vec<Link>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completed: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

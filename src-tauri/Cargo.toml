@@ -21,7 +21,7 @@ parking_lot = "0.12"
 regex = "1.10"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+windows = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_Graphics_Gdi"] }
 winreg = "0.52"
 
 [build-dependencies]

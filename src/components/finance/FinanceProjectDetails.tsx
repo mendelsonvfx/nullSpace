@@ -178,14 +178,20 @@ export function FinanceProjectDetails({
               const daysRemaining = Math.ceil(
                 (new Date(project.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
               );
+
+              // Don't show overdue for completed or archived projects
+              const isProjectFinished = project.status === 'completed' || project.status === 'archived';
+
               return (
                 <p className={`text-sm font-medium ${
-                  daysRemaining < 0 ? 'text-red-500' :
-                  daysRemaining < 7 ? 'text-yellow-500' :
+                  !isProjectFinished && daysRemaining < 0 ? 'text-red-500' :
+                  !isProjectFinished && daysRemaining < 7 ? 'text-yellow-500' :
                   'text-green-500'
                 }`}>
-                  {daysRemaining < 0
+                  {!isProjectFinished && daysRemaining < 0
                     ? `Overdue by ${Math.abs(daysRemaining)} days`
+                    : isProjectFinished && daysRemaining < 0
+                    ? 'Completed'
                     : `${daysRemaining} days left`
                   }
                 </p>

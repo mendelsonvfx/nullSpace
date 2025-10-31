@@ -12,6 +12,7 @@ import { InlineTimer, TimeInfoBar } from '../time';
 import { ManualTimeEntryModal } from '../modals/ManualTimeEntryModal';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
 import { useThumbnail } from '../../hooks/useThumbnail';
+import { useModalBlur } from '../../hooks/useModalBlur';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
@@ -57,6 +58,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
   // Load cached thumbnail for Project Settings modal
   const thumbnailSrc = useThumbnail(project.path, project.thumbnail);
+
+  // Modal blur effect
+  const blurClass = useModalBlur();
 
   // Widget visibility is now handled by timeTrackingStore (after 1.5s delay)
 
@@ -701,7 +705,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       {/* Payment Modal */}
       {showPaymentModal && (
         <div
-          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity duration-200 rounded-lg ${
+          className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity duration-200 rounded-lg ${blurClass} ${
             isPaymentModalAnimating ? 'opacity-100' : 'opacity-0'
           }`}
           onMouseDown={(e) => {
@@ -721,6 +725,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               isPaymentModalAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
             }`}
             onClick={(e) => e.stopPropagation()}
+            data-modal-window
           >
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Payment Settings</h2>

@@ -330,7 +330,7 @@ input[type="number"] {
 /* Custom scrollbar styles */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #52525b #18181b;
+  scrollbar-color: #3f3f46 transparent;
 }
 
 /* Webkit scrollbar styles for Chrome, Safari, Edge */
@@ -340,20 +340,20 @@ input[type="number"] {
 }
 
 *::-webkit-scrollbar-track {
-  background: #18181b;
+  background: transparent;
 }
 
 *::-webkit-scrollbar-thumb {
-  background: #52525b;
+  background: #3f3f46;
   border-radius: 4px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: #71717a;
+  background: #52525b;
 }
 
 *::-webkit-scrollbar-corner {
-  background: #18181b;
+  background: transparent;
 }
 
 /* MDXEditor Dark Theme */

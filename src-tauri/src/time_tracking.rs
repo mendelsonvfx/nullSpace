@@ -30,6 +30,7 @@ pub struct ActiveSession {
     pub process_alive: bool,
     pub last_cpu_usage: f32,
     pub last_input_time: DateTime<Utc>,    // Last time user interacted with this window
+    pub window_disappeared_at: Option<DateTime<Utc>>,  // When window disappeared (for adaptive grace period)
 }
 
 /// Single focus check entry
@@ -140,24 +141,63 @@ fn has_visible_window(pid: u32) -> bool {
         let has_window = false;
         let pid_to_find = pid;
 
-        // Callback function for EnumWindows
+        // Callback function for EnumWindows with enhanced visibility checks
         unsafe extern "system" fn enum_window_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            use windows::Win32::UI::WindowsAndMessaging::{
+                GetWindowLongW, GetWindow, GetWindowRect, GWL_STYLE, GWL_EXSTYLE, GW_OWNER,
+                WS_VISIBLE, WS_EX_TOOLWINDOW
+            };
+            use windows::Win32::Foundation::RECT;
+
             let result = lparam.0 as *mut (bool, u32, u32);
             let (has_window, pid_to_find, window_count) = &mut *result;
 
-            // Check if window is visible
-            if IsWindowVisible(hwnd).as_bool() {
-                let mut window_pid: u32 = 0;
-                GetWindowThreadProcessId(hwnd, Some(&mut window_pid));
+            // Check if window belongs to our process
+            let mut window_pid: u32 = 0;
+            GetWindowThreadProcessId(hwnd, Some(&mut window_pid));
+            if window_pid != *pid_to_find {
+                return BOOL(1); // Continue - wrong process
+            }
 
-                if window_pid == *pid_to_find {
-                    *window_count += 1;
-                    *has_window = true;
-                    return BOOL(0); // Stop enumeration
+            // Basic visibility check
+            if !IsWindowVisible(hwnd).as_bool() {
+                return BOOL(1); // Continue - not visible
+            }
+
+            // ✅ CHECK 1: Window size must be > 10x10 pixels (excludes 0x0 ghost windows)
+            let mut rect = RECT::default();
+            if GetWindowRect(hwnd, &mut rect).is_ok() {
+                let width = rect.right - rect.left;
+                let height = rect.bottom - rect.top;
+                if width <= 10 || height <= 10 {
+                    return BOOL(1); // Continue - too small
                 }
             }
 
-            BOOL(1) // Continue enumeration
+            // ✅ CHECK 2: Window style checks
+            let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+            let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+
+            // Must have WS_VISIBLE flag
+            if (style & WS_VISIBLE.0) == 0 {
+                return BOOL(1); // Continue - not actually visible
+            }
+
+            // Must NOT be a tool window (excludes helper/service windows)
+            if (ex_style & WS_EX_TOOLWINDOW.0) != 0 {
+                return BOOL(1); // Continue - tool window
+            }
+
+            // ✅ CHECK 3: Window owner check (prefer main windows without owner)
+            let owner = GetWindow(hwnd, GW_OWNER);
+            if owner.0 != 0 {
+                return BOOL(1); // Continue - has owner (likely child/dialog window)
+            }
+
+            // Found a valid visible window!
+            *window_count += 1;
+            *has_window = true;
+            return BOOL(0); // Stop enumeration
         }
 
         let mut callback_data = (has_window, pid_to_find, 0u32);
@@ -167,7 +207,7 @@ fn has_visible_window(pid: u32) -> bool {
 
         let result = callback_data.0;
         if !result {
-            println!("[TimeTracking] PID {} has no visible windows", pid);
+            println!("[TimeTracking] PID {} has no visible windows (enhanced checks: size, style, owner)", pid);
         }
         result
     }
@@ -213,6 +253,7 @@ pub fn start_time_tracking(
         process_alive: true,
         last_cpu_usage: 0.0,
         last_input_time: now,
+        window_disappeared_at: None,  // Initialize - window is visible at start
     };
 
     let mut sessions = ACTIVE_SESSIONS.lock();
@@ -350,30 +391,53 @@ pub fn check_active_windows() {
             if session.process_alive {
                 println!("[TimeTracking] Process {} died, marking session {} as dead", session.pid, entry_id);
                 session.process_alive = false;
-                // Reset last_cpu_check to prevent counting extra time on next minute mark
-                session.last_cpu_check = now;
+                session.last_cpu_check = now;  // Prevent counting extra time on next minute mark
+                session.window_disappeared_at = None;  // Clean up stale state
             }
             continue;
         }
 
         // Check if process has any visible windows (not in background)
-        // Give new processes 30 seconds to open a window (grace period for slow-starting apps like After Effects)
+        // Adaptive grace period:
+        // - Young sessions (<60 sec): 30 sec grace period (slow app startup like After Effects)
+        // - Mature sessions (≥60 sec): 5 sec grace period (quick detection after window closes)
         let session_age = now.signed_duration_since(session.start_time);
-        let in_grace_period = session_age.num_seconds() < 30;
+        let is_young_session = session_age.num_seconds() < 60;
+        let grace_period_seconds = if is_young_session { 30 } else { 5 };
 
         let has_window = has_visible_window(session.pid);
-        println!("[TimeTracking] PID {} has_visible_window: {}, in_grace_period: {}", session.pid, has_window, in_grace_period);
 
         if !has_window {
-            if session.process_alive && !in_grace_period {
-                println!("[TimeTracking] Process {} has no visible windows (background) after grace period, marking session {} as dead", session.pid, entry_id);
-                session.process_alive = false;
-                // Reset last_cpu_check to prevent counting extra time on next minute mark
-                session.last_cpu_check = now;
-            } else {
-                println!("[TimeTracking] PID {} has no window but in grace period, skipping", session.pid);
+            // Window disappeared - track when it disappeared
+            if session.window_disappeared_at.is_none() {
+                session.window_disappeared_at = Some(now);
+                println!("[TimeTracking] PID {} window disappeared, starting {} sec grace period (session age: {} sec)",
+                    session.pid, grace_period_seconds, session_age.num_seconds());
+            }
+
+            // Check if grace period expired
+            if let Some(disappeared_at) = session.window_disappeared_at {
+                let disappeared_duration = now.signed_duration_since(disappeared_at);
+
+                if disappeared_duration.num_seconds() >= grace_period_seconds {
+                    if session.process_alive {
+                        println!("[TimeTracking] Grace period expired for PID {} ({}s), marking session {} as dead",
+                            session.pid, grace_period_seconds, entry_id);
+                        session.process_alive = false;
+                        session.last_cpu_check = now;
+                    }
+                } else if session.process_alive {
+                    println!("[TimeTracking] PID {} no window, in grace period ({}/{}s)",
+                        session.pid, disappeared_duration.num_seconds(), grace_period_seconds);
+                }
             }
             continue;
+        }
+
+        // Window is visible - reset disappearance tracking
+        if session.window_disappeared_at.is_some() {
+            println!("[TimeTracking] PID {} window reappeared, resetting grace period", session.pid);
+            session.window_disappeared_at = None;
         }
 
         // Skip paused sessions for time counting
@@ -416,8 +480,8 @@ pub fn check_active_windows() {
             if session.process_alive {
                 println!("[TimeTracking] Session {} inactive for 30 minutes (CPU: {:.1}%), marking as dead", entry_id, cpu_usage);
                 session.process_alive = false;
-                // Reset last_cpu_check to prevent counting extra time on next minute mark
-                session.last_cpu_check = now;
+                session.last_cpu_check = now;  // Prevent counting extra time on next minute mark
+                session.window_disappeared_at = None;  // Clean up stale state
             }
         }
     }
