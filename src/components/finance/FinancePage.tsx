@@ -13,6 +13,7 @@ import { ManualTransactionModal } from '../modals/ManualTransactionModal';
 import { Currency } from '../../types/project';
 import { getProjectColor, createSoftGradient } from '../../utils/colorUtils';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
+import SimpleBar from 'simplebar-react';
 
 interface FinancePageProps {
   projects: any[];
@@ -90,6 +91,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const [showScrollGradient, setShowScrollGradient] = useState(true);
   const [showMinMaxTooltips, setShowMinMaxTooltips] = useState(false);
   const [timelineContextMenu, setTimelineContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [hoveredMonthIndex, setHoveredMonthIndex] = useState<number | null>(null);
 
   const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
   const { updateProject } = useProjectStore();
@@ -693,10 +695,15 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
   return (
     <div className="h-full flex flex-col bg-zinc-950 overflow-hidden animate-fade-in">
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 pb-8 pt-6">
-        {selectedProject ? (
-          /* Project Financial Details */
-          <FinanceProjectDetails
+      <SimpleBar
+        scrollableNodeProps={{ ref: scrollContainerRef }}
+        className="flex-1 custom-page-scrollbar"
+        autoHide={false}
+      >
+        <div className="px-8 pb-8 pt-6">
+          {selectedProject ? (
+            /* Project Financial Details */
+            <FinanceProjectDetails
             project={selectedProject}
             projects={projects}
             baseCurrency={baseCurrency}
@@ -704,11 +711,11 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             currencySymbols={currencySymbols}
             totalRevenue={totalRevenue}
             convertCurrency={convertCurrency}
-            onClose={onClose}
-          />
-        ) : (
-          /* General Finance Overview */
-          <div className="w-full">
+              onClose={onClose}
+            />
+          ) : (
+            /* General Finance Overview */
+            <div className="w-full">
             {/* Total Revenue and Pending */}
             <div className="grid grid-cols-2 gap-8 mb-12">
               {/* Total Revenue */}
@@ -907,14 +914,19 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
                   {/* Список всех проектов */}
                   <div className="relative">
-                    <div
-                      className="space-y-1.5 max-h-96 overflow-y-auto pr-2 custom-scrollbar"
-                      onScroll={(e) => {
-                        const target = e.currentTarget;
-                        const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 10;
-                        setShowScrollGradient(!isAtBottom);
+                    <SimpleBar
+                      scrollableNodeProps={{
+                        onScroll: (e) => {
+                          const target = e.currentTarget;
+                          const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 10;
+                          setShowScrollGradient(!isAtBottom);
+                        }
                       }}
+                      className="custom-scrollbar-fixed"
+                      style={{ maxHeight: '384px' }}
+                      autoHide={false}
                     >
+                      <div className="space-y-1.5 pr-2">
                     {sortedFilteredProjects.map((project: any) => {
                         const originalCurrency = project.currency || 'USD';
                         const originalAmount = project.displayAmount || project.cost;
@@ -1026,7 +1038,8 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                           </div>
                         );
                     })}
-                    </div>
+                      </div>
+                    </SimpleBar>
                     {/* Fade gradient at bottom */}
                     <div
                       className={`absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-zinc-900 to-transparent pointer-events-none transition-opacity duration-300 ${
@@ -1364,9 +1377,22 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                       {monthlyRevenue.map((month, index) => {
                         const heightPercent = maxRevenue > 0 ? (month.revenue / maxRevenue) * 100 : 0;
                         const isCurrentMonth = month.year === now.getFullYear() && month.monthIndex === now.getMonth();
+                        const isHovered = hoveredMonthIndex === index;
+                        const isFaded = hoveredMonthIndex !== null && !isHovered;
 
                         return (
-                          <div key={index} className="flex flex-col items-center gap-3 group" style={{ flex: '1 1 0' }}>
+                          <div
+                            key={index}
+                            className="flex flex-col items-center gap-3 group"
+                            style={{ flex: '1 1 0' }}
+                            onMouseEnter={() => {
+                              // Only trigger hover effect if this bar has revenue > 0
+                              if (month.revenue > 0) {
+                                setHoveredMonthIndex(index);
+                              }
+                            }}
+                            onMouseLeave={() => setHoveredMonthIndex(null)}
+                          >
                             {/* Bar */}
                             <div className="relative flex items-end justify-center" style={{ height: '240px', width: '100%' }}>
                               {/* Background bar (подложка) */}
@@ -1387,19 +1413,10 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                                   height: month.revenue === 0 ? '3px' : `${heightPercent}%`,
                                   minHeight: month.revenue > 0 ? '8px' : '3px',
                                   boxShadow: isCurrentMonth
-                                    ? '0 0 20px rgba(168, 85, 247, 0.5)'
-                                    : '0 0 0 rgba(0, 0, 0, 0)',
-                                  transition: 'all 0.3s ease'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.boxShadow = isCurrentMonth
-                                    ? '0 0 30px rgba(168, 85, 247, 0.7)'
-                                    : '0 0 20px rgba(113, 113, 122, 0.5)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.boxShadow = isCurrentMonth
-                                    ? '0 0 20px rgba(168, 85, 247, 0.5)'
-                                    : '0 0 0 rgba(0, 0, 0, 0)';
+                                    ? (isHovered ? '0 0 30px rgba(168, 85, 247, 0.7)' : '0 0 20px rgba(168, 85, 247, 0.5)')
+                                    : (isHovered ? '0 0 20px rgba(113, 113, 122, 0.5)' : '0 0 0 rgba(0, 0, 0, 0)'),
+                                  transition: 'all 0.3s ease',
+                                  opacity: isFaded ? 0.3 : 1
                                 }}
                               >
                                 {/* Glow effect */}
@@ -1505,7 +1522,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
         {/* Top 3 Clients by Revenue */}
         {paidProjects.length > 0 && (
-          <div className="mb-6">
+          <div>
             <div className="grid grid-cols-[1fr,300px] gap-6 items-start">
               <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 min-h-[280px]">
                 <h3 className="text-lg font-semibold mb-4 text-zinc-200">Top 3 Clients by Revenue</h3>
@@ -1573,18 +1590,18 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
           </>
         )}
 
-        {/* Time Analytics Section */}
-        {!selectedProject && timeTrackingEnabled && (
-          <TimeAnalytics
-            projects={projects}
-            baseCurrency={baseCurrency}
-            convertCurrency={convertCurrency}
-          />
-        )}
-
-          </div>
-        )}
-      </div>
+          {/* Time Analytics Section */}
+          {!selectedProject && timeTrackingEnabled && (
+            <TimeAnalytics
+              projects={projects}
+              baseCurrency={baseCurrency}
+              convertCurrency={convertCurrency}
+            />
+          )}
+            </div>
+          )}
+        </div>
+      </SimpleBar>
 
       {/* Manual Transaction Modal */}
       <ManualTransactionModal

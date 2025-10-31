@@ -9,6 +9,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import { clearAllTimeTrackingData } from '../../utils/clearAllData';
 import { hslStringToHex } from '../../utils/colorUtils';
+import SimpleBar from 'simplebar-react';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -203,14 +204,16 @@ export function SettingsPanel({ onClose, onDeleteClient, onDeleteCategory }: Set
           </div>
 
           {/* Content Area */}
-          <div className="flex-1 overflow-y-auto p-6">
-            {activeTab === 'general' && <GeneralSettings />}
-            {activeTab === 'software' && <SoftwareSettings softwarePaths={softwarePaths} setSoftwarePaths={setSoftwarePaths} />}
-            {activeTab === 'appearance' && <AppearanceSettings showTagIcons={showTagIcons} setShowTagIcons={setShowTagIcons} />}
-            {activeTab === 'clients' && <ClientsSettings onDeleteClient={onDeleteClient} />}
-            {activeTab === 'finance' && <FinanceSettings />}
-            {activeTab === 'categories' && <CategoriesSettings onDeleteCategory={onDeleteCategory} />}
-          </div>
+          <SimpleBar className="flex-1 custom-page-scrollbar" autoHide={false}>
+            <div className="p-6">
+              {activeTab === 'general' && <GeneralSettings />}
+              {activeTab === 'software' && <SoftwareSettings softwarePaths={softwarePaths} setSoftwarePaths={setSoftwarePaths} />}
+              {activeTab === 'appearance' && <AppearanceSettings showTagIcons={showTagIcons} setShowTagIcons={setShowTagIcons} />}
+              {activeTab === 'clients' && <ClientsSettings onDeleteClient={onDeleteClient} />}
+              {activeTab === 'finance' && <FinanceSettings />}
+              {activeTab === 'categories' && <CategoriesSettings onDeleteCategory={onDeleteCategory} />}
+            </div>
+          </SimpleBar>
 
           {/* Footer */}
           <div className="border-t border-zinc-800 px-6 py-4 flex justify-end gap-3 flex-shrink-0">

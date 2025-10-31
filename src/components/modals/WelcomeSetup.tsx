@@ -4,6 +4,8 @@ import { FolderOpen, Rocket, Check, RefreshCw } from 'lucide-react';
 import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import type { SoftwareName } from '../../types/project';
+import { useModalBlur } from '../../hooks/useModalBlur';
+import SimpleBar from 'simplebar-react';
 
 interface WelcomeSetupProps {
   onComplete: () => void;
@@ -32,6 +34,7 @@ function isValidExecutablePath(path: string): boolean {
 }
 
 export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
+  const blurClass = useModalBlur();
   const { setDefaultProjectsPath, loadProjects } = useProjectStore();
   const [step, setStep] = useState(1);
   const [projectsDir, setProjectsDir] = useState('');
@@ -140,7 +143,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
   const hasSoftwarePathsConfigured = softwarePaths.some(sw => sw.path.trim() !== '');
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4 rounded-lg">
+    <div className={`fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4 rounded-lg ${blurClass}`}>
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-3xl w-full overflow-hidden" data-modal-window>
         {/* Header */}
         <div className="bg-gradient-to-r from-purple-700 to-zinc-800 px-6 py-4">
@@ -181,7 +184,8 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
         </div>
 
         {/* Content */}
-        <div className="px-6 py-5 h-[320px] overflow-y-auto">
+        <SimpleBar className="h-[320px] custom-scrollbar-fixed" autoHide={false}>
+          <div className="px-6 py-5">
           {step === 1 && (
             <div className="space-y-4">
               <div>
@@ -313,7 +317,8 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                 </button>
               </div>
 
-              <div className="space-y-2 max-h-[240px] overflow-y-auto pr-2">
+              <SimpleBar className="max-h-[240px] custom-scrollbar-fixed" autoHide={false}>
+                <div className="space-y-2 pr-2">
                 {softwarePaths.map((sw, index) => (
                   <div key={sw.name} className="bg-zinc-800 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
@@ -350,10 +355,12 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+              </SimpleBar>
             </div>
           )}
-        </div>
+          </div>
+        </SimpleBar>
 
         {/* Footer */}
         <div className="px-6 py-4 bg-zinc-800 flex justify-between items-center border-t border-zinc-700">

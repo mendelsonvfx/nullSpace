@@ -6,6 +6,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { writeText } from '@tauri-apps/api/clipboard';
+import SimpleBar from 'simplebar-react';
 
 // Import folder icons
 import blenderFolIcon from '/icons/folders/blender_fol.png';
@@ -676,7 +677,8 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-auto space-y-1">
+      <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
+        <div className="space-y-1">
         {tree.length > 0 ? (
           <>
             {/* Software folders first */}
@@ -693,12 +695,13 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
         ) : (
           <p className="text-xs text-zinc-500">No files found</p>
         )}
-      </div>
+        </div>
+      </SimpleBar>
       <div className="mt-4 pt-3 border-t border-zinc-800 text-xs text-zinc-500">
         {loadingSize ? (
-          <span>Calculating size...</span>
+          <span style={{ marginBottom: '-2px' }}>Calculating size...</span>
         ) : directorySize !== null ? (
-          <span>Project size: {formatSize(directorySize)}</span>
+          <span style={{ marginBottom: '-8px' }}>Project size: {formatSize(directorySize)}</span>
         ) : null}
       </div>
 

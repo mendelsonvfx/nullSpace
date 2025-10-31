@@ -29,7 +29,7 @@ export const TopProjectsByTime: React.FC<TopProjectsByTimeProps> = ({
   const totalMinutes = topProjectsByTime.reduce((sum, p) => sum + p.totalMinutes, 0);
 
   return (
-    <div data-time-analytics className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 mt-6 mb-12">
+    <div data-time-analytics className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 mt-6">
       <h2 className="text-2xl font-medium text-zinc-400 mb-6">Top 3 Projects by Time Spent</h2>
       <div className="space-y-4">
         {topProjectsByTime.map((project) => {
@@ -60,6 +60,15 @@ export const TopProjectsByTime: React.FC<TopProjectsByTimeProps> = ({
             </div>
           );
         })}
+        {/* Placeholders for missing projects */}
+        {Array.from({ length: Math.max(0, 3 - topProjectsByTime.length) }).map((_, index) => (
+          <div key={`placeholder-${index}`} className="space-y-2">
+            <div className="flex justify-between text-sm opacity-30">
+              <span className="text-zinc-600">—</span>
+            </div>
+            <div className="relative h-8 bg-zinc-800/50 rounded-lg" />
+          </div>
+        ))}
       </div>
     </div>
   );

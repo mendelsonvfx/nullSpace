@@ -18,6 +18,8 @@ import { WelcomeSetup } from './components/modals/WelcomeSetup';
 import { BreakReminderContainer } from './components/time';
 import type { BreakReminder } from './components/time';
 import { useTimeTrackingStore, TimerService } from './features/time-tracking';
+import SimpleBar from 'simplebar-react';
+import 'simplebar-react/dist/simplebar.min.css';
 
 // Import refactored components
 import { EmptyState } from './components/shared';
@@ -147,6 +149,11 @@ function App() {
   const [breakReminders, setBreakReminders] = useState<BreakReminder[]>([]);
   const [shownReminders, setShownReminders] = useState<Set<string>>(new Set());
   const [showCategorySubmenu, setShowCategorySubmenu] = useState(false);
+  const [accentColor, setAccentColor] = useState(() => {
+    return localStorage.getItem('accentColor') || '#8B5CF6';
+  });
+  const [showBottomShadow, setShowBottomShadow] = useState(true);
+  const projectListRef = useRef<HTMLDivElement>(null);
 
   // Check if we should show welcome setup
   useEffect(() => {
@@ -718,6 +725,7 @@ function App() {
       // Also update accent color when storage changes
       const savedColor = localStorage.getItem('accentColor');
       if (savedColor) {
+        setAccentColor(savedColor);
         document.documentElement.style.setProperty('--accent-color', savedColor);
         const adjustColorBrightness = (hex: string, percent: number) => {
           const num = parseInt(hex.replace('#', ''), 16);
@@ -874,6 +882,20 @@ function App() {
     const nextStatus = STATUS_CYCLE[nextIndex];
     updateStatus(projectId, nextStatus);
   }, [updateStatus]);
+
+  // Check if project list is scrolled to bottom
+  const handleProjectListScroll = useCallback(() => {
+    if (projectListRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = projectListRef.current;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 5;
+      setShowBottomShadow(!isAtBottom);
+    }
+  }, []);
+
+  // Check scroll position when projects change
+  useEffect(() => {
+    handleProjectListScroll();
+  }, [filteredProjects, handleProjectListScroll]);
 
   // ✅ OPTIMIZATION: Memoize expensive computations to avoid recalculating on every render
   // Create a Map of clients by ID for O(1) lookup instead of O(n) find operations
@@ -1066,14 +1088,14 @@ function App() {
             const { renameCategory } = useProjectStore.getState();
             renameCategory(oldName, newName);
           }}
-          accentColor="#a855f7"
+          accentColor={accentColor}
         />
       )}
       {/* Sidebar - Project List */}
-      <div className="w-80 border-r border-t border-zinc-800 flex flex-col">
+      <div className="w-80 border-r border-t border-zinc-800 flex flex-col relative">
         {/* Sidebar Header */}
-        <div className="p-4 border-b border-zinc-800">
-          <div className="flex items-center justify-between mb-4">
+        <div className="px-4 pt-4 pb-3 border-b border-zinc-800">
+          <div className="flex items-center justify-between mb-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <input
@@ -1273,180 +1295,199 @@ function App() {
         </div>
 
         {/* Project List */}
-        <div className="flex-1 overflow-auto p-2">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full" />
-            </div>
-          ) : filteredProjects.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-zinc-500 text-sm">
-              <Folder className="w-8 h-8 mb-2 opacity-50" />
-              <p>No projects found</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {filteredProjects.map(project => (
-                <div
-                  key={project.id}
-                  onMouseEnter={() => setHoveredProjectId(project.id)}
-                  onMouseLeave={() => setHoveredProjectId(null)}
-                >
-                  <ProjectCard
-                    projectPath={project.path}
-                    thumbnail={project.thumbnail}
-                    isSelected={selectedProjectId === project.id}
-                    onClick={() => handleOpenProject(project)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setActiveMenu('projects');
-                      setContextMenu({ x: e.clientX, y: e.clientY, projectId: project.id });
-                    }}
-                  >
-                    <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-bold text-base truncate flex-1">{project.name}</h3>
-                      {project.isPinned && (
-                        <Pin className="w-3 h-3 text-white fill-white" />
-                      )}
-                      {project.isFavorite && (
-                        <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                      )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          cycleStatus(project.id, project.status as ProjectStatus);
-                        }}
-                        className={`w-3 h-3 rounded-full ${STATUS_COLORS[project.status as keyof typeof STATUS_COLORS]} ${
-                          activeSessionsByProject.get(project.id) && project.status !== 'archived'
-                            ? project.status === 'active'
-                              ? 'status-glow-green brightness-150'
-                              : project.status === 'paused'
-                              ? 'status-glow-yellow brightness-150'
-                              : project.status === 'completed'
-                              ? 'status-glow-blue brightness-150'
-                              : ''
-                            : ''
-                        } hover:ring-2 hover:ring-white/50 transition-all cursor-pointer`}
-                        title={`Status: ${STATUS_LABELS[project.status as keyof typeof STATUS_LABELS]} (click to change)`}
-                      />
-                    </div>
-                    <p className="text-xs text-zinc-400 truncate mb-2">{project.description}</p>
-                    {project.software && project.software.length > 0 && (
-                      <div className="flex gap-1.5 mb-2">
-                        {project.software.slice(0, 5).map((sw: any) => (
-                          <SoftwareIcon key={sw.name} name={sw.name} />
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex items-end justify-between">
-                      <div className="flex gap-1 flex-wrap">
-                        {project.clientId && clientsById.get(project.clientId) && (
-                          <span
-                            key="client"
-                            className="px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1"
-                            style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
-                          >
-                            {showTagIcons && <User className="w-3 h-3 fill-current opacity-30" />}
-                            {clientsById.get(project.clientId)!.name}
-                          </span>
-                        )}
-                        {project.tags.slice(0, 2).map(tag => (
-                          <span key={tag} className="px-2 py-0.5 bg-zinc-800/80 rounded-full text-xs">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {/* Payment Status */}
-                        {project.paymentStatus === 'paid' && (
-                          <span className="text-xs px-2 py-0.5 bg-green-900/50 text-green-300 rounded-full flex items-center gap-1">
-                            {showTagIcons && <DollarSign className="w-3 h-3" />}
-                            Paid
-                          </span>
-                        )}
-                        {project.paymentStatus === 'prepaid' && (
-                          <span className="text-xs px-2 py-0.5 bg-yellow-900/50 text-yellow-300 rounded-full flex items-center gap-1">
-                            {showTagIcons && <DollarSign className="w-3 h-3" />}
-                            Prepaid
-                          </span>
-                        )}
-                        {/* Deadline - hide if project is completed or archived */}
-                        {project.deadline && project.status !== 'completed' && project.status !== 'archived' && (() => {
-                          const daysLeft = getDaysRemaining(project.deadline);
-                          if (daysLeft === null) return null;
-
-                          let displayText;
-                          if (daysLeft < 0) {
-                            const absDays = Math.abs(daysLeft);
-                            displayText = absDays >= 100 ? '99+ overdue' : `${absDays}d overdue`;
-                          } else if (daysLeft === 0) {
-                            displayText = 'today';
-                          } else {
-                            displayText = daysLeft >= 100 ? '99+ left' : `${daysLeft}d left`;
-                          }
-
-                          return (
-                            <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${
-                              daysLeft < 0
-                                ? 'bg-red-900 text-red-300'
-                                : daysLeft === 0
-                                ? 'bg-red-900 text-red-300'
-                                : daysLeft < 5
-                                ? 'bg-red-900 text-red-300'
-                                : daysLeft < 10
-                                ? 'bg-yellow-900 text-yellow-300'
-                                : 'bg-zinc-800 text-zinc-400'
-                            }`}>
-                              {displayText}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-                </ProjectCard>
+        <SimpleBar
+          className="flex-1 custom-page-scrollbar"
+          autoHide={false}
+        >
+          <div className="p-2">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full" />
               </div>
-            ))}
+            ) : filteredProjects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32 text-zinc-500 text-sm">
+                <Folder className="w-8 h-8 mb-2 opacity-50" />
+                <p>No projects found</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {filteredProjects.map(project => (
+                  <div
+                    key={project.id}
+                    onMouseEnter={() => setHoveredProjectId(project.id)}
+                    onMouseLeave={() => setHoveredProjectId(null)}
+                  >
+                    <ProjectCard
+                      projectPath={project.path}
+                      thumbnail={project.thumbnail}
+                      isSelected={selectedProjectId === project.id}
+                      onClick={() => handleOpenProject(project)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setActiveMenu('projects');
+                        setContextMenu({ x: e.clientX, y: e.clientY, projectId: project.id });
+                      }}
+                    >
+                      <div className="relative z-10">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-base truncate flex-1">{project.name}</h3>
+                        {project.isPinned && (
+                          <Pin className="w-3 h-3 text-white fill-white" />
+                        )}
+                        {project.isFavorite && (
+                          <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            cycleStatus(project.id, project.status as ProjectStatus);
+                          }}
+                          className={`w-3 h-3 rounded-full ${STATUS_COLORS[project.status as keyof typeof STATUS_COLORS]} ${
+                            activeSessionsByProject.get(project.id) && project.status !== 'archived'
+                              ? project.status === 'active'
+                                ? 'status-glow-green brightness-150'
+                                : project.status === 'paused'
+                                ? 'status-glow-yellow brightness-150'
+                                : project.status === 'completed'
+                                ? 'status-glow-blue brightness-150'
+                                : ''
+                              : ''
+                          } hover:ring-2 hover:ring-white/50 transition-all cursor-pointer`}
+                          title={`Status: ${STATUS_LABELS[project.status as keyof typeof STATUS_LABELS]} (click to change)`}
+                        />
+                      </div>
+                      <p className="text-xs text-zinc-400 truncate mb-2">{project.description}</p>
+                      {project.software && project.software.length > 0 && (
+                        <div className="flex gap-1.5 mb-2">
+                          {project.software.slice(0, 5).map((sw: any) => (
+                            <SoftwareIcon key={sw.name} name={sw.name} />
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-end justify-between">
+                        <div className="flex gap-1 flex-wrap">
+                          {project.clientId && clientsById.get(project.clientId) && (
+                            <span
+                              key="client"
+                              className="px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1"
+                              style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
+                            >
+                              {showTagIcons && <User className="w-3 h-3 fill-current opacity-30" />}
+                              {clientsById.get(project.clientId)!.name}
+                            </span>
+                          )}
+                          {project.tags.slice(0, 2).map(tag => (
+                            <span key={tag} className="px-2 py-0.5 bg-zinc-800/80 rounded-full text-xs">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {/* Payment Status */}
+                          {project.paymentStatus === 'paid' && (
+                            <span className="text-xs px-2 py-0.5 bg-green-900/50 text-green-300 rounded-full flex items-center gap-1">
+                              {showTagIcons && <DollarSign className="w-3 h-3" />}
+                              Paid
+                            </span>
+                          )}
+                          {project.paymentStatus === 'prepaid' && (
+                            <span className="text-xs px-2 py-0.5 bg-yellow-900/50 text-yellow-300 rounded-full flex items-center gap-1">
+                              {showTagIcons && <DollarSign className="w-3 h-3" />}
+                              Prepaid
+                            </span>
+                          )}
+                          {/* Deadline - hide if project is completed or archived */}
+                          {project.deadline && project.status !== 'completed' && project.status !== 'archived' && (() => {
+                            const daysLeft = getDaysRemaining(project.deadline);
+                            if (daysLeft === null) return null;
+
+                            let displayText;
+                            if (daysLeft < 0) {
+                              const absDays = Math.abs(daysLeft);
+                              displayText = absDays >= 100 ? '99+ overdue' : `${absDays}d overdue`;
+                            } else if (daysLeft === 0) {
+                              displayText = 'today';
+                            } else {
+                              displayText = daysLeft >= 100 ? '99+ left' : `${daysLeft}d left`;
+                            }
+
+                            return (
+                              <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${
+                                daysLeft < 0
+                                  ? 'bg-red-900 text-red-300'
+                                  : daysLeft === 0
+                                  ? 'bg-red-900 text-red-300'
+                                  : daysLeft < 5
+                                  ? 'bg-red-900 text-red-300'
+                                  : daysLeft < 10
+                                  ? 'bg-yellow-900 text-yellow-300'
+                                  : 'bg-zinc-800 text-zinc-400'
+                              }`}>
+                                {displayText}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </ProjectCard>
+                </div>
+              ))}
+            </div>
+            )}
           </div>
-          )}
-        </div>
+        </SimpleBar>
+
+        {/* Bottom gradient shadow */}
+        <div
+          className="absolute left-0 right-0 pointer-events-none transition-opacity duration-1000"
+          style={{
+            bottom: '0',
+            height: '60px',
+            background: 'linear-gradient(to top, rgba(0, 0, 0, 0.5), transparent)',
+            zIndex: 40,
+            opacity: showBottomShadow ? 1 : 0
+          }}
+        />
 
         {/* Sidebar Footer */}
-        <div className="border-t border-zinc-800 px-4 py-2 space-y-2">
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="w-full bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium text-white animate-button"
-          >
-            <Plus className="w-5 h-5" />
-            New Project
-          </button>
+        <div className="absolute bottom-0 left-0 right-0 px-2 pb-2 pointer-events-none z-50">
+          <div className="bg-zinc-900 rounded-xl p-2 space-y-2 pointer-events-auto">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="w-full bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium text-white animate-button"
+            >
+              <Plus className="w-5 h-5" />
+              New Project
+            </button>
 
-          {/* Mode Switcher */}
-          <div className="flex items-center bg-zinc-900 rounded-lg p-0.5">
-            <button
-              onClick={() => setViewMode('projects')}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
-                viewMode === 'projects'
-                  ? 'bg-zinc-800 text-white'
-                  : 'bg-transparent text-zinc-500 hover:text-zinc-400'
-              }`}
-              title="Projects"
-            >
-              <Folder className="w-3.5 h-3.5" />
-              <span className="text-xs font-medium">Projects</span>
-            </button>
-            <button
-              onClick={handleToggleFinanceMode}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
-                viewMode === 'finance'
-                  ? 'bg-zinc-800 text-white'
-                  : 'bg-transparent text-zinc-500 hover:text-zinc-400'
-              }`}
-              title="Statistics"
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span className="text-xs font-medium">Statistics</span>
-            </button>
+            {/* Mode Switcher */}
+            <div className="flex items-center bg-zinc-800 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode('projects')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
+                  viewMode === 'projects'
+                    ? 'bg-zinc-700 text-white'
+                    : 'bg-transparent text-zinc-500 hover:text-zinc-400'
+                }`}
+                title="Projects"
+              >
+                <Folder className="w-3.5 h-3.5" />
+                <span className="text-xs font-medium">Projects</span>
+              </button>
+              <button
+                onClick={handleToggleFinanceMode}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
+                  viewMode === 'finance'
+                    ? 'bg-zinc-700 text-white'
+                    : 'bg-transparent text-zinc-500 hover:text-zinc-400'
+                }`}
+                title="Statistics"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span className="text-xs font-medium">Statistics</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

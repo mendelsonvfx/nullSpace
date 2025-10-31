@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { X, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Project } from '../../types/project';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import SimpleBar from 'simplebar-react';
 
 interface ManualTransactionModalProps {
   isOpen: boolean;
@@ -174,11 +175,11 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
         data-modal-window
       >
         {/* Two columns */}
-        <div className="grid grid-cols-2 divide-x divide-zinc-800 h-full">
+        <div className="grid grid-cols-2 divide-x divide-zinc-800 flex-1 overflow-hidden">
           {/* Left: Add Transaction Form with Header and Footer */}
-          <div className="flex flex-col">
+          <div className="flex flex-col overflow-hidden min-h-0">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800 flex-shrink-0">
               <h2 className="text-lg font-bold text-white">Add Transaction Manually</h2>
               <button
                 onClick={handleCancel}
@@ -189,7 +190,8 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
             </div>
 
             {/* Form Body */}
-            <div className="flex-1 p-4 space-y-3 overflow-y-auto">
+            <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
+              <div className="p-4 space-y-3">
               {/* Project Selection */}
               <div>
                 <label className="block text-xs text-zinc-400 mb-1.5 font-medium">
@@ -266,10 +268,11 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                   onChange={(e) => setNotes(e.target.value)}
                 />
               </div>
-            </div>
+              </div>
+            </SimpleBar>
 
             {/* Footer */}
-            <div className="flex gap-2 p-4 border-t border-zinc-800">
+            <div className="flex gap-2 p-4 border-t border-zinc-800 flex-shrink-0">
               <button
                 onClick={handleCancel}
                 className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg transition-colors font-medium"
@@ -287,12 +290,13 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
           </div>
 
           {/* Right: History Journal */}
-          <div className="p-4 flex flex-col">
-            <h3 className="text-sm font-medium text-zinc-300 mb-3">Recent Transactions</h3>
+          <div className="p-4 flex flex-col overflow-hidden min-h-0">
+            <h3 className="text-sm font-medium text-zinc-300 mb-3 flex-shrink-0">Recent Transactions</h3>
             {manualTransactions.length === 0 ? (
               <p className="text-zinc-600 text-xs text-center py-6">No manual transactions yet</p>
             ) : (
-              <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
+              <SimpleBar className="flex-1 custom-scrollbar min-h-0" autoHide={false} style={{ height: 0 }}>
+                <div className="space-y-1.5 pr-1">
                 {manualTransactions.map(({ transaction, project }) => {
                   const transactionDate = new Date(transaction.date).toLocaleDateString();
                   const symbol = currencySymbols[transaction.currency || 'USD'] || '$';
@@ -358,7 +362,8 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                     </div>
                   );
                 })}
-              </div>
+                </div>
+              </SimpleBar>
             )}
           </div>
         </div>

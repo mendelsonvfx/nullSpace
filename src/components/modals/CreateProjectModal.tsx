@@ -5,6 +5,8 @@ import { selectProjectDirectory } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { generateBrightColor, SOFTWARE_OPTIONS } from '../../utils';
+import { useModalBlur } from '../../hooks/useModalBlur';
+import SimpleBar from 'simplebar-react';
 
 interface CreateProjectModalProps {
   onClose: () => void;
@@ -13,6 +15,7 @@ interface CreateProjectModalProps {
 }
 
 export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: CreateProjectModalProps) {
+  const blurClass = useModalBlur();
   const { defaultProjectsPath, clients, addClient, selectedCategory } = useProjectStore();
   const [useDefaultPath, setUseDefaultPath] = useState(true);
   const [newClientName, setNewClientName] = useState('');
@@ -202,7 +205,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 rounded-lg"
+      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 rounded-lg ${blurClass}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
@@ -223,7 +226,8 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
           </button>
         </div>
 
-        <div className="p-4 space-y-2.5 overflow-y-auto flex-1">
+        <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
+          <div className="p-4 space-y-2.5">
           <div className="flex gap-3 items-end">
             <div className="flex-1">
               <label className="block text-sm font-medium mb-1.5">Project Name</label>
@@ -705,7 +709,8 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                 </label>
               </div>
             </div>
-        </div>
+          </div>
+        </SimpleBar>
 
         <div className="p-4 border-t border-zinc-800 flex justify-end gap-2 flex-shrink-0">
           <button

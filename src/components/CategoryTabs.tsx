@@ -2,6 +2,7 @@ import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { AddCategoryModal } from './modals/AddCategoryModal';
 import { RenameCategoryModal } from './modals/RenameCategoryModal';
+import SimpleBar from 'simplebar-react';
 
 interface CategoryTabsProps {
   categories: string[];
@@ -127,21 +128,15 @@ export function CategoryTabs({
   return (
     <div className="flex flex-col h-full bg-zinc-900 border-r border-zinc-800 relative" style={{ width: '40px' }}>
       {/* Scrollable categories container */}
-      <div
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto overflow-x-hidden"
-        style={{
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-          WebkitOverflowScrolling: 'touch'
+      <SimpleBar
+        scrollableNodeProps={{
+          ref: scrollContainerRef,
+          onScroll: handleScroll
         }}
+        className="flex-1 custom-scrollbar"
+        autoHide={false}
+        style={{ maxHeight: '100%' }}
       >
-        <style>{`
-          .flex-1::-webkit-scrollbar {
-            display: none;
-          }
-        `}</style>
         {categories.map((category) => (
           <div key={category} className="relative group">
             <button
@@ -174,7 +169,7 @@ export function CategoryTabs({
             </button>
           </div>
         ))}
-      </div>
+      </SimpleBar>
 
       {/* Add category button */}
       {onAddCategory && (

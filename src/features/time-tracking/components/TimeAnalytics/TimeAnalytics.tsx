@@ -66,17 +66,28 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
   const weeklyData = useMemo(() => {
     const weeks = getLastNWeeks(12);
 
-    return weeks.map(weekStart => {
+    return weeks.map((weekStart, index) => {
       const weekMinutes = getTotalMinutesForWeek(allTimeEntries, weekStart);
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekEnd.getDate() + 6);
+
+      // Generate relative week label
+      const weeksAgo = weeks.length - 1 - index;
+      let label: string;
+      if (weeksAgo === 0) {
+        label = 'This Week';
+      } else if (weeksAgo === 1) {
+        label = 'Last Week';
+      } else {
+        label = `${weeksAgo}w ago`;
+      }
 
       return {
         weekStart,
         weekEnd,
         minutes: weekMinutes,
         hours: weekMinutes / 60,
-        label: `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+        label
       };
     });
   }, [allTimeEntries]);
@@ -147,7 +158,7 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
   // Empty state
   if (totalMinutes === 0) {
     return (
-      <div className="mb-12">
+      <div className="mt-12">
         <h2 className="text-2xl font-medium text-zinc-400 mb-6">Time Analytics</h2>
         <div data-time-analytics className="bg-zinc-900 rounded-xl p-12 border border-zinc-800 text-center">
           <Clock className="w-16 h-16 text-zinc-700 mx-auto mb-4" />
@@ -161,7 +172,7 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
   }
 
   return (
-    <div className="mb-12">
+    <div className="mt-12">
       <h2 className="text-2xl font-medium text-zinc-400 mb-6">Time Analytics</h2>
 
       {/* Stats Cards */}

@@ -13,6 +13,7 @@ import { ManualTimeEntryModal } from '../modals/ManualTimeEntryModal';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import SimpleBar from 'simplebar-react';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
@@ -190,7 +191,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       tabIndex={-1}
     >
       {/* Header */}
-      <div className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between flex-shrink-0">
+      <div className="border-b border-zinc-800 px-6 py-5 flex items-center justify-between flex-shrink-0">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <h2 className="text-2xl font-semibold">{project.name}</h2>
@@ -461,7 +462,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <SimpleBar className="flex-1 custom-page-scrollbar" autoHide={false}>
+        <div className="p-6">
         {/* Quick Actions */}
         <div className="mb-6">
           <h3 className="text-sm font-medium text-zinc-400 mb-3">Quick Actions</h3>
@@ -527,6 +529,22 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 e.isActive && e.widgetVisible && e.software === softwareKey
               );
 
+              // Get software color for gradient
+              const softwareColors: Record<string, string> = {
+                'blender': '#E87D0D',
+                'houdini': '#FF4713',
+                'after-effects': '#9999FF',
+                'photoshop': '#31A8FF',
+                'maya': '#0FADED',
+                'cinema4d': '#0099D8',
+                'substance': '#F37A3A',
+                'unreal': '#313131',
+                'unity': '#000000',
+                'zbrush': '#F37021',
+                'marmoset': '#FF6B00'
+              };
+              const softwareColor = softwareColors[softwareKey] || '#6366f1';
+
               return (
                 <button
                   key={sw.name}
@@ -545,7 +563,38 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   }}
                   disabled={status === 'launching'}
                   data-launch-software
-                  className="p-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg flex items-center gap-3 transition-all duration-200 group active:scale-[0.98] active:brightness-95 select-none disabled:opacity-60 disabled:cursor-not-allowed relative"
+                  className="p-4 border border-zinc-800 rounded-lg flex items-center gap-3 transition-all duration-200 group select-none disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
+                  onMouseDown={(e) => {
+                    // Применяем эффект прожатия только для ЛКМ (левая кнопка мыши)
+                    if (e.button === 0) {
+                      e.currentTarget.style.transform = 'scale(0.98)';
+                      e.currentTarget.style.filter = 'brightness(0.95)';
+                    }
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.transform = '';
+                    e.currentTarget.style.filter = '';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = '';
+                    e.currentTarget.style.filter = '';
+                    e.currentTarget.style.background = `
+                      radial-gradient(circle at 00% 120%, ${softwareColor}15 0%, transparent 80%),
+                      rgb(24, 24, 27)
+                    `;
+                  }}
+                  style={{
+                    background: `
+                      radial-gradient(circle at 00% 120%, ${softwareColor}15 0%, transparent 80%),
+                      rgb(24, 24, 27)
+                    `
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = `
+                      radial-gradient(circle at 00% 120%, ${softwareColor}40 0%, transparent 100%),
+                      rgb(28, 28, 31)
+                    `;
+                  }}
                 >
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center">
                     <SoftwareIcon name={sw.name} />
@@ -700,7 +749,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
         {/* Notes Section */}
         <NotesSection project={project} context={context} />
-      </div>
+        </div>
+      </SimpleBar>
 
       {/* Payment Modal */}
       {showPaymentModal && (
@@ -734,7 +784,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               </button>
             </div>
 
-            <div className="flex-1 p-4 space-y-3 overflow-y-auto">
+            <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
+              <div className="p-4 space-y-3">
               <div>
                 <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Cost *</label>
                 <div className="flex gap-2">
@@ -807,7 +858,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   />
                 </div>
               )}
-            </div>
+              </div>
+            </SimpleBar>
 
             <div className="flex justify-end gap-2 p-4 border-t border-zinc-800">
               <button
@@ -824,7 +876,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       {/* Project Settings Modal */}
       {showProjectSettings && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 rounded-lg"
+          className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 rounded-lg ${blurClass}`}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
@@ -845,7 +897,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               </button>
             </div>
 
-            <div className="p-4 space-y-2.5 overflow-y-auto flex-1">
+            <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
+              <div className="p-4 space-y-2.5">
               <div>
                 <label className="block text-sm font-medium mb-1.5">Project Name</label>
                 <input
@@ -1298,7 +1351,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   Delete Project
                 </button>
               </div>
-            </div>
+              </div>
+            </SimpleBar>
 
             {/* Footer */}
             <div className="border-t border-zinc-800 px-4 py-4 flex justify-end gap-3 flex-shrink-0">

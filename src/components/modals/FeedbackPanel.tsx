@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Save, Copy, Check } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import SimpleBar from 'simplebar-react';
 
 interface FeedbackPanelProps {
   onClose: () => void;
@@ -94,7 +95,8 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
+          <div className="p-4 space-y-4">
           {/* New Feedback Input */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-zinc-400">
@@ -139,17 +141,20 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
                 )}
               </button>
             </div>
-            <div className="bg-zinc-800 rounded-lg p-3 min-h-[200px] max-h-[300px] overflow-y-auto">
-              {allFeedback ? (
-                <pre className="text-sm whitespace-pre-wrap break-words text-zinc-300">
-                  {allFeedback}
-                </pre>
-              ) : (
-                <p className="text-sm text-zinc-500">No feedback yet</p>
-              )}
-            </div>
+            <SimpleBar className="bg-zinc-800 rounded-lg min-h-[200px] max-h-[300px] custom-scrollbar-fixed" autoHide={false}>
+              <div className="p-3">
+                {allFeedback ? (
+                  <pre className="text-sm whitespace-pre-wrap break-words text-zinc-300">
+                    {allFeedback}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-zinc-500">No feedback yet</p>
+                )}
+              </div>
+            </SimpleBar>
           </div>
-        </div>
+          </div>
+        </SimpleBar>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 // src/features/time-tracking/components/TimeAnalytics/WeeklyTimeline.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { formatTime } from '../../utils/timeFormatters';
 
 interface WeekData {
@@ -18,6 +18,8 @@ interface WeeklyTimelineProps {
  * Weekly timeline chart (last 12 weeks)
  */
 export const WeeklyTimeline: React.FC<WeeklyTimelineProps> = ({ weeklyData }) => {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
   // Find max minutes for chart scaling (normalize to hours for consistency)
   const maxWeeklyMinutes = useMemo(() => {
     const max = Math.max(...weeklyData.map(w => w.minutes), 0);
@@ -42,11 +44,21 @@ export const WeeklyTimeline: React.FC<WeeklyTimelineProps> = ({ weeklyData }) =>
           const now = new Date();
           const isCurrentWeek = week.weekStart <= now && now < week.weekEnd;
 
+          const isHovered = hoveredIndex === index;
+          const isFaded = hoveredIndex !== null && !isHovered;
+
           return (
             <div
               key={index}
               className="flex flex-col items-center gap-3 group"
               style={{ flex: '1 1 0' }}
+              onMouseEnter={() => {
+                // Only trigger hover effect if this bar has minutes > 0
+                if (week.minutes > 0) {
+                  setHoveredIndex(index);
+                }
+              }}
+              onMouseLeave={() => setHoveredIndex(null)}
             >
               {/* Bar */}
               <div
@@ -71,19 +83,10 @@ export const WeeklyTimeline: React.FC<WeeklyTimelineProps> = ({ weeklyData }) =>
                     height: week.minutes === 0 ? '3px' : `${heightPercent}%`,
                     minHeight: week.minutes > 0 ? '20px' : '3px',
                     boxShadow: isCurrentWeek
-                      ? '0 0 20px rgba(168, 85, 247, 0.5)'
-                      : '0 0 0 rgba(0, 0, 0, 0)',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = isCurrentWeek
-                      ? '0 0 30px rgba(168, 85, 247, 0.7)'
-                      : '0 0 20px rgba(113, 113, 122, 0.5)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = isCurrentWeek
-                      ? '0 0 20px rgba(168, 85, 247, 0.5)'
-                      : '0 0 0 rgba(0, 0, 0, 0)';
+                      ? (isHovered ? '0 0 30px rgba(168, 85, 247, 0.7)' : '0 0 20px rgba(168, 85, 247, 0.5)')
+                      : (isHovered ? '0 0 20px rgba(113, 113, 122, 0.5)' : '0 0 0 rgba(0, 0, 0, 0)'),
+                    transition: 'all 0.3s ease',
+                    opacity: isFaded ? 0.3 : 1
                   }}
                 >
                   {/* Glow effect */}
@@ -94,20 +97,20 @@ export const WeeklyTimeline: React.FC<WeeklyTimelineProps> = ({ weeklyData }) =>
                       } opacity-0 group-hover:opacity-20 transition-opacity`}
                     />
                   )}
-
-                  {/* Value label above bar */}
-                  {week.minutes > 0 && (
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 pointer-events-none">
-                      <div
-                        className={`text-xs font-medium whitespace-nowrap ${
-                          isCurrentWeek ? 'text-purple-300' : 'text-zinc-400'
-                        }`}
-                      >
-                        {formatTime(week.minutes)}
-                      </div>
-                    </div>
-                  )}
                 </div>
+
+                {/* Value label above bar */}
+                {week.minutes > 0 && (
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 pointer-events-none">
+                    <div
+                      className={`text-xs font-medium whitespace-nowrap ${
+                        isCurrentWeek ? 'text-purple-300' : 'text-zinc-400'
+                      }`}
+                    >
+                      {formatTime(week.minutes)}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Label */}

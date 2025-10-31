@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react';
 import { Project } from '../../../../types/project';
 import { formatTime, formatSoftwareName, getSoftwareColor } from '../../utils';
 import { SoftwareIcon } from '../../../../components/SoftwareIcon';
+import SimpleBar from 'simplebar-react';
 
 interface TimeEntryHistoryProps {
   project: Project;
@@ -30,8 +31,13 @@ export const TimeEntryHistory: React.FC<TimeEntryHistoryProps> = ({
       {manualEntries.length === 0 ? (
         <p className="text-zinc-600 text-xs text-center py-6">No manual entries yet</p>
       ) : (
-        <div className="space-y-1.5 max-h-[350px] overflow-y-auto pr-1">
-          {manualEntries.map((entry) => {
+        <SimpleBar
+          className="custom-scrollbar-fixed"
+          style={{ maxHeight: '350px' }}
+          autoHide={false}
+        >
+          <div className="space-y-1.5 pr-1">
+            {manualEntries.map((entry) => {
             const color = getSoftwareColor(entry.software);
             const entryDate = new Date(entry.startTime).toLocaleDateString();
             const shotName = entry.shotId
@@ -81,8 +87,9 @@ export const TimeEntryHistory: React.FC<TimeEntryHistoryProps> = ({
                 </button>
               </div>
             );
-          })}
-        </div>
+            })}
+          </div>
+        </SimpleBar>
       )}
     </div>
   );

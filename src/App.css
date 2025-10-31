@@ -328,32 +328,155 @@ input[type="number"] {
 }
 
 /* Custom scrollbar styles */
-* {
+/* Exclude SimpleBar elements from global scrollbar styles */
+*:not(.simplebar-scrollbar):not(.simplebar-track):not(.simplebar-content-wrapper):not(.simplebar-content) {
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.05s ease;
+}
+
+*:hover {
   scrollbar-color: #3f3f46 transparent;
 }
 
 /* Webkit scrollbar styles for Chrome, Safari, Edge */
-*::-webkit-scrollbar {
+*:not(.simplebar-scrollbar):not(.simplebar-track):not(.simplebar-content-wrapper):not(.simplebar-content)::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-*::-webkit-scrollbar-track {
+*:not(.simplebar-scrollbar):not(.simplebar-track):not(.simplebar-content-wrapper):not(.simplebar-content)::-webkit-scrollbar-track {
   background: transparent;
 }
 
-*::-webkit-scrollbar-thumb {
+*:not(.simplebar-scrollbar):not(.simplebar-track):not(.simplebar-content-wrapper):not(.simplebar-content)::-webkit-scrollbar-thumb {
   background: #3f3f46;
   border-radius: 4px;
+  transition: background 0.05s ease;
 }
 
-*::-webkit-scrollbar-thumb:hover {
+*:not(.simplebar-scrollbar):not(.simplebar-track):not(.simplebar-content-wrapper):not(.simplebar-content)::-webkit-scrollbar-thumb:hover {
   background: #52525b;
 }
 
-*::-webkit-scrollbar-corner {
+*:not(.simplebar-scrollbar):not(.simplebar-track):not(.simplebar-content-wrapper):not(.simplebar-content)::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* ========================================
+   SimpleBar Custom Styling - Universal
+   ======================================== */
+
+/* CRITICAL: Make SimpleBar work with flexbox parent */
+.custom-scrollbar {
+  /* height removed - use inline styles where needed */
+}
+
+/* For SimpleBar with fixed/max height (don't use height: 0) */
+.custom-scrollbar-fixed {
+  /* No height override */
+}
+
+/* For SimpleBar inside grid layouts (don't use height: 0) */
+.custom-scrollbar-grid {
+  /* No height override - grid items handle sizing differently */
+}
+
+/* Custom Scrollbar - 3px width with 6px margins, appears on hover only */
+.custom-scrollbar .simplebar-scrollbar::before,
+.custom-scrollbar-fixed .simplebar-scrollbar::before,
+.custom-scrollbar-grid .simplebar-scrollbar::before {
+  background-color: #3f3f46;  /* zinc-700 */
+  width: 3px;
+  left: 1.5px;
+  right: 1.5px;
+  border-radius: 2px;
+  opacity: 0;  /* Hidden by default */
+  transition: opacity 0.5s ease;  /* Smooth fade in/out 0.5s */
+  top: 6px;  /* Top margin */
+  bottom: 6px;  /* Bottom margin */
+}
+
+/* Show scrollbar when hovering over the entire container */
+.custom-scrollbar:hover .simplebar-scrollbar::before,
+.custom-scrollbar-fixed:hover .simplebar-scrollbar::before,
+.custom-scrollbar-grid:hover .simplebar-scrollbar::before {
+  opacity: 1;  /* Fully visible on hover */
+}
+
+/* Vertical track styling */
+.custom-scrollbar .simplebar-track.simplebar-vertical,
+.custom-scrollbar-fixed .simplebar-track.simplebar-vertical,
+.custom-scrollbar-grid .simplebar-track.simplebar-vertical {
+  width: 6px;
+  right: -4px;  
+  background: transparent;
+  top: 6px;  /* Top margin */
+  bottom: 6px;  /* Bottom margin */
+  height: calc(100% - 12px);  /* Subtract top + bottom margins (6px + 6px = 12px) */
+}
+
+/* Hide horizontal scrollbar */
+.custom-scrollbar .simplebar-track.simplebar-horizontal,
+.custom-scrollbar-fixed .simplebar-track.simplebar-horizontal,
+.custom-scrollbar-grid .simplebar-track.simplebar-horizontal {
+  display: none;
+}
+
+/* Ensure scrollbar stays visible during hover (override any SimpleBar defaults) */
+.custom-scrollbar:hover .simplebar-scrollbar,
+.custom-scrollbar-fixed:hover .simplebar-scrollbar,
+.custom-scrollbar-grid:hover .simplebar-scrollbar {
+  visibility: visible !important;
+}
+
+/* Prevent horizontal overflow */
+.custom-scrollbar .simplebar-content-wrapper,
+.custom-scrollbar-fixed .simplebar-content-wrapper,
+.custom-scrollbar-grid .simplebar-content-wrapper {
+  overflow-x: hidden !important;
+}
+
+/* Custom scrollbar for full-page content areas */
+.custom-page-scrollbar {
+  height: 0;
+}
+
+.custom-page-scrollbar .simplebar-scrollbar::before {
+  background-color: #3f3f46;
+  width: 3px;
+  left: 1.5px;
+  right: 1.5px;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  top: 6px;
+  bottom: 6px;
+}
+
+.custom-page-scrollbar:hover .simplebar-scrollbar::before {
+  opacity: 1;
+}
+
+.custom-page-scrollbar .simplebar-track.simplebar-vertical {
+  width: 6px;
+  right: 0;
+  background: transparent;
+  top: 2px;
+  bottom: 2px;
+  height: calc(100% - 12px);
+}
+
+.custom-page-scrollbar .simplebar-track.simplebar-horizontal {
+  display: none;
+}
+
+.custom-page-scrollbar:hover .simplebar-scrollbar {
+  visibility: visible !important;
+}
+
+.custom-page-scrollbar .simplebar-content-wrapper {
+  overflow-x: hidden !important;
 }
 
 /* MDXEditor Dark Theme */
@@ -776,3 +899,4 @@ div[data-radix-popper-content-wrapper] > div {
   background: #3f3f46 !important;
   background-color: #3f3f46 !important;
 }
+

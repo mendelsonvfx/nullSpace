@@ -1,10 +1,12 @@
 import { X, ExternalLink } from 'lucide-react';
+import { useModalBlur } from '../../hooks/useModalBlur';
 
 interface AboutPanelProps {
   onClose: () => void;
 }
 
 export function AboutPanel({ onClose }: AboutPanelProps) {
+  const blurClass = useModalBlur();
   const links = [
     {
       title: 'Telegram',
@@ -31,7 +33,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 rounded-lg animate-fade-in"
+      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 rounded-lg animate-fade-in ${blurClass}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
