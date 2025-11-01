@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistics - nullSpace</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e4e4e7;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: #0f0f0f;
+            border-right: 1px solid #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            padding: 20px 16px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 12px;
+            margin-bottom: 20px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .logo-text {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .search-box {
+            background: #1a1a1a;
+            border: 1px solid #262626;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #71717a;
+            font-size: 14px;
+        }
+
+        .search-box input {
+            background: none;
+            border: none;
+            outline: none;
+            color: #e4e4e7;
+            width: 100%;
+            font-size: 14px;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .filter-tab {
+            flex: 1;
+            padding: 8px 12px;
+            background: transparent;
+            border: 1px solid #262626;
+            border-radius: 8px;
+            color: #71717a;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .filter-tab.active {
+            background: #1a1a1a;
+            border-color: #3f3f46;
+            color: #e4e4e7;
+        }
+
+        .projects-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-right: 8px;
+        }
+
+        .projects-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .projects-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .projects-list::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 3px;
+        }
+
+        .project-card {
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .project-card:hover {
+            border-color: #262626;
+            background: #171717;
+        }
+
+        .project-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .project-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #e4e4e7;
+        }
+
+        .project-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+        }
+
+        .project-desc {
+            font-size: 12px;
+            color: #71717a;
+            margin-bottom: 12px;
+        }
+
+        .project-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .meta-badge {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .badge-ae {
+            background: rgba(147, 51, 234, 0.15);
+            color: #c084fc;
+        }
+
+        .badge-blender {
+            background: rgba(249, 115, 22, 0.15);
+            color: #fb923c;
+        }
+
+        .badge-status {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+        }
+
+        .badge-prepaid {
+            background: rgba(251, 146, 60, 0.15);
+            color: #fb923c;
+        }
+
+        .badge-time {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+        }
+
+        .new-project-btn {
+            margin-top: 16px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 14px;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .new-project-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+
+        .sidebar-footer {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #1a1a1a;
+            display: flex;
+            gap: 8px;
+        }
+
+        .footer-btn {
+            flex: 1;
+            padding: 10px;
+            background: #1a1a1a;
+            border: 1px solid #262626;
+            border-radius: 8px;
+            color: #71717a;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .footer-btn:hover {
+            background: #262626;
+            color: #e4e4e7;
+        }
+
+        .footer-btn.active {
+            background: rgba(139, 92, 246, 0.15);
+            border-color: rgba(139, 92, 246, 0.3);
+            color: #c4b5fd;
+        }
+
+        /* Main Content */
+        .main-content {
+            background: #0a0a0a;
+            overflow-y: auto;
+            padding: 32px;
+        }
+
+        .main-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .main-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .main-content::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 4px;
+        }
+
+        /* Revenue Section */
+        .revenue-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .revenue-card {
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 20px;
+            padding: 32px;
+        }
+
+        .revenue-title {
+            font-size: 16px;
+            color: #a1a1aa;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+
+        .revenue-amount {
+            font-size: 56px;
+            font-weight: 700;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .revenue-amount.pending {
+            background: linear-gradient(135deg, #71717a 0%, #52525b 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .breakdown-title {
+            font-size: 14px;
+            color: #71717a;
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+
+        .project-breakdown {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .breakdown-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #0f0f0f;
+            border: 1px solid #1a1a1a;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .breakdown-item:hover {
+            background: #1a1a1a;
+            border-color: #262626;
+            transform: translateX(4px);
+        }
+
+        .breakdown-preview {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            background: #1a1a1a;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .breakdown-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .breakdown-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .breakdown-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e4e4e7;
+            margin-bottom: 2px;
+        }
+
+        .breakdown-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: #10b981;
+        }
+
+        .breakdown-value.pending {
+            color: #71717a;
+        }
+
+        /* Statement Section */
+        .statement-section {
+            margin-bottom: 32px;
+        }
+
+        .statement-btn {
+            width: 100%;
+            padding: 18px 24px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .statement-btn:hover {
+            background: #1a1a1a;
+            border-color: #262626;
+        }
+
+        .statement-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: #e4e4e7;
+        }
+
+        .statement-icon {
+            color: #71717a;
+            transition: transform 0.2s ease;
+        }
+
+        /* Statistics Cards */
+        .statistics-section {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 20px;
+            padding: 28px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #71717a;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+
+        .stat-value {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .stat-value.blue {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-value.purple {
+            background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-value.pink {
+            background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-meta {
+            display: flex;
+            gap: 12px;
+            font-size: 13px;
+        }
+
+        .stat-meta-item {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .stat-meta-item.paid {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+        }
+
+        .stat-meta-item.pending {
+            background: rgba(251, 146, 60, 0.15);
+            color: #fb923c;
+        }
+
+        /* Finance Analytics */
+        .finance-section {
+            margin-bottom: 32px;
+        }
+
+        .finance-card {
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 20px;
+            padding: 32px;
+        }
+
+        .finance-header {
+            margin-bottom: 28px;
+        }
+
+        .finance-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .timeline-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #e4e4e7;
+            margin-bottom: 24px;
+        }
+
+        /* Chart */
+        .chart-container {
+            height: 280px;
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            padding: 20px 0;
+            position: relative;
+        }
+
+        .chart-bar {
+            flex: 1;
+            background: linear-gradient(180deg, rgba(139, 92, 246, 0.3) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border-radius: 6px 6px 0 0;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .chart-bar:hover {
+            background: linear-gradient(180deg, rgba(139, 92, 246, 0.5) 0%, rgba(139, 92, 246, 0.2) 100%);
+        }
+
+        .chart-bar.high {
+            background: linear-gradient(180deg, #8b5cf6 0%, #6366f1 50%, rgba(139, 92, 246, 0.3) 100%);
+        }
+
+        .chart-bar.medium {
+            background: linear-gradient(180deg, #3b82f6 0%, #2563eb 50%, rgba(59, 130, 246, 0.3) 100%);
+        }
+
+        .chart-tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-8px);
+            background: #1a1a1a;
+            border: 1px solid #262626;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #e4e4e7;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .chart-bar:hover .chart-tooltip {
+            opacity: 1;
+        }
+
+        .chart-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+            padding: 0 4px;
+        }
+
+        .chart-label {
+            font-size: 12px;
+            color: #71717a;
+            font-weight: 500;
+        }
+
+        /* Gradient overlays for cards */
+        .revenue-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .revenue-card.pending::before {
+            background: radial-gradient(circle, rgba(113, 113, 122, 0.1) 0%, transparent 70%);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">N</div>
+                <div class="logo-text">nullSpace</div>
+            </div>
+
+            <div class="search-box">
+                <span>🔍</span>
+                <input type="text" placeholder="Search projects...">
+            </div>
+
+            <div class="filter-tabs">
+                <button class="filter-tab active">📁 All</button>
+                <button class="filter-tab">⭐ Fav</button>
+                <button class="filter-tab">📦 Archive</button>
+            </div>
+
+            <div class="projects-list">
+                <div class="project-card">
+                    <div class="project-card-header">
+                        <div class="project-name">FlyingHouse CC</div>
+                        <div class="project-status"></div>
+                    </div>
+                    <div class="project-desc">Compositing of CG element</div>
+                    <div class="project-meta">
+                        <span class="meta-badge badge-ae">Ae</span>
+                        <span class="meta-badge badge-status">✅ Paid</span>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-card-header">
+                        <div class="project-name">Influence</div>
+                        <div class="project-status"></div>
+                    </div>
+                    <div class="project-desc">Realistic interior visualization</div>
+                    <div class="project-meta">
+                        <span class="meta-badge badge-blender">🎨</span>
+                        <span class="meta-badge badge-prepaid">⏳ Prepaid</span>
+                        <span class="meta-badge badge-time">15d left</span>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-card-header">
+                        <div class="project-name">H.Witches Crows</div>
+                        <div class="project-status"></div>
+                    </div>
+                    <div class="project-desc">Motion graphics project</div>
+                    <div class="project-meta">
+                        <span class="meta-badge badge-ae">Ae</span>
+                        <span class="meta-badge badge-blender">🎨</span>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-card-header">
+                        <div class="project-name">PURINA</div>
+                        <div class="project-status"></div>
+                    </div>
+                    <div class="project-desc">Naked Eye cat ad</div>
+                    <div class="project-meta">
+                        <span class="meta-badge badge-ae">Ae</span>
+                        <span class="meta-badge badge-prepaid">⏳ Prepaid</span>
+                        <span class="meta-badge badge-time">8d left</span>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-card-header">
+                        <div class="project-name">H.Witches</div>
+                        <div class="project-status"></div>
+                    </div>
+                    <div class="project-desc">Character animation</div>
+                    <div class="project-meta">
+                        <span class="meta-badge badge-ae">Ae</span>
+                        <span class="meta-badge badge-blender">🎨</span>
+                        <span class="meta-badge badge-status">✅ Paid</span>
+                    </div>
+                </div>
+            </div>
+
+            <button class="new-project-btn">
+                <span>➕</span>
+                <span>New Project</span>
+            </button>
+
+            <div class="sidebar-footer">
+                <button class="footer-btn">📊 Projects</button>
+                <button class="footer-btn active">📈 Statistics</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Revenue Section -->
+            <div class="revenue-section">
+                <!-- Total Revenue -->
+                <div class="revenue-card">
+                    <div class="revenue-title">Total Revenue</div>
+                    <div class="revenue-amount">2 424 $</div>
+                    <div class="breakdown-title">Project Breakdown:</div>
+                    <div class="project-breakdown">
+                        <div class="breakdown-item">
+                            <div class="breakdown-preview" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);"></div>
+                            <div class="breakdown-info">
+                                <div class="breakdown-name">Influence</div>
+                            </div>
+                            <div class="breakdown-value">1 545 $</div>
+                        </div>
+                        <div class="breakdown-item">
+                            <div class="breakdown-preview" style="background: linear-gradient(135deg, #10b981 0%, #064e3b 100%);"></div>
+                            <div class="breakdown-info">
+                                <div class="breakdown-name">PURINA</div>
+                            </div>
+                            <div class="breakdown-value">618 $</div>
+                        </div>
+                        <div class="breakdown-item">
+                            <div class="breakdown-preview" style="background: linear-gradient(135deg, #059669 0%, #047857 100%);"></div>
+                            <div class="breakdown-info">
+                                <div class="breakdown-name">H.Witches</div>
+                            </div>
+                            <div class="breakdown-value">185 $</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pending -->
+                <div class="revenue-card pending">
+                    <div class="revenue-title">Pending</div>
+                    <div class="revenue-amount pending">3 400 $</div>
+                    <div class="breakdown-title">Project Breakdown:</div>
+                    <div class="project-breakdown">
+                        <div class="breakdown-item">
+                            <div class="breakdown-preview" style="background: linear-gradient(135deg, #3f3f46 0%, #27272a 100%);"></div>
+                            <div class="breakdown-info">
+                                <div class="breakdown-name">H.Witches Crows</div>
+                            </div>
+                            <div class="breakdown-value pending">1 236 $</div>
+                        </div>
+                        <div class="breakdown-item">
+                            <div class="breakdown-preview" style="background: linear-gradient(135deg, #52525b 0%, #3f3f46 100%);"></div>
+                            <div class="breakdown-info">
+                                <div class="breakdown-name">Influence</div>
+                            </div>
+                            <div class="breakdown-value pending">1 545 $</div>
+                        </div>
+                        <div class="breakdown-item">
+                            <div class="breakdown-preview" style="background: linear-gradient(135deg, #3f3f46 0%, #18181b 100%);"></div>
+                            <div class="breakdown-info">
+                                <div class="breakdown-name">PURINA</div>
+                            </div>
+                            <div class="breakdown-value pending">618 $</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statement Button -->
+            <div class="statement-section">
+                <button class="statement-btn">
+                    <span class="statement-text">Statement</span>
+                    <span class="statement-icon">▼</span>
+                </button>
+            </div>
+
+            <!-- Statistics -->
+            <div class="statistics-section">
+                <h2 class="section-title">Statistics</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Projects</div>
+                        <div class="stat-value blue">5</div>
+                        <div class="stat-meta">
+                            <span class="stat-meta-item paid">4 paid</span>
+                            <span class="stat-meta-item pending">3 pending</span>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-label">Average Project Value</div>
+                        <div class="stat-value purple">606 $</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-label">Revenue per Day</div>
+                        <div class="stat-value pink">41 $</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Finance Analytics -->
+            <div class="finance-section">
+                <h2 class="section-title">Finance Analytics</h2>
+                <div class="finance-card">
+                    <div class="timeline-title">Revenue Timeline</div>
+                    
+                    <div class="chart-container">
+                        <div class="chart-bar" style="height: 25%;">
+                            <div class="chart-tooltip">$120</div>
+                        </div>
+                        <div class="chart-bar" style="height: 35%;">
+                            <div class="chart-tooltip">$210</div>
+                        </div>
+                        <div class="chart-bar" style="height: 30%;">
+                            <div class="chart-tooltip">$180</div>
+                        </div>
+                        <div class="chart-bar medium" style="height: 55%;">
+                            <div class="chart-tooltip">$380</div>
+                        </div>
+                        <div class="chart-bar" style="height: 40%;">
+                            <div class="chart-tooltip">$245</div>
+                        </div>
+                        <div class="chart-bar high" style="height: 75%;">
+                            <div class="chart-tooltip">$545</div>
+                        </div>
+                        <div class="chart-bar high" style="height: 85%;">
+                            <div class="chart-tooltip">$618</div>
+                        </div>
+                        <div class="chart-bar medium" style="height: 60%;">
+                            <div class="chart-tooltip">$425</div>
+                        </div>
+                        <div class="chart-bar" style="height: 45%;">
+                            <div class="chart-tooltip">$285</div>
+                        </div>
+                        <div class="chart-bar" style="height: 35%;">
+                            <div class="chart-tooltip">$195</div>
+                        </div>
+                        <div class="chart-bar" style="height: 50%;">
+                            <div class="chart-tooltip">$340</div>
+                        </div>
+                        <div class="chart-bar" style="height: 40%;">
+                            <div class="chart-tooltip">$265</div>
+                        </div>
+                    </div>
+
+                    <div class="chart-labels">
+                        <span class="chart-label">Jan</span>
+                        <span class="chart-label">Feb</span>
+                        <span class="chart-label">Mar</span>
+                        <span class="chart-label">Apr</span>
+                        <span class="chart-label">May</span>
+                        <span class="chart-label">Jun</span>
+                        <span class="chart-label">Jul</span>
+                        <span class="chart-label">Aug</span>
+                        <span class="chart-label">Sep</span>
+                        <span class="chart-label">Oct</span>
+                        <span class="chart-label">Nov</span>
+                        <span class="chart-label">Dec</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Interactive behaviors
+        document.querySelectorAll('.project-card').forEach(card => {
+            card.addEventListener('click', function() {
+                document.querySelectorAll('.project-card').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        document.querySelectorAll('.footer-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.footer-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        document.querySelector('.statement-btn').addEventListener('click', function() {
+            const icon = this.querySelector('.statement-icon');
+            icon.style.transform = icon.style.transform === 'rotate(180deg)' ? '' : 'rotate(180deg)';
+        });
+
+        // Chart bar animations
+        document.querySelectorAll('.chart-bar').forEach(bar => {
+            bar.addEventListener('mouseenter', function() {
+                this.style.transform = 'scaleY(1.05)';
+                this.style.transformOrigin = 'bottom';
+            });
+            bar.addEventListener('mouseleave', function() {
+                this.style.transform = '';
+            });
+        });
+
+        // Breakdown items animation
+        document.querySelectorAll('.breakdown-item').forEach(item => {
+            item.addEventListener('mouseenter', function() {
+                this.style.transition = 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)';
+            });
+        });
+    </script>
+</body>
+</html>

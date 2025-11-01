@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>H.Witches Crows - nullSpace</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e4e4e7;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 280px 1fr 320px;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: #0f0f0f;
+            border-right: 1px solid #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            padding: 20px 16px 16px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 12px;
+            margin-bottom: 20px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .logo-text {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .search-box {
+            background: #1a1a1a;
+            border: 1px solid #262626;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #71717a;
+            font-size: 14px;
+        }
+
+        .search-box input {
+            background: none;
+            border: none;
+            outline: none;
+            color: #e4e4e7;
+            width: 100%;
+            font-size: 14px;
+        }
+
+        .search-icon {
+            width: 16px;
+            height: 16px;
+            color: #71717a;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .filter-tab {
+            flex: 1;
+            padding: 8px 12px;
+            background: transparent;
+            border: 1px solid #262626;
+            border-radius: 8px;
+            color: #71717a;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .filter-tab.active {
+            background: #1a1a1a;
+            border-color: #3f3f46;
+            color: #e4e4e7;
+        }
+
+        .filter-tab:hover {
+            border-color: #3f3f46;
+        }
+
+        .projects-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-right: 8px;
+            margin-bottom: 16px;
+        }
+
+        .projects-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .projects-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .projects-list::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 3px;
+        }
+
+        .project-card {
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .project-card:hover {
+            border-color: #262626;
+            background: #171717;
+        }
+
+        .project-card.active {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(99, 102, 241, 0.05) 100%);
+            border-color: rgba(139, 92, 246, 0.3);
+        }
+
+        .project-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .project-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #e4e4e7;
+        }
+
+        .project-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+        }
+
+        .project-desc {
+            font-size: 12px;
+            color: #71717a;
+            margin-bottom: 12px;
+        }
+
+        .project-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .meta-badge {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .badge-ae {
+            background: rgba(147, 51, 234, 0.15);
+            color: #c084fc;
+        }
+
+        .badge-blender {
+            background: rgba(249, 115, 22, 0.15);
+            color: #fb923c;
+        }
+
+        .badge-status {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+        }
+
+        .badge-prepaid {
+            background: rgba(251, 146, 60, 0.15);
+            color: #fb923c;
+        }
+
+        .badge-generic {
+            background: rgba(113, 113, 122, 0.15);
+            color: #a1a1aa;
+        }
+
+        .badge-client {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+        }
+
+        /* Sidebar Actions */
+        .sidebar-actions {
+            margin-top: auto;
+            padding-top: 16px;
+            border-top: 1px solid #1a1a1a;
+        }
+
+        .new-project-btn {
+            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 14px;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+            margin-bottom: 12px;
+        }
+
+        .new-project-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+
+        .sidebar-nav {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-btn {
+            flex: 1;
+            padding: 10px;
+            background: #1a1a1a;
+            border: 1px solid #262626;
+            border-radius: 8px;
+            color: #71717a;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .nav-btn:hover {
+            background: #262626;
+            color: #e4e4e7;
+        }
+
+        .nav-btn.active {
+            background: rgba(139, 92, 246, 0.15);
+            border-color: rgba(139, 92, 246, 0.3);
+            color: #c4b5fd;
+        }
+
+        /* Main Content */
+        .main-content {
+            background: #0a0a0a;
+            overflow-y: auto;
+            padding: 28px 32px;
+        }
+
+        .main-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .main-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .main-content::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 4px;
+        }
+
+        /* Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .project-title {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .completed-badge {
+            padding: 4px 10px;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 6px;
+            color: #34d399;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .add-tag-btn {
+            padding: 4px 10px;
+            background: #1a1a1a;
+            border: 1px solid #262626;
+            border-radius: 6px;
+            color: #71717a;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .add-tag-btn:hover {
+            background: #262626;
+            color: #e4e4e7;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .icon-btn:hover {
+            background: #1a1a1a;
+            border-color: #262626;
+        }
+
+        .icon-btn svg {
+            width: 18px;
+            height: 18px;
+            color: #a1a1aa;
+        }
+
+        /* Shot Tabs */
+        .shot-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 28px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .shot-tabs::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .shot-tabs::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .shot-tabs::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 2px;
+        }
+
+        .shot-tab {
+            padding: 8px 16px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            color: #71717a;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .shot-tab.active {
+            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+            border-color: #8b5cf6;
+            color: white;
+        }
+
+        .shot-tab.completed {
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .shot-tab.completed::after {
+            content: ' ✓';
+            color: #34d399;
+        }
+
+        .shot-tab:hover:not(.active) {
+            background: #1a1a1a;
+            border-color: #262626;
+        }
+
+        .add-shot-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: 1px dashed #3f3f46;
+            border-radius: 8px;
+            color: #71717a;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .add-shot-btn:hover {
+            border-color: #52525b;
+            color: #a1a1aa;
+        }
+
+        /* Quick Actions */
+        .section {
+            margin-bottom: 28px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e4e4e7;
+            margin-bottom: 14px;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .action-card {
+            padding: 12px 14px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .action-card:hover {
+            background: #1a1a1a;
+            border-color: rgba(139, 92, 246, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .action-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .action-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .action-icon.folder {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.1) 100%);
+            color: #60a5fa;
+        }
+
+        .action-icon.payment {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.1) 100%);
+            color: #34d399;
+        }
+
+        .action-icon.time {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.1) 100%);
+            color: #fbbf24;
+        }
+
+        .action-text {
+            font-size: 14px;
+            font-weight: 500;
+            color: #e4e4e7;
+        }
+
+        /* Launch Software */
+        .software-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .software-card {
+            padding: 20px;
+            background: linear-gradient(135deg, #141414 0%, #0f0f0f 100%);
+            border: 1px solid #1a1a1a;
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .software-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .software-card.blender-card::before {
+            background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, transparent 100%);
+        }
+
+        .software-card.ae-card::before {
+            background: linear-gradient(135deg, rgba(147, 51, 234, 0.1) 0%, transparent 100%);
+        }
+
+        .software-card:hover {
+            border-color: #262626;
+            transform: translateY(-4px);
+        }
+
+        .software-card:hover::before {
+            opacity: 1;
+        }
+
+        .software-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .software-icon.blender {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+        }
+
+        .software-icon.ae {
+            background: linear-gradient(135deg, #9333ea 0%, #7c3aed 100%);
+            font-size: 28px;
+        }
+
+        .software-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #e4e4e7;
+            position: relative;
+            z-index: 1;
+        }
+
+        .software-subtitle {
+            font-size: 12px;
+            color: #71717a;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Versions */
+        .versions-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .version-filters {
+            display: flex;
+            gap: 8px;
+        }
+
+        .version-filter {
+            padding: 6px 12px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            color: #71717a;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .version-filter.active {
+            background: rgba(139, 92, 246, 0.15);
+            border-color: rgba(139, 92, 246, 0.3);
+            color: #c4b5fd;
+        }
+
+        .version-filter:hover {
+            background: #1a1a1a;
+        }
+
+        .versions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 12px;
+        }
+
+        .version-card {
+            padding: 14px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .version-card:hover {
+            background: #1a1a1a;
+            border-color: rgba(139, 92, 246, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .version-icon {
+            width: 44px;
+            height: 44px;
+            margin: 0 auto 8px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .version-icon.ae-icon {
+            background: rgba(147, 51, 234, 0.2);
+            color: #c084fc;
+        }
+
+        .version-icon.blender-icon {
+            background: rgba(249, 115, 22, 0.2);
+            color: #fb923c;
+        }
+
+        .version-number {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e4e4e7;
+        }
+
+        /* Output Overview */
+        .output-box {
+            padding: 48px 24px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 16px;
+            text-align: center;
+            color: #71717a;
+            font-size: 14px;
+        }
+
+        /* Links */
+        .links-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .link-item {
+            padding: 12px 14px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .link-item:hover {
+            background: #1a1a1a;
+            border-color: rgba(139, 92, 246, 0.3);
+        }
+
+        .link-icon {
+            width: 32px;
+            height: 32px;
+            background: rgba(139, 92, 246, 0.15);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .link-icon svg {
+            width: 16px;
+            height: 16px;
+            color: #c4b5fd;
+        }
+
+        .link-text {
+            flex: 1;
+            font-size: 12px;
+            color: #e4e4e7;
+        }
+
+        .add-link-input {
+            padding: 12px 14px;
+            background: #141414;
+            border: 1px dashed #3f3f46;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .add-link-input input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: #e4e4e7;
+            font-size: 12px;
+        }
+
+        .add-link-input input::placeholder {
+            color: #52525b;
+        }
+
+        .add-btn {
+            width: 32px;
+            height: 32px;
+            background: rgba(139, 92, 246, 0.15);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #c4b5fd;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .add-btn:hover {
+            background: rgba(139, 92, 246, 0.25);
+        }
+
+        .add-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Tasks */
+        .task-info {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .task-item {
+            padding: 14px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 10px;
+        }
+
+        .task-label {
+            font-size: 11px;
+            color: #71717a;
+            margin-bottom: 6px;
+        }
+
+        .task-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e4e4e7;
+        }
+
+        /* Right Panel */
+        .right-panel {
+            background: #0f0f0f;
+            border-left: 1px solid #1a1a1a;
+            padding: 28px 20px;
+            overflow-y: auto;
+        }
+
+        .right-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .right-panel::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .right-panel::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 3px;
+        }
+
+        .panel-section {
+            margin-bottom: 28px;
+        }
+
+        .panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e4e4e7;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-title svg {
+            width: 18px;
+            height: 18px;
+            color: #8b5cf6;
+        }
+
+        /* File Tree */
+        .file-tree {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .tree-item {
+            padding: 8px 10px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 12px;
+        }
+
+        .tree-item:hover {
+            background: #1a1a1a;
+            border-color: #262626;
+        }
+
+        .tree-item.folder {
+            font-weight: 500;
+        }
+
+        .tree-item.nested {
+            margin-left: 20px;
+        }
+
+        .tree-icon {
+            width: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .tree-icon svg {
+            width: 16px;
+            height: 16px;
+            color: #a1a1aa;
+        }
+
+        .tree-item.expanded {
+            background: #1a1a1a;
+        }
+
+        .chevron {
+            margin-left: auto;
+            color: #52525b;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Left Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">N</div>
+                <div class="logo-text">nullSpace</div>
+            </div>
+
+            <div class="search-box">
+                <svg class="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input type="text" placeholder="Search projects...">
+            </div>
+
+            <div class="filter-tabs">
+                <button class="filter-tab active">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                    All
+                </button>
+                <button class="filter-tab">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                    </svg>
+                    Fav
+                </button>
+                <button class="filter-tab">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                    </svg>
+                    Archive
+                </button>
+            </div>
+
+            <div class="projects-list">
+                <div class="project-card">
+                    <div class="project-card-header">
+                        <div class="project-name">FlyingHouse CC</div>
+                        <div class="project-status"></div>
+                    </div>
+                    <div class="project-desc">Compositing of CG element</div>
+                    <div class="project-meta">
+                        <span class="meta-badge badge-ae">Ae</span>
+                        <span class="meta-badge badge-generic">Generic</span>
+                        <span class="meta-badge badge-status">$ Paid</span>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-card-header">
+                        <div class="project-name">Influence</div>
+                        <div class="project-status"></div>
+                    </div>
+                    <div class="project-desc">Realistic interior visualization</div>
+                    <div class="project-meta">
+                        <span class="meta-badge badge-blender">Blender</span>
+                        <span class="meta-badge badge-client">Mary</span>
+                        <span class="meta-badge badge-prepaid">$ Prepaid</span>
+                        <span class="meta-badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171;">15d left</span>
+                    </div>
+                </div>
+
+                <div class="project-card active">
+                    <div class="project-card-header">
+                        <div class="project-name">H.Witches Crows</div>
+                        <div class="project-status"></div>
+                    </div>
+                    <div class="project-desc">Motion graphics</div>
+                    <div class="project-meta">
+                        <span class="meta-badge badge-ae">Ae</span>
+                        <span class="meta-badge badge-blender">Blender</span>
+                        <span class="meta-badge badge-client">MANTRA</span>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-card-header">
+                        <div class="project-name">PURINA</div>
+                        <div class="project-status"></div>
+                    </div>
+                    <div class="project-desc">Naked Eye cat ad</div>
+                    <div class="project-meta">
+                        <span class="meta-badge badge-ae">Ae</span>
+                        <span class="meta-badge badge-client">MANTRA</span>
+                        <span class="meta-badge badge-prepaid">$ Prepaid</span>
+                        <span class="meta-badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171;">8d left</span>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-card-header">
+                        <div class="project-name">H.Witches</div>
+                        <div class="project-status"></div>
+                    </div>
+                    <div class="project-desc">Character animation</div>
+                    <div class="project-meta">
+                        <span class="meta-badge badge-ae">Ae</span>
+                        <span class="meta-badge badge-blender">Blender</span>
+                        <span class="meta-badge badge-client">MANTRA</span>
+                        <span class="meta-badge badge-status">$ Paid</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-actions">
+                <button class="new-project-btn">
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>New Project</span>
+                </button>
+
+                <div class="sidebar-nav">
+                    <button class="nav-btn">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                        </svg>
+                        Projects
+                    </button>
+                    <button class="nav-btn">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Statistics
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Header -->
+            <div class="page-header">
+                <div class="header-left">
+                    <h1 class="project-title">H.Witches Crows</h1>
+                    <span class="completed-badge">Completed</span>
+                    <button class="add-tag-btn">+ Add tag...</button>
+                </div>
+                <div class="header-actions">
+                    <button class="icon-btn">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                        </svg>
+                    </button>
+                    <button class="icon-btn">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                    </button>
+                    <button class="icon-btn">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                    </button>
+                    <button class="icon-btn">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Shot Tabs -->
+            <div class="shot-tabs">
+                <button class="shot-tab active">Shot 050</button>
+                <button class="shot-tab completed">Shot 080</button>
+                <button class="shot-tab completed">Shot 090</button>
+                <button class="shot-tab completed">Shot 190</button>
+                <button class="add-shot-btn">+ Add shot...</button>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="section">
+                <h3 class="section-title">Quick Actions</h3>
+                <div class="quick-actions">
+                    <div class="action-card">
+                        <div class="action-icon folder">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </div>
+                        <div class="action-text">Open Folder</div>
+                    </div>
+                    <div class="action-card">
+                        <div class="action-icon payment">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                            </svg>
+                        </div>
+                        <div class="action-text">Payment</div>
+                    </div>
+                    <div class="action-card">
+                        <div class="action-icon time">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div class="action-text">Add Time</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Launch Software -->
+            <div class="section">
+                <h3 class="section-title">Launch Software</h3>
+                <div class="software-grid">
+                    <div class="software-card blender-card">
+                        <div class="software-icon blender">
+                            <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="12" r="3" fill="white"/>
+                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="white" stroke-width="1.5" fill="none"/>
+                            </svg>
+                        </div>
+                        <div class="software-name">Blender</div>
+                        <div class="software-subtitle">Click to launch</div>
+                    </div>
+                    <div class="software-card ae-card">
+                        <div class="software-icon ae">Ae</div>
+                        <div class="software-name">After Effects</div>
+                        <div class="software-subtitle">Click to launch</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Versions Overview -->
+            <div class="section">
+                <div class="versions-header">
+                    <h3 class="section-title" style="margin-bottom: 0;">Versions Overview</h3>
+                    <div class="version-filters">
+                        <button class="version-filter active">All</button>
+                        <button class="version-filter">Other</button>
+                        <button class="version-filter">Ae After Effects</button>
+                        <button class="version-filter">Blender</button>
+                    </div>
+                </div>
+                <div class="versions-grid">
+                    <div class="version-card">
+                        <div class="version-icon blender-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="12" r="2"/>
+                            </svg>
+                        </div>
+                        <div class="version-number">v010</div>
+                    </div>
+                    <div class="version-card">
+                        <div class="version-icon ae-icon">Ae</div>
+                        <div class="version-number">v005</div>
+                    </div>
+                    <div class="version-card">
+                        <div class="version-icon ae-icon">Ae</div>
+                        <div class="version-number">v004</div>
+                    </div>
+                    <div class="version-card">
+                        <div class="version-icon blender-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="12" r="2"/>
+                            </svg>
+                        </div>
+                        <div class="version-number">v009</div>
+                    </div>
+                    <div class="version-card">
+                        <div class="version-icon ae-icon">Ae</div>
+                        <div class="version-number">v003</div>
+                    </div>
+                    <div class="version-card">
+                        <div class="version-icon blender-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="12" r="2"/>
+                            </svg>
+                        </div>
+                        <div class="version-number">v008</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Output Overview -->
+            <div class="section">
+                <h3 class="section-title">Output Overview</h3>
+                <div class="output-box">
+                    No outputs found. Outputs should be in Render/Preview or Render/Final folders.
+                </div>
+            </div>
+
+            <!-- Links -->
+            <div class="section">
+                <h3 class="section-title">Links</h3>
+                <div class="links-list">
+                    <div class="link-item">
+                        <div class="link-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                        </div>
+                        <div class="link-text">02_SOURCE — Яндекс Диск</div>
+                    </div>
+                    <div class="add-link-input">
+                        <div class="link-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: #52525b;">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                        </div>
+                        <input type="text" placeholder="Paste URL...">
+                        <div class="add-btn">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tasks -->
+            <div class="section">
+                <h3 class="section-title">Task Details</h3>
+                <div class="task-info">
+                    <div class="task-item">
+                        <div class="task-label">Created</div>
+                        <div class="task-value">Oct 15, 2025</div>
+                    </div>
+                    <div class="task-item">
+                        <div class="task-label">Time Spent</div>
+                        <div class="task-value">3h 58m</div>
+                    </div>
+                    <div class="task-item">
+                        <div class="task-label">Completed</div>
+                        <div class="task-value">Oct 29, 2025</div>
+                    </div>
+                    <div class="task-item">
+                        <div class="task-label">Project size</div>
+                        <div class="task-value">12.52 GB</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="right-panel">
+            <div class="panel-section">
+                <h3 class="panel-title">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                    Project Structure
+                </h3>
+                <div class="file-tree">
+                    <div class="tree-item folder expanded">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>AfterEffects</span>
+                        <span class="chevron">▼</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Auto-Save</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Assets</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Cache</span>
+                    </div>
+                    <div class="tree-item folder expanded">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Footage</span>
+                        <span class="chevron">▼</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Plates</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Renders</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Stock</span>
+                    </div>
+                    <div class="tree-item">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                        </span>
+                        <span>H.WitchesCrows_Shot050...</span>
+                    </div>
+                    <div class="tree-item folder">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Output</span>
+                        <span class="chevron">▶</span>
+                    </div>
+                    <div class="tree-item folder expanded">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Blender</span>
+                        <span class="chevron">▼</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Assets</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>HDRI</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                        </span>
+                        <span>HV_EP_10_0190_match...</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Materials</span>
+                    </div>
+                    <div class="tree-item nested">
+                        <span class="tree-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                        </span>
+                        <span>Models</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Interactive behaviors
+        document.querySelectorAll('.project-card').forEach(card => {
+            card.addEventListener('click', function() {
+                document.querySelectorAll('.project-card').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        document.querySelectorAll('.shot-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                if (!this.classList.contains('add-shot-btn')) {
+                    document.querySelectorAll('.shot-tab').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                }
+            });
+        });
+
+        document.querySelectorAll('.version-filter').forEach(filter => {
+            filter.addEventListener('click', function() {
+                document.querySelectorAll('.version-filter').forEach(f => f.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        document.querySelectorAll('.tree-item.folder').forEach(folder => {
+            folder.addEventListener('click', function(e) {
+                e.stopPropagation();
+                this.classList.toggle('expanded');
+                const chevron = this.querySelector('.chevron');
+                if (chevron) {
+                    chevron.textContent = this.classList.contains('expanded') ? '▼' : '▶';
+                }
+            });
+        });
+
+        // Smooth hover effects
+        document.querySelectorAll('.action-card, .software-card, .version-card').forEach(element => {
+            element.addEventListener('mouseenter', function() {
+                this.style.transition = 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)';
+            });
+        });
+    </script>
+</body>
+</html>

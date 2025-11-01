@@ -16,14 +16,18 @@ export function InlineTimer({ activeEntry }: InlineTimerProps) {
   // Subscribe to timeTrackingStore for elapsedSeconds updates
   const currentEntry = useTimeTrackingStore(state => state.sessions.get(activeEntry.id));
 
-  // Animation state
+  // Animation state - MUST be declared before any conditional returns (React Hooks Rules)
   const wasAlreadyVisible = activeEntry.widgetVisible === true;
   const [isVisible, setIsVisible] = useState(false);
 
-  console.log(`[InlineTimer] 🎬 Component state: wasAlreadyVisible=${wasAlreadyVisible}, widgetVisible=${activeEntry.widgetVisible}, isVisible=${isVisible}`);
-
-  // Trigger animation on mount
+  // Trigger animation on mount - MUST be declared before any conditional returns (React Hooks Rules)
   useEffect(() => {
+    // Conditional logic inside effect is safe
+    if (!currentEntry || !currentEntry.isActive) {
+      console.log(`[InlineTimer] 🎭 useEffect: Entry is no longer active, skipping animation`);
+      return; // Early return inside effect is allowed
+    }
+
     console.log(`[InlineTimer] 🎭 useEffect for animation. wasAlreadyVisible=${wasAlreadyVisible}`);
     console.log(`[InlineTimer] ⏰ Setting 10ms timer to show widget with animation`);
 
@@ -37,7 +41,17 @@ export function InlineTimer({ activeEntry }: InlineTimerProps) {
       console.log(`[InlineTimer] 🧹 Cleaning up animation timer`);
       clearTimeout(timer);
     };
-  }, [wasAlreadyVisible]);
+  }, [wasAlreadyVisible, currentEntry]);
+
+  console.log(`[InlineTimer] 🎬 Component state: wasAlreadyVisible=${wasAlreadyVisible}, widgetVisible=${activeEntry.widgetVisible}, isVisible=${isVisible}`);
+
+  // Defensive check: Don't render if entry is no longer active
+  // This prevents frozen timers during async projectStore updates
+  // MUST be after all hooks (React Hooks Rules)
+  if (!currentEntry || !currentEntry.isActive) {
+    console.log(`[InlineTimer] ⚠️ Entry is no longer active, not rendering`);
+    return null;
+  }
 
   // Use elapsedSeconds from currentEntry (updated by widget timer every second)
   // This ensures accurate time tracking without recalculation

@@ -327,6 +327,19 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     };
   }, [project.path]);
 
+  // Listen for tree refresh requests (e.g., when adding/removing software)
+  useEffect(() => {
+    const handleTreeRefresh = () => {
+      console.log('Tree refresh event received - updating folder tree');
+      debouncedReload();
+    };
+
+    window.addEventListener('tree-refresh', handleTreeRefresh);
+    return () => {
+      window.removeEventListener('tree-refresh', handleTreeRefresh);
+    };
+  }, [project.path]);
+
   const loadDirectorySize = async () => {
     // Clear any existing timer first
     if (loadingSizeTimerRef.current !== null) {

@@ -142,7 +142,7 @@ export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId }: 
       <button
         onClick={handleAddLink}
         disabled={!url.trim()}
-        className="px-3 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         title="Add Link"
       >
         <Plus className="w-4 h-4" />

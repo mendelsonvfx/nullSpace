@@ -259,45 +259,48 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
       console.warn(`[TimeTrackingStore] ⚠️  Entry has no workSessionId!`);
     }
 
-    // Save to projectStore and disk
-    try {
-      const { useProjectStore } = await import('../../../store/projectStore');
-      const projectStore = useProjectStore.getState();
-      const project = projectStore.projects.find(p => p.id === entry.projectId);
+    // Save to projectStore and disk (non-blocking to avoid UI freeze)
+    // Fire and forget - UI state is already updated above
+    (async () => {
+      try {
+        const { useProjectStore } = await import('../../../store/projectStore');
+        const projectStore = useProjectStore.getState();
+        const project = projectStore.projects.find(p => p.id === entry.projectId);
 
-      if (project) {
-        const updatedEntry = get().sessions.get(entryId);
-        const updatedEntries = (project.timeEntries || []).map(e =>
-          e.id === entryId
-            ? {
-                ...e,
-                endTime: now,
-                durationMinutes: finalMinutes,
-                softwareMinutes: updatedEntry?.softwareMinutes || 0,  // Save focused minutes
-                isActive: false
-              }
-            : e
-        );
+        if (project) {
+          const updatedEntry = get().sessions.get(entryId);
+          const updatedEntries = (project.timeEntries || []).map(e =>
+            e.id === entryId
+              ? {
+                  ...e,
+                  endTime: now,
+                  durationMinutes: finalMinutes,
+                  softwareMinutes: updatedEntry?.softwareMinutes || 0,  // Save focused minutes
+                  isActive: false
+                }
+              : e
+          );
 
-        const completedMinutes = updatedEntries
-          .filter(e => !e.isActive)
-          .reduce((sum, e) => sum + e.durationMinutes, 0);
+          const completedMinutes = updatedEntries
+            .filter(e => !e.isActive)
+            .reduce((sum, e) => sum + e.durationMinutes, 0);
 
-        const updatedProject = {
-          ...project,
-          timeEntries: updatedEntries,
-          totalMinutesSpent: completedMinutes,
-          workSession: project.workSession,  // Keep WorkSession (updated by WorkSessionService)
-          updatedAt: new Date().toISOString()
-        };
+          const updatedProject = {
+            ...project,
+            timeEntries: updatedEntries,
+            totalMinutesSpent: completedMinutes,
+            workSession: project.workSession,  // Keep WorkSession (updated by WorkSessionService)
+            updatedAt: new Date().toISOString()
+          };
 
-        await projectStore.updateProject(updatedProject);
-        const focusedMinutes = updatedEntry?.softwareMinutes || 0;
-        console.log(`[TimeTrackingStore] 💾 Saved stopped session to disk: ${entry.software} ${finalMinutes}m total, ${focusedMinutes}m focused`);
+          await projectStore.updateProject(updatedProject);
+          const focusedMinutes = updatedEntry?.softwareMinutes || 0;
+          console.log(`[TimeTrackingStore] 💾 Saved stopped session to disk: ${entry.software} ${finalMinutes}m total, ${focusedMinutes}m focused`);
+        }
+      } catch (error) {
+        console.error('[TimeTrackingStore] ❌ Failed to save stopped session to disk:', error);
       }
-    } catch (error) {
-      console.error('[TimeTrackingStore] ❌ Failed to save stopped session to disk:', error);
-    }
+    })();
 
     return finalMinutes;
   },

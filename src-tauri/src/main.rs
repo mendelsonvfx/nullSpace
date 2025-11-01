@@ -106,8 +106,11 @@ struct FolderTemplate {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Software {
     name: String,
+    #[serde(rename = "executablePath", alias = "executable_path")]
     executable_path: String,
     version: Option<String>,
+    #[serde(default)]
+    icon: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -402,6 +405,7 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
             name: name.clone(),
             executable_path: String::new(), // Empty path, will be configured later
             version: None,
+            icon: None,
         }
     }).collect();
 
@@ -447,6 +451,52 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
         .map_err(|e| format!("Failed to write metadata: {}", e))?;
 
     Ok(project)
+}
+
+#[tauri::command]
+async fn add_software_to_project(project_path: String, software_name: String) -> Result<(), String> {
+    let project_path_buf = PathBuf::from(&project_path);
+
+    // Check if project exists
+    if !project_path_buf.exists() {
+        return Err("Project path does not exist".to_string());
+    }
+
+    // Get folder template for the software
+    let software_folders = get_folder_template(&software_name);
+    let folder_name = get_software_folder_name(&software_name);
+    let software_path = project_path_buf.join(folder_name);
+
+    // Create software folders if they don't exist
+    if !software_path.exists() {
+        for folder_item in software_folders {
+            create_folder_item(&software_path, &folder_item)?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn remove_software_from_project(project_path: String, software_name: String) -> Result<(), String> {
+    let project_path_buf = PathBuf::from(&project_path);
+
+    // Check if project exists
+    if !project_path_buf.exists() {
+        return Err("Project path does not exist".to_string());
+    }
+
+    // Get software folder name
+    let folder_name = get_software_folder_name(&software_name);
+    let software_path = project_path_buf.join(folder_name);
+
+    // Delete software folder if it exists
+    if software_path.exists() {
+        fs::remove_dir_all(&software_path)
+            .map_err(|e| format!("Failed to delete software folder: {}", e))?;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -2621,6 +2671,8 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             create_project,
+            add_software_to_project,
+            remove_software_from_project,
             load_projects,
             update_project,
             delete_project,

@@ -6,11 +6,12 @@ import { LinkItem, LinkInputForm, NotesSection } from '../shared';
 import { VersionsOverview } from './VersionsOverview';
 import { OutputOverview } from './OutputOverview';
 import { SoftwareIcon } from '../SoftwareIcon';
-import { STATUS_LABELS } from '../../utils';
+import { STATUS_LABELS, SOFTWARE_OPTIONS } from '../../utils';
 import { versionsCache } from '../../utils/versionsCache';
 import { InlineTimer, TimeInfoBar } from '../time';
 import { ManualTimeEntryModal } from '../modals/ManualTimeEntryModal';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
+import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import SimpleBar from 'simplebar-react';
@@ -34,6 +35,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [isShotEditMode, setIsShotEditMode] = useState(false);
   const [isFavoriteAnimating, setIsFavoriteAnimating] = useState(false);
   const [shotToDelete, setShotToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [softwareToRemove, setSoftwareToRemove] = useState<string | null>(null);
   const [editingShotId, setEditingShotId] = useState<string | null>(null);
   const [editingShotNumber, setEditingShotNumber] = useState('');
 
@@ -56,6 +58,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   // Get fresh project from store for real-time timer updates
   const latestProject = useProjectStore(state => state.projects.find(p => p.id === project.id) || project);
   const timeTrackingEnabled = useTimeTrackingFeature();
+  const timeTrackingSessions = useTimeTrackingStore(state => state.sessions);
 
   // Load cached thumbnail for Project Settings modal
   const thumbnailSrc = useThumbnail(project.path, project.thumbnail);
@@ -182,6 +185,96 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
     } catch (error) {
       console.error('Failed to process image:', error);
     }
+  };
+
+  // Map display names to internal keys (same as in software launch section)
+  const nameToKey: Record<string, string> = {
+    'Blender': 'blender',
+    'Houdini': 'houdini',
+    'Maya': 'maya',
+    'After Effects': 'after-effects',
+    'Cinema 4D': 'cinema4d',
+    'Substance': 'substance',
+    'Unreal': 'unreal',
+    'Unity': 'unity',
+    'ZBrush': 'zbrush',
+    'Photoshop': 'photoshop',
+    'Marmoset': 'marmoset'
+  };
+
+  const handleToggleSoftware = async (softwareName: string) => {
+    const softwareKey = nameToKey[softwareName] || softwareName.toLowerCase().replace(/\s+/g, '-');
+    const { projects, updateProject } = useProjectStore.getState();
+    const currentProject = projects.find(p => p.id === project.id) || project;
+    const isCurrentlySelected = currentProject.software.some((sw: any) => {
+      const existingKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+      return existingKey === softwareKey;
+    });
+
+    if (isCurrentlySelected) {
+      // Show confirmation modal before removing
+      setSoftwareToRemove(softwareName);
+    } else {
+      // Add software directly without confirmation
+      try {
+        // Create folders for the software
+        await invoke('add_software_to_project', {
+          projectPath: project.path,
+          softwareName: softwareKey
+        });
+
+        // Update project metadata
+        const newSoftware = {
+          name: softwareName,
+          executablePath: '', // Will be set from settings
+          version: undefined,
+          icon: undefined
+        };
+
+        await updateProject({
+          ...currentProject,
+          software: [...currentProject.software, newSoftware]
+        });
+
+        // Trigger tree refresh
+        window.dispatchEvent(new CustomEvent('tree-refresh'));
+      } catch (error) {
+        console.error('Failed to add software:', error);
+      }
+    }
+  };
+
+  const handleRemoveSoftware = async () => {
+    if (!softwareToRemove) return;
+
+    const softwareKey = nameToKey[softwareToRemove] || softwareToRemove.toLowerCase().replace(/\s+/g, '-');
+    const { updateProject } = useProjectStore.getState();
+
+    try {
+      // Delete software folder
+      await invoke('remove_software_from_project', {
+        projectPath: project.path,
+        softwareName: softwareKey
+      });
+
+      // Remove software from project metadata
+      const updatedSoftware = project.software.filter((sw: any) => {
+        const existingKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+        return existingKey !== softwareKey;
+      });
+
+      await updateProject({
+        ...project,
+        software: updatedSoftware
+      });
+
+      // Trigger tree refresh
+      window.dispatchEvent(new CustomEvent('tree-refresh'));
+    } catch (error) {
+      console.error('Failed to remove software:', error);
+    }
+
+    setSoftwareToRemove(null);
   };
 
   return (
@@ -525,9 +618,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               const status = launchingStatus?.[statusKey] || 'idle';
 
               // Find active session for this software (compare with softwareKey, not display name)
-              const activeEntry = latestProject.timeEntries?.find((e: any) =>
-                e.isActive && e.widgetVisible && e.software === softwareKey
-              );
+              // Use live timeTrackingStore state to avoid showing frozen timers during async projectStore updates
+              const activeEntry = latestProject.timeEntries?.find((e: any) => {
+                const liveSession = timeTrackingSessions.get(e.id);
+                return e.software === softwareKey &&
+                       liveSession?.isActive === true &&
+                       liveSession?.widgetVisible === true;
+              });
 
               // Get software color for gradient
               const softwareColors: Record<string, string> = {
@@ -1333,41 +1430,76 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 />
               </div>
 
+              {/* Tools Section */}
               <div className="border-t border-zinc-800 pt-4">
-                <div className="mb-3">
-                  <div className="font-medium mb-1 text-red-400">Delete Project</div>
-                  <p className="text-sm text-zinc-400">
-                    Permanently delete this project and all its data. This action cannot be undone.
-                  </p>
+                <div className="font-medium mb-3">Tools</div>
+                <div className="flex gap-2">
+                  {SOFTWARE_OPTIONS.map((sw) => {
+                    const softwareKey = nameToKey[sw] || sw.toLowerCase().replace(/\s+/g, '-');
+                    const isSelected = latestProject.software.some((pSw: any) => {
+                      const existingKey = nameToKey[pSw.name] || pSw.name.toLowerCase().replace(/\s+/g, '-');
+                      return existingKey === softwareKey;
+                    });
+
+                    return (
+                      <button
+                        key={sw}
+                        onClick={() => handleToggleSoftware(sw)}
+                        className={`flex-1 px-3 py-1.5 rounded text-xs transition-all duration-200 ease-out whitespace-nowrap flex items-center justify-center relative ${
+                          isSelected
+                            ? 'bg-zinc-700 text-white'
+                            : 'bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                        }`}
+                      >
+                        <div
+                          className="flex items-center gap-1.5 transition-transform duration-200 ease-out"
+                          style={{ transform: isSelected ? 'translateX(-8px)' : 'translateX(0)' }}
+                        >
+                          <SoftwareIcon name={sw} className="w-3.5 h-3.5" />
+                          {sw}
+                        </div>
+                        <Check
+                          className={`w-3.5 h-3.5 text-green-500 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out ${
+                            isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-50'
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
-                <button
-                  onClick={() => {
-                    // Show custom confirmation dialog on top of settings modal
-                    onDeleteProject(project);
-                  }}
-                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Delete Project
-                </button>
               </div>
               </div>
             </SimpleBar>
 
             {/* Footer */}
-            <div className="border-t border-zinc-800 px-4 py-4 flex justify-end gap-3 flex-shrink-0">
+            <div className="border-t border-zinc-800 px-4 py-4 flex justify-between items-center gap-3 flex-shrink-0">
+              {/* Delete button on the left */}
               <button
-                onClick={() => setShowProjectSettings(false)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+                onClick={() => {
+                  // Show custom confirmation dialog on top of settings modal
+                  onDeleteProject(project);
+                }}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
               >
-                Close
+                <Trash2 className="w-4 h-4" />
+                Delete Project
               </button>
-              <button
-                onClick={() => setShowProjectSettings(false)}
-                className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium text-sm"
-              >
-                Save Changes
-              </button>
+
+              {/* Close and Save buttons on the right */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowProjectSettings(false)}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => setShowProjectSettings(false)}
+                  className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium text-sm"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1407,6 +1539,56 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Software Confirmation Dialog */}
+      {softwareToRemove && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
+            }
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget &&
+                (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
+              setSoftwareToRemove(null);
+            }
+            delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
+          }}
+        >
+          <div
+            className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-2">Remove {softwareToRemove}?</h3>
+            <div className="text-zinc-400 mb-6">
+              <p className="mb-3">
+                This will permanently remove <span className="font-medium text-zinc-300">{softwareToRemove}</span> from this project.
+              </p>
+              <div className="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-3">
+                <p className="text-sm text-yellow-200/90">
+                  <strong>Warning:</strong> Removing software will delete its folder and all contents from the project directory. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setSoftwareToRemove(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRemoveSoftware}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium"
+              >
+                Remove Software
               </button>
             </div>
           </div>
