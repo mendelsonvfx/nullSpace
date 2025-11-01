@@ -1330,70 +1330,85 @@ function App() {
                         setContextMenu({ x: e.clientX, y: e.clientY, projectId: project.id });
                       }}
                     >
-                      <div className="relative z-10">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-bold text-base truncate flex-1">{project.name}</h3>
-                        {project.isPinned && (
-                          <Pin className="w-3 h-3 text-white fill-white" />
-                        )}
-                        {project.isFavorite && (
-                          <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                        )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            cycleStatus(project.id, project.status as ProjectStatus);
-                          }}
-                          className={`w-3 h-3 rounded-full ${STATUS_COLORS[project.status as keyof typeof STATUS_COLORS]} ${
-                            activeSessionsByProject.get(project.id) && project.status !== 'archived'
-                              ? project.status === 'active'
-                                ? 'status-glow-green brightness-150'
-                                : project.status === 'paused'
-                                ? 'status-glow-yellow brightness-150'
-                                : project.status === 'completed'
-                                ? 'status-glow-blue brightness-150'
+                      {/* Header with title, pin, favorite, status */}
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <h3 className="font-semibold text-card-title text-text-primary truncate flex-1">{project.name}</h3>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {project.isPinned && (
+                            <Pin className="w-3.5 h-3.5 text-text-primary fill-text-primary" />
+                          )}
+                          {project.isFavorite && (
+                            <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              cycleStatus(project.id, project.status as ProjectStatus);
+                            }}
+                            className={`w-3 h-3 rounded-full ${STATUS_COLORS[project.status as keyof typeof STATUS_COLORS]} ${
+                              activeSessionsByProject.get(project.id) && project.status !== 'archived'
+                                ? project.status === 'active'
+                                  ? 'status-glow-green brightness-150'
+                                  : project.status === 'paused'
+                                  ? 'status-glow-yellow brightness-150'
+                                  : project.status === 'completed'
+                                  ? 'status-glow-blue brightness-150'
+                                  : ''
                                 : ''
-                              : ''
-                          } hover:ring-2 hover:ring-white/50 transition-all cursor-pointer`}
-                          title={`Status: ${STATUS_LABELS[project.status as keyof typeof STATUS_LABELS]} (click to change)`}
-                        />
+                            } hover:ring-2 hover:ring-white/50 transition-all cursor-pointer`}
+                            title={`Status: ${STATUS_LABELS[project.status as keyof typeof STATUS_LABELS]} (click to change)`}
+                          />
+                        </div>
                       </div>
-                      <p className="text-xs text-zinc-400 truncate mb-2">{project.description}</p>
+
+                      {/* Description */}
+                      <p className="text-xs text-text-secondary truncate mb-3">{project.description}</p>
+
+                      {/* Software Icons - larger with hover effect */}
                       {project.software && project.software.length > 0 && (
-                        <div className="flex gap-1.5 mb-2">
-                          {project.software.slice(0, 5).map((sw: any) => (
-                            <SoftwareIcon key={sw.name} name={sw.name} />
+                        <div className="flex gap-2 mb-3">
+                          {project.software.slice(0, 6).map((sw: any) => (
+                            <div
+                              key={sw.name}
+                              className="transition-transform hover:scale-110 duration-200"
+                            >
+                              <SoftwareIcon name={sw.name} className="w-7 h-7" />
+                            </div>
                           ))}
                         </div>
                       )}
-                      <div className="flex items-end justify-between">
-                        <div className="flex gap-1 flex-wrap">
+
+                      {/* Bottom section: tags + metadata */}
+                      <div className="flex items-center justify-between gap-2">
+                        {/* Left: Client + Tags */}
+                        <div className="flex gap-1.5 flex-wrap flex-1 min-w-0">
                           {project.clientId && clientsById.get(project.clientId) && (
                             <span
-                              key="client"
-                              className="px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1"
+                              className="px-2.5 py-1 rounded-badge text-badge font-medium flex items-center gap-1.5 flex-shrink-0"
                               style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
                             >
-                              {showTagIcons && <User className="w-3 h-3 fill-current opacity-30" />}
+                              {showTagIcons && <User className="w-3 h-3 fill-current opacity-40" />}
                               {clientsById.get(project.clientId)!.name}
                             </span>
                           )}
                           {project.tags.slice(0, 2).map(tag => (
-                            <span key={tag} className="px-2 py-0.5 bg-zinc-800/80 rounded-full text-xs">
+                            <span key={tag} className="px-2.5 py-1 bg-hover-bg rounded-badge text-badge text-text-muted">
                               {tag}
                             </span>
                           ))}
                         </div>
-                        <div className="flex items-center gap-1.5">
+
+                        {/* Right: Payment + Deadline */}
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
                           {/* Payment Status */}
                           {project.paymentStatus === 'paid' && (
-                            <span className="text-xs px-2 py-0.5 bg-green-900/50 text-green-300 rounded-full flex items-center gap-1">
+                            <span className="text-badge px-2.5 py-1 bg-green-900/30 text-green-400 rounded-badge flex items-center gap-1.5 font-medium">
                               {showTagIcons && <DollarSign className="w-3 h-3" />}
                               Paid
                             </span>
                           )}
                           {project.paymentStatus === 'prepaid' && (
-                            <span className="text-xs px-2 py-0.5 bg-yellow-900/50 text-yellow-300 rounded-full flex items-center gap-1">
+                            <span className="text-badge px-2.5 py-1 bg-yellow-900/30 text-yellow-400 rounded-badge flex items-center gap-1.5 font-medium">
                               {showTagIcons && <DollarSign className="w-3 h-3" />}
                               Prepaid
                             </span>
@@ -1414,16 +1429,16 @@ function App() {
                             }
 
                             return (
-                              <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${
+                              <span className={`text-badge px-2.5 py-1 rounded-badge whitespace-nowrap font-medium ${
                                 daysLeft < 0
-                                  ? 'bg-red-900 text-red-300'
+                                  ? 'bg-red-900/30 text-red-400'
                                   : daysLeft === 0
-                                  ? 'bg-red-900 text-red-300'
+                                  ? 'bg-red-900/30 text-red-400'
                                   : daysLeft < 5
-                                  ? 'bg-red-900 text-red-300'
+                                  ? 'bg-red-900/30 text-red-400'
                                   : daysLeft < 10
-                                  ? 'bg-yellow-900 text-yellow-300'
-                                  : 'bg-zinc-800 text-zinc-400'
+                                  ? 'bg-yellow-900/30 text-yellow-400'
+                                  : 'bg-hover-bg text-text-muted'
                               }`}>
                                 {displayText}
                               </span>
@@ -1431,7 +1446,6 @@ function App() {
                           })()}
                         </div>
                       </div>
-                    </div>
                   </ProjectCard>
                 </div>
               ))}

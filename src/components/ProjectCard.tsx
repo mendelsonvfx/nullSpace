@@ -1,5 +1,4 @@
-import { ReactNode, memo, useMemo } from 'react';
-import { useThumbnail } from '../hooks/useThumbnail';
+import { ReactNode, memo } from 'react';
 
 interface ProjectCardProps {
   projectPath: string;
@@ -12,59 +11,33 @@ interface ProjectCardProps {
 }
 
 export const ProjectCard = memo(function ProjectCard({
-  projectPath,
-  thumbnail,
   isSelected,
   onClick,
   onContextMenu,
   onPaste,
   children
 }: ProjectCardProps) {
-  const thumbnailSrc = useThumbnail(projectPath, thumbnail);
-
-  // Memoize background style to prevent recreating object on every render
-  const backgroundStyle = useMemo(() =>
-    thumbnailSrc ? {
-      backgroundImage: `linear-gradient(to right, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.6)), url("${thumbnailSrc}")`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundColor: '#000000'
-    } : {
-      backgroundImage: 'linear-gradient(to left, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.95))',
-      backgroundColor: '#000000'
-    },
-    [thumbnailSrc]
-  );
-
-  // Memoize gradient style
-  const gradientStyle = useMemo(() => ({
-    backgroundImage: 'linear-gradient(to top, var(--accent-color), transparent)'
-  }), []);
-
   return (
     <div
       data-project-card
-      className={`w-full text-left rounded-lg transition-all relative border group animate-card cursor-pointer ${
+      className={`w-full text-left rounded-card transition-all relative border group cursor-pointer bg-card-bg ${
         isSelected
-          ? 'border-accent'
-          : 'hover:border-accent border-zinc-800'
+          ? 'border-accent shadow-glow-accent'
+          : 'hover:border-border-hover border-border-primary hover:shadow-card-hover'
       }`}
       onClick={onClick}
       onContextMenu={onContextMenu}
       onPaste={onPaste}
       tabIndex={-1}
     >
-      {/* Background image with gradient */}
-      <div className="absolute inset-0 rounded-lg overflow-hidden" style={backgroundStyle} />
-
       {/* Bottom gradient overlay (accent color, appears on hover) */}
       <div
-        className="absolute inset-x-0 bottom-0 h-24 rounded-lg pointer-events-none z-10 opacity-0 group-hover:opacity-20 transition-opacity duration-500"
-        style={gradientStyle}
+        className="absolute inset-x-0 bottom-0 h-20 rounded-card pointer-events-none opacity-0 group-hover:opacity-10 transition-opacity duration-300"
+        style={{ background: 'linear-gradient(to top, var(--accent-color), transparent)' }}
       />
 
       {/* Content */}
-      <div className="relative z-20 p-3">
+      <div className="relative z-10 p-4">
         {children}
       </div>
     </div>
