@@ -677,7 +677,7 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
+      <SimpleBar className="custom-scrollbar" autoHide={false} style={{ height: 'calc(100% - 40px)' }}>
         <div className="space-y-1">
         {tree.length > 0 ? (
           <>

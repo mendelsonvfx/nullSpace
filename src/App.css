@@ -475,6 +475,15 @@ input[type="number"] {
   overflow-x: hidden !important;
 }
 
+/* CategoryTabs - hidden scrollbar */
+.category-tabs-scrollbar .simplebar-track.simplebar-vertical {
+  display: none !important;
+}
+
+.category-tabs-scrollbar .simplebar-scrollbar {
+  display: none !important;
+}
+
 /* MDXEditor Dark Theme */
 .markdown-editor-container {
   --accentBase: #a855f7;

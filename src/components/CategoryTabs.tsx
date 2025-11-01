@@ -133,9 +133,9 @@ export function CategoryTabs({
           ref: scrollContainerRef,
           onScroll: handleScroll
         }}
-        className="flex-1 custom-scrollbar"
-        autoHide={false}
-        style={{ maxHeight: '100%' }}
+        className="flex-1 category-tabs-scrollbar"
+        autoHide={true}
+        style={{ maxHeight: '100%', paddingBottom: onAddCategory ? '93px' : '0' }}
       >
         {categories.map((category) => (
           <div key={category} className="relative group">
@@ -173,10 +173,10 @@ export function CategoryTabs({
 
       {/* Add category button */}
       {onAddCategory && (
-        <div className="relative z-0">
+        <div className="absolute bottom-0 left-0 right-0 z-50">
           <button
             onClick={() => setIsAdding(true)}
-            className="w-full flex items-center justify-center bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors duration-200 border-t border-zinc-800"
+            className="w-full flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 transition-colors duration-200 border-t border-zinc-800"
             style={{ height: '93px' }}
             title="Add category"
           >
@@ -202,7 +202,7 @@ export function CategoryTabs({
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px]"
+          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-[100] min-w-[180px] animate-context-menu"
           style={{
             top: contextMenu.y,
             left: contextMenu.x
