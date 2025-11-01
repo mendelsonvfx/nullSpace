@@ -1,4 +1,5 @@
-import { ReactNode, memo } from 'react';
+import { ReactNode, memo, useMemo } from 'react';
+import { useThumbnail } from '../hooks/useThumbnail';
 
 interface ProjectCardProps {
   projectPath: string;
@@ -11,25 +12,48 @@ interface ProjectCardProps {
 }
 
 export const ProjectCard = memo(function ProjectCard({
+  projectPath,
+  thumbnail,
   isSelected,
   onClick,
   onContextMenu,
   onPaste,
   children
 }: ProjectCardProps) {
+  const thumbnailSrc = useThumbnail(projectPath, thumbnail);
+
+  // Memoize background style
+  const backgroundStyle = useMemo(() =>
+    thumbnailSrc ? {
+      backgroundImage: `linear-gradient(to right, rgba(10, 10, 10, 0.85), rgba(10, 10, 10, 0.4)), url("${thumbnailSrc}")`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundColor: '#141414'
+    } : undefined,
+    [thumbnailSrc]
+  );
+
   return (
     <div
       data-project-card
-      className={`w-full text-left rounded-card transition-all relative border group cursor-pointer bg-card-bg ${
+      className={`w-full text-left rounded-card transition-all relative border group cursor-pointer bg-card-bg overflow-hidden hover:scale-[1.02] ${
         isSelected
           ? 'border-accent shadow-glow-accent'
-          : 'hover:border-border-hover border-border-primary hover:shadow-card-hover'
+          : 'hover:border-accent border-border-primary hover:shadow-card-hover'
       }`}
       onClick={onClick}
       onContextMenu={onContextMenu}
       onPaste={onPaste}
       tabIndex={-1}
     >
+      {/* Background image with gradient overlay */}
+      {thumbnailSrc && (
+        <div
+          className="absolute inset-0 rounded-card"
+          style={backgroundStyle}
+        />
+      )}
+
       {/* Bottom gradient overlay (accent color, appears on hover) */}
       <div
         className="absolute inset-x-0 bottom-0 h-20 rounded-card pointer-events-none opacity-0 group-hover:opacity-10 transition-opacity duration-300"

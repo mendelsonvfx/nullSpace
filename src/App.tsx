@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { Plus, Folder, Search, X, Settings, Star, Archive, Grid3x3, ChevronRight, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, MessageSquare, Image, BarChart3 } from 'lucide-react';
+import { Plus, Folder, Search, X, Settings, Star, Archive, Grid3x3, ChevronRight, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, Image, BarChart3 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from './store/projectStore';
 import { useContextMenuStore } from './store/contextMenuStore';
@@ -1094,47 +1094,39 @@ function App() {
         />
       )}
       {/* Sidebar - Project List */}
-      <div className="w-80 border-r border-t border-zinc-800 flex flex-col relative">
+      <div className="w-80 border-r border-t border-border-primary bg-sidebar-bg flex flex-col relative">
         {/* Sidebar Header */}
-        <div className="px-4 pt-4 pb-3 border-b border-zinc-800">
-          <div className="flex items-center justify-between mb-3">
+        <div className="px-4 pt-5 pb-0 flex flex-col">
+          {/* Search + Settings */}
+          <div className="flex items-center gap-2 mb-5">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
               <input
                 type="text"
                 placeholder="Search projects..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 data-search-bar
-                className="bg-zinc-900 border border-zinc-800 rounded-lg pl-10 pr-4 py-2 w-full focus:outline-none focus:border-accent transition-colors text-sm"
+                className="bg-hover-bg border border-border-secondary rounded-button pl-10 pr-3.5 py-2.5 w-full focus:outline-none focus:border-border-hover transition-colors text-sm text-text-primary placeholder:text-text-muted"
               />
             </div>
-            <div className="flex gap-2 ml-2">
-              <button
-                onClick={() => setShowFeedback(true)}
-                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-                title="Feedback"
-              >
-                <MessageSquare className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setShowSettings(true)}
-                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-                title="Settings"
-              >
-                <Settings className="w-5 h-5 animate-settings-icon" />
-              </button>
-            </div>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="px-3 hover:bg-hover-bg rounded-button transition-colors border border-border-secondary hover:border-border-hover flex-shrink-0 h-full flex items-center justify-center"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4 text-text-muted animate-settings-icon" />
+            </button>
           </div>
 
-          {/* Filter Menu */}
-          <div className="flex gap-1 items-center w-full">
+          {/* Filter Tabs */}
+          <div className="flex gap-2 mb-5">
             <button
               onClick={() => setFilterView('all')}
-              className={`flex-1 px-3 py-1 rounded-lg text-xs transition-colors font-medium flex items-center justify-center gap-1.5 ${
+              className={`flex-1 px-3 py-2 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border ${
                 filterView === 'all'
-                  ? 'bg-zinc-700 text-white'
-                  : 'bg-zinc-800/50 text-zinc-400 hover:text-white'
+                  ? 'bg-hover-bg border-border-hover text-text-primary'
+                  : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
               }`}
               title="All projects"
             >
@@ -1143,10 +1135,10 @@ function App() {
             </button>
             <button
               onClick={() => setFilterView('favorites')}
-              className={`flex-1 px-3 py-1 rounded-lg text-xs transition-colors font-medium flex items-center justify-center gap-1.5 ${
+              className={`flex-1 px-3 py-2 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border ${
                 filterView === 'favorites'
-                  ? 'bg-zinc-700 text-white'
-                  : 'bg-zinc-800/50 text-zinc-400 hover:text-white'
+                  ? 'bg-hover-bg border-border-hover text-text-primary'
+                  : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
               }`}
               title="Favorites"
             >
@@ -1155,10 +1147,10 @@ function App() {
             </button>
             <button
               onClick={() => setFilterView('archive')}
-              className={`flex-1 px-3 py-1 rounded-lg text-xs transition-colors font-medium flex items-center justify-center gap-1.5 ${
+              className={`flex-1 px-3 py-2 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border ${
                 filterView === 'archive'
-                  ? 'bg-zinc-700 text-white'
-                  : 'bg-zinc-800/50 text-zinc-400 hover:text-white'
+                  ? 'bg-hover-bg border-border-hover text-text-primary'
+                  : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
               }`}
               title="Archive"
             >
@@ -1171,8 +1163,8 @@ function App() {
                   setActiveMenu(showFilterMenu ? null : 'filters');
                   setShowFilterMenu(!showFilterMenu);
                 }}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  showFilterMenu ? 'bg-zinc-700 text-white' : 'bg-zinc-800/50 text-zinc-400 hover:text-white'
+                className={`px-3 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border h-full ${
+                  showFilterMenu ? 'bg-hover-bg border-border-hover text-text-primary' : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
                 }`}
                 title="Sort & Filter"
               >
@@ -1301,18 +1293,18 @@ function App() {
           className="flex-1 custom-page-scrollbar"
           autoHide={false}
         >
-          <div className="p-2" style={{ paddingBottom: '110px' }}>
+          <div className="px-4 pr-2" style={{ paddingBottom: '110px' }}>
             {isLoading ? (
               <div className="flex items-center justify-center h-32">
                 <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full" />
               </div>
             ) : filteredProjects.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-32 text-zinc-500 text-sm">
+              <div className="flex flex-col items-center justify-center h-32 text-text-muted text-sm">
                 <Folder className="w-8 h-8 mb-2 opacity-50" />
                 <p>No projects found</p>
               </div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-3 pr-2">
                 {filteredProjects.map(project => (
                   <div
                     key={project.id}
@@ -1468,7 +1460,7 @@ function App() {
 
         {/* Sidebar Footer */}
         <div className="absolute bottom-0 left-0 right-0 px-2 pb-2 pointer-events-none z-50">
-          <div className="bg-zinc-900 rounded-xl p-2 space-y-2 pointer-events-auto">
+          <div className="bg-card-bg rounded-xl p-2 space-y-2 pointer-events-auto">
             <button
               onClick={() => setShowCreateModal(true)}
               className="w-full bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium text-white animate-button"
@@ -1478,12 +1470,12 @@ function App() {
             </button>
 
             {/* Mode Switcher */}
-            <div className="flex items-center bg-zinc-800 rounded-lg p-0.5">
+            <div className="flex items-center bg-hover-bg rounded-lg p-0.5">
               <button
                 onClick={() => setViewMode('projects')}
                 className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
                   viewMode === 'projects'
-                    ? 'bg-zinc-700 text-white'
+                    ? 'bg-card-bg text-white'
                     : 'bg-transparent text-zinc-500 hover:text-zinc-400'
                 }`}
                 title="Projects"
@@ -1495,7 +1487,7 @@ function App() {
                 onClick={handleToggleFinanceMode}
                 className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
                   viewMode === 'finance'
-                    ? 'bg-zinc-700 text-white'
+                    ? 'bg-card-bg text-white'
                     : 'bg-transparent text-zinc-500 hover:text-zinc-400'
                 }`}
                 title="Statistics"
