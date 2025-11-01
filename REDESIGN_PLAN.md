@@ -3,6 +3,7 @@
 **Based on:** nullspace_project_page.html design reference
 **Target Pages:** Project Details & Project List
 **Date:** 2025-11-01
+**Last Updated:** 2025-11-02
 
 ---
 
@@ -15,6 +16,7 @@
 5. [Project Details Redesign](#project-details-redesign)
 6. [Implementation Roadmap](#implementation-roadmap)
 7. [Component Breakdown](#component-breakdown)
+8. [Icon System Migration](#icon-system-migration) ⭐ NEW
 
 ---
 
@@ -1049,6 +1051,298 @@ If redesign causes issues:
 
 ---
 
+## Icon System Migration
+
+### Phase 9: Solar Icons Integration (AFTER UI Redesign)
+
+**Decision:** Replace Lucide React with Solar Icons Set after initial redesign is tested.
+
+**Rationale:**
+- Solar Icons provides 7,000+ modern icons in Linear and Bold variants
+- Better suited for dark interfaces
+- More cohesive with nullSpace design aesthetic
+- Linear/Bold variants allow for visual hierarchy through icon weight
+
+### Icon Strategy
+
+#### Style Usage
+1. **Linear (Default)** - Used for:
+   - Navigation icons (folder, file, search)
+   - Settings and configuration
+   - Document/file operations
+   - General UI elements
+   - Right-click context menus
+
+2. **Bold (Accents)** - Used for:
+   - Star (favorites) - more prominent
+   - Status indicators - attention-grabbing
+   - Checkmarks (completed states)
+   - Primary action buttons
+   - Alert/warning icons
+
+### Implementation Plan
+
+#### Step 1: Install Iconify (Solar Icons via Iconify)
+```bash
+npm install @iconify/react
+```
+
+**Why Iconify:**
+- Single package for Solar Icons
+- Tree-shakeable (only used icons bundled)
+- Automatic icon loading
+- Smaller bundle size than individual icon packages
+
+#### Step 2: Create Icon Wrapper Component
+
+**File:** `src/components/icons/SolarIcon.tsx`
+```tsx
+import { Icon } from '@iconify/react';
+
+interface SolarIconProps {
+  name: string;
+  variant?: 'linear' | 'bold' | 'broken' | 'outline';
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Solar Icons wrapper component
+ *
+ * @param name - Icon name without prefix (e.g., 'folder', 'star', 'settings')
+ * @param variant - Icon style variant (default: 'linear')
+ * @param className - Tailwind classes
+ *
+ * @example
+ * <SolarIcon name="folder" variant="linear" className="w-5 h-5" />
+ * <SolarIcon name="star" variant="bold" className="w-5 h-5 text-yellow-400" />
+ */
+export function SolarIcon({
+  name,
+  variant = 'linear',
+  className,
+  style
+}: SolarIconProps) {
+  return (
+    <Icon
+      icon={`solar:${name}-${variant}`}
+      className={className}
+      style={style}
+    />
+  );
+}
+
+// Preset variants for common use cases
+export const FolderIcon = (props: Omit<SolarIconProps, 'name'>) => (
+  <SolarIcon name="folder" {...props} />
+);
+
+export const StarIcon = (props: Omit<SolarIconProps, 'name' | 'variant'>) => (
+  <SolarIcon name="star" variant="bold" {...props} />
+);
+
+export const CheckIcon = (props: Omit<SolarIconProps, 'name' | 'variant'>) => (
+  <SolarIcon name="check-circle" variant="bold" {...props} />
+);
+```
+
+#### Step 3: Icon Mapping Table
+
+Complete mapping from Lucide to Solar Icons:
+
+| Component Usage | Lucide Icon | Solar Linear | Solar Bold (Accent) | Notes |
+|----------------|-------------|--------------|---------------------|-------|
+| **File Tree** |
+| Folder | `Folder` | `solar:folder-linear` | - | Default |
+| Folder Open | `FolderOpen` | `solar:folder-open-linear` | - | Expanded state |
+| File | `File` | `solar:file-linear` | - | Generic file |
+| Document | `FileText` | `solar:document-text-linear` | - | Text docs |
+| **Navigation** |
+| Search | `Search` | `solar:magnifer-linear` | - | Search box |
+| Settings | `Settings` | `solar:settings-linear` | - | Settings button |
+| Close | `X` | `solar:close-circle-linear` | `solar:close-circle-bold` | Modal close |
+| **Actions** |
+| Add/Plus | `Plus` | `solar:add-circle-linear` | `solar:add-circle-bold` | Add buttons |
+| Edit | `Pencil` | `solar:pen-linear` | - | Edit mode |
+| Delete | `Trash2` | `solar:trash-bin-trash-linear` | `solar:trash-bin-trash-bold` | Delete action |
+| **Project** |
+| Star (Favorite) | `Star` | - | `solar:star-bold` | Always bold |
+| Pin | `Pin` | - | `solar:pin-bold` | Always bold |
+| Link | `Link2` | `solar:link-linear` | - | External links |
+| Calendar | - | `solar:calendar-linear` | - | Deadline picker |
+| **Status** |
+| Check | `Check` | - | `solar:check-circle-bold` | Always bold |
+| Clock/Time | `Clock` | `solar:clock-circle-linear` | - | Time tracking |
+| **Finance** |
+| Credit Card | `CreditCard` | `solar:card-linear` | - | Payment |
+| Dollar | `DollarSign` | `solar:dollar-linear` | `solar:dollar-bold` | Money badges |
+| **Software** |
+| Folder Open | `FolderOpen` | `solar:folder-open-linear` | - | Open project |
+| Play/Launch | `Play` | `solar:play-circle-linear` | `solar:play-circle-bold` | Launch software |
+| Loading | `Loader2` | `solar:refresh-circle-linear` | - | Animated spin |
+| **Arrows** |
+| Chevron Down | `ChevronDown` | `solar:alt-arrow-down-linear` | - | Expand |
+| Chevron Right | `ChevronRight` | `solar:alt-arrow-right-linear` | - | Collapse |
+| Chevron Up | `ChevronUp` | `solar:alt-arrow-up-linear` | - | Collapse |
+| **Other** |
+| Archive | `Archive` | `solar:archive-linear` | - | Archive filter |
+| User | `User` | `solar:user-circle-linear` | - | Client badge |
+| List | `List` | `solar:hamburger-menu-linear` | - | List view |
+
+#### Step 4: Migration Strategy
+
+**Option A: Gradual Migration (Recommended)**
+1. Keep Lucide installed alongside Iconify
+2. Create SolarIcon wrapper component
+3. Replace icons file-by-file, starting with:
+   - ProjectDetails.tsx (most visible)
+   - App.tsx (project list)
+   - Modals
+   - Shared components
+4. Test after each file
+5. Remove Lucide when all migrations complete
+
+**Option B: Big Bang Migration**
+1. Install Iconify
+2. Create global search-replace script
+3. Replace all Lucide imports at once
+4. Full regression test
+
+**Recommendation:** Use Option A for safety
+
+#### Step 5: Files to Update
+
+**Priority 1 (High Visibility):**
+1. `src/components/project/ProjectDetails.tsx` (~30 icons)
+2. `src/App.tsx` (~15 icons)
+3. `src/components/ProjectCard.tsx` (~5 icons)
+
+**Priority 2 (Modals):**
+4. `src/components/modals/SettingsPanel.tsx`
+5. `src/components/modals/CreateProjectModal.tsx`
+6. `src/components/modals/ManualTimeEntryModal.tsx`
+7. Other modals in `src/components/modals/`
+
+**Priority 3 (Shared Components):**
+8. `src/components/project/RightSidebar.tsx`
+9. `src/components/project/TreeView.tsx`
+10. `src/components/shared/` components
+
+#### Step 6: Testing Checklist
+
+After Solar Icons migration:
+
+- [ ] All icons render correctly
+- [ ] Icon sizes match previous (w-4, w-5, etc.)
+- [ ] Icon colors apply correctly (text-zinc-400, etc.)
+- [ ] Hover states work
+- [ ] Active states work (filled stars, etc.)
+- [ ] Animations work (spinning loaders)
+- [ ] No console errors
+- [ ] Bundle size acceptable (check with `npm run build`)
+- [ ] Performance unchanged (no lag)
+
+### Code Examples
+
+#### Before (Lucide):
+```tsx
+import { Folder, Star, Settings, X } from 'lucide-react';
+
+<Folder className="w-5 h-5 text-zinc-400" />
+<Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
+<Settings className="w-5 h-5" />
+<X className="w-5 h-5" />
+```
+
+#### After (Solar via Iconify):
+```tsx
+import { Icon } from '@iconify/react';
+// or
+import { SolarIcon } from '../icons/SolarIcon';
+
+<Icon icon="solar:folder-linear" className="w-5 h-5 text-zinc-400" />
+<Icon icon="solar:star-bold" className="w-5 h-5 text-yellow-400" />
+<Icon icon="solar:settings-linear" className="w-5 h-5" />
+<Icon icon="solar:close-circle-linear" className="w-5 h-5" />
+
+// Or with wrapper:
+<SolarIcon name="folder" variant="linear" className="w-5 h-5 text-zinc-400" />
+<SolarIcon name="star" variant="bold" className="w-5 h-5 text-yellow-400" />
+<SolarIcon name="settings" className="w-5 h-5" /> {/* defaults to linear */}
+<SolarIcon name="close-circle" className="w-5 h-5" />
+```
+
+#### Filled Icons (like filled Star):
+```tsx
+// Lucide (manual fill):
+<Star className="fill-yellow-400 text-yellow-400" />
+
+// Solar (has dedicated fill variant):
+<Icon icon="solar:star-bold-duotone" className="text-yellow-400" />
+// or just use bold which is solid:
+<Icon icon="solar:star-bold" className="text-yellow-400" />
+```
+
+### Bundle Size Impact
+
+**Current (Lucide React):**
+- ~50KB minified + gzipped (entire library)
+- Tree-shakeable
+
+**After (Iconify):**
+- ~15KB base (@iconify/react core)
+- +~1KB per icon loaded
+- Only icons actually used are bundled
+- **Expected: Similar or smaller bundle size**
+
+### Fallback Strategy
+
+If Solar Icons has issues:
+
+1. **Keep Lucide installed** (already agreed)
+2. Create feature flag:
+```tsx
+const USE_SOLAR_ICONS = true; // toggle to revert
+
+{USE_SOLAR_ICONS ? (
+  <Icon icon="solar:folder-linear" />
+) : (
+  <Folder />
+)}
+```
+
+3. Can quickly revert if problems found
+
+### Timeline
+
+**Phase 9 starts AFTER Phase 1-8 complete and tested**
+
+- **Day 9:** Install Iconify, create SolarIcon wrapper
+- **Day 10:** Migrate ProjectDetails.tsx and test
+- **Day 11:** Migrate App.tsx, ProjectCard.tsx and test
+- **Day 12:** Migrate all modals
+- **Day 13:** Migrate shared components
+- **Day 14:** Final testing, bundle size check, cleanup
+- **Optional:** Remove Lucide dependency if all working
+
+---
+
+## Updated Implementation Roadmap
+
+### Phase 1-8: UI Redesign (Use Lucide Icons)
+Same as original plan - no changes.
+
+### Phase 9: Icon Migration (NEW)
+**Days 9-14:** Migrate from Lucide to Solar Icons
+- Install @iconify/react
+- Create SolarIcon wrapper component
+- Gradual file-by-file migration
+- Comprehensive testing
+- Bundle size verification
+- Optional: Remove Lucide
+
+---
+
 ## Conclusion
 
 This redesign brings RayHub's visual design in line with modern project management tools while maintaining its unique focus on creative software workflows. The nullSpace-inspired design provides:
@@ -1058,10 +1352,13 @@ This redesign brings RayHub's visual design in line with modern project manageme
 - **Professional Polish:** Smooth animations, consistent spacing
 - **Enhanced Workflow:** Quick project switching, better file navigation
 - **Scalability:** Structure supports future features
+- **Modern Icon System:** Solar Icons for cohesive, professional look
 
-The implementation roadmap spreads work over 8 days, allowing for iterative development and testing at each phase.
+The implementation roadmap spreads work over 14 days total:
+- **Days 1-8:** UI redesign with existing Lucide icons
+- **Days 9-14:** Icon system migration to Solar Icons
 
-**Estimated Total Time:** 8 days (40-50 hours)
+**Estimated Total Time:** 14 days (60-70 hours)
 
 **Priority:** High (improves core user experience)
 
@@ -1069,6 +1366,7 @@ The implementation roadmap spreads work over 8 days, allowing for iterative deve
 
 ---
 
-**Document Version:** 1.0
+**Document Version:** 1.1
 **Created:** 2025-11-01
+**Updated:** 2025-11-02 (Added Solar Icons migration plan)
 **Author:** Claude Code Assistant

@@ -4,10 +4,49 @@
 
 /* CSS Variables */
 :root {
+  /* Original accent color (user customizable) */
   --accent-color: #9103c6;
   --accent-color-hover: #7a02a3;
+
+  /* Animations */
   --animation-duration: 0.3s;
   --animation-timing: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* nullSpace Design System Colors */
+  /* Backgrounds */
+  --bg-app: #0a0a0a;
+  --bg-sidebar: #0f0f0f;
+  --bg-card: #141414;
+  --bg-hover: #1a1a1a;
+
+  /* Borders */
+  --border-primary: #1a1a1a;
+  --border-secondary: #262626;
+  --border-hover: #3f3f46;
+
+  /* Text */
+  --text-primary: #e4e4e7;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --text-dim: #52525b;
+
+  /* Accent gradient (nullSpace default purple) */
+  --accent-default: #8b5cf6;
+  --accent-default-to: #6366f1;
+  --accent-default-hover: #7c3aed;
+
+  /* Status colors */
+  --status-active: #10b981;
+  --status-paused: #f59e0b;
+  --status-completed: #3b82f6;
+  --status-archived: #71717a;
+
+  /* Software colors (for gradients) */
+  --sw-blender: #f97316;
+  --sw-ae: #9333ea;
+  --sw-houdini: #ff4713;
+  --sw-maya: #0faded;
+  --sw-cinema4d: #0099d8;
 }
 
 /* Animations disabled state */
