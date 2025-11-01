@@ -88,7 +88,6 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
           onChange={handleNoteChange}
           placeholder="Add notes..."
           plugins={plugins}
-          contentEditableClassName="prose prose-invert prose-sm max-w-none"
         />
       </div>
     </div>

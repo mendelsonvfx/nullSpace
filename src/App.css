@@ -331,11 +331,6 @@ input[type="number"] {
 /* Exclude SimpleBar elements from global scrollbar styles */
 *:not(.simplebar-scrollbar):not(.simplebar-track):not(.simplebar-content-wrapper):not(.simplebar-content) {
   scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color 0.05s ease;
-}
-
-*:hover {
   scrollbar-color: #3f3f46 transparent;
 }
 
@@ -369,17 +364,18 @@ input[type="number"] {
 
 /* CRITICAL: Make SimpleBar work with flexbox parent */
 .custom-scrollbar {
+  /* Intentionally empty - styles applied via child selectors below */
   /* height removed - use inline styles where needed */
 }
 
 /* For SimpleBar with fixed/max height (don't use height: 0) */
 .custom-scrollbar-fixed {
-  /* No height override */
+  /* Intentionally empty - styles applied via child selectors below */
 }
 
 /* For SimpleBar inside grid layouts (don't use height: 0) */
 .custom-scrollbar-grid {
-  /* No height override - grid items handle sizing differently */
+  /* Intentionally empty - styles applied via child selectors below */
 }
 
 /* Custom Scrollbar - 3px width with 6px margins, appears on hover only */
@@ -626,10 +622,15 @@ input[type="number"] {
 /* Block type select button - compact size */
 .markdown-editor-container button[class*='_selectTrigger'],
 .markdown-editor-container [role='combobox'] {
+  background: transparent !important;
+  color: #cccccc !important;
+  border: none !important;
   padding: 4px 4px 4px 6px !important;
   gap: 4px !important;
   min-width: auto !important;
   max-width: fit-content !important;
+  opacity: 0.8 !important;
+  transition: all 0.2s !important;
 }
 
 .markdown-editor-container button[class*='_selectTrigger'] svg,
@@ -641,6 +642,14 @@ input[type="number"] {
 .markdown-editor-container button[class*='_selectTrigger'] span,
 .markdown-editor-container [role='combobox'] span {
   white-space: nowrap !important;
+}
+
+/* Block type select button hover */
+.markdown-editor-container button[class*='_selectTrigger']:hover,
+.markdown-editor-container [role='combobox']:hover {
+  background: #27272a !important;
+  color: #a1a1aa !important;
+  opacity: 1 !important;
 }
 
 /* Dropdown menu/popover - aggressive override */

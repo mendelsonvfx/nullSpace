@@ -916,7 +916,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   <div className="relative">
                     <SimpleBar
                       scrollableNodeProps={{
-                        onScroll: (e) => {
+                        onScroll: (e: React.UIEvent<HTMLDivElement>) => {
                           const target = e.currentTarget;
                           const isAtBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 10;
                           setShowScrollGradient(!isAtBottom);

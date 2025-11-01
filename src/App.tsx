@@ -633,9 +633,11 @@ function App() {
 
     // Initialize animations state
     const animationsEnabled = localStorage.getItem('animationsEnabled');
+    console.log('ANIMATIONS DEBUG:', { animationsEnabled, parsed: animationsEnabled !== null ? JSON.parse(animationsEnabled) : null, bodyClasses: document.body.className });
     if (animationsEnabled !== null && !JSON.parse(animationsEnabled)) {
       document.body.classList.add('animations-disabled');
     }
+    console.log('ANIMATIONS AFTER:', document.body.className);
 
     // Initialize borders state
     const bordersEnabled = localStorage.getItem('bordersEnabled');
@@ -1299,7 +1301,7 @@ function App() {
           className="flex-1 custom-page-scrollbar"
           autoHide={false}
         >
-          <div className="p-2">
+          <div className="p-2" style={{ paddingBottom: '110px' }}>
             {isLoading ? (
               <div className="flex items-center justify-center h-32">
                 <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full" />
