@@ -272,7 +272,7 @@ html.fullscreen::before,
 html.fullscreen::after {
   content: '';
   position: fixed;
-  background: #18181b;
+  background: #0f0f0f;
   z-index: -1;
   pointer-events: none;
 }
@@ -405,16 +405,19 @@ input[type="number"] {
 .custom-scrollbar {
   /* Intentionally empty - styles applied via child selectors below */
   /* height removed - use inline styles where needed */
+  display: block;
 }
 
 /* For SimpleBar with fixed/max height (don't use height: 0) */
 .custom-scrollbar-fixed {
   /* Intentionally empty - styles applied via child selectors below */
+  display: block;
 }
 
 /* For SimpleBar inside grid layouts (don't use height: 0) */
 .custom-scrollbar-grid {
   /* Intentionally empty - styles applied via child selectors below */
+  display: block;
 }
 
 /* Custom Scrollbar - 3px width with 6px margins, appears on hover only */
@@ -526,7 +529,7 @@ input[type="number"] {
 /* MDXEditor Dark Theme */
 .markdown-editor-container {
   --accentBase: #a855f7;
-  --baseBackground: #18181b;
+  --baseBackground: #141414;
   --admonitionTipBackground: #1e293b;
 }
 
@@ -542,10 +545,10 @@ input[type="number"] {
 }
 
 .markdown-editor-container [class*='_rootContentEditableWrapper'] {
-  background: #18181b;
-  border: 1px solid #27272a;
-  border-radius: 0 0 8px 8px;
-  border-top: 1px solid #3f3f46;
+  background: #141414;
+  border: 1px solid #1a1a1a;
+  border-radius: 0 0 10px 10px;
+  border-top: 1px solid #1a1a1a;
   min-height: 200px;
   max-height: 500px;
   overflow-y: auto;
@@ -585,9 +588,9 @@ input[type="number"] {
 
 /* Toolbar styling */
 .markdown-editor-container [class*='_toolbarRoot'] {
-  background: #18181b;
-  border: 1px solid #27272a;
-  border-radius: 8px 8px 0 0;
+  background: #141414;
+  border: 1px solid #1a1a1a;
+  border-radius: 10px 10px 0 0;
   border-bottom: none;
   margin-bottom: 0;
   padding: 6px;
@@ -599,7 +602,7 @@ input[type="number"] {
 
 .markdown-editor-container button[class*='_toolbarButton'] {
   background: transparent;
-  color: #cccccc !important;
+  color: #a1a1aa !important;
   border: none;
   padding: 6px;
   border-radius: 4px;
@@ -608,14 +611,16 @@ input[type="number"] {
 }
 
 .markdown-editor-container button[class*='_toolbarButton'] svg {
-  color: #cccccc !important;
-  fill: #cccccc !important;
-  stroke: #cccccc !important;
+  color: #a1a1aa !important;
+  fill: #a1a1aa !important;
+  stroke: #a1a1aa !important;
+  width: 70% !important;
+  height: 70% !important;
 }
 
 .markdown-editor-container button[class*='_toolbarButton'] svg path {
-  fill: #cccccc !important;
-  stroke: #cccccc !important;
+  fill: #a1a1aa !important;
+  stroke: #a1a1aa !important;
 }
 
 .markdown-editor-container button[class*='_toolbarButton']:hover {
@@ -647,20 +652,20 @@ input[type="number"] {
   stroke: #a855f7 !important;
 }
 
-/* Force all toolbar icons to be 80% white */
+/* Force all toolbar icons to be 70% white */
 .markdown-editor-container [class*='_toolbarRoot'] svg {
-  color: #cccccc !important;
+  color: #a1a1aa !important;
   fill: currentColor !important;
-  opacity: 0.8;
+  opacity: 0.7;
 }
 
 .markdown-editor-container [class*='_toolbarRoot'] button:not([data-active='true']) svg {
-  color: #cccccc !important;
+  color: #a1a1aa !important;
 }
 
 /* Select dropdown */
 .markdown-editor-container select[class*='_selectWithLabel'] {
-  background: #18181b;
+  background: #141414;
   border: 1px solid #27272a;
   color: #e4e4e7;
   border-radius: 4px;
@@ -671,7 +676,7 @@ input[type="number"] {
 .markdown-editor-container button[class*='_selectTrigger'],
 .markdown-editor-container [role='combobox'] {
   background: transparent !important;
-  color: #cccccc !important;
+  color: #a1a1aa !important;
   border: none !important;
   padding: 4px 4px 4px 6px !important;
   gap: 4px !important;
@@ -743,7 +748,7 @@ div[data-radix-popper-content-wrapper] > div {
 [role='listbox'] > div,
 [class*='_selectItem'] {
   background: transparent !important;
-  color: #f4f4f5 !important;
+  color: #e4e4e7 !important;
   padding: 8px 12px !important;
 }
 
@@ -777,21 +782,21 @@ div[data-radix-popper-content-wrapper] > div {
 .markdown-editor-container h1 {
   font-size: 2em;
   font-weight: bold;
-  color: #f4f4f5;
+  color: #e4e4e7;
   margin: 0.67em 0;
 }
 
 .markdown-editor-container h2 {
   font-size: 1.5em;
   font-weight: bold;
-  color: #f4f4f5;
+  color: #e4e4e7;
   margin: 0.75em 0;
 }
 
 .markdown-editor-container h3 {
   font-size: 1.17em;
   font-weight: bold;
-  color: #f4f4f5;
+  color: #e4e4e7;
   margin: 0.83em 0;
 }
 
@@ -853,7 +858,7 @@ div[data-radix-popper-content-wrapper] > div {
 /* Strong and emphasis */
 .markdown-editor-container strong {
   font-weight: bold;
-  color: #f4f4f5;
+  color: #e4e4e7;
 }
 
 .markdown-editor-container em {
@@ -883,10 +888,10 @@ div[data-radix-popper-content-wrapper] > div {
 [class*='_dialogContent'] textarea,
 [role='dialog'] input,
 [role='dialog'] textarea {
-  background: #18181b !important;
-  background-color: #18181b !important;
+  background: #141414 !important;
+  background-color: #141414 !important;
   border: 1px solid #3f3f46 !important;
-  color: #f4f4f5 !important;
+  color: #e4e4e7 !important;
   border-radius: 4px !important;
   padding: 8px !important;
 }

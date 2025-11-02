@@ -364,8 +364,8 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
   if (loading && versions.length === 0) {
     return (
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-zinc-400 mb-3">Versions Overview</h3>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-text-secondary mb-3">Versions Overview</h3>
+        <div className="bg-card-bg border border-border-primary rounded-med p-4">
           <div className="flex items-center justify-center">
             <div className="animate-spin w-5 h-5 border-2 border-accent border-t-transparent rounded-full" />
           </div>
@@ -378,9 +378,9 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
   if (!loading && versions.length === 0) {
     return (
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-zinc-400 mb-3">Versions Overview</h3>
-        <div data-versions-overview className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-          <p className="text-xs text-zinc-500 text-center">No versions found (looking for folders like ProjectName_v001)</p>
+        <h3 className="text-sm font-medium text-text-secondary mb-3">Versions Overview</h3>
+        <div data-versions-overview className="bg-card-bg border border-border-primary rounded-med p-4">
+          <p className="text-xs text-text-muted text-center">No versions found (looking for folders like ProjectName_v001)</p>
         </div>
       </div>
     );
@@ -424,12 +424,12 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
 
   return (
     <div className="mb-6 overflow-hidden">
-      <h3 className="text-sm font-medium text-zinc-400 mb-3">Versions Overview</h3>
+      <h3 className="text-sm font-medium text-text-secondary mb-3">Versions Overview</h3>
 
       {/* Software Tabs */}
       {uniqueSoftware.length > 0 && (
         <div className="flex gap-2 mb-3">
-          <div className="flex gap-1 bg-zinc-800/50 rounded-lg p-1">
+          <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
             <button
               onClick={() => {
                 setSelectedSoftware('all');
@@ -438,7 +438,7 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
               className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${
                 selectedSoftware === 'all' && !showOnlyUnversioned
                   ? 'bg-zinc-700 text-white'
-                  : 'text-zinc-400 hover:text-white'
+                  : 'text-text-secondary hover:text-white'
               }`}
             >
               All
@@ -451,13 +451,13 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
               className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${
                 showOnlyUnversioned
                   ? 'bg-zinc-700 text-white'
-                  : 'text-zinc-400 hover:text-white'
+                  : 'text-text-secondary hover:text-white'
               }`}
             >
               Other
             </button>
           </div>
-          <div className="flex gap-1 bg-zinc-800/50 rounded-lg p-1 overflow-x-auto">
+          <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1 overflow-x-auto">
             {uniqueSoftware.map((software) => (
               <button
                 key={software}
@@ -468,7 +468,7 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
                 className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                   selectedSoftware === software && !showOnlyUnversioned
                     ? 'bg-zinc-700 text-white'
-                    : 'text-zinc-400 hover:text-white'
+                    : 'text-text-secondary hover:text-white'
                 }`}
               >
                 <SoftwareIcon name={software} className="w-3.5 h-3.5" />
@@ -483,15 +483,15 @@ export function VersionsOverview({ project, currentShot }: VersionsOverviewProps
         ref={scrollContainerRef}
         onWheel={handleWheel}
         data-versions-overview
-        className="versions-scroll-container bg-zinc-900 border border-zinc-800 rounded-lg p-4 overflow-x-auto">
+        className="versions-scroll-container bg-card-bg border border-border-primary rounded-med p-4 overflow-x-auto">
         {filteredVersions.length === 0 ? (
-          <p className="text-xs text-zinc-500 text-center">No versions found for {selectedSoftware}</p>
+          <p className="text-xs text-text-muted text-center">No versions found for {selectedSoftware}</p>
         ) : (
           <div className="flex gap-3 w-max">
             {filteredVersions.map((version) => (
               <div
                 key={version.path}
-                className="flex-shrink-0 w-32 cursor-pointer hover:bg-zinc-800 rounded-lg p-2 transition-colors select-none"
+                className="flex-shrink-0 w-32 cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none"
                 onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
                 onContextMenu={(e) => handleContextMenu(e, version)}
                 title="Double-click to open"

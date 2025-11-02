@@ -153,6 +153,7 @@ function App() {
     return localStorage.getItem('accentColor') || '#8B5CF6';
   });
   const [showBottomShadow, setShowBottomShadow] = useState(true);
+  const [showTopShadow, setShowTopShadow] = useState(false);
   const projectListRef = useRef<HTMLDivElement>(null);
 
   // Check if we should show welcome setup
@@ -890,7 +891,9 @@ function App() {
     if (projectListRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = projectListRef.current;
       const isAtBottom = scrollHeight - scrollTop - clientHeight < 5;
+      const isAtTop = scrollTop < 5;
       setShowBottomShadow(!isAtBottom);
+      setShowTopShadow(!isAtTop);
     }
   }, []);
 
@@ -898,6 +901,17 @@ function App() {
   useEffect(() => {
     handleProjectListScroll();
   }, [filteredProjects, handleProjectListScroll]);
+
+  // Add scroll event listener to project list
+  useEffect(() => {
+    const scrollElement = projectListRef.current;
+    if (scrollElement) {
+      scrollElement.addEventListener('scroll', handleProjectListScroll);
+      return () => {
+        scrollElement.removeEventListener('scroll', handleProjectListScroll);
+      };
+    }
+  }, [handleProjectListScroll]);
 
   // ✅ OPTIMIZATION: Memoize expensive computations to avoid recalculating on every render
   // Create a Map of clients by ID for O(1) lookup instead of O(n) find operations
@@ -989,7 +1003,7 @@ function App() {
       </div>
 
       {/* Custom Title Bar */}
-      <div className="h-8 bg-zinc-900 flex items-center justify-between select-none flex-shrink-0 rounded-t-lg relative z-[60]">
+      <div className="h-8 bg-sidebar-bg flex items-center justify-between select-none flex-shrink-0 rounded-t-lg relative z-[60]">
         <div
           className="flex items-center gap-2 flex-1 h-full"
           style={{ paddingLeft: '13px' }}
@@ -1096,9 +1110,9 @@ function App() {
       {/* Sidebar - Project List */}
       <div className="w-80 border-r border-t border-border-primary bg-sidebar-bg flex flex-col relative">
         {/* Sidebar Header */}
-        <div className="px-4 pt-5 pb-0 flex flex-col">
-          {/* Search + Settings */}
-          <div className="flex items-center gap-2 mb-5">
+        <div className="px-4 pt-5 pb-0 flex flex-col relative">
+          {/* Search */}
+          <div className="flex items-center gap-2 mb-4">
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
               <input
@@ -1110,17 +1124,10 @@ function App() {
                 className="bg-hover-bg border border-border-secondary rounded-button pl-10 pr-3.5 py-2.5 w-full focus:outline-none focus:border-border-hover transition-colors text-sm text-text-primary placeholder:text-text-muted"
               />
             </div>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="px-3 hover:bg-hover-bg rounded-button transition-colors border border-border-secondary hover:border-border-hover flex-shrink-0 h-full flex items-center justify-center"
-              title="Settings"
-            >
-              <Settings className="w-4 h-4 text-text-muted animate-settings-icon" />
-            </button>
           </div>
 
           {/* Filter Tabs */}
-          <div className="flex gap-2 mb-5">
+          <div className="flex gap-2 mb-1 relative">
             <button
               onClick={() => setFilterView('all')}
               className={`flex-1 px-3 py-2 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border ${
@@ -1286,14 +1293,20 @@ function App() {
               )}
             </div>
           </div>
+          {/* Gradient fade at the bottom of filter tabs */}
+          <div className="absolute -bottom-8 left-0 right-0 h-8 pointer-events-none z-10 transition-opacity duration-300" style={{
+            background: 'linear-gradient(to bottom, #0f0f0f 0%, rgba(15, 15, 15, 0.9) 20%, rgba(15, 15, 15, 0.7) 40%, rgba(15, 15, 15, 0.4) 60%, rgba(15, 15, 15, 0.15) 80%, transparent 100%)',
+            opacity: showTopShadow ? 1 : 0
+          }}></div>
         </div>
 
         {/* Project List */}
         <SimpleBar
           className="flex-1 custom-page-scrollbar"
           autoHide={false}
+          scrollableNodeProps={{ ref: projectListRef }}
         >
-          <div className="px-4 pr-2" style={{ paddingBottom: '110px' }}>
+          <div className="px-4 pr-2 pt-4" style={{ paddingBottom: '110px' }}>
             {isLoading ? (
               <div className="flex items-center justify-center h-32">
                 <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full" />
@@ -1323,8 +1336,8 @@ function App() {
                       }}
                     >
                       {/* Header with title, pin, favorite, status */}
-                      <div className="flex items-center gap-2.5 mb-2">
-                        <h3 className="font-semibold text-card-title text-text-primary truncate flex-1">{project.name}</h3>
+                      <div className="flex items-center gap-2.5 mb-1">
+                        <h3 className="font-bold text-card-title text-text-primary truncate flex-1">{project.name}</h3>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {project.isPinned && (
                             <Pin className="w-3.5 h-3.5 text-text-primary fill-text-primary" />
@@ -1356,51 +1369,60 @@ function App() {
                       {/* Description */}
                       <p className="text-xs text-text-secondary truncate mb-3">{project.description}</p>
 
-                      {/* Software Icons - larger with hover effect */}
-                      {project.software && project.software.length > 0 && (
-                        <div className="flex gap-2 mb-3">
-                          {project.software.slice(0, 6).map((sw: any) => (
-                            <div
-                              key={sw.name}
-                              className="transition-transform hover:scale-110 duration-200"
-                            >
-                              <SoftwareIcon name={sw.name} className="w-7 h-7" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {/* Software Icons + Tags row */}
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        {/* Left: Software Icons */}
+                        {project.software && project.software.length > 0 && (
+                          <div className="flex gap-2">
+                            {project.software.slice(0, 6).map((sw: any) => (
+                              <div
+                                key={sw.name}
+                                className="transition-transform hover:scale-110 duration-200"
+                              >
+                                <SoftwareIcon name={sw.name} className="w-7 h-7" />
+                              </div>
+                            ))}
+                          </div>
+                        )}
 
-                      {/* Bottom section: tags + metadata */}
+                        {/* Right: Tags */}
+                        {project.tags && project.tags.length > 0 && (
+                          <div className="flex gap-1.5 flex-shrink-0">
+                            {project.tags.slice(0, 2).map(tag => (
+                              <span key={tag} className="px-2 py-1 bg-hover-bg rounded-button text-badge text-text-muted">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bottom section: Client + Payment + Deadline */}
                       <div className="flex items-center justify-between gap-2">
-                        {/* Left: Client + Tags */}
+                        {/* Left: Client */}
                         <div className="flex gap-1.5 flex-wrap flex-1 min-w-0">
                           {project.clientId && clientsById.get(project.clientId) && (
                             <span
-                              className="px-2.5 py-1 rounded-badge text-badge font-medium flex items-center gap-1.5 flex-shrink-0"
+                              className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 flex-shrink-0"
                               style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
                             >
                               {showTagIcons && <User className="w-3 h-3 fill-current opacity-40" />}
                               {clientsById.get(project.clientId)!.name}
                             </span>
                           )}
-                          {project.tags.slice(0, 2).map(tag => (
-                            <span key={tag} className="px-2.5 py-1 bg-hover-bg rounded-badge text-badge text-text-muted">
-                              {tag}
-                            </span>
-                          ))}
                         </div>
 
                         {/* Right: Payment + Deadline */}
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {/* Payment Status */}
                           {project.paymentStatus === 'paid' && (
-                            <span className="text-badge px-2.5 py-1 bg-green-900/30 text-green-400 rounded-badge flex items-center gap-1.5 font-medium">
+                            <span className="text-badge px-2 py-1 bg-green-900 text-green-400 rounded-button flex items-center gap-1 font-medium">
                               {showTagIcons && <DollarSign className="w-3 h-3" />}
                               Paid
                             </span>
                           )}
                           {project.paymentStatus === 'prepaid' && (
-                            <span className="text-badge px-2.5 py-1 bg-yellow-900/30 text-yellow-400 rounded-badge flex items-center gap-1.5 font-medium">
+                            <span className="text-badge px-2 py-1 bg-yellow-900 text-yellow-400 rounded-button flex items-center gap-1 font-medium">
                               {showTagIcons && <DollarSign className="w-3 h-3" />}
                               Prepaid
                             </span>
@@ -1421,15 +1443,15 @@ function App() {
                             }
 
                             return (
-                              <span className={`text-badge px-2.5 py-1 rounded-badge whitespace-nowrap font-medium ${
+                              <span className={`text-badge px-2 py-1 rounded-button whitespace-nowrap font-medium ${
                                 daysLeft < 0
-                                  ? 'bg-red-900/30 text-red-400'
+                                  ? 'bg-red-900 text-red-400'
                                   : daysLeft === 0
-                                  ? 'bg-red-900/30 text-red-400'
+                                  ? 'bg-red-900 text-red-400'
                                   : daysLeft < 5
-                                  ? 'bg-red-900/30 text-red-400'
+                                  ? 'bg-red-900 text-red-400'
                                   : daysLeft < 10
-                                  ? 'bg-yellow-900/30 text-yellow-400'
+                                  ? 'bg-yellow-900 text-yellow-400'
                                   : 'bg-hover-bg text-text-muted'
                               }`}>
                                 {displayText}
@@ -1460,40 +1482,61 @@ function App() {
 
         {/* Sidebar Footer */}
         <div className="absolute bottom-0 left-0 right-0 px-2 pb-2 pointer-events-none z-50">
-          <div className="bg-card-bg rounded-xl p-2 space-y-2 pointer-events-auto">
+          <div className="bg-card-bg border border-border-primary rounded-xl p-2 space-y-2 pointer-events-auto">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="w-full bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors font-medium text-white animate-button"
+              className="w-full border border-accent px-4 py-2 rounded-button flex items-center justify-center gap-2 font-medium text-white animate-button"
+              style={{
+                background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-color-hover) 100%)',
+                backgroundSize: '200% 200%',
+                backgroundPosition: '0% 50%',
+                transition: 'background-position 0.5s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundPosition = '100% 50%';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundPosition = '0% 50%';
+              }}
             >
               <Plus className="w-5 h-5" />
               New Project
             </button>
 
             {/* Mode Switcher */}
-            <div className="flex items-center bg-hover-bg rounded-lg p-0.5">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center bg-app-bg bg-opacity-50 rounded-lg p-0.5">
+                <button
+                  onClick={() => setViewMode('projects')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
+                    viewMode === 'projects'
+                      ? 'bg-hover-bg text-white'
+                      : 'bg-transparent text-zinc-500 hover:text-zinc-400'
+                  }`}
+                  title="Projects"
+                >
+                  <Folder className="w-3.5 h-3.5" />
+                  <span className="text-xs font-medium">Projects</span>
+                </button>
+                <button
+                  onClick={handleToggleFinanceMode}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
+                    viewMode === 'finance'
+                      ? 'bg-hover-bg text-white'
+                      : 'bg-transparent text-zinc-500 hover:text-zinc-400'
+                  }`}
+                  title="Statistics"
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span className="text-xs font-medium">Statistics</span>
+                </button>
+              </div>
               <button
-                onClick={() => setViewMode('projects')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
-                  viewMode === 'projects'
-                    ? 'bg-card-bg text-white'
-                    : 'bg-transparent text-zinc-500 hover:text-zinc-400'
-                }`}
-                title="Projects"
+                onClick={() => setShowSettings(true)}
+                className="px-3 hover:bg-hover-bg rounded-lg transition-colors flex-shrink-0 flex items-center justify-center py-1.5"
+                title="Settings"
               >
-                <Folder className="w-3.5 h-3.5" />
-                <span className="text-xs font-medium">Projects</span>
-              </button>
-              <button
-                onClick={handleToggleFinanceMode}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
-                  viewMode === 'finance'
-                    ? 'bg-card-bg text-white'
-                    : 'bg-transparent text-zinc-500 hover:text-zinc-400'
-                }`}
-                title="Statistics"
-              >
-                <BarChart3 className="w-3.5 h-3.5" />
-                <span className="text-xs font-medium">Statistics</span>
+                <Settings className="w-4 h-4 text-text-muted animate-settings-icon" />
               </button>
             </div>
           </div>
@@ -1501,7 +1544,7 @@ function App() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden border-t border-zinc-800">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden border-t border-border-primary">
         {/* Lazy load FinancePage - only mount after first use, then keep mounted but hidden */}
         {financePageMounted && (
           <div style={{ display: viewMode === 'finance' ? 'flex' : 'none', height: '100%' }} className="flex flex-col">

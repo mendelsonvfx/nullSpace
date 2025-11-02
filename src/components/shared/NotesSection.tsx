@@ -1,5 +1,5 @@
 import { useRef, useCallback, memo, useMemo } from 'react';
-import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin, linkPlugin, codeBlockPlugin, codeMirrorPlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles, BlockTypeSelect, InsertCodeBlock, ListsToggle } from '@mdxeditor/editor';
+import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, markdownShortcutPlugin, linkPlugin, codeBlockPlugin, codeMirrorPlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles, BlockTypeSelect, ListsToggle } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
 import { useProjectStore } from '../../store/projectStore';
 
@@ -65,7 +65,6 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
           <UndoRedo />
           <BoldItalicUnderlineToggles />
           <BlockTypeSelect />
-          <InsertCodeBlock />
           <ListsToggle />
         </>
       )
@@ -79,7 +78,7 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
 
   return (
     <div>
-      <h3 className="text-sm font-medium text-zinc-400 mb-3">Notes</h3>
+      <h3 className="text-sm font-medium text-text-secondary mb-3">Notes</h3>
       <div className="markdown-editor-container" onClick={handleContainerClick}>
         <MDXEditor
           key={editorKey}

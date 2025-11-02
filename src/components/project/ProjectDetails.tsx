@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Settings, Star, FolderOpen, CreditCard, Loader2, Check, Pencil, Clock, Plus, Trash2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
 import { useProjectStore } from '../../store/projectStore';
@@ -38,6 +38,11 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [softwareToRemove, setSoftwareToRemove] = useState<string | null>(null);
   const [editingShotId, setEditingShotId] = useState<string | null>(null);
   const [editingShotNumber, setEditingShotNumber] = useState('');
+  const [animatingShotId, setAnimatingShotId] = useState<string | null>(null);
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const [newTag, setNewTag] = useState('');
+  const [showTopShadow, setShowTopShadow] = useState(false);
+  const contentScrollRef = useRef<HTMLElement | null>(null);
 
   // Animation effect for Payment Modal
   useEffect(() => {
@@ -47,6 +52,25 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       setIsPaymentModalAnimating(false);
     }
   }, [showPaymentModal]);
+
+  // Scroll handler for header gradient
+  const handleContentScroll = useCallback(() => {
+    if (!contentScrollRef.current) return;
+    const scrollTop = contentScrollRef.current.scrollTop;
+    const isAtTop = scrollTop < 5;
+    setShowTopShadow(!isAtTop);
+  }, []);
+
+  // Add scroll event listener to content
+  useEffect(() => {
+    const scrollElement = contentScrollRef.current;
+    if (scrollElement) {
+      scrollElement.addEventListener('scroll', handleContentScroll);
+      return () => {
+        scrollElement.removeEventListener('scroll', handleContentScroll);
+      };
+    }
+  }, [handleContentScroll]);
 
   // Track which date fields user has manually filled in Project Settings
   const [deadlineFieldsFilled, setDeadlineFieldsFilled] = useState({
@@ -279,317 +303,333 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
   return (
     <div
-      className="flex-1 flex flex-col h-screen overflow-hidden min-w-0 animate-mode-switch focus:outline-none"
+      className="flex-1 flex flex-col h-screen overflow-hidden min-w-0 animate-mode-switch focus:outline-none bg-app-bg relative"
       onPaste={handlePaste}
       tabIndex={-1}
     >
       {/* Header */}
-      <div className="border-b border-zinc-800 px-6 py-5 flex items-center justify-between flex-shrink-0">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-2xl font-semibold">{project.name}</h2>
-            <span className="text-xs text-zinc-500 font-normal">
+      <div className="px-7 pt-5 flex-shrink-0 relative z-10">
+        {/* Gradient fade at the bottom */}
+        <div className="absolute -bottom-8 left-0 right-0 h-8 pointer-events-none z-10 transition-opacity duration-300" style={{
+          background: 'linear-gradient(to bottom, #0a0a0a 0%, rgba(10, 10, 10, 0.9) 20%, rgba(10, 10, 10, 0.7) 40%, rgba(10, 10, 10, 0.4) 60%, rgba(10, 10, 10, 0.15) 80%, transparent 100%)',
+          opacity: showTopShadow ? 1 : 0
+        }}></div>
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-4 flex-wrap">
+              <h1 className="text-project-title font-bold">{project.name}</h1>
+              <span className={`px-2.5 py-1 rounded-badge text-xs font-medium ${
+              project.status === 'active' ? 'bg-status-active/15 text-status-active border border-status-active/30' :
+              project.status === 'completed' ? 'bg-status-completed/15 text-status-completed border border-status-completed/30' :
+              project.status === 'paused' ? 'bg-status-paused/15 text-status-paused border border-status-paused/30' :
+              'bg-status-archived/15 text-status-archived border border-status-archived/30'
+            }`}>
               {STATUS_LABELS[project.status as keyof typeof STATUS_LABELS]}
             </span>
-            <div className="flex gap-2 flex-wrap items-center ml-2">
-              {project.tags.map((tag: string) => (
-                <span
-                  key={tag}
-                  onClick={() => {
-                    const { removeTag } = useProjectStore.getState();
-                    removeTag(project.id, tag);
-                  }}
-                  className="px-2 py-0.5 bg-zinc-800 rounded text-xs cursor-pointer hover:bg-red-600 hover:line-through transition-all"
-                  title="Click to remove"
-                >
-                  {tag}
-                </span>
-              ))}
+            {/* Existing Tags */}
+            {project.tags.map((tag: string) => (
+              <button
+                key={tag}
+                onClick={() => {
+                  const { removeTag } = useProjectStore.getState();
+                  removeTag(project.id, tag);
+                }}
+                className="px-2.5 py-1 bg-hover-bg rounded-badge text-xs text-text-muted border border-transparent hover:border-red-700/60 hover:bg-red-900/20 hover:line-through transition-all cursor-pointer"
+                title="Click to remove tag"
+              >
+                {tag}
+              </button>
+            ))}
+            {/* Add Tag Input or Button */}
+            {isAddingTag ? (
               <input
                 type="text"
-                placeholder="+ Add tag..."
+                value={newTag}
+                onChange={(e) => setNewTag(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                  if (e.key === 'Enter' && newTag.trim()) {
                     const { addTag } = useProjectStore.getState();
-                    addTag(project.id, e.currentTarget.value.trim());
-                    e.currentTarget.value = '';
+                    addTag(project.id, newTag.trim());
+                    setNewTag('');
+                    setIsAddingTag(false);
+                  } else if (e.key === 'Escape') {
+                    setNewTag('');
+                    setIsAddingTag(false);
                   }
                 }}
-                onBlur={(e) => {
-                  if (e.currentTarget.value.trim()) {
+                onBlur={() => {
+                  if (newTag.trim()) {
                     const { addTag } = useProjectStore.getState();
-                    addTag(project.id, e.currentTarget.value.trim());
-                    e.currentTarget.value = '';
+                    addTag(project.id, newTag.trim());
                   }
+                  setNewTag('');
+                  setIsAddingTag(false);
                 }}
-                className="px-2 py-0.5 bg-transparent border border-zinc-700 border-dashed rounded text-xs text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-accent focus:border-solid w-24"
+                autoFocus
+                placeholder="Tag name..."
+                className="px-2.5 py-1 bg-card-bg border border-accent rounded-badge text-xs text-text-primary focus:outline-none w-32"
               />
+            ) : (
+              <button
+                onClick={() => setIsAddingTag(true)}
+                className="px-2.5 py-1 bg-transparent border border-border-secondary border-dashed rounded-badge text-xs text-text-muted hover:border-accent hover:text-accent transition-all cursor-pointer"
+                title="Add tag to project"
+              >
+                + Add tag...
+              </button>
+            )}
+            </div>
+            <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                const { toggleFavorite } = useProjectStore.getState();
+                toggleFavorite(project.id);
+                setIsFavoriteAnimating(true);
+                setTimeout(() => setIsFavoriteAnimating(false), 500);
+              }}
+              className={`w-9 h-9 bg-card-bg border border-border-primary rounded-button flex items-center justify-center hover:bg-hover-bg hover:border-border-secondary transition-all ${isFavoriteAnimating ? 'animate-favorite-star-bounce' : ''}`}
+              title={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              <Star className={`w-[18px] h-[18px] transition-all ${project.isFavorite ? 'text-yellow-400 fill-yellow-400' : 'text-text-secondary'}`} />
+            </button>
+            <button
+              onClick={() => setShowProjectSettings(true)}
+              className="w-9 h-9 bg-card-bg border border-border-primary rounded-button flex items-center justify-center hover:bg-hover-bg hover:border-border-secondary transition-all"
+              title="Project Settings"
+            >
+              <Settings className="w-[18px] h-[18px] text-text-secondary animate-settings-icon" />
+            </button>
+            <button
+              onClick={onClose}
+              className="w-9 h-9 bg-card-bg border border-border-primary rounded-button flex items-center justify-center hover:bg-hover-bg hover:border-border-secondary transition-all group"
+              title="Close"
+            >
+              <X className="w-[18px] h-[18px] text-text-secondary group-hover:text-red-500 transition-colors" />
+            </button>
             </div>
           </div>
-          <p className="text-zinc-400 text-sm mb-2">{project.description}</p>
-          {project.hasShots === true && (
-            <div className="flex gap-2 flex-wrap items-center">
-              {(project.shots || []).map((shot: any) => (
-                <div
+        </div>
+
+        {/* Shot Tabs */}
+        {project.hasShots === true && (
+          <div className="mb-7">
+            <div className="flex gap-2 overflow-x-auto pb-2 items-center group">
+            {(project.shots || []).map((shot: any) => {
+              const isEditing = editingShotId === shot.id;
+
+              if (isEditing) {
+                return (
+                  <div key={shot.id} className="flex items-center gap-2 px-4 py-1.5 bg-card-bg border border-accent rounded-button">
+                    <span className="text-[13px] text-text-muted">Shot</span>
+                    <input
+                      type="text"
+                      value={editingShotNumber}
+                      onChange={(e) => {
+                        // Only allow digits, max 3 characters
+                        const value = e.target.value.replace(/[^\d]/g, '').slice(0, 3);
+                        setEditingShotNumber(value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.currentTarget.blur();
+                        } else if (e.key === 'Escape') {
+                          setEditingShotId(null);
+                          setEditingShotNumber('');
+                          setIsShotEditMode(false);
+                        }
+                      }}
+                      onBlur={async () => {
+                        if (editingShotNumber.trim()) {
+                          try {
+                            const newShotName = `Shot ${editingShotNumber.trim()}`;
+                            const currentShotMatch = shot.name.match(/\d+/);
+                            const newShotMatch = newShotName.match(/\d+/);
+
+                            // Only rename files if shot number changed
+                            if (currentShotMatch && newShotMatch && currentShotMatch[0] !== newShotMatch[0]) {
+                              const currentShotNumber = parseInt(currentShotMatch[0], 10);
+                              const shotNum = parseInt(newShotMatch[0], 10);
+
+                              // Check if files are accessible
+                              const accessible = await invoke<boolean>('check_shot_files_accessible', {
+                                projectPath: project.path,
+                                shotNumber: currentShotNumber
+                              });
+
+                              if (!accessible) {
+                                alert(`Cannot rename shot ${currentShotMatch[0]} because some files are currently in use. Please close the files and try again.`);
+                                setEditingShotId(null);
+                                setEditingShotNumber('');
+                                setIsShotEditMode(false);
+                                return;
+                              }
+
+                              // Rename files
+                              const renamedCount = await invoke<number>('rename_shot_files', {
+                                projectPath: project.path,
+                                oldShotNumber: currentShotNumber,
+                                newShotNumber: shotNum
+                              });
+
+                              console.log(`Renamed ${renamedCount} files for shot ${currentShotNumber} -> ${shotNum}`);
+
+                              // Invalidate versions cache and trigger reload
+                              versionsCache.invalidate(project.path);
+
+                              // Wait a bit for file system to sync, then trigger version update event
+                              setTimeout(() => {
+                                window.dispatchEvent(new CustomEvent('version-created', {
+                                  detail: { projectPath: project.path }
+                                }));
+                              }, 100);
+                            }
+
+                            // Rename shot in metadata
+                            const { renameShot } = useProjectStore.getState();
+                            renameShot(project.id, shot.id, newShotName);
+                          } catch (error) {
+                            console.error('Failed to rename shot:', error);
+                            alert(`Failed to rename shot: ${error}`);
+                          }
+                        }
+                        setEditingShotId(null);
+                        setEditingShotNumber('');
+                        setIsShotEditMode(false);
+                      }}
+                      autoFocus
+                      className="w-16 bg-transparent text-[13px] text-text-primary focus:outline-none"
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <button
                   key={shot.id}
                   onClick={() => {
                     if (!isShotEditMode) {
                       const { setCurrentShot } = useProjectStore.getState();
                       setCurrentShot(project.id, shot.id);
+                    } else {
+                      setEditingShotId(shot.id);
+                      // Extract only the number from "Shot 123"
+                      const numberOnly = shot.name.replace(/[^\d]/g, '');
+                      setEditingShotNumber(numberOnly);
                     }
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     const { toggleShotCompleted } = useProjectStore.getState();
+                    const wasCompleted = shot.completed;
                     toggleShotCompleted(project.id, shot.id);
+                    // Only animate when marking as completed, not when uncompleting
+                    if (!wasCompleted) {
+                      setAnimatingShotId(shot.id);
+                      setTimeout(() => setAnimatingShotId(null), 600);
+                    }
                   }}
-                  className={`group relative flex items-center rounded overflow-hidden cursor-pointer transition-all hover:brightness-110 ${
+                  className={`px-4 py-1.5 rounded-button text-[13px] font-medium whitespace-nowrap transition-all duration-300 flex items-center justify-center gap-2 ${
                     project.currentShotId === shot.id
-                      ? 'bg-accent text-white'
-                      : 'bg-zinc-800 text-zinc-300'
-                  }`}
+                      ? 'bg-hover-bg border border-accent text-white'
+                      : shot.completed
+                      ? 'bg-card-bg border border-status-active/30 text-text-muted hover:bg-hover-bg'
+                      : 'bg-card-bg border border-border-primary text-text-muted hover:bg-hover-bg hover:border-border-secondary'
+                  } ${animatingShotId === shot.id ? 'animate-shot-complete-glow' : ''}`}
                 >
-                  <div
-                    className={`py-1 pl-3 text-sm font-medium flex items-center gap-1 transition-all ${shot.completed ? 'pr-1' : 'pr-3'}`}
-                  >
-                    {shot.name !== 'Main' && <span>Shot</span>}
-                    {isShotEditMode && editingShotId === shot.id && shot.name !== 'Main' ? (
-                      <input
-                        type="text"
-                        value={editingShotNumber}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          // Only allow digits and max 3 characters
-                          if (/^\d{0,3}$/.test(value)) {
-                            setEditingShotNumber(value);
-                          }
-                        }}
-                        onBlur={async () => {
-                          const shotNum = parseInt(editingShotNumber);
-                          if (editingShotNumber.length === 3 && shotNum >= 1 && shotNum <= 999) {
-                            const newShotName = `Shot ${editingShotNumber}`;
-
-                            // Check if trying to change shot number
-                            const currentShotMatch = shot.name.match(/\d{3}/);
-                            const currentShotNumber = currentShotMatch ? parseInt(currentShotMatch[0]) : null;
-
-                            if (currentShotNumber && currentShotNumber !== shotNum) {
-                              // Shot number is being changed
-                              try {
-                                // Check if target shot number already exists
-                                const versions = await invoke<any[]>('get_project_versions', {
-                                  projectPath: project.path
-                                });
-
-                                const targetShotExists = versions.some(v => {
-                                  const match = v.name.match(/_Shot(\d{3})/);
-                                  return match && match[1] === editingShotNumber;
-                                });
-
-                                if (targetShotExists) {
-                                  alert(`Shot ${editingShotNumber} already has files in the project. Choose a different number.`);
-                                  setEditingShotId(null);
-                                  setEditingShotNumber('');
-                                  return;
-                                }
-
-                                // Check if current shot has files and if they are accessible
-                                const currentShotFiles = versions.filter(v => {
-                                  const match = v.name.match(/_Shot(\d{3})/);
-                                  return match && parseInt(match[1]) === currentShotNumber;
-                                });
-
-                                if (currentShotFiles.length > 0) {
-                                  // Check if files are accessible (not locked)
-                                  const accessible = await invoke<boolean>('check_shot_files_accessible', {
-                                    projectPath: project.path,
-                                    shotNumber: currentShotNumber
-                                  });
-
-                                  if (!accessible) {
-                                    alert(`Cannot rename shot ${currentShotMatch[0]} because some files are currently in use. Please close the files and try again.`);
-                                    setEditingShotId(null);
-                                    setEditingShotNumber('');
-                                    return;
-                                  }
-
-                                  // Rename files
-                                  const renamedCount = await invoke<number>('rename_shot_files', {
-                                    projectPath: project.path,
-                                    oldShotNumber: currentShotNumber,
-                                    newShotNumber: shotNum
-                                  });
-
-                                  console.log(`Renamed ${renamedCount} files for shot ${currentShotNumber} -> ${shotNum}`);
-
-                                  // Invalidate versions cache and trigger reload
-                                  versionsCache.invalidate(project.path);
-
-                                  // Wait a bit for file system to sync, then trigger version update event
-                                  setTimeout(() => {
-                                    window.dispatchEvent(new CustomEvent('version-created', {
-                                      detail: { projectPath: project.path }
-                                    }));
-                                  }, 100);
-                                }
-
-                                // Rename shot in metadata
-                                const { renameShot } = useProjectStore.getState();
-                                renameShot(project.id, shot.id, newShotName);
-                              } catch (error) {
-                                console.error('Failed to rename shot:', error);
-                                alert(`Failed to rename shot: ${error}`);
-                              }
-                            } else {
-                              // No number change, just update name
-                              const { renameShot } = useProjectStore.getState();
-                              renameShot(project.id, shot.id, newShotName);
-                            }
-                          }
-                          setEditingShotId(null);
-                          setEditingShotNumber('');
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.currentTarget.blur();
-                          } else if (e.key === 'Escape') {
-                            setEditingShotId(null);
-                            setEditingShotNumber('');
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        autoFocus
-                        className="w-12 px-1 py-0 text-sm font-medium bg-zinc-700 rounded text-center focus:outline-none focus:ring-1 focus:ring-accent"
-                        placeholder="001"
-                      />
-                    ) : (
-                      <span
-                        onClick={(e) => {
-                          if (isShotEditMode && shot.name !== 'Main') {
-                            e.stopPropagation();
-                            // Extract number from shot name (e.g., "Shot 001" -> "001")
-                            const match = shot.name.match(/\d{3}/);
-                            if (match) {
-                              setEditingShotId(shot.id);
-                              setEditingShotNumber(match[0]);
-                            }
-                          }
-                        }}
-                        className={isShotEditMode && shot.name !== 'Main' ? 'text-zinc-400 cursor-pointer hover:text-zinc-300 underline' : ''}
-                      >
-                        {shot.name.replace('Shot ', '')}
-                      </span>
-                    )}
-                  </div>
-                  <div className={`transition-all duration-200 ease-in-out overflow-hidden flex items-center ${shot.completed ? 'w-7 opacity-100' : 'w-0 opacity-0'}`}>
-                    <Check className="w-4 h-4 text-green-500 mx-auto" />
-                  </div>
-                  <div className={`transition-all duration-200 ease-in-out overflow-hidden ${isShotEditMode && shot.name !== 'Main' ? 'w-5 opacity-100' : 'w-0 opacity-0'}`}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShotToDelete({ id: shot.id, name: shot.name });
-                      }}
-                      className="pl-0 pr-2 py-1"
-                      title="Delete shot"
-                    >
-                      <X className="w-3 h-3 close-button-red" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <button
-                onClick={() => {
-                  const { addShot } = useProjectStore.getState();
-                  addShot(project.id);
-                }}
-                className="px-3 py-1 bg-transparent border border-zinc-700 border-dashed rounded text-sm text-zinc-400 hover:border-accent hover:text-accent transition-all"
-              >
-                + Add shot...
-              </button>
-              <button
-                onClick={() => setIsShotEditMode(!isShotEditMode)}
-                className={`p-1 transition-colors relative z-10 ${
-                  isShotEditMode ? 'text-accent' : 'text-zinc-400 hover:text-accent'
-                }`}
-                title={isShotEditMode ? 'Done editing' : 'Edit shots'}
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
+                  <span>{shot.name}</span>
+                  <Check
+                    className={`text-status-active transition-all duration-300 ${
+                      shot.completed ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
+                    }`}
+                    strokeWidth={3}
+                    style={{
+                      overflow: 'hidden'
+                    }}
+                  />
+                  <X
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const { removeShot } = useProjectStore.getState();
+                      removeShot(project.id, shot.id);
+                    }}
+                    className={`hover:text-red-500 cursor-pointer transition-all duration-300 ${
+                      project.currentShotId === shot.id ? 'text-white' : 'text-text-muted'
+                    } ${
+                      isShotEditMode ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
+                    }`}
+                    strokeWidth={2}
+                    style={{
+                      overflow: 'hidden'
+                    }}
+                  />
+                </button>
+              );
+            })}
+            <button
+              onClick={() => {
+                const { addShot } = useProjectStore.getState();
+                addShot(project.id);
+              }}
+              className="px-4 py-2 bg-transparent border border-border-secondary border-dashed rounded-button text-[13px] text-text-muted hover:border-accent hover:text-accent transition-all whitespace-nowrap"
+            >
+              + Add shot...
+            </button>
+            <button
+              onClick={() => setIsShotEditMode(!isShotEditMode)}
+              className={`p-2 transition-all ${
+                isShotEditMode ? 'text-accent opacity-100' : 'text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100'
+              }`}
+              title={isShotEditMode ? 'Done editing' : 'Edit shots'}
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
             </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              const { toggleFavorite } = useProjectStore.getState();
-              toggleFavorite(project.id);
-
-              // Trigger animation
-              setIsFavoriteAnimating(true);
-              setTimeout(() => {
-                setIsFavoriteAnimating(false);
-              }, 500);
-            }}
-            className={`group p-2 hover:bg-zinc-800 rounded-lg transition-colors ${
-              project.isFavorite ? 'text-yellow-400' : 'text-zinc-400'
-            }`}
-            title={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          >
-            <Star className={`w-5 h-5 transition-all ${project.isFavorite ? 'text-yellow-400 fill-yellow-400' : 'text-zinc-300 group-hover:fill-zinc-600'} ${isFavoriteAnimating ? 'animate-favorite-star-bounce' : ''}`} />
-          </button>
-          <button
-            onClick={() => setShowProjectSettings(true)}
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-            title="Project Settings"
-          >
-            <Settings className="w-5 h-5 animate-settings-icon" />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 close-button-red" />
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
-      <SimpleBar className="flex-1 custom-page-scrollbar" autoHide={false}>
-        <div className="p-6">
+      <SimpleBar className="flex-1 custom-page-scrollbar" autoHide={false} scrollableNodeProps={{ ref: contentScrollRef }}>
+        <div className="px-7 pb-16 pt-4">
         {/* Quick Actions */}
-        <div className="mb-6">
-          <h3 className="text-sm font-medium text-zinc-400 mb-3">Quick Actions</h3>
-          <div className="flex gap-2 flex-wrap">
+        <div className="mb-7">
+          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Quick Actions</h3>
+          <div className="grid grid-cols-3 gap-3">
             <button
               onClick={onOpenFolder}
-              className="relative px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
+              className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
             >
-              <FolderOpen className="w-4 h-4 pointer-events-none" />
-              <span className="pointer-events-none">Open Folder</span>
+              <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-blue-500/20 via-blue-600/10 to-blue-700/10">
+                <FolderOpen className="w-5 h-5 text-blue-400 pointer-events-none" />
+              </div>
+              <span className="text-sm font-medium text-text-primary pointer-events-none">Open Folder</span>
             </button>
             <button
               onClick={() => setShowPaymentModal(true)}
-              className="relative px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
+              className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
             >
-              <CreditCard className="w-4 h-4 pointer-events-none" />
-              <span className="pointer-events-none">Payment</span>
+              <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-green-500/20 via-green-600/10 to-green-700/10">
+                <CreditCard className="w-5 h-5 text-green-400 pointer-events-none" />
+              </div>
+              <span className="text-sm font-medium text-text-primary pointer-events-none">Payment</span>
             </button>
             {timeTrackingEnabled && (
               <button
                 onClick={() => setShowManualTimeEntry(true)}
-                className="relative px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
+                className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
               >
-                <Clock className="w-4 h-4 pointer-events-none" />
-                <span className="pointer-events-none">Add Time</span>
+                <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-yellow-500/20 via-yellow-600/10 to-yellow-700/10">
+                  <Clock className="w-5 h-5 text-yellow-400 pointer-events-none" />
+                </div>
+                <span className="text-sm font-medium text-text-primary pointer-events-none">Add Time</span>
               </button>
             )}
           </div>
         </div>
 
         {/* Software Launchers */}
-        <div className="mb-6">
-          <h3 className="text-sm font-medium text-zinc-400 mb-3">Launch Software</h3>
+        <div className="mb-7">
+          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Launch Software</h3>
           <div className="grid grid-cols-2 gap-2">
             {project.software.map((sw: any) => {
               // Get executable path from localStorage
@@ -660,7 +700,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   }}
                   disabled={status === 'launching'}
                   data-launch-software
-                  className="p-4 border border-zinc-800 rounded-lg flex items-center gap-3 transition-all duration-200 group select-none disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
+                  className="p-4 border border-zinc-800 rounded-xl flex items-center gap-3 transition-all duration-200 group select-none disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
                   onMouseDown={(e) => {
                     // Применяем эффект прожатия только для ЛКМ (левая кнопка мыши)
                     if (e.button === 0) {
@@ -726,8 +766,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         <OutputOverview project={project} currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null} />
 
         {/* Links Section */}
-        <div className="mb-6">
-          <h3 className="text-sm font-medium text-zinc-400 mb-3">Links</h3>
+        <div className="mb-7">
+          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Links</h3>
           <div className="space-y-2">
             {context.links.map((link: any) => (
               <LinkItem key={link.id} link={link} projectId={project.id} shotId={context.shotId} />
@@ -737,8 +777,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         </div>
 
         {/* Todo Section */}
-        <div className="mb-6">
-          <h3 className="text-sm font-medium text-zinc-400 mb-3">Tasks</h3>
+        <div className="mb-7">
+          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Tasks</h3>
           <div className="space-y-2">
             {(() => {
               // Group todos by date
@@ -761,13 +801,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 <div key={date} className="space-y-2">
                   {/* Date separator */}
                   <div className="flex items-center gap-2 mt-4 mb-2">
-                    <div className="h-px bg-zinc-700 flex-1" />
-                    <span className="text-xs text-zinc-500 font-medium">{date}</span>
-                    <div className="h-px bg-zinc-700 flex-1" />
+                    <div className="h-px bg-border-secondary flex-1" />
+                    <span className="text-xs text-text-dim font-medium">{date}</span>
+                    <div className="h-px bg-border-secondary flex-1" />
                   </div>
                   {/* Tasks for this date */}
                   {todos.map((todo: any) => (
-                    <div key={todo.id} className="flex items-center gap-2 group">
+                    <div key={todo.id} className="flex items-center group">
                       <button
                         onClick={() => {
                           if (context.isShot && context.shotId) {
@@ -778,17 +818,21 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             toggleTodo(project.id, todo.id);
                           }
                         }}
-                        className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        className={`flex items-center justify-center transition-all duration-200 ${
                           todo.completed
-                            ? 'bg-accent border-accent'
-                            : 'border-zinc-600 hover:border-accent'
-                        }`}
+                            ? 'w-5 opacity-100'
+                            : 'w-0 opacity-0 group-hover:w-5 group-hover:opacity-100'
+                        } overflow-hidden`}
                       >
-                        {todo.completed && <Check className="w-3 h-3 text-white" />}
+                        <Check className={`w-3 h-3 flex-shrink-0 ${
+                          todo.completed ? 'text-zinc-400' : 'text-zinc-600'
+                        }`} />
                       </button>
                       <span
-                        className={`flex-1 text-sm ${
-                          todo.completed ? 'line-through text-zinc-500' : 'text-zinc-300'
+                        className={`flex-1 text-sm transition-all duration-200 ${
+                          todo.completed
+                            ? 'text-text-muted ml-1'
+                            : 'text-text-primary ml-0 group-hover:ml-1'
                         }`}
                       >
                         {todo.text}
@@ -803,9 +847,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             removeTodo(project.id, todo.id);
                           }
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-800 rounded transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded-lg transition-opacity"
                       >
-                        <X className="w-3 h-3 close-button-red" />
+                        <X className="w-3.5 h-3.5 text-text-muted" />
                       </button>
                     </div>
                   ))}
@@ -839,7 +883,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   e.currentTarget.value = '';
                 }
               }}
-              className="w-full px-3 py-2 bg-transparent border border-zinc-700 border-dashed rounded-lg text-sm text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-accent focus:border-solid"
+              className="w-full px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-card text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:border-solid"
             />
           </div>
         </div>
@@ -1613,7 +1657,17 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       )}
 
       {/* Project Info Bar */}
-      {timeTrackingEnabled && <TimeInfoBar project={latestProject} />}
+      {timeTrackingEnabled && (
+        <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-50">
+          <div className="pointer-events-auto relative z-10">
+            <TimeInfoBar project={latestProject} />
+          </div>
+          {/* Gradient fade at the bottom edge of screen */}
+          <div className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none z-0" style={{
+            background: 'linear-gradient(to bottom, transparent 0%, rgba(10, 10, 10, 0.15) 20%, rgba(10, 10, 10, 0.4) 40%, rgba(10, 10, 10, 0.7) 60%, rgba(10, 10, 10, 0.9) 80%, #0a0a0a 100%)'
+          }}></div>
+        </div>
+      )}
     </div>
   );
 }

@@ -20,43 +20,49 @@ export function TimeInfoBar({ project }: TimeInfoBarProps) {
   );
 
   return (
-    <div className="border-t border-zinc-800 px-6 py-2 bg-zinc-900 text-xs text-zinc-400 flex-shrink-0">
-      <div className="flex justify-between items-center">
-        <div className="flex gap-6">
-          <div>
-            <span className="text-zinc-500">Created:</span>{' '}
-            {project.createdAt
-              ? new Date(project.createdAt).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric'
-                })
-              : 'Unknown'}
+    <div className="px-7 pb-3 flex-shrink-0">
+      <div className="bg-card-bg border border-border-primary rounded-button px-6 py-2">
+        <div className="flex justify-between items-center text-xs">
+          <div className="flex gap-6">
+            <div>
+              <span className="text-text-muted">Created:</span>{' '}
+              <span className="text-text-secondary">
+                {project.createdAt
+                  ? new Date(project.createdAt).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })
+                  : 'Unknown'}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-text-muted">Time Spent:</span>{' '}
+              <span className="text-text-primary font-medium">{formatTime(totalMinutes)}</span>
+              {hasActiveSession && (
+                <span className="text-green-400 ml-1 animate-pulse">●</span>
+              )}
+            </div>
           </div>
 
           <div>
-            <span className="text-zinc-500">Time Spent:</span>{' '}
-            <span className="text-white font-medium">{formatTime(totalMinutes)}</span>
-            {hasActiveSession && (
-              <span className="text-green-400 ml-1 animate-pulse">●</span>
-            )}
+            {project.status === 'completed' &&
+              (project.completedAt || project.updatedAt) && (
+                <div>
+                  <span className="text-text-muted">Completed:</span>{' '}
+                  <span className="text-text-secondary">
+                    {new Date(
+                      project.completedAt || project.updatedAt
+                    ).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </span>
+                </div>
+              )}
           </div>
-        </div>
-
-        <div>
-          {project.status === 'completed' &&
-            (project.completedAt || project.updatedAt) && (
-              <div>
-                <span className="text-zinc-500">Completed:</span>{' '}
-                {new Date(
-                  project.completedAt || project.updatedAt
-                ).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric'
-                })}
-              </div>
-            )}
         </div>
       </div>
     </div>

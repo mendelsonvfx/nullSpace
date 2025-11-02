@@ -481,8 +481,8 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
   if (loading) {
     return (
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-zinc-400 mb-3">Output Overview</h3>
-        <div data-output-overview className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
+        <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
           <div className="flex items-center justify-center">
             <div className="animate-spin w-5 h-5 border-2 border-accent border-t-transparent rounded-full" />
           </div>
@@ -494,8 +494,8 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
   if (error) {
     return (
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-zinc-400 mb-3">Output Overview</h3>
-        <div data-output-overview className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
+        <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
           <p className="text-xs text-red-400 text-center">Error: {error}</p>
         </div>
       </div>
@@ -505,9 +505,9 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
   if (outputs.length === 0) {
     return (
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-zinc-400 mb-3">Output Overview</h3>
-        <div data-output-overview className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-          <p className="text-xs text-zinc-500 text-center">No outputs found. Outputs should be in Render/Preview or Render/Final folders.</p>
+        <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
+        <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
+          <p className="text-xs text-text-muted text-center">No outputs found. Outputs should be in Render/Preview or Render/Final folders.</p>
         </div>
       </div>
     );
@@ -515,18 +515,18 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
 
   return (
     <div className="mb-6">
-      <h3 className="text-sm font-medium text-zinc-400 mb-3">Output Overview</h3>
+      <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
 
       {/* Filters */}
       <div className="flex gap-2 mb-3">
         {/* Output Type Filter */}
-        <div className="flex gap-1 bg-zinc-800/50 rounded-lg p-1">
+        <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
           <button
             onClick={() => updateSelectedOutputType('preview')}
             className={`px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5 ${
               selectedOutputType === 'preview'
                 ? 'bg-zinc-700 text-white'
-                : 'text-zinc-400 hover:text-white'
+                : 'text-text-secondary hover:text-white'
             }`}
           >
             <Eye className="w-3 h-3" />
@@ -537,7 +537,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
             className={`px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5 ${
               selectedOutputType === 'final'
                 ? 'bg-zinc-700 text-white'
-                : 'text-zinc-400 hover:text-white'
+                : 'text-text-secondary hover:text-white'
             }`}
           >
             <Film className="w-3 h-3" />
@@ -547,7 +547,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
 
         {/* Software Filter - only show if more than one software */}
         {availableSoftware.length > 1 && (
-          <div className="flex gap-1 bg-zinc-800/50 rounded-lg p-1">
+          <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
             {availableSoftware.map(software => (
               <button
                 key={software}
@@ -555,7 +555,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                 className={`px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5 ${
                   selectedSoftware === software
                     ? 'bg-zinc-700 text-white'
-                    : 'text-zinc-400 hover:text-white'
+                    : 'text-text-secondary hover:text-white'
                 }`}
               >
                 <SoftwareIcon name={software} className="w-3.5 h-3.5" />
@@ -569,12 +569,12 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
       {/* Outputs Grid */}
       <div className="space-y-4">
         {Object.entries(groupedOutputs).map(([software, types]) => (
-          <div data-output-overview key={software} className="bg-zinc-800/30 border border-zinc-800 rounded-lg overflow-hidden">
+          <div data-output-overview key={software} className="bg-card-bg border border-border-primary rounded-med overflow-hidden">
             {/* Software Header */}
             <div className="bg-zinc-800/50 px-4 py-2 flex items-center gap-2 border-b border-zinc-700/50">
               <SoftwareIcon name={software} className="w-4 h-4" />
-              <span className="text-sm font-medium">{formatSoftwareName(software)}</span>
-              <span className="text-xs text-zinc-500 ml-auto">
+              <span className="text-sm font-medium text-text-primary">{formatSoftwareName(software)}</span>
+              <span className="text-xs text-text-muted ml-auto">
                 {types.preview.length + types.final.length} outputs
               </span>
             </div>
@@ -594,18 +594,18 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <span className="text-sm text-zinc-300 group-hover:text-white transition-colors truncate block">
+                        <span className="text-sm text-text-primary group-hover:text-white transition-colors truncate block">
                           {groupPrefix ? (
-                            <span className="text-zinc-500">{getRelativePathInGroup(output, groupPrefix)}</span>
+                            <span className="text-text-muted">{getRelativePathInGroup(output, groupPrefix)}</span>
                           ) : (
                             getFolderName(output.path, output.is_sequence) && (
-                              <span className="text-zinc-500">{getFolderName(output.path, output.is_sequence)} / </span>
+                              <span className="text-text-muted">{getFolderName(output.path, output.is_sequence)} / </span>
                             )
                           )}
                           {output.name}
                         </span>
                         {output.is_sequence && output.frame_count && (
-                          <span className="text-xs text-zinc-500">
+                          <span className="text-xs text-text-muted">
                             {output.frame_count} frames
                             {output.missing_frames && (
                               <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
@@ -613,7 +613,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-zinc-500 flex-shrink-0">
+                      <div className="flex items-center gap-3 text-xs text-text-muted flex-shrink-0">
                         <span>{formatFileSize(output.size)}</span>
                         <span>{formatDate(output.created_at)}</span>
                       </div>
@@ -624,8 +624,8 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                 return (
                   <div>
                     <div className="flex items-center gap-2 mb-2 px-2">
-                      <Eye className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs font-medium text-zinc-400">Preview ({types.preview.length})</span>
+                      <Eye className="w-3.5 h-3.5 text-text-secondary" />
+                      <span className="text-xs font-medium text-text-secondary">Preview ({types.preview.length})</span>
                     </div>
                     <div className="space-y-2">
                       {/* Grouped files */}
@@ -640,10 +640,10 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                               className="w-full text-left px-3 py-2 rounded bg-zinc-700/30 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
                             >
                               <ChevronDown
-                                className={`w-4 h-4 text-zinc-400 transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
+                                className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
                               />
-                              <span className="text-sm text-zinc-400">{group.path} /</span>
-                              <span className="text-xs text-zinc-500 ml-auto">({group.files.length})</span>
+                              <span className="text-sm text-text-secondary">{group.path} /</span>
+                              <span className="text-xs text-text-muted ml-auto">({group.files.length})</span>
                             </button>
 
                             {/* Group files */}
@@ -680,18 +680,18 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <span className="text-sm text-zinc-300 group-hover:text-white transition-colors truncate block">
+                        <span className="text-sm text-text-primary group-hover:text-white transition-colors truncate block">
                           {groupPrefix ? (
-                            <span className="text-zinc-500">{getRelativePathInGroup(output, groupPrefix)}</span>
+                            <span className="text-text-muted">{getRelativePathInGroup(output, groupPrefix)}</span>
                           ) : (
                             getFolderName(output.path, output.is_sequence) && (
-                              <span className="text-zinc-500">{getFolderName(output.path, output.is_sequence)} / </span>
+                              <span className="text-text-muted">{getFolderName(output.path, output.is_sequence)} / </span>
                             )
                           )}
                           {output.name}
                         </span>
                         {output.is_sequence && output.frame_count && (
-                          <span className="text-xs text-zinc-500">
+                          <span className="text-xs text-text-muted">
                             {output.frame_count} frames
                             {output.missing_frames && (
                               <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
@@ -699,7 +699,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-zinc-500 flex-shrink-0">
+                      <div className="flex items-center gap-3 text-xs text-text-muted flex-shrink-0">
                         <span>{formatFileSize(output.size)}</span>
                         <span>{formatDate(output.created_at)}</span>
                       </div>
@@ -710,8 +710,8 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                 return (
                   <div>
                     <div className="flex items-center gap-2 mb-2 px-2">
-                      <Film className="w-3.5 h-3.5 text-zinc-400" />
-                      <span className="text-xs font-medium text-zinc-400">Final ({types.final.length})</span>
+                      <Film className="w-3.5 h-3.5 text-text-secondary" />
+                      <span className="text-xs font-medium text-text-secondary">Final ({types.final.length})</span>
                     </div>
                     <div className="space-y-2">
                       {/* Grouped files */}
@@ -726,10 +726,10 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                               className="w-full text-left px-3 py-2 rounded bg-zinc-700/30 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
                             >
                               <ChevronDown
-                                className={`w-4 h-4 text-zinc-400 transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
+                                className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
                               />
-                              <span className="text-sm text-zinc-400">{group.path} /</span>
-                              <span className="text-xs text-zinc-500 ml-auto">({group.files.length})</span>
+                              <span className="text-sm text-text-secondary">{group.path} /</span>
+                              <span className="text-xs text-text-muted ml-auto">({group.files.length})</span>
                             </button>
 
                             {/* Group files */}
@@ -758,8 +758,8 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
       </div>
 
       {filteredOutputs.length === 0 && (
-        <div data-output-overview className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-          <p className="text-xs text-zinc-500 text-center">No outputs match the selected filters.</p>
+        <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
+          <p className="text-xs text-text-muted text-center">No outputs match the selected filters.</p>
         </div>
       )}
 
@@ -786,14 +786,14 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
         >
           <button
             onClick={() => handleRevealInExplorer(contextMenu.output.path)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-zinc-300"
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-text-primary"
           >
             <FolderOpen className="w-4 h-4" />
             Reveal in Explorer
           </button>
           <button
             onClick={() => handleCopyPath(contextMenu.output.path)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-zinc-300"
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-text-primary"
           >
             <Copy className="w-4 h-4" />
             Copy Path
@@ -824,14 +824,14 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
         >
           <button
             onClick={() => handleRevealGroupInExplorer(groupContextMenu.groupPath, selectedOutputType)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-zinc-300"
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-text-primary"
           >
             <FolderOpen className="w-4 h-4" />
             Reveal in Explorer
           </button>
           <button
             onClick={() => handleCopyGroupPath(groupContextMenu.groupPath, selectedOutputType)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-zinc-300"
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-text-primary"
           >
             <Copy className="w-4 h-4" />
             Copy Path

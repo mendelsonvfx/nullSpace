@@ -16,6 +16,19 @@ interface LinkItemProps {
 export const LinkItem = memo(function LinkItem({ link, projectId, shotId }: LinkItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(link.title);
+  const [faviconError, setFaviconError] = useState(false);
+
+  // Extract domain from URL for favicon
+  const getFaviconUrl = useCallback((url: string) => {
+    try {
+      const urlObj = new URL(url);
+      return `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=64`;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const faviconUrl = getFaviconUrl(link.url);
 
   const handleSave = useCallback(() => {
     if (editedTitle.trim()) {
@@ -59,8 +72,19 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId }: Link
 
   if (isEditing) {
     return (
-      <div className="flex items-center gap-2 bg-zinc-900 rounded-lg px-3 py-2">
-        <LinkIcon className="w-4 h-4 text-accent flex-shrink-0" />
+      <div className="flex items-center gap-3 bg-card-bg border border-border-primary rounded-med px-3 py-2.5">
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-hover-bg flex-shrink-0 overflow-hidden">
+          {faviconUrl && !faviconError ? (
+            <img
+              src={faviconUrl}
+              alt=""
+              className="w-4 h-4 object-contain"
+              onError={() => setFaviconError(true)}
+            />
+          ) : (
+            <LinkIcon className="w-4 h-4 text-text-muted" />
+          )}
+        </div>
         <input
           type="text"
           value={editedTitle}
@@ -68,41 +92,52 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId }: Link
           onKeyDown={handleKeyDown}
           onBlur={handleSave}
           autoFocus
-          className="flex-1 bg-transparent text-sm text-zinc-300 focus:outline-none"
+          className="flex-1 bg-transparent text-sm text-text-primary focus:outline-none"
         />
         <button
           onClick={handleSave}
-          className="p-1 hover:bg-zinc-700 rounded transition-colors"
+          className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors"
         >
-          <Check className="w-3 h-3 text-green-500" />
+          <Check className="w-3.5 h-3.5 text-green-500" />
         </button>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 group bg-zinc-900 hover:bg-zinc-800 rounded-lg px-3 py-2 transition-colors">
+    <div className="flex items-center gap-3 group bg-card-bg hover:border-accent border border-border-primary rounded-med px-3 py-2.5 transition-all">
       <button
         onClick={handleOpenUrl}
-        className="flex items-center gap-2 flex-1 text-left min-w-0"
+        className="flex items-center gap-3 flex-1 text-left min-w-0"
         title={link.url}
       >
-        <LinkIcon className="w-4 h-4 text-accent flex-shrink-0" />
-        <span className="text-sm text-zinc-300 truncate block">{link.title}</span>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-hover-bg group-hover:bg-accent/10 transition-colors flex-shrink-0 overflow-hidden">
+          {faviconUrl && !faviconError ? (
+            <img
+              src={faviconUrl}
+              alt=""
+              className="w-4 h-4 object-contain"
+              onError={() => setFaviconError(true)}
+            />
+          ) : (
+            <LinkIcon className="w-4 h-4 text-text-muted group-hover:text-accent transition-colors" />
+          )}
+        </div>
+        <span className="text-sm text-text-primary truncate block">{link.title}</span>
       </button>
       <button
         onClick={() => setIsEditing(true)}
-        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-hover-bg rounded-lg transition-opacity"
         title="Edit title"
       >
-        <Pencil className="w-3 h-3" />
+        <Pencil className="w-3.5 h-3.5 text-text-muted" />
       </button>
       <button
         onClick={handleRemove}
-        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-hover-bg rounded-lg transition-opacity"
         title="Remove link"
       >
-        <X className="w-3 h-3 close-button-red" />
+        <X className="w-3.5 h-3.5 text-text-muted" />
       </button>
     </div>
   );

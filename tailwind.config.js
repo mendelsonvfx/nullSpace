@@ -70,10 +70,13 @@ export default {
         accent: 'var(--accent-color)',
       },
       borderRadius: {
-        'card': '12px',
-        'button': '8px',
-        'badge': '6px',
-        'software': '14px',
+        // Semantic naming based on usage
+        'badge': '6px',      // Small elements: badges, tags
+        'button': '8px',     // Interactive elements: buttons, inputs
+        'med': '10px',       // Medium elements: Quick Actions, Overview containers
+        'card': '12px',      // Large cards: project cards
+        'software': '14px',  // Software launchers
+        'modal': '16px',     // Modals and dialogs
       },
       boxShadow: {
         'glow-green': '0 0 8px rgba(16, 185, 129, 0.5)',
@@ -123,12 +126,35 @@ export default {
             opacity: '1'
           },
         },
+        'checkmark-pop': {
+          '0%': {
+            transform: 'scale(0)',
+            opacity: '0'
+          },
+          '50%': {
+            transform: 'scale(1.2)',
+          },
+          '100%': {
+            transform: 'scale(1)',
+            opacity: '1'
+          },
+        },
+        'shot-complete-glow': {
+          '0%, 100%': {
+            'box-shadow': '0 0 0 rgba(16, 185, 129, 0)'
+          },
+          '50%': {
+            'box-shadow': '0 0 4px rgba(16, 185, 129, 0.4)'
+          },
+        },
       },
       animation: {
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
         'pulse-glow-yellow': 'pulse-glow-yellow 2s ease-in-out infinite',
         'pulse-glow-blue': 'pulse-glow-blue 2s ease-in-out infinite',
         'slide-in-right': 'slide-in-right 0.3s ease-out',
+        'checkmark-pop': 'checkmark-pop 0.3s ease-out',
+        'shot-complete-glow': 'shot-complete-glow 0.6s ease-out',
       },
     },
   },

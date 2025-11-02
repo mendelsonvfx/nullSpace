@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Plus } from 'lucide-react';
+import { Link as LinkIcon } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
 
@@ -127,7 +127,10 @@ export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId }: 
   }, []);
 
   return (
-    <div className="flex gap-2">
+    <div className="flex items-center gap-3 bg-transparent border border-border-secondary border-dashed rounded-med px-3 py-2.5 hover:border-accent transition-all">
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-hover-bg flex-shrink-0">
+        <LinkIcon className="w-4 h-4 text-text-muted" />
+      </div>
       <input
         type="url"
         placeholder="Paste URL..."
@@ -137,15 +140,15 @@ export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId }: 
         onPaste={handlePaste}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        className="flex-1 px-3 py-2 bg-transparent border border-zinc-700 border-dashed rounded-lg text-sm text-zinc-300 placeholder-zinc-500 focus:outline-none focus:border-accent focus:border-solid"
+        className="flex-1 bg-transparent text-sm text-text-primary placeholder-text-muted focus:outline-none"
       />
       <button
         onClick={handleAddLink}
         disabled={!url.trim()}
-        className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="px-3 py-1.5 bg-hover-bg hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium text-text-muted"
         title="Add Link"
       >
-        <Plus className="w-4 h-4" />
+        Add
       </button>
     </div>
   );
