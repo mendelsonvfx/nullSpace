@@ -1109,7 +1109,13 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
       {/* Category Tabs - крайний левый */}
-      {showCategoryBar && (
+      <div
+        className="transition-all duration-300 ease-in-out overflow-hidden"
+        style={{
+          width: showCategoryBar ? '40px' : '0px',
+          opacity: showCategoryBar ? 1 : 0
+        }}
+      >
         <CategoryTabs
           categories={categories}
           selectedCategory={selectedCategory}
@@ -1128,7 +1134,7 @@ function App() {
           }}
           accentColor={accentColor}
         />
-      )}
+      </div>
       {/* Sidebar - Project List */}
       <div className="w-80 border-r border-t border-border-primary bg-sidebar-bg flex flex-col relative">
         {/* Sidebar Header */}
