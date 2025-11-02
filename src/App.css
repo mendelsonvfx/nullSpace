@@ -447,7 +447,7 @@ input[type="number"] {
 .custom-scrollbar-fixed .simplebar-track.simplebar-vertical,
 .custom-scrollbar-grid .simplebar-track.simplebar-vertical {
   width: 6px;
-  right: -4px;  
+  right: -8px;
   background: transparent;
   top: 6px;  /* Top margin */
   bottom: 6px;  /* Bottom margin */

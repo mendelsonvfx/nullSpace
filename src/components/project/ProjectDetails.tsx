@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconPencil, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconCalendar } from '@tabler/icons-react';
+import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconPencil, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api';
 import { useProjectStore } from '../../store/projectStore';
 import { LinkItem, LinkInputForm, NotesSection } from '../shared';

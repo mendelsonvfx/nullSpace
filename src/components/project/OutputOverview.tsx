@@ -588,7 +588,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                 const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
                   <button
                     key={output.path}
-                    onClick={() => handleOutputClick(output)}
+                    onDoubleClick={() => handleOutputClick(output)}
                     onContextMenu={(e) => handleContextMenu(e, output)}
                     className="w-full text-left px-3 py-2 rounded bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors group"
                   >
@@ -674,7 +674,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                 const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
                   <button
                     key={output.path}
-                    onClick={() => handleOutputClick(output)}
+                    onDoubleClick={() => handleOutputClick(output)}
                     onContextMenu={(e) => handleContextMenu(e, output)}
                     className="w-full text-left px-3 py-2 rounded bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors group"
                   >

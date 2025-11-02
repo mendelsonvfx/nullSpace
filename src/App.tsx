@@ -1391,97 +1391,122 @@ function App() {
                       {/* Description */}
                       <p className="text-xs text-text-secondary truncate mb-3">{project.description}</p>
 
-                      {/* Software Icons + Tags row */}
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        {/* Left: Software Icons */}
-                        {project.software && project.software.length > 0 && (
-                          <div className="flex gap-2">
-                            {project.software.slice(0, 6).map((sw: any) => (
-                              <div
-                                key={sw.name}
-                                className="transition-transform hover:scale-110 duration-200"
-                              >
-                                <SoftwareIcon name={sw.name} className="w-7 h-7" />
+                      {(() => {
+                        const hasClient = project.clientId && clientsById.get(project.clientId);
+                        const hasPayment = project.paymentStatus === 'paid' || project.paymentStatus === 'prepaid';
+                        const hasDeadline = project.deadline && project.status !== 'completed' && project.status !== 'archived';
+
+                        // Show tags in bottom row when NOT both payment AND deadline exist
+                        const showTagsBottom = !(hasPayment && hasDeadline);
+                        // Show tags in top row when BOTH payment AND deadline exist
+                        const showTagsTop = hasPayment && hasDeadline;
+
+                        return (
+                          <>
+                            {/* Software Icons + Tags (top) row */}
+                            {((project.software && project.software.length > 0) || (showTagsTop && project.tags && project.tags.length > 0)) && (
+                              <div className="flex items-center justify-between gap-2 mb-3">
+                                {/* Left: Software icons */}
+                                <div className="flex gap-2">
+                                  {project.software && project.software.slice(0, 6).map((sw: any) => (
+                                    <div
+                                      key={sw.name}
+                                      className="transition-transform hover:scale-110 duration-200"
+                                    >
+                                      <SoftwareIcon name={sw.name} className="w-7 h-7" />
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Right: Tags (only when both payment AND deadline exist) */}
+                                {showTagsTop && project.tags && project.tags.length > 0 && (
+                                  <div className="flex gap-1.5 flex-shrink-0">
+                                    {project.tags.slice(0, 2).map(tag => (
+                                      <span key={tag} className="px-2 py-1 bg-hover-bg rounded-full text-badge text-text-muted">
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            ))}
-                          </div>
-                        )}
+                            )}
 
-                        {/* Right: Tags */}
-                        {project.tags && project.tags.length > 0 && (
-                          <div className="flex gap-1.5 flex-shrink-0">
-                            {project.tags.slice(0, 2).map(tag => (
-                              <span key={tag} className="px-2 py-1 bg-hover-bg rounded-button text-badge text-text-muted">
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                            {/* Bottom section */}
+                            <div className="flex items-center justify-between gap-2">
+                              {/* Left: Client */}
+                              <div className="flex gap-1.5 flex-wrap flex-1 min-w-0">
+                                {hasClient && (
+                                  <span
+                                    className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 flex-shrink-0"
+                                    style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
+                                  >
+                                    {showTagIcons && <IconUser stroke={1.5} className="w-3 h-3 fill-current opacity-40" />}
+                                    {clientsById.get(project.clientId)!.name}
+                                  </span>
+                                )}
+                              </div>
 
-                      {/* Bottom section: Client + Payment + Deadline */}
-                      <div className="flex items-center justify-between gap-2">
-                        {/* Left: Client */}
-                        <div className="flex gap-1.5 flex-wrap flex-1 min-w-0">
-                          {project.clientId && clientsById.get(project.clientId) && (
-                            <span
-                              className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 flex-shrink-0"
-                              style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
-                            >
-                              {showTagIcons && <IconUser stroke={1.5} className="w-3 h-3 fill-current opacity-40" />}
-                              {clientsById.get(project.clientId)!.name}
-                            </span>
-                          )}
-                        </div>
+                              {/* Right: Tags + Payment + Deadline */}
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {/* Tags - show only when NOT both payment AND deadline */}
+                                {showTagsBottom && project.tags && project.tags.length > 0 && (
+                                  <>
+                                    {project.tags.slice(0, 2).map(tag => (
+                                      <span key={tag} className="px-2 py-1 bg-hover-bg rounded-full text-badge text-text-muted">
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </>
+                                )}
+                                {/* Payment Status */}
+                                {project.paymentStatus === 'paid' && (
+                                  <span className="text-badge px-2 py-1 bg-green-900 text-green-400 rounded-button flex items-center gap-1 font-medium">
+                                    {showTagIcons && <IconCurrencyDollar stroke={1.5} className="w-3 h-3" />}
+                                    Paid
+                                  </span>
+                                )}
+                                {project.paymentStatus === 'prepaid' && (
+                                  <span className="text-badge px-2 py-1 bg-yellow-900 text-yellow-400 rounded-button flex items-center gap-1 font-medium">
+                                    {showTagIcons && <IconCurrencyDollar stroke={1.5} className="w-3 h-3" />}
+                                    Prepaid
+                                  </span>
+                                )}
+                                {/* Deadline */}
+                                {project.deadline && project.status !== 'completed' && project.status !== 'archived' && (() => {
+                                  const daysLeft = getDaysRemaining(project.deadline);
+                                  if (daysLeft === null) return null;
 
-                        {/* Right: Payment + Deadline */}
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {/* Payment Status */}
-                          {project.paymentStatus === 'paid' && (
-                            <span className="text-badge px-2 py-1 bg-green-900 text-green-400 rounded-button flex items-center gap-1 font-medium">
-                              {showTagIcons && <IconCurrencyDollar stroke={1.5} className="w-3 h-3" />}
-                              Paid
-                            </span>
-                          )}
-                          {project.paymentStatus === 'prepaid' && (
-                            <span className="text-badge px-2 py-1 bg-yellow-900 text-yellow-400 rounded-button flex items-center gap-1 font-medium">
-                              {showTagIcons && <IconCurrencyDollar stroke={1.5} className="w-3 h-3" />}
-                              Prepaid
-                            </span>
-                          )}
-                          {/* Deadline - hide if project is completed or archived */}
-                          {project.deadline && project.status !== 'completed' && project.status !== 'archived' && (() => {
-                            const daysLeft = getDaysRemaining(project.deadline);
-                            if (daysLeft === null) return null;
+                                  let displayText;
+                                  if (daysLeft < 0) {
+                                    const absDays = Math.abs(daysLeft);
+                                    displayText = absDays >= 100 ? '99+ overdue' : `${absDays}d overdue`;
+                                  } else if (daysLeft === 0) {
+                                    displayText = 'today';
+                                  } else {
+                                    displayText = daysLeft >= 100 ? '99+ left' : `${daysLeft}d left`;
+                                  }
 
-                            let displayText;
-                            if (daysLeft < 0) {
-                              const absDays = Math.abs(daysLeft);
-                              displayText = absDays >= 100 ? '99+ overdue' : `${absDays}d overdue`;
-                            } else if (daysLeft === 0) {
-                              displayText = 'today';
-                            } else {
-                              displayText = daysLeft >= 100 ? '99+ left' : `${daysLeft}d left`;
-                            }
-
-                            return (
-                              <span className={`text-badge px-2 py-1 rounded-button whitespace-nowrap font-medium ${
-                                daysLeft < 0
-                                  ? 'bg-red-900 text-red-400'
-                                  : daysLeft === 0
-                                  ? 'bg-red-900 text-red-400'
-                                  : daysLeft < 5
-                                  ? 'bg-red-900 text-red-400'
-                                  : daysLeft < 10
-                                  ? 'bg-yellow-900 text-yellow-400'
-                                  : 'bg-hover-bg text-text-muted'
-                              }`}>
-                                {displayText}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                      </div>
+                                  return (
+                                    <span className={`text-badge px-2 py-1 rounded-button whitespace-nowrap font-medium ${
+                                      daysLeft < 0
+                                        ? 'bg-red-900 text-red-400'
+                                        : daysLeft === 0
+                                        ? 'bg-red-900 text-red-400'
+                                        : daysLeft < 5
+                                        ? 'bg-red-900 text-red-400'
+                                        : daysLeft < 10
+                                        ? 'bg-yellow-900 text-yellow-400'
+                                        : 'bg-hover-bg text-text-muted'
+                                    }`}>
+                                      {displayText}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
                   </ProjectCard>
                 </div>
               ))}

@@ -718,9 +718,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     <div className="flex flex-col h-full relative">
       {/* Panel Title */}
       <div className="flex items-center gap-2 mb-4 justify-between">
-        <div className="flex items-center gap-2">
-          <IconFolder className="w-4 h-4 text-text-secondary" stroke={1.5} />
-          <h3 className="text-section-title font-semibold text-text-primary">Project Structure</h3>
+        <div className="flex items-center gap-2.5">
+          <IconFolder className="w-5 h-5 text-text-secondary flex-shrink-0" stroke={1.5} />
+          <h3 className="text-section-title font-semibold text-text-primary leading-none">Project Structure</h3>
         </div>
         <button
           onClick={onToggleHidden}
@@ -761,7 +761,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       </SimpleBar>
 
       {/* Project Size Info Bar - Absolute positioned */}
-      <div className="absolute bottom-0 left-0 right-0 pt-2.5">
+      <div className="absolute -bottom-1 left-0 right-0 pt-2.5">
         <div className="bg-card-bg border border-border-primary rounded-button px-4 py-2">
           <div className="text-xs">
             <span className="text-text-muted">Project size:</span>{' '}
