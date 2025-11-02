@@ -14,12 +14,14 @@ export const EmptyState = memo(function EmptyState({ onCreateProject }: EmptySta
       <h2 className="text-xl font-medium text-white mb-2">No Project Selected</h2>
       <p className="text-sm mb-6">Select a project from the sidebar or create a new one</p>
       <button
-        className="px-6 py-3 bg-gradient-to-r from-accent to-accent-hover text-white rounded-button font-medium flex items-center justify-center gap-2 transition-all duration-200 hover:shadow-lg relative overflow-hidden"
-        style={{
-          backgroundSize: '200% 100%',
-          backgroundPosition: '0% 50%'
-        }}
         onClick={onCreateProject}
+        className="border border-accent px-6 py-3 rounded-button flex items-center justify-center gap-2 font-medium text-white animate-button"
+        style={{
+          background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-color-hover) 100%)',
+          backgroundSize: '200% 200%',
+          backgroundPosition: '0% 50%',
+          transition: 'background-position 0.5s ease'
+        }}
         onMouseEnter={(e) => {
           e.currentTarget.style.backgroundPosition = '100% 50%';
         }}
