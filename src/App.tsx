@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { Plus, Folder, Search, X, Settings, Star, Archive, Grid3x3, ChevronRight, Pin, Trash2, Circle, DollarSign, User, Filter, Minus, Square, Image, BarChart3 } from 'lucide-react';
+import { Icon } from '@iconify/react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from './store/projectStore';
 import { useContextMenuStore } from './store/contextMenuStore';
@@ -1052,7 +1052,7 @@ function App() {
             className="w-8 h-6 hover:bg-zinc-800 flex items-center justify-center transition-colors rounded"
             title="Minimize"
           >
-            <Minus className="w-3.5 h-3.5 text-zinc-400" />
+            <Icon icon="solar:minus-circle-linear" className="w-3.5 h-3.5 text-zinc-400" />
           </button>
           <button
             onClick={async () => {
@@ -1069,7 +1069,7 @@ function App() {
             className="w-8 h-6 hover:bg-zinc-800 flex items-center justify-center transition-colors rounded"
             title="Maximize"
           >
-            <Square className="w-3 h-3 text-zinc-400" />
+            <Icon icon="solar:stop-linear" className="w-3 h-3 text-zinc-400" />
           </button>
           <button
             onClick={() => {
@@ -1079,7 +1079,7 @@ function App() {
             className="w-8 h-6 hover:bg-red-600 flex items-center justify-center transition-colors rounded"
             title="Close"
           >
-            <X className="w-3.5 h-3.5 text-zinc-400" />
+            <Icon icon="solar:close-circle-linear" className="w-3.5 h-3.5 text-zinc-400" />
           </button>
         </div>
       </div>
@@ -1114,7 +1114,7 @@ function App() {
           {/* Search */}
           <div className="flex items-center gap-2 mb-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+              <Icon icon="solar:magnifer-linear" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
               <input
                 type="text"
                 placeholder="Search projects..."
@@ -1137,7 +1137,7 @@ function App() {
               }`}
               title="All projects"
             >
-              <Grid3x3 className="w-3.5 h-3.5" />
+              <Icon icon="solar:widget-4-linear" className="w-3.5 h-3.5" />
               <span>All</span>
             </button>
             <button
@@ -1149,7 +1149,7 @@ function App() {
               }`}
               title="Favorites"
             >
-              <Star className={`w-3.5 h-3.5 ${filterView === 'favorites' ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+              <Icon icon={filterView === 'favorites' ? 'solar:star-bold' : 'solar:star-linear'} className={`w-3.5 h-3.5 ${filterView === 'favorites' ? 'text-yellow-400' : ''}`} />
               <span>Fav</span>
             </button>
             <button
@@ -1161,7 +1161,7 @@ function App() {
               }`}
               title="Archive"
             >
-              <Archive className="w-3.5 h-3.5" />
+              <Icon icon="solar:archive-linear" className="w-3.5 h-3.5" />
               <span>Archive</span>
             </button>
             <div className="relative" ref={filterMenuRef}>
@@ -1175,7 +1175,7 @@ function App() {
                 }`}
                 title="Sort & Filter"
               >
-                <Filter className="w-3.5 h-3.5" />
+                <Icon icon="solar:filter-linear" className="w-3.5 h-3.5" />
               </button>
               {showFilterMenu && (
                 <div className="absolute top-full mt-1 right-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[160px] animate-modal">
@@ -1241,7 +1241,7 @@ function App() {
                   >
                     <button className="w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 flex items-center justify-between">
                       <span>Client</span>
-                      <ChevronRight className="w-3 h-3" />
+                      <Icon icon="solar:alt-arrow-right-linear" className="w-3 h-3" />
                     </button>
                     {showClientSubmenu && (
                       <div
@@ -1313,7 +1313,7 @@ function App() {
               </div>
             ) : filteredProjects.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-32 text-text-muted text-sm">
-                <Folder className="w-8 h-8 mb-2 opacity-50" />
+                <Icon icon="solar:folder-linear" className="w-8 h-8 mb-2 opacity-50" />
                 <p>No projects found</p>
               </div>
             ) : (
@@ -1340,10 +1340,10 @@ function App() {
                         <h3 className="font-bold text-card-title text-text-primary truncate flex-1">{project.name}</h3>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {project.isPinned && (
-                            <Pin className="w-3.5 h-3.5 text-text-primary fill-text-primary" />
+                            <Icon icon="solar:pin-bold" className="w-3.5 h-3.5 text-text-primary" />
                           )}
                           {project.isFavorite && (
-                            <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+                            <Icon icon="solar:star-bold" className="w-3.5 h-3.5 text-yellow-400" />
                           )}
                           <button
                             onClick={(e) => {
@@ -1406,7 +1406,7 @@ function App() {
                               className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 flex-shrink-0"
                               style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
                             >
-                              {showTagIcons && <User className="w-3 h-3 fill-current opacity-40" />}
+                              {showTagIcons && <Icon icon="solar:user-circle-linear" className="w-3 h-3 fill-current opacity-40" />}
                               {clientsById.get(project.clientId)!.name}
                             </span>
                           )}
@@ -1417,13 +1417,13 @@ function App() {
                           {/* Payment Status */}
                           {project.paymentStatus === 'paid' && (
                             <span className="text-badge px-2 py-1 bg-green-900 text-green-400 rounded-button flex items-center gap-1 font-medium">
-                              {showTagIcons && <DollarSign className="w-3 h-3" />}
+                              {showTagIcons && <Icon icon="solar:dollar-minimalistic-linear" className="w-3 h-3" />}
                               Paid
                             </span>
                           )}
                           {project.paymentStatus === 'prepaid' && (
                             <span className="text-badge px-2 py-1 bg-yellow-900 text-yellow-400 rounded-button flex items-center gap-1 font-medium">
-                              {showTagIcons && <DollarSign className="w-3 h-3" />}
+                              {showTagIcons && <Icon icon="solar:dollar-minimalistic-linear" className="w-3 h-3" />}
                               Prepaid
                             </span>
                           )}
@@ -1499,7 +1499,7 @@ function App() {
                 e.currentTarget.style.backgroundPosition = '0% 50%';
               }}
             >
-              <Plus className="w-5 h-5" />
+              <Icon icon="solar:add-circle-linear" className="w-5 h-5" />
               New Project
             </button>
 
@@ -1515,7 +1515,7 @@ function App() {
                   }`}
                   title="Projects"
                 >
-                  <Folder className="w-3.5 h-3.5" />
+                  <Icon icon="solar:folder-linear" className="w-3.5 h-3.5" />
                   <span className="text-xs font-medium">Projects</span>
                 </button>
                 <button
@@ -1527,7 +1527,7 @@ function App() {
                   }`}
                   title="Statistics"
                 >
-                  <BarChart3 className="w-3.5 h-3.5" />
+                  <Icon icon="solar:chart-linear" className="w-3.5 h-3.5" />
                   <span className="text-xs font-medium">Statistics</span>
                 </button>
               </div>
@@ -1536,7 +1536,7 @@ function App() {
                 className="px-3 hover:bg-hover-bg rounded-lg transition-colors flex-shrink-0 flex items-center justify-center py-1.5"
                 title="Settings"
               >
-                <Settings className="w-4 h-4 text-text-muted animate-settings-icon" />
+                <Icon icon="solar:settings-linear" className="w-4 h-4 text-text-muted animate-settings-icon" />
               </button>
             </div>
           </div>
@@ -1740,7 +1740,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <Pin className="w-4 h-4" />
+            <Icon icon="solar:pin-linear" className="w-4 h-4" />
             {projects.find(p => p.id === contextMenu.projectId)?.isPinned ? 'Unpin' : 'Pin to top'}
           </button>
           <button
@@ -1750,7 +1750,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <Star className="w-4 h-4" />
+            <Icon icon="solar:star-linear" className="w-4 h-4" />
             {projects.find(p => p.id === contextMenu.projectId)?.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           </button>
           <button
@@ -1775,7 +1775,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <Image className="w-4 h-4" />
+            <Icon icon="solar:gallery-linear" className="w-4 h-4" />
             Paste Thumbnail
           </button>
           <button
@@ -1788,7 +1788,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <X className="w-4 h-4" />
+            <Icon icon="solar:close-circle-linear" className="w-4 h-4" />
             Remove Thumbnail
           </button>
           <div className="border-t border-zinc-700 my-1" />
@@ -1802,7 +1802,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <Circle className="w-4 h-4 fill-green-500 text-green-500" />
+            <Icon icon="solar:record-circle-linear" className="w-4 h-4 fill-green-500 text-green-500" />
             Active
           </button>
           <button
@@ -1812,7 +1812,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <Circle className="w-4 h-4 fill-yellow-500 text-yellow-500" />
+            <Icon icon="solar:record-circle-linear" className="w-4 h-4 fill-yellow-500 text-yellow-500" />
             Paused
           </button>
           <button
@@ -1822,7 +1822,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <Circle className="w-4 h-4 fill-blue-500 text-blue-500" />
+            <Icon icon="solar:record-circle-linear" className="w-4 h-4 fill-blue-500 text-blue-500" />
             Completed
           </button>
           <button
@@ -1832,7 +1832,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <Archive className="w-4 h-4" />
+            <Icon icon="solar:archive-linear" className="w-4 h-4" />
             Archived
           </button>
 
@@ -1851,7 +1851,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <DollarSign className="w-4 h-4 text-zinc-500" />
+            <Icon icon="solar:dollar-minimalistic-linear" className="w-4 h-4 text-zinc-500" />
             Unpaid
           </button>
           <button
@@ -1868,7 +1868,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <DollarSign className="w-4 h-4 text-yellow-500" />
+            <Icon icon="solar:dollar-minimalistic-linear" className="w-4 h-4 text-yellow-500" />
             Prepaid
           </button>
           <button
@@ -1885,7 +1885,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <DollarSign className="w-4 h-4 text-green-500" />
+            <Icon icon="solar:dollar-minimalistic-linear" className="w-4 h-4 text-green-500" />
             Paid
           </button>
 
@@ -1911,10 +1911,10 @@ function App() {
               className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between gap-2"
             >
               <div className="flex items-center gap-2">
-                <Folder className="w-4 h-4" />
+                <Icon icon="solar:folder-linear" className="w-4 h-4" />
                 Move to...
               </div>
-              <ChevronRight className="w-4 h-4" />
+              <Icon icon="solar:alt-arrow-right-linear" className="w-4 h-4" />
             </button>
 
             {/* Category submenu */}
@@ -2007,7 +2007,7 @@ function App() {
             }}
             className="w-full px-4 py-2 text-left text-sm hover:bg-red-900/50 text-red-400 flex items-center gap-2"
           >
-            <Trash2 className="w-4 h-4" />
+            <Icon icon="solar:trash-bin-trash-linear" className="w-4 h-4" />
             Delete project
           </button>
         </div>
