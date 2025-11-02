@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { File, ChevronRight, ChevronDown, EyeOff, Copy, FolderOpen, Palette, Check } from 'lucide-react';
+import { File, ChevronRight, ChevronDown, EyeOff, Copy, FolderOpen, Palette, Check, Eye, FolderTree } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
 import { listen } from '@tauri-apps/api/event';
 import { useProjectStore } from '../../store/projectStore';
@@ -15,8 +15,8 @@ import photoshopFolIcon from '/icons/folders/photoshop_fol.png';
 import afterEffectsFolIcon from '/icons/folders/after-effects_fol.png';
 
 // Folder SVG component
-const FolderIcon = ({ color }: { color: string }) => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+const FolderIcon = ({ color, size = 16 }: { color: string; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path
       d="M3 6V16.8C3 17.9201 3 18.4798 3.21799 18.9076C3.40973 19.2839 3.71547 19.5905 4.0918 19.7822C4.5192 20 5.07899 20 6.19691 20H17.8031C18.921 20 19.48 20 19.9074 19.7822C20.2837 19.5905 20.5905 19.2841 20.7822 18.9078C21.0002 18.48 21.0002 17.9199 21.0002 16.7998L21.0002 9.19978C21.0002 8.07967 21.0002 7.51962 20.7822 7.0918C20.5905 6.71547 20.2839 6.40973 19.9076 6.21799C19.4798 6 18.9201 6 17.8 6H12M3 6H12M3 6C3 4.89543 3.89543 4 5 4H8.67452C9.1637 4 9.40886 4 9.63904 4.05526C9.84311 4.10425 10.0379 4.18526 10.2168 4.29492C10.4186 4.41857 10.5918 4.59182 10.9375 4.9375L12 6"
       stroke={color}
@@ -47,9 +47,10 @@ interface FileNode {
 interface TreeViewProps {
   project: any;
   showHidden: boolean;
+  onToggleHidden: () => void;
 }
 
-export function TreeView({ project, showHidden }: TreeViewProps) {
+export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps) {
   const { activeMenu, setActiveMenu } = useContextMenuStore();
   const [tree, setTree] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -586,85 +587,100 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
     const isHidden = hiddenPaths.has(node.path);
     const folderColor = node.is_dir ? folderColors.get(node.path) : null;
 
-    // Remove file extension from display name only for project files (with icons)
-    const displayName = !node.is_dir && fileIcon && node.name.includes('.')
-      ? node.name.substring(0, node.name.lastIndexOf('.'))
-      : node.name;
+    // Format display name
+    let displayName = node.name;
 
-    // Skip hidden items if showHidden is false
-    if (isHidden && !showHidden) {
-      return null;
+    // Remove file extension from display name only for project files (with icons)
+    if (!node.is_dir && fileIcon && node.name.includes('.')) {
+      displayName = node.name.substring(0, node.name.lastIndexOf('.'));
     }
 
+    // Add space to "AfterEffects" folder name
+    if (node.is_dir && node.name.toLowerCase() === 'aftereffects') {
+      displayName = 'After Effects';
+    }
+
+    // Render hidden items with animation instead of skipping them
+    const shouldShow = !isHidden || showHidden;
+
     return (
-      <div key={node.path}>
+      <div
+        key={node.path}
+        style={{ marginLeft: depth > 0 ? '12px' : '0' }}
+        className={`transition-opacity duration-150 ${!shouldShow ? 'opacity-0 h-0 overflow-hidden pointer-events-none' : isHidden ? 'opacity-40' : 'opacity-100'}`}
+      >
         <div
-          className={`flex items-center gap-1 py-1 hover:bg-zinc-800 rounded text-sm select-none group ${isHidden ? 'opacity-40' : ''}`}
+          className={`flex items-center gap-2 px-2.5 py-2 bg-card-bg border border-border-primary rounded-badge text-xs select-none group transition-all cursor-pointer hover:bg-hover-bg hover:border-border-secondary ${isExpanded && node.is_dir ? 'bg-hover-bg border-border-secondary' : ''}`}
+          onDoubleClick={(e) => handleDoubleClick(e, node)}
+          onContextMenu={(e) => handleContextMenu(e, node)}
         >
-          {/* Left clickable area - includes left padding (8px) + indentation (depth * 16px) + chevron */}
-          <div
-            className={`flex items-center justify-end gap-1 flex-shrink-0 ${node.is_dir && hasChildren ? 'cursor-pointer' : ''}`}
-            style={{ paddingLeft: '8px', width: `${depth * 16 + 8 + 12 + 4}px` }}
-            onClick={node.is_dir && hasChildren ? (e) => {
-              e.stopPropagation();
-              toggleDir(node.path);
-            } : undefined}
-          >
-            {node.is_dir ? (
-              <>
-                {hasChildren ? (
-                  isExpanded ?
-                    <ChevronDown className="w-3 h-3" /> :
-                    <ChevronRight className="w-3 h-3" />
-                ) : (
-                  <div className="w-3 h-3" />
-                )}
-              </>
+          {/* Icon */}
+          {node.is_dir ? (
+            softwareFolderIcon ? (
+              <img
+                src={softwareFolderIcon}
+                alt={node.name}
+                className="w-6 h-6 flex-shrink-0 object-contain"
+              />
             ) : (
-              <div className="w-3 h-3" />
-            )}
-          </div>
-          {/* Icon and name area - double-click to open, right-click for context menu */}
-          <div
-            className="flex items-center gap-1 flex-1 cursor-pointer min-w-0 pr-2"
-            onDoubleClick={(e) => handleDoubleClick(e, node)}
-            onContextMenu={(e) => handleContextMenu(e, node)}
-          >
-            {node.is_dir ? (
-              softwareFolderIcon ? (
-                <img
-                  src={softwareFolderIcon}
-                  alt={node.name}
-                  className="w-7 h-7 flex-shrink-0"
-                />
+              <div className="w-[18px] flex items-center justify-center flex-shrink-0">
+                <FolderIcon color={folderColor || '#a1a1aa'} />
+              </div>
+            )
+          ) : (
+            <div className="w-[18px] flex items-center justify-center flex-shrink-0">
+              {fileIcon ? (
+                <SoftwareIcon name={fileIcon} className="w-4 h-4 flex-shrink-0" />
               ) : (
-                <FolderIcon color={folderColor || '#60a5fa'} />
-              )
-            ) : (
-              <>
-                {fileIcon ? (
-                  <SoftwareIcon name={fileIcon} className="w-4 h-4 flex-shrink-0" />
-                ) : (
-                  <File className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                )}
-              </>
+                <File className="w-4 h-4 text-text-secondary flex-shrink-0" />
+              )}
+            </div>
+          )}
+
+          {/* Name */}
+          <span className={`truncate flex-1 text-text-primary ${node.is_dir ? 'font-medium' : ''}`}>{displayName}</span>
+
+          {/* Right side: Hide button + Chevron */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleHidden(node.path);
+              }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded"
+              title={isHidden ? "Show" : "Hide"}
+            >
+              {isHidden ? (
+                <Eye className="w-3 h-3 text-zinc-400" />
+              ) : (
+                <EyeOff className="w-3 h-3 text-zinc-400" />
+              )}
+            </button>
+            {node.is_dir && hasChildren && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleDir(node.path);
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                }}
+                className="text-text-dim hover:text-text-secondary py-1.5 pl-2 pr-4 -mr-2.5 transition-colors"
+              >
+                <ChevronRight className={`w-3 h-3 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} />
+              </button>
             )}
-            <span className="truncate">{displayName}</span>
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleHidden(node.path);
-            }}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded"
-            title={isHidden ? "Show" : "Hide"}
-          >
-            <EyeOff className="w-3 h-3 text-zinc-400" />
-          </button>
         </div>
-        {node.is_dir && isExpanded && node.children && (
-          <div>
-            {node.children.map(child => renderNode(child, depth + 1))}
+        {node.is_dir && node.children && (
+          <div
+            className={`overflow-hidden transition-all duration-150 ease-out ${
+              isExpanded ? 'mt-1 max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+            }`}
+          >
+            <div className="flex flex-col gap-1">
+              {node.children.map(child => renderNode(child, depth + 1))}
+            </div>
           </div>
         )}
       </div>
@@ -689,40 +705,72 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
   );
 
   return (
-    <div className="flex flex-col h-full">
-      <SimpleBar className="custom-scrollbar" autoHide={false} style={{ height: 'calc(100% - 40px)' }}>
-        <div className="space-y-1">
+    <div className="flex flex-col h-full relative">
+      {/* Panel Title */}
+      <div className="flex items-center gap-2 mb-4 justify-between">
+        <div className="flex items-center gap-2">
+          <FolderTree className="w-4 h-4 text-text-secondary" />
+          <h3 className="text-section-title font-semibold text-text-primary">Project Structure</h3>
+        </div>
+        <button
+          onClick={onToggleHidden}
+          className="p-1 hover:bg-hover-bg rounded transition-colors group"
+          title={showHidden ? "Hide hidden items" : "Show hidden items"}
+        >
+          {showHidden ? (
+            <Eye className="w-4 h-4 text-text-secondary group-hover:text-text-secondary" />
+          ) : (
+            <EyeOff className="w-4 h-4 text-text-muted group-hover:text-text-secondary" />
+          )}
+        </button>
+      </div>
+
+      <SimpleBar className="custom-scrollbar" autoHide={false} style={{ height: 'calc(100% - 40px)', paddingBottom: '45px' }}>
+        <div className="flex flex-col">
         {tree.length > 0 ? (
           <>
             {/* Software folders first */}
-            {softwareFolders.map(node => renderNode(node))}
+            <div className="flex flex-col gap-1.5">
+              {softwareFolders.map(node => renderNode(node))}
+            </div>
 
             {/* Separator between software and global folders */}
             {softwareFolders.length > 0 && globalFolders.length > 0 && (
-              <div className="my-2 mx-12 border-t border-zinc-800" />
+              <div className="my-2 mx-12 border-t border-border-secondary" />
             )}
 
             {/* Global folders */}
-            {globalFolders.map(node => renderNode(node))}
+            <div className="flex flex-col gap-1">
+              {globalFolders.map(node => renderNode(node))}
+            </div>
           </>
         ) : (
-          <p className="text-xs text-zinc-500">No files found</p>
+          <p className="text-xs text-text-muted">No files found</p>
         )}
         </div>
       </SimpleBar>
-      <div className="mt-4 pt-3 border-t border-zinc-800 text-xs text-zinc-500">
-        {loadingSize ? (
-          <span style={{ marginBottom: '-2px' }}>Calculating size...</span>
-        ) : directorySize !== null ? (
-          <span style={{ marginBottom: '-8px' }}>Project size: {formatSize(directorySize)}</span>
-        ) : null}
+
+      {/* Project Size Info Bar - Absolute positioned */}
+      <div className="absolute bottom-0 left-0 right-0 pt-2.5">
+        <div className="bg-card-bg border border-border-primary rounded-button px-4 py-2">
+          <div className="text-xs">
+            <span className="text-text-muted">Project size:</span>{' '}
+            {loadingSize ? (
+              <span className="text-text-secondary">Calculating...</span>
+            ) : directorySize !== null ? (
+              <span className="text-text-primary font-medium">{formatSize(directorySize)}</span>
+            ) : (
+              <span className="text-text-secondary">Unknown</span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Context Menu */}
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
+          className="fixed bg-card-bg border border-border-secondary rounded-button shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
           style={{
             top: Math.min(contextMenu.y, window.innerHeight - 300),
             left: Math.min(contextMenu.x, window.innerWidth - 200)
@@ -730,12 +778,12 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
         >
           <button
             onClick={() => copyPath(contextMenu.node.path)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+            className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg flex items-center gap-2"
           >
             {copiedPath === contextMenu.node.path ? (
               <>
-                <Check className="w-4 h-4 text-green-500" />
-                <span className="text-green-500">Path Copied</span>
+                <Check className="w-4 h-4 text-status-active" />
+                <span className="text-status-active">Path Copied</span>
               </>
             ) : (
               <>
@@ -748,17 +796,17 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
             <>
               <button
                 onClick={() => openInExplorer(contextMenu.node.path)}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+                className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg flex items-center gap-2"
               >
                 <FolderOpen className="w-4 h-4" />
                 Open in Explorer
               </button>
               {!getSoftwareFolderIcon(contextMenu.node.name) && (
                 <>
-                  <div className="border-t border-zinc-700 my-1" />
+                  <div className="border-t border-border-primary my-1" />
                   <button
                     onClick={() => setShowColorPicker(!showColorPicker)}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+                    className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg flex items-center gap-2"
                   >
                     <Palette className="w-4 h-4" />
                     Set Color
@@ -772,7 +820,7 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
                       <button
                         key={color.value}
                         onClick={() => setFolderColor(contextMenu.node.path, color.value)}
-                        className="w-8 h-8 rounded border-2 border-zinc-600 hover:border-white transition-colors"
+                        className="w-8 h-8 rounded border-2 border-border-secondary hover:border-text-primary transition-colors"
                         style={{ backgroundColor: color.value }}
                         title={color.name}
                       />
@@ -781,7 +829,7 @@ export function TreeView({ project, showHidden }: TreeViewProps) {
                   {folderColors.has(contextMenu.node.path) && (
                     <button
                       onClick={() => removeFolderColor(contextMenu.node.path)}
-                      className="w-full px-2 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 rounded transition-colors"
+                      className="w-full px-2 py-1 text-xs bg-hover-bg hover:bg-border-hover rounded transition-colors text-text-primary"
                     >
                       Remove Color
                     </button>
