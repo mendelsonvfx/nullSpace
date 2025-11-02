@@ -12,6 +12,7 @@
   "dependencies": {
     "@iconify/react": "^6.0.2",
     "@mdxeditor/editor": "^3.47.0",
+    "@tabler/icons-react": "^3.35.0",
     "@tauri-apps/api": "1.5",
     "@tauri-apps/plugin-opener": "^2",
     "jspdf": "^3.0.3",

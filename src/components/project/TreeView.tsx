@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Icon } from '@iconify/react';
+import {
+  IconFile,
+  IconChevronRight,
+  IconEye,
+  IconEyeOff,
+  IconCopy,
+  IconCircleCheck,
+  IconFolderOpen,
+  IconPalette,
+  IconFolder
+} from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api';
 import { listen } from '@tauri-apps/api/event';
 import { useProjectStore } from '../../store/projectStore';
@@ -632,7 +642,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
               {fileIcon ? (
                 <SoftwareIcon name={fileIcon} className="w-4 h-4 flex-shrink-0" />
               ) : (
-                <Icon icon="solar:document-text-linear" className="w-4 h-4 text-text-secondary flex-shrink-0" />
+                <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
               )}
             </div>
           )}
@@ -651,9 +661,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
               title={isHidden ? "Show" : "Hide"}
             >
               {isHidden ? (
-                <Icon icon="solar:eye-linear" className="w-3 h-3 text-zinc-400" />
+                <IconEye className="w-3 h-3 text-zinc-400" stroke={1.5} />
               ) : (
-                <Icon icon="solar:eye-closed-linear" className="w-3 h-3 text-zinc-400" />
+                <IconEyeOff className="w-3 h-3 text-zinc-400" stroke={1.5} />
               )}
             </button>
             {node.is_dir && hasChildren && (
@@ -667,7 +677,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
                 }}
                 className="text-text-dim hover:text-text-secondary py-1.5 pl-2 pr-4 -mr-2.5 transition-colors"
               >
-                <Icon icon="solar:alt-arrow-right-linear" className={`w-3 h-3 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} />
+                <IconChevronRight className={`w-3 h-3 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} stroke={1.5} />
               </button>
             )}
           </div>
@@ -709,7 +719,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       {/* Panel Title */}
       <div className="flex items-center gap-2 mb-4 justify-between">
         <div className="flex items-center gap-2">
-          <Icon icon="solar:folder-2-linear" className="w-4 h-4 text-text-secondary" />
+          <IconFolder className="w-4 h-4 text-text-secondary" stroke={1.5} />
           <h3 className="text-section-title font-semibold text-text-primary">Project Structure</h3>
         </div>
         <button
@@ -718,9 +728,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           title={showHidden ? "Hide hidden items" : "Show hidden items"}
         >
           {showHidden ? (
-            <Icon icon="solar:eye-linear" className="w-4 h-4 text-text-secondary group-hover:text-text-secondary" />
+            <IconEye className="w-4 h-4 text-text-secondary group-hover:text-text-secondary" stroke={1.5} />
           ) : (
-            <Icon icon="solar:eye-closed-linear" className="w-4 h-4 text-text-muted group-hover:text-text-secondary" />
+            <IconEyeOff className="w-4 h-4 text-text-muted group-hover:text-text-secondary" stroke={1.5} />
           )}
         </button>
       </div>
@@ -782,12 +792,12 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           >
             {copiedPath === contextMenu.node.path ? (
               <>
-                <Icon icon="solar:check-circle-bold" className="w-4 h-4 text-status-active" />
+                <IconCircleCheck className="w-4 h-4 text-status-active" stroke={1.5} />
                 <span className="text-status-active">Path Copied</span>
               </>
             ) : (
               <>
-                <Icon icon="solar:copy-linear" className="w-4 h-4" />
+                <IconCopy className="w-4 h-4" stroke={1.5} />
                 Copy Path
               </>
             )}
@@ -798,7 +808,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
                 onClick={() => openInExplorer(contextMenu.node.path)}
                 className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg flex items-center gap-2"
               >
-                <Icon icon="solar:folder-open-linear" className="w-4 h-4" />
+                <IconFolderOpen className="w-4 h-4" stroke={1.5} />
                 Open in Explorer
               </button>
               {!getSoftwareFolderIcon(contextMenu.node.name) && (
@@ -808,7 +818,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
                     onClick={() => setShowColorPicker(!showColorPicker)}
                     className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg flex items-center gap-2"
                   >
-                    <Icon icon="solar:pallete-linear" className="w-4 h-4" />
+                    <IconPalette className="w-4 h-4" stroke={1.5} />
                     Set Color
                   </button>
                 </>
