@@ -387,10 +387,14 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 setIsFavoriteAnimating(true);
                 setTimeout(() => setIsFavoriteAnimating(false), 500);
               }}
-              className={`w-9 h-9 bg-card-bg border border-border-primary rounded-button flex items-center justify-center hover:bg-hover-bg hover:border-border-secondary transition-all ${isFavoriteAnimating ? 'animate-favorite-star-bounce' : ''}`}
+              className="w-9 h-9 bg-card-bg border border-border-primary rounded-button flex items-center justify-center hover:bg-hover-bg hover:border-border-secondary transition-all"
               title={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
             >
-              {project.isFavorite ? <IconStarFilled stroke={1.5} className="w-[18px] h-[18px] text-yellow-400 transition-all" /> : <IconStar stroke={1.5} className="w-[18px] h-[18px] text-text-secondary transition-all" />}
+              {project.isFavorite ? (
+                <IconStarFilled stroke={1.5} className={`w-[18px] h-[18px] text-yellow-400 transition-all ${isFavoriteAnimating ? 'animate-favorite-star-bounce' : ''}`} />
+              ) : (
+                <IconStar stroke={1.5} className={`w-[18px] h-[18px] text-text-secondary transition-all ${isFavoriteAnimating ? 'animate-favorite-star-bounce' : ''}`} />
+              )}
             </button>
             <button
               onClick={() => setShowProjectSettings(true)}
