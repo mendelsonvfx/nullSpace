@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Settings, Star, FolderOpen, CreditCard, Loader2, Check, Pencil, Clock, Plus, Trash2 } from 'lucide-react';
+import { Icon } from '@iconify/react';
 import { invoke } from '@tauri-apps/api';
 import { useProjectStore } from '../../store/projectStore';
 import { LinkItem, LinkInputForm, NotesSection } from '../shared';
@@ -390,21 +390,21 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               className={`w-9 h-9 bg-card-bg border border-border-primary rounded-button flex items-center justify-center hover:bg-hover-bg hover:border-border-secondary transition-all ${isFavoriteAnimating ? 'animate-favorite-star-bounce' : ''}`}
               title={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
             >
-              <Star className={`w-[18px] h-[18px] transition-all ${project.isFavorite ? 'text-yellow-400 fill-yellow-400' : 'text-text-secondary'}`} />
+              <Icon icon={project.isFavorite ? 'solar:star-bold' : 'solar:star-linear'} className={`w-[18px] h-[18px] transition-all ${project.isFavorite ? 'text-yellow-400' : 'text-text-secondary'}`} />
             </button>
             <button
               onClick={() => setShowProjectSettings(true)}
               className="w-9 h-9 bg-card-bg border border-border-primary rounded-button flex items-center justify-center hover:bg-hover-bg hover:border-border-secondary transition-all"
               title="Project Settings"
             >
-              <Settings className="w-[18px] h-[18px] text-text-secondary animate-settings-icon" />
+              <Icon icon="solar:settings-linear" className="w-[18px] h-[18px] text-text-secondary animate-settings-icon" />
             </button>
             <button
               onClick={onClose}
               className="w-9 h-9 bg-card-bg border border-border-primary rounded-button flex items-center justify-center hover:bg-hover-bg hover:border-border-secondary transition-all group"
               title="Close"
             >
-              <X className="w-[18px] h-[18px] text-text-secondary group-hover:text-red-500 transition-colors" />
+              <Icon icon="solar:close-circle-linear" className="w-[18px] h-[18px] text-text-secondary group-hover:text-red-500 transition-colors" />
             </button>
             </div>
           </div>
@@ -537,16 +537,17 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   } ${animatingShotId === shot.id ? 'animate-shot-complete-glow' : ''}`}
                 >
                   <span>{shot.name}</span>
-                  <Check
+                  <Icon
+                    icon="solar:check-circle-bold"
                     className={`text-status-active transition-all duration-300 ${
                       shot.completed ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
                     }`}
-                    strokeWidth={3}
                     style={{
                       overflow: 'hidden'
                     }}
                   />
-                  <X
+                  <Icon
+                    icon="solar:close-circle-linear"
                     onClick={(e) => {
                       e.stopPropagation();
                       const { removeShot } = useProjectStore.getState();
@@ -557,7 +558,6 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     } ${
                       isShotEditMode ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
                     }`}
-                    strokeWidth={2}
                     style={{
                       overflow: 'hidden'
                     }}
@@ -581,7 +581,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               }`}
               title={isShotEditMode ? 'Done editing' : 'Edit shots'}
             >
-              <Pencil className="w-4 h-4" />
+              <Icon icon="solar:pen-linear" className="w-4 h-4" />
             </button>
             </div>
           </div>
@@ -600,7 +600,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
             >
               <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-blue-500/20 via-blue-600/10 to-blue-700/10">
-                <FolderOpen className="w-5 h-5 text-blue-400 pointer-events-none" />
+                <Icon icon="solar:folder-open-linear" className="w-5 h-5 text-blue-400 pointer-events-none" />
               </div>
               <span className="text-sm font-medium text-text-primary pointer-events-none">Open Folder</span>
             </button>
@@ -609,7 +609,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
             >
               <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-green-500/20 via-green-600/10 to-green-700/10">
-                <CreditCard className="w-5 h-5 text-green-400 pointer-events-none" />
+                <Icon icon="solar:card-linear" className="w-5 h-5 text-green-400 pointer-events-none" />
               </div>
               <span className="text-sm font-medium text-text-primary pointer-events-none">Payment</span>
             </button>
@@ -619,7 +619,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
               >
                 <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-yellow-500/20 via-yellow-600/10 to-yellow-700/10">
-                  <Clock className="w-5 h-5 text-yellow-400 pointer-events-none" />
+                  <Icon icon="solar:clock-circle-linear" className="w-5 h-5 text-yellow-400 pointer-events-none" />
                 </div>
                 <span className="text-sm font-medium text-text-primary pointer-events-none">Add Time</span>
               </button>
@@ -748,10 +748,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
                   {/* Status indicator */}
                   {!activeEntry && status === 'launching' && (
-                    <Loader2 className="w-5 h-5 text-accent animate-spin" />
+                    <Icon icon="solar:refresh-circle-linear" className="w-5 h-5 text-accent animate-spin" />
                   )}
                   {!activeEntry && status === 'success' && (
-                    <Check className="w-5 h-5 text-green-500 animate-in fade-in zoom-in duration-300" />
+                    <Icon icon="solar:check-circle-bold" className="w-5 h-5 text-green-500 animate-in fade-in zoom-in duration-300" />
                   )}
                 </button>
               );
@@ -824,7 +824,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             : 'w-0 opacity-0 group-hover:w-5 group-hover:opacity-100'
                         } overflow-hidden`}
                       >
-                        <Check className={`w-3 h-3 flex-shrink-0 ${
+                        <Icon icon="solar:check-circle-bold" className={`w-3 h-3 flex-shrink-0 ${
                           todo.completed ? 'text-zinc-400' : 'text-zinc-600'
                         }`} />
                       </button>
@@ -849,7 +849,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                         }}
                         className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded-lg transition-opacity"
                       >
-                        <X className="w-3.5 h-3.5 text-text-muted" />
+                        <Icon icon="solar:close-circle-linear" className="w-3.5 h-3.5 text-text-muted" />
                       </button>
                     </div>
                   ))}
@@ -921,7 +921,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Payment Settings</h2>
               <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-                <X className="w-5 h-5 text-zinc-400" />
+                <Icon icon="solar:close-circle-linear" className="w-5 h-5 text-zinc-400" />
               </button>
             </div>
 
@@ -1034,7 +1034,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-semibold">Project Settings</h2>
               <button onClick={() => setShowProjectSettings(false)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
-                <X className="w-5 h-5 close-button-red" />
+                <Icon icon="solar:close-circle-linear" className="w-5 h-5 close-button-red" />
               </button>
             </div>
 
@@ -1085,7 +1085,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                         }}
                         className="absolute top-1 right-1 w-6 h-6 bg-red-600 hover:bg-red-700 rounded transition-colors text-sm flex items-center justify-center"
                       >
-                        <X className="w-3 h-3" />
+                        <Icon icon="solar:close-circle-linear" className="w-3 h-3" />
                       </button>
                     </div>
                   ) : (
@@ -1109,7 +1109,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       }}
                       className="h-[60px] w-full bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm border border-zinc-700 flex items-center justify-center"
                     >
-                      <Plus className="w-5 h-5" />
+                      <Icon icon="solar:add-circle-linear" className="w-5 h-5" />
                     </button>
                   )}
                 </div>
@@ -1502,7 +1502,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           <SoftwareIcon name={sw} className="w-3.5 h-3.5" />
                           {sw}
                         </div>
-                        <Check
+                        <Icon
+                          icon="solar:check-circle-bold"
                           className={`w-3.5 h-3.5 text-green-500 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out ${
                             isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-50'
                           }`}
@@ -1525,7 +1526,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 }}
                 className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
               >
-                <Trash2 className="w-4 h-4" />
+                <Icon icon="solar:trash-bin-trash-linear" className="w-4 h-4" />
                 Delete Project
               </button>
 
