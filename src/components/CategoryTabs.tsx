@@ -1,4 +1,4 @@
-import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { IconPlus, IconTrash, IconPencil } from '@tabler/icons-react';
 import { useState, useEffect, useRef } from 'react';
 import { AddCategoryModal } from './modals/AddCategoryModal';
 import { RenameCategoryModal } from './modals/RenameCategoryModal';
@@ -126,7 +126,7 @@ export function CategoryTabs({
   const activeColor = darkenColor(accentColor, 40);
 
   return (
-    <div className="flex flex-col h-full bg-zinc-900 border-r border-zinc-800 relative" style={{ width: '40px' }}>
+    <div className="flex flex-col h-full bg-sidebar-bg border-r border-border-primary relative" style={{ width: '40px' }}>
       {/* Scrollable categories container */}
       <SimpleBar
         scrollableNodeProps={{
@@ -142,7 +142,7 @@ export function CategoryTabs({
             <button
               onClick={() => onSelectCategory(category)}
               onContextMenu={(e) => handleContextMenu(e, category)}
-              className="w-full h-32 flex items-center justify-center relative overflow-hidden transition-all duration-200 hover:bg-zinc-800/50"
+              className="w-full h-32 flex items-center justify-center relative overflow-hidden transition-all duration-200 hover:bg-hover-bg"
               title={category}
             >
               {/* Полоса слева для активной категории */}
@@ -156,12 +156,12 @@ export function CategoryTabs({
                 />
               )}
               <span
-                className="absolute inset-0 flex items-center justify-center text-xs font-medium tracking-wide"
+                className="absolute inset-0 flex items-center justify-center text-xs font-medium tracking-wide transition-colors"
                 style={{
                   writingMode: 'vertical-rl',
                   textOrientation: 'mixed',
                   transform: 'rotate(180deg)',
-                  color: selectedCategory === category ? '#ffffff' : '#71717a'
+                  color: selectedCategory === category ? '#e4e4e7' : '#71717a'
                 }}
               >
                 {category}
@@ -176,11 +176,11 @@ export function CategoryTabs({
         <div className="absolute bottom-0 left-0 right-0 z-50">
           <button
             onClick={() => setIsAdding(true)}
-            className="w-full flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 transition-colors duration-200 border-t border-zinc-800"
+            className="w-full flex items-center justify-center bg-sidebar-bg hover:bg-hover-bg transition-colors duration-200 border-t border-border-primary"
             style={{ height: '93px' }}
             title="Add category"
           >
-            <Plus size={14} className="text-zinc-500" />
+            <IconPlus stroke={1.5} className="w-3.5 h-3.5 text-text-muted" />
           </button>
         </div>
       )}
@@ -202,7 +202,7 @@ export function CategoryTabs({
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-[100] min-w-[180px] animate-context-menu"
+          className="fixed bg-card-bg border border-border-secondary rounded-lg shadow-lg py-1 z-[100] min-w-[180px] animate-context-menu"
           style={{
             top: contextMenu.y,
             left: contextMenu.x
@@ -210,16 +210,16 @@ export function CategoryTabs({
         >
           <button
             onClick={handleRename}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 transition-colors flex items-center gap-2"
+            className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg transition-colors flex items-center gap-2"
           >
-            <Edit2 className="w-4 h-4" />
+            <IconPencil stroke={1.5} className="w-4 h-4" />
             Rename
           </button>
           <button
             onClick={handleDelete}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 text-red-400 hover:text-red-300 transition-colors flex items-center gap-2"
+            className="w-full px-4 py-2 text-left text-sm hover:bg-red-900/50 text-red-400 hover:text-red-300 transition-colors flex items-center gap-2"
           >
-            <Trash2 className="w-4 h-4" />
+            <IconTrash stroke={1.5} className="w-4 h-4" />
             Delete
           </button>
         </div>
