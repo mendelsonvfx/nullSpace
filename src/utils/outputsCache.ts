@@ -199,7 +199,7 @@ class OutputsCache {
   }
 
   // Get output state for a project
-  getOutputState(projectPath: string): { selectedSoftware: string; selectedOutputType: 'preview' | 'final' } | null {
+  getOutputState(projectPath: string): { selectedSoftware: SoftwareName; selectedOutputType: 'preview' | 'final' } | null {
     const entry = this.outputStateCache.get(projectPath);
     if (!entry) {
       return null;

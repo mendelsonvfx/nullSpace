@@ -44,7 +44,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   };
 
   // Initialize with empty values - will be set in useLayoutEffect before paint
-  const [selectedSoftware, setSelectedSoftware] = useState<string>('');
+  const [selectedSoftware, setSelectedSoftware] = useState<SoftwareName | ''>('');
   const [selectedOutputType, setSelectedOutputType] = useState<'preview' | 'final'>('preview');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; output: OutputFile } | null>(null);
   const [groupContextMenu, setGroupContextMenu] = useState<{ x: number; y: number; groupPath: string } | null>(null);
@@ -66,15 +66,17 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   };
 
   // Save selected software and persist to cache
-  const updateSelectedSoftware = (software: string) => {
+  const updateSelectedSoftware = (software: SoftwareName) => {
     setSelectedSoftware(software);
-    outputsCache.setOutputState(getCacheKey(), software as SoftwareName, selectedOutputType);
+    outputsCache.setOutputState(getCacheKey(), software, selectedOutputType);
   };
 
   // Save selected output type and persist to cache
   const updateSelectedOutputType = (type: 'preview' | 'final') => {
     setSelectedOutputType(type);
-    outputsCache.setOutputState(getCacheKey(), selectedSoftware as SoftwareName, type);
+    if (selectedSoftware) {
+      outputsCache.setOutputState(getCacheKey(), selectedSoftware, type);
+    }
   };
 
   // Get scene and shot filter for output scanning
@@ -228,12 +230,12 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   // Validate selected software matches available outputs
   useEffect(() => {
     if (availableSoftware.length > 0) {
-      const isValid = availableSoftware.includes(selectedSoftware);
+      const isValid = selectedSoftware ? availableSoftware.includes(selectedSoftware) : false;
       if (!selectedSoftware || !isValid) {
         isRestoringStateRef.current = true; // Mark as programmatic change
         const firstSoftware = availableSoftware[0];
         setSelectedSoftware(firstSoftware);
-        outputsCache.setOutputState(getCacheKey(), firstSoftware as SoftwareName, selectedOutputType);
+        outputsCache.setOutputState(getCacheKey(), firstSoftware, selectedOutputType);
         setTimeout(() => {
           isRestoringStateRef.current = false;
         }, 0);
