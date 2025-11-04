@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { SoftwareIcon } from '../SoftwareIcon';
 import type { SoftwareName } from '../../types/project';
-import { Film, Eye, FolderOpen, Copy, ChevronDown } from 'lucide-react';
+import { Film, Eye, FolderOpen, Copy, ChevronDown, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { outputsCache } from '../../utils/outputsCache';
 
@@ -35,6 +35,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   const [outputs, setOutputs] = useState<OutputFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Generate unique cache key for project + scene + shot combination
   const getCacheKey = () => {
@@ -178,8 +179,17 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
       });
     });
 
+    const handleRefreshAll = () => {
+      console.log('Refresh all event received - reloading outputs');
+      outputsCache.invalidate(project.path);
+      loadOutputs(true);
+    };
+
+    window.addEventListener('refresh-all', handleRefreshAll);
+
     return () => {
       if (unlisten) unlisten();
+      window.removeEventListener('refresh-all', handleRefreshAll);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.path]);
@@ -564,15 +574,29 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
     );
   }
 
+  const handleRefreshAll = async () => {
+    setIsRefreshing(true);
+
+    // Invalidate cache and trigger reload
+    outputsCache.invalidate(project.path);
+    await loadOutputs(true);
+
+    // Trigger global refresh event for TreeView and VersionsOverview
+    window.dispatchEvent(new CustomEvent('refresh-all'));
+
+    // Stop animation after rotation completes (300ms)
+    setTimeout(() => setIsRefreshing(false), 300);
+  };
+
   return (
     <div className="mb-6">
       <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
 
       {/* Filters */}
-      <div className="flex gap-2 mb-3">
+      <div className="flex gap-2 mb-3 items-stretch">
         {/* Software Filter - only show if more than one software */}
         {availableSoftware.length > 1 && (
-          <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
+          <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1 flex-shrink-0">
             {availableSoftware.map(software => (
               <button
                 key={software}
@@ -621,6 +645,20 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
             Final
           </button>
         </div>
+        <button
+          onClick={handleRefreshAll}
+          className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors ml-auto group self-center"
+          title="Refresh all (Tree, Versions, Outputs)"
+          disabled={isRefreshing}
+        >
+          <RefreshCw
+            className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
+            style={{
+              transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+            }}
+          />
+        </button>
       </div>
 
       {/* Outputs Grid */}

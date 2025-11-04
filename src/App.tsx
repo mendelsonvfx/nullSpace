@@ -1493,16 +1493,16 @@ function App() {
                                   }
 
                                   return (
-                                    <span className={`text-badge px-2 py-1 rounded-button whitespace-nowrap font-medium ${
+                                    <span className={`text-badge px-2 py-1 rounded-button whitespace-nowrap font-medium border ${
                                       daysLeft < 0
-                                        ? 'bg-red-900 text-red-400'
+                                        ? 'bg-red-900 text-red-400 border-red-900'
                                         : daysLeft === 0
-                                        ? 'bg-red-900 text-red-400'
+                                        ? 'bg-red-900 text-red-400 border-red-900'
                                         : daysLeft < 5
-                                        ? 'bg-red-900 text-red-400'
+                                        ? 'bg-red-900 text-red-400 border-red-900'
                                         : daysLeft < 10
-                                        ? 'bg-yellow-900 text-yellow-400'
-                                        : 'bg-hover-bg text-text-muted'
+                                        ? 'bg-yellow-900 text-yellow-400 border-yellow-900'
+                                        : 'bg-hover-bg text-text-muted border-border-secondary'
                                     }`}>
                                       {displayText}
                                     </span>

@@ -53,6 +53,7 @@ export interface Scene {
   notes: Note[];
   browserTabs: BrowserTab[];
   links: Link[];
+  wip?: boolean; // Work in progress status
   completed?: boolean;
 }
 
@@ -65,6 +66,7 @@ export interface Shot {
   notes: Note[];
   browserTabs: BrowserTab[];
   links: Link[];
+  wip?: boolean; // Work in progress status
   completed?: boolean;
 }
 

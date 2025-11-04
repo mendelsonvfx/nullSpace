@@ -5,7 +5,7 @@ import { SoftwareIcon } from '../SoftwareIcon';
 import { versionsCache } from '../../utils/versionsCache';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
-import { FolderOpen, Copy } from 'lucide-react';
+import { FolderOpen, Copy, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import type { SoftwareName } from '../../types/project';
 
@@ -31,6 +31,7 @@ export function VersionsOverview({ project, currentScene, currentShot }: Version
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; version: ProjectVersion } | null>(null);
   const [showShotSubmenu, setShowShotSubmenu] = useState(false);
   const [submenuAction, setSubmenuAction] = useState<'move' | 'copy' | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadingTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
@@ -164,8 +165,18 @@ export function VersionsOverview({ project, currentScene, currentShot }: Version
       }
     };
 
+    const handleRefreshAll = () => {
+      console.log('Refresh all event received - reloading versions');
+      versionsCache.invalidate(project.path);
+      loadVersions(false, true);
+    };
+
     window.addEventListener('version-created', handleVersionUpdate);
-    return () => window.removeEventListener('version-created', handleVersionUpdate);
+    window.addEventListener('refresh-all', handleRefreshAll);
+    return () => {
+      window.removeEventListener('version-created', handleVersionUpdate);
+      window.removeEventListener('refresh-all', handleRefreshAll);
+    };
   }, [project.path]);
 
   // Close context menu when clicking outside
@@ -196,7 +207,13 @@ export function VersionsOverview({ project, currentScene, currentShot }: Version
     }
   }, [activeMenu]);
 
-  // Filter versions by scene and shot, then sort: versioned files first (by date), then non-versioned files (by date)
+  // Extract version number from filename (e.g., "file_v001.blend" → 1)
+  const extractVersionNumber = (filename: string): number => {
+    const match = filename.match(/_v(\d+)/i);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  // Filter versions by scene and shot, then sort: versioned files first (by version number), then non-versioned files (by date)
   const versions = useMemo(() => {
     let filtered = allVersions;
 
@@ -225,13 +242,21 @@ export function VersionsOverview({ project, currentScene, currentShot }: Version
       });
     }
 
-    // Sort: versioned files first (by date desc), then non-versioned files (by date desc)
+    // Sort: versioned files first (by version number DESC - newest to oldest), then non-versioned files (by date desc)
     const sorted = [...filtered].sort((a, b) => {
       // First, sort by versioned status (versioned files first)
       if (a.is_versioned !== b.is_versioned) {
         return a.is_versioned ? -1 : 1;
       }
-      // Then sort by creation date (newest first)
+
+      // For versioned files, sort by version number (highest first)
+      if (a.is_versioned && b.is_versioned) {
+        const versionA = extractVersionNumber(a.name);
+        const versionB = extractVersionNumber(b.name);
+        return versionB - versionA; // Descending order: v003, v002, v001
+      }
+
+      // For non-versioned files, sort by creation date (newest first)
       return b.created_at - a.created_at;
     });
 
@@ -461,32 +486,49 @@ export function VersionsOverview({ project, currentScene, currentShot }: Version
       return true;
     });
 
+  const handleRefreshAll = async () => {
+    setIsRefreshing(true);
+
+    // Invalidate all caches and trigger reload
+    versionsCache.invalidate(project.path);
+    await loadVersions(false, true);
+
+    // Trigger global refresh event for TreeView and OutputOverview
+    window.dispatchEvent(new CustomEvent('refresh-all'));
+
+    // Stop animation after rotation completes (300ms)
+    setTimeout(() => setIsRefreshing(false), 300);
+  };
+
   return (
     <div className="mb-6 overflow-hidden">
       <h3 className="text-sm font-medium text-text-secondary mb-3">Versions Overview</h3>
 
       {/* Software Tabs */}
       {uniqueSoftware.length > 0 && (
-        <div className="flex gap-2 mb-3">
-          <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1 overflow-x-auto">
-            {uniqueSoftware.map((software) => (
-              <button
-                key={software}
-                onClick={() => {
-                  setSelectedSoftware(software);
-                  setShowOnlyUnversioned(false);
-                }}
-                className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                  selectedSoftware === software && !showOnlyUnversioned
-                    ? 'bg-zinc-700 text-white'
-                    : 'text-text-secondary hover:text-white'
-                }`}
-              >
-                <SoftwareIcon name={software} className="w-3.5 h-3.5" />
-                {software}
-              </button>
-            ))}
-          </div>
+        <div className="flex gap-2 mb-3 items-stretch">
+          {/* Software Filter - only show if more than one software */}
+          {uniqueSoftware.length > 1 && (
+            <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1 flex-shrink-0">
+              {uniqueSoftware.map((software) => (
+                <button
+                  key={software}
+                  onClick={() => {
+                    setSelectedSoftware(software);
+                    setShowOnlyUnversioned(false);
+                  }}
+                  className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                    selectedSoftware === software && !showOnlyUnversioned
+                      ? 'bg-zinc-700 text-white'
+                      : 'text-text-secondary hover:text-white'
+                  }`}
+                >
+                  <SoftwareIcon name={software} className="w-3.5 h-3.5" />
+                  {software}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
             <button
               onClick={() => {
@@ -515,6 +557,20 @@ export function VersionsOverview({ project, currentScene, currentShot }: Version
               Other
             </button>
           </div>
+          <button
+            onClick={handleRefreshAll}
+            className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors ml-auto group self-center"
+            title="Refresh all (Tree, Versions, Outputs)"
+            disabled={isRefreshing}
+          >
+            <RefreshCw
+              className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
+              style={{
+                transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+              }}
+            />
+          </button>
         </div>
       )}
 

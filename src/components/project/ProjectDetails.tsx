@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconPencil, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus } from '@tabler/icons-react';
+import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconPencil, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconProgress } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api';
 import { useProjectStore } from '../../store/projectStore';
 import { LinkItem, LinkInputForm, NotesSection } from '../shared';
@@ -504,9 +504,11 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   onContextMenu={(e) => {
                     e.preventDefault();
                     const { toggleSceneCompleted } = useProjectStore.getState();
-                    const wasCompleted = scene.completed;
+                    const isGoingToWip = !scene.wip && !scene.completed;
+                    const isGoingToCompleted = scene.wip && !scene.completed;
                     toggleSceneCompleted(project.id, scene.id);
-                    if (!wasCompleted) {
+                    // Animate only when going to WIP or Completed
+                    if (isGoingToWip || isGoingToCompleted) {
                       setAnimatingSceneId(scene.id);
                       setTimeout(() => setAnimatingSceneId(null), 600);
                     }
@@ -516,10 +518,19 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       ? 'bg-hover-bg border border-accent text-white'
                       : scene.completed
                       ? 'bg-card-bg border border-status-active/30 text-text-muted hover:bg-hover-bg'
+                      : scene.wip
+                      ? 'bg-card-bg border border-yellow-500/30 text-text-muted hover:bg-hover-bg'
                       : 'bg-card-bg border border-border-primary text-text-muted hover:bg-hover-bg hover:border-border-secondary'
                   } ${animatingSceneId === scene.id ? 'animate-shot-complete-glow' : ''}`}
                 >
                   <span>{scene.name}</span>
+                  <IconProgress
+                    stroke={1.5}
+                    className={`text-yellow-500 transition-all duration-300 ${
+                      scene.wip ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
+                    }`}
+                    style={{ overflow: 'hidden' }}
+                  />
                   <IconCheck
                     stroke={1.5}
                     className={`text-status-active transition-all duration-300 ${
@@ -676,10 +687,11 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   onContextMenu={(e) => {
                     e.preventDefault();
                     const { toggleShotCompleted } = useProjectStore.getState();
-                    const wasCompleted = shot.completed;
+                    const isGoingToWip = !shot.wip && !shot.completed;
+                    const isGoingToCompleted = shot.wip && !shot.completed;
                     toggleShotCompleted(project.id, shot.id);
-                    // Only animate when marking as completed, not when uncompleting
-                    if (!wasCompleted) {
+                    // Animate only when going to WIP or Completed
+                    if (isGoingToWip || isGoingToCompleted) {
                       setAnimatingShotId(shot.id);
                       setTimeout(() => setAnimatingShotId(null), 600);
                     }
@@ -689,10 +701,19 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       ? 'bg-hover-bg border border-accent text-white'
                       : shot.completed
                       ? 'bg-card-bg border border-status-active/30 text-text-muted hover:bg-hover-bg'
+                      : shot.wip
+                      ? 'bg-card-bg border border-yellow-500/30 text-text-muted hover:bg-hover-bg'
                       : 'bg-card-bg border border-border-primary text-text-muted hover:bg-hover-bg hover:border-border-secondary'
                   } ${animatingShotId === shot.id ? 'animate-shot-complete-glow' : ''}`}
                 >
                   <span>{shot.name}</span>
+                  <IconProgress
+                    stroke={1.5}
+                    className={`text-yellow-500 transition-all duration-300 ${
+                      shot.wip ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
+                    }`}
+                    style={{ overflow: 'hidden' }}
+                  />
                   <IconCheck
                     stroke={1.5}
                     className={`text-status-active transition-all duration-300 ${

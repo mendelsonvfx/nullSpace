@@ -1461,7 +1461,8 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                         // Determine software by extension
                         let extension = file_path.extension()
                             .and_then(|e| e.to_str())
-                            .unwrap_or("");
+                            .unwrap_or("")
+                            .to_lowercase();
 
                         // Skip .blend1 backup files
                         if extension == "blend1" {
@@ -1469,7 +1470,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                         }
 
                         // Check if file matches known software extensions
-                        let software_name = match extension {
+                        let software_name = match extension.as_str() {
                             "blend" => Some("Blender"),
                             "hip" => Some("Houdini"),
                             "ma" | "mb" => Some("Maya"),
@@ -1553,7 +1554,8 @@ async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
                         let file_path = entry.path();
                         let extension = file_path.extension()
                             .and_then(|e| e.to_str())
-                            .unwrap_or("");
+                            .unwrap_or("")
+                            .to_lowercase();
 
                         // Delete .blend1 backup files
                         if extension == "blend1" {
@@ -1729,8 +1731,12 @@ async fn get_directory_size(path: String) -> Result<u64, String> {
 async fn open_url(url: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         Command::new("cmd")
             .args(&["/c", "start", &url])
+            .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|e| format!("Failed to open URL: {}", e))?;
     }

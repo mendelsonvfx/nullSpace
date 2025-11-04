@@ -348,9 +348,16 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       debouncedReload();
     };
 
+    const handleRefreshAll = () => {
+      console.log('Refresh all event received - updating folder tree');
+      debouncedReload();
+    };
+
     window.addEventListener('tree-refresh', handleTreeRefresh);
+    window.addEventListener('refresh-all', handleRefreshAll);
     return () => {
       window.removeEventListener('tree-refresh', handleTreeRefresh);
+      window.removeEventListener('refresh-all', handleRefreshAll);
     };
   }, [project.path]);
 
@@ -479,6 +486,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           'hip': { name: 'Houdini', key: 'houdini' },
           'hiplc': { name: 'Houdini', key: 'houdini' },
           'hipnc': { name: 'Houdini', key: 'houdini' },
+          'psd': { name: 'Photoshop', key: 'photoshop' },
+          'psb': { name: 'Photoshop', key: 'photoshop' },
           'mb': { name: 'Maya', key: 'maya' },
           'ma': { name: 'Maya', key: 'maya' },
           'c4d': { name: 'Cinema 4D', key: 'cinema4d' },
@@ -538,8 +547,6 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           software: softwareMapping.key,
           pid: result.pid
         });
-
-        console.log(`[TreeView] Started time tracking for ${softwareMapping.name} (PID: ${result.pid})`);
       } catch (error) {
         console.error('Failed to open file:', error);
       }

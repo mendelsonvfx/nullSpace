@@ -998,7 +998,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         ...project,
         scenes: (project.scenes || []).map(s => {
           if (s.id === sceneId) {
-            return { ...s, completed: !s.completed };
+            // Cycle through: none → wip → completed → none
+            if (!s.wip && !s.completed) {
+              return { ...s, wip: true, completed: false };
+            } else if (s.wip && !s.completed) {
+              return { ...s, wip: false, completed: true };
+            } else {
+              return { ...s, wip: false, completed: false };
+            }
           }
           return s;
         })
@@ -1332,7 +1339,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         ...project,
         shots: (project.shots || []).map(s => {
           if (s.id === shotId) {
-            return { ...s, completed: !s.completed };
+            // Cycle through: none → wip → completed → none
+            if (!s.wip && !s.completed) {
+              return { ...s, wip: true, completed: false };
+            } else if (s.wip && !s.completed) {
+              return { ...s, wip: false, completed: true };
+            } else {
+              return { ...s, wip: false, completed: false };
+            }
           }
           return s;
         })
