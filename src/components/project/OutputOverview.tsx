@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { SoftwareIcon } from '../SoftwareIcon';
 import type { SoftwareName } from '../../types/project';
@@ -35,20 +35,24 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   const [outputs, setOutputs] = useState<OutputFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedSoftware, setSelectedSoftware] = useState<string>(() => {
-    const savedState = outputsCache.getOutputState(project.path);
-    return savedState?.selectedSoftware || '';
-  });
-  const [selectedOutputType, setSelectedOutputType] = useState<'preview' | 'final'>(() => {
-    const savedState = outputsCache.getOutputState(project.path);
-    return savedState?.selectedOutputType || 'preview';
-  });
+
+  // Generate unique cache key for project + scene + shot combination
+  const getCacheKey = () => {
+    const shotId = currentShot ? `_shot_${currentShot.number}` : '';
+    const sceneId = currentScene ? `_scene_${currentScene.name}` : '';
+    return `${project.path}${sceneId}${shotId}`;
+  };
+
+  // Initialize with empty values - will be set in useLayoutEffect before paint
+  const [selectedSoftware, setSelectedSoftware] = useState<string>('');
+  const [selectedOutputType, setSelectedOutputType] = useState<'preview' | 'final'>('preview');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; output: OutputFile } | null>(null);
   const [groupContextMenu, setGroupContextMenu] = useState<{ x: number; y: number; groupPath: string } | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => outputsCache.getExpandedGroups(project.path));
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const groupContextMenuRef = useRef<HTMLDivElement>(null);
   const isFirstLoadRef = useRef(true);
+  const isRestoringStateRef = useRef(false); // Track if we're restoring state programmatically
 
   // Format software name for display
   const formatSoftwareName = (software: string): string => {
@@ -64,13 +68,13 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   // Save selected software and persist to cache
   const updateSelectedSoftware = (software: string) => {
     setSelectedSoftware(software);
-    outputsCache.setOutputState(project.path, software, selectedOutputType);
+    outputsCache.setOutputState(getCacheKey(), software, selectedOutputType);
   };
 
   // Save selected output type and persist to cache
   const updateSelectedOutputType = (type: 'preview' | 'final') => {
     setSelectedOutputType(type);
-    outputsCache.setOutputState(project.path, selectedSoftware, type);
+    outputsCache.setOutputState(getCacheKey(), selectedSoftware, type);
   };
 
   // Get scene and shot filter for output scanning
@@ -184,12 +188,59 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
     return Array.from(softwareSet).sort();
   }, [outputs]);
 
-  // Auto-select first software when outputs load
-  useEffect(() => {
-    if (availableSoftware.length > 0 && !selectedSoftware) {
-      updateSelectedSoftware(availableSoftware[0]);
+  // Restore filter state BEFORE paint (prevents visual flicker)
+  useLayoutEffect(() => {
+    isRestoringStateRef.current = true; // Mark that we're restoring state programmatically
+
+    const cacheKey = getCacheKey();
+    const savedState = outputsCache.getOutputState(cacheKey);
+
+    if (savedState) {
+      // Restore saved state for this specific project/scene/shot
+      setSelectedSoftware(savedState.selectedSoftware);
+      setSelectedOutputType(savedState.selectedOutputType);
+    } else {
+      // No saved state - try to get from cached outputs
+      const cachedOutputs = outputsCache.get(project.path);
+      if (cachedOutputs && cachedOutputs.length > 0) {
+        const availableSoft = Array.from(new Set(cachedOutputs.map(o => o.software))).sort();
+        if (availableSoft.length > 0) {
+          setSelectedSoftware(availableSoft[0]);
+        } else {
+          setSelectedSoftware('');
+        }
+      } else if (availableSoftware.length > 0) {
+        // Use currently loaded outputs
+        setSelectedSoftware(availableSoftware[0]);
+      } else {
+        setSelectedSoftware('');
+      }
+      setSelectedOutputType('preview');
     }
-  }, [availableSoftware, selectedSoftware]);
+
+    // Reset the flag after state updates are committed
+    setTimeout(() => {
+      isRestoringStateRef.current = false;
+    }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.path, currentScene?.name, currentShot?.number, availableSoftware]);
+
+  // Validate selected software matches available outputs
+  useEffect(() => {
+    if (availableSoftware.length > 0) {
+      const isValid = availableSoftware.includes(selectedSoftware);
+      if (!selectedSoftware || !isValid) {
+        isRestoringStateRef.current = true; // Mark as programmatic change
+        const firstSoftware = availableSoftware[0];
+        setSelectedSoftware(firstSoftware);
+        outputsCache.setOutputState(getCacheKey(), firstSoftware, selectedOutputType);
+        setTimeout(() => {
+          isRestoringStateRef.current = false;
+        }, 0);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableSoftware, selectedSoftware, selectedOutputType]);
 
   // Filter outputs based on selected software and output type
   const filteredOutputs = useMemo(() => {
@@ -524,7 +575,9 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
               <button
                 key={software}
                 onClick={() => updateSelectedSoftware(software)}
-                className={`px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 ${
+                  !isRestoringStateRef.current ? 'transition-colors' : ''
+                } ${
                   selectedSoftware === software
                     ? 'bg-zinc-700 text-white'
                     : 'text-text-secondary hover:text-white'
@@ -541,7 +594,9 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
         <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
           <button
             onClick={() => updateSelectedOutputType('preview')}
-            className={`px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 ${
+              !isRestoringStateRef.current ? 'transition-colors' : ''
+            } ${
               selectedOutputType === 'preview'
                 ? 'bg-zinc-700 text-white'
                 : 'text-text-secondary hover:text-white'
@@ -552,7 +607,9 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
           </button>
           <button
             onClick={() => updateSelectedOutputType('final')}
-            className={`px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 ${
+              !isRestoringStateRef.current ? 'transition-colors' : ''
+            } ${
               selectedOutputType === 'final'
                 ? 'bg-zinc-700 text-white'
                 : 'text-text-secondary hover:text-white'
