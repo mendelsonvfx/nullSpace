@@ -2531,8 +2531,9 @@ struct OutputFile {
 // Helper function to extract frame number from filename
 fn extract_frame_number(filename: &str) -> Option<(String, u32, String)> {
     use regex::Regex;
-    // Match patterns like: name.0001.exr, name_0001.png, 0001.exr, etc.
-    let re = Regex::new(r"^(.*)[\._]?(\d{4,})\.([a-zA-Z0-9]+)$").ok()?;
+    // Match patterns like: name.001.exr, name_001.png, 001.exr, etc.
+    // Requires 3+ digits to avoid grouping files like "1.png", "2.png"
+    let re = Regex::new(r"^(.*)[\._]?(\d{3,})\.([a-zA-Z0-9]+)$").ok()?;
     if let Some(caps) = re.captures(filename) {
         let prefix = caps.get(1).map_or("", |m| m.as_str()).to_string();
         let frame_str = caps.get(2)?.as_str();
@@ -2586,6 +2587,15 @@ fn detect_missing_frames(frames: &[u32], first_frame: u32, last_frame: u32) -> O
     Some(groups.join(", "))
 }
 
+// Helper function to check if file extension is an image format
+fn is_image_format(ext: &str) -> bool {
+    let image_formats = [
+        "png", "jpg", "jpeg", "exr", "dpx", "tif", "tiff",
+        "tga", "bmp", "hdr", "pic", "psd", "sgi", "rgb"
+    ];
+    image_formats.contains(&ext.to_lowercase().as_str())
+}
+
 // Helper function to group image sequences
 fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
     use std::collections::HashMap;
@@ -2596,8 +2606,14 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
     // Group files by prefix, extension, software, and render_type (to keep Preview and Final separate)
     for file in files {
         if let Some((prefix, _frame_num, ext)) = extract_frame_number(&file.name) {
-            let key = format!("{}_{}_{}_{}",prefix, ext, file.software, file.render_type);
-            sequences.entry(key).or_insert_with(Vec::new).push(file);
+            // Only group image formats into sequences
+            if is_image_format(&ext) {
+                let key = format!("{}_{}_{}_{}",prefix, ext, file.software, file.render_type);
+                sequences.entry(key).or_insert_with(Vec::new).push(file);
+            } else {
+                // Non-image files are treated as standalone
+                standalone_files.push(file);
+            }
         } else {
             standalone_files.push(file);
         }
