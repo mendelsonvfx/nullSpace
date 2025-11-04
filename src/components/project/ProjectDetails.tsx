@@ -32,10 +32,14 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showManualTimeEntry, setShowManualTimeEntry] = useState(false);
   const [isPaymentModalAnimating, setIsPaymentModalAnimating] = useState(false);
+  const [isSceneEditMode, setIsSceneEditMode] = useState(false);
   const [isShotEditMode, setIsShotEditMode] = useState(false);
   const [isFavoriteAnimating, setIsFavoriteAnimating] = useState(false);
   const [shotToDelete, setShotToDelete] = useState<{ id: string; name: string } | null>(null);
   const [softwareToRemove, setSoftwareToRemove] = useState<string | null>(null);
+  const [editingSceneId, setEditingSceneId] = useState<string | null>(null);
+  const [editingSceneNumber, setEditingSceneNumber] = useState('');
+  const [animatingSceneId, setAnimatingSceneId] = useState<string | null>(null);
   const [editingShotId, setEditingShotId] = useState<string | null>(null);
   const [editingShotNumber, setEditingShotNumber] = useState('');
   const [animatingShotId, setAnimatingShotId] = useState<string | null>(null);
@@ -92,28 +96,53 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
   // Widget visibility is now handled by timeTrackingStore (after 1.5s delay)
 
-  // Get current context (todos, notes, links, browserTabs) based on shot selection
+  // Get current context (todos, notes, links, browserTabs) based on scene/shot selection
   const getCurrentContext = () => {
-    if (project.hasShots && project.currentShotId) {
-      const currentShot = project.shots?.find((s: any) => s.id === project.currentShotId);
-      if (currentShot) {
+    if (project.hasShots && project.currentSceneId) {
+      const currentScene = project.scenes?.find((s: any) => s.id === project.currentSceneId);
+
+      if (currentScene) {
+        // If shot is selected, return shot context
+        if (project.currentShotId) {
+          const currentShot = project.shots?.find((s: any) => s.id === project.currentShotId);
+          if (currentShot) {
+            return {
+              todos: currentShot.todos || [],
+              notes: currentShot.notes || [],
+              links: currentShot.links || [],
+              browserTabs: currentShot.browserTabs || [],
+              isShot: true,
+              isScene: false,
+              shotId: currentShot.id,
+              sceneId: currentScene.id
+            };
+          }
+        }
+
+        // Otherwise return scene context
         return {
-          todos: currentShot.todos || [],
-          notes: currentShot.notes || [],
-          links: currentShot.links || [],
-          browserTabs: currentShot.browserTabs || [],
-          isShot: true,
-          shotId: currentShot.id
+          todos: currentScene.todos || [],
+          notes: currentScene.notes || [],
+          links: currentScene.links || [],
+          browserTabs: currentScene.browserTabs || [],
+          isShot: false,
+          isScene: true,
+          shotId: null,
+          sceneId: currentScene.id
         };
       }
     }
+
+    // Return project context (no scenes/shots)
     return {
       todos: project.todos || [],
       notes: project.notes || [],
       links: project.links || [],
       browserTabs: project.browserTabs || [],
       isShot: false,
-      shotId: null
+      isScene: false,
+      shotId: null,
+      sceneId: null
     };
   };
 
@@ -414,16 +443,139 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           </div>
         </div>
 
+        {/* Scene Tabs */}
+        {project.hasShots === true && (
+          <div className="mb-1">
+            <div className="flex gap-1.5 overflow-x-auto pb-1 items-center group">
+            {(project.scenes || []).map((scene: any) => {
+              const isEditing = editingSceneId === scene.id;
+
+              if (isEditing) {
+                return (
+                  <div key={scene.id} className="flex items-center gap-2 px-3 py-1 bg-card-bg border border-accent rounded-button">
+                    <span className="text-[13px] text-text-muted">Scene</span>
+                    <input
+                      type="text"
+                      value={editingSceneNumber}
+                      onChange={(e) => {
+                        // Allow any text for scene suffix
+                        setEditingSceneNumber(e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.currentTarget.blur();
+                        } else if (e.key === 'Escape') {
+                          setEditingSceneId(null);
+                          setEditingSceneNumber('');
+                          setIsSceneEditMode(false);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (editingSceneNumber.trim()) {
+                          const newSceneName = `Scene ${editingSceneNumber.trim()}`;
+                          const { renameScene } = useProjectStore.getState();
+                          renameScene(project.id, scene.id, newSceneName);
+                        }
+                        setEditingSceneId(null);
+                        setEditingSceneNumber('');
+                        setIsSceneEditMode(false);
+                      }}
+                      autoFocus
+                      className="w-32 bg-transparent text-[13px] text-text-primary focus:outline-none"
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <button
+                  key={scene.id}
+                  onClick={() => {
+                    if (!isSceneEditMode) {
+                      const { setCurrentScene } = useProjectStore.getState();
+                      setCurrentScene(project.id, scene.id);
+                    } else {
+                      setEditingSceneId(scene.id);
+                      // Extract suffix after "Scene " for editing
+                      const suffix = scene.name.replace(/^Scene\s+/i, '');
+                      setEditingSceneNumber(suffix);
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    const { toggleSceneCompleted } = useProjectStore.getState();
+                    const wasCompleted = scene.completed;
+                    toggleSceneCompleted(project.id, scene.id);
+                    if (!wasCompleted) {
+                      setAnimatingSceneId(scene.id);
+                      setTimeout(() => setAnimatingSceneId(null), 600);
+                    }
+                  }}
+                  className={`px-3 py-1 rounded-button text-[13px] font-medium whitespace-nowrap transition-all duration-300 flex items-center justify-center gap-2 ${
+                    project.currentSceneId === scene.id
+                      ? 'bg-hover-bg border border-accent text-white'
+                      : scene.completed
+                      ? 'bg-card-bg border border-status-active/30 text-text-muted hover:bg-hover-bg'
+                      : 'bg-card-bg border border-border-primary text-text-muted hover:bg-hover-bg hover:border-border-secondary'
+                  } ${animatingSceneId === scene.id ? 'animate-shot-complete-glow' : ''}`}
+                >
+                  <span>{scene.name}</span>
+                  <IconCheck
+                    stroke={1.5}
+                    className={`text-status-active transition-all duration-300 ${
+                      scene.completed ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
+                    }`}
+                    style={{ overflow: 'hidden' }}
+                  />
+                  <IconX
+                    stroke={1.5}
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      const { removeScene } = useProjectStore.getState();
+                      removeScene(project.id, scene.id);
+                    }}
+                    className={`hover:text-red-500 cursor-pointer transition-all duration-300 ${
+                      project.currentSceneId === scene.id ? 'text-white' : 'text-text-muted'
+                    } ${
+                      isSceneEditMode ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
+                    }`}
+                    style={{ overflow: 'hidden' }}
+                  />
+                </button>
+              );
+            })}
+            <button
+              onClick={() => {
+                const { addScene } = useProjectStore.getState();
+                addScene(project.id);
+              }}
+              className="px-3 py-1 bg-transparent border border-border-secondary border-dashed rounded-button text-[13px] text-text-muted hover:border-accent hover:text-accent transition-all whitespace-nowrap opacity-0 group-hover:opacity-100"
+            >
+              + Add scene...
+            </button>
+            <button
+              onClick={() => setIsSceneEditMode(!isSceneEditMode)}
+              className={`p-2 transition-all ${
+                isSceneEditMode ? 'text-accent opacity-100' : 'text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100'
+              }`}
+              title={isSceneEditMode ? 'Done editing' : 'Edit scenes'}
+            >
+              <IconPencil stroke={1.5} className="w-4 h-4" />
+            </button>
+            </div>
+          </div>
+        )}
+
         {/* Shot Tabs */}
         {project.hasShots === true && (
-          <div className="mb-7">
-            <div className="flex gap-2 overflow-x-auto pb-2 items-center group">
-            {(project.shots || []).map((shot: any) => {
+          <div className="mb-3">
+            <div className="flex gap-1.5 overflow-x-auto pb-1 items-center group">
+            {(project.shots || []).filter((shot: any) => shot.sceneId === project.currentSceneId).map((shot: any) => {
               const isEditing = editingShotId === shot.id;
 
               if (isEditing) {
                 return (
-                  <div key={shot.id} className="flex items-center gap-2 px-4 py-1.5 bg-card-bg border border-accent rounded-button">
+                  <div key={shot.id} className="flex items-center gap-2 px-3 py-1 bg-card-bg border border-accent rounded-button">
                     <span className="text-[13px] text-text-muted">Shot</span>
                     <input
                       type="text"
@@ -532,7 +684,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       setTimeout(() => setAnimatingShotId(null), 600);
                     }
                   }}
-                  className={`px-4 py-1.5 rounded-button text-[13px] font-medium whitespace-nowrap transition-all duration-300 flex items-center justify-center gap-2 ${
+                  className={`px-3 py-1 rounded-button text-[13px] font-medium whitespace-nowrap transition-all duration-300 flex items-center justify-center gap-2 ${
                     project.currentShotId === shot.id
                       ? 'bg-hover-bg border border-accent text-white'
                       : shot.completed
@@ -574,7 +726,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 const { addShot } = useProjectStore.getState();
                 addShot(project.id);
               }}
-              className="px-4 py-2 bg-transparent border border-border-secondary border-dashed rounded-button text-[13px] text-text-muted hover:border-accent hover:text-accent transition-all whitespace-nowrap"
+              className="px-3 py-1 bg-transparent border border-border-secondary border-dashed rounded-button text-[13px] text-text-muted hover:border-accent hover:text-accent transition-all whitespace-nowrap opacity-0 group-hover:opacity-100"
             >
               + Add shot...
             </button>
@@ -692,6 +844,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   onClick={() => {
                     if (status === 'launching' || activeEntry) return;
 
+                    const currentScene = project.hasShots && project.currentSceneId
+                      ? project.scenes?.find((s: any) => s.id === project.currentSceneId)
+                      : null;
+
                     const currentShot = project.hasShots && project.currentShotId
                       ? project.shots?.find((s: any) => s.id === project.currentShotId)
                       : null;
@@ -699,6 +855,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     onLaunchSoftware({
                       ...sw,
                       executablePath,
+                      sceneNumber: currentScene?.number,
                       shotNumber: currentShot?.number
                     });
                   }}
@@ -764,10 +921,18 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         </div>
 
         {/* Versions Overview */}
-        <VersionsOverview project={project} currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null} />
+        <VersionsOverview
+          project={project}
+          currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
+          currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
+        />
 
         {/* Output Overview */}
-        <OutputOverview project={project} currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null} />
+        <OutputOverview
+          project={project}
+          currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
+          currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
+        />
 
         {/* Links Section */}
         <div className="mb-7">
@@ -868,6 +1033,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   if (context.isShot && context.shotId) {
                     const { addShotTodo } = useProjectStore.getState();
                     addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
+                  } else if (context.isScene && context.sceneId) {
+                    const { addSceneTodo } = useProjectStore.getState();
+                    addSceneTodo(project.id, context.sceneId, e.currentTarget.value.trim());
                   } else {
                     const { addTodo } = useProjectStore.getState();
                     addTodo(project.id, e.currentTarget.value.trim());
@@ -880,6 +1048,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   if (context.isShot && context.shotId) {
                     const { addShotTodo } = useProjectStore.getState();
                     addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
+                  } else if (context.isScene && context.sceneId) {
+                    const { addSceneTodo } = useProjectStore.getState();
+                    addSceneTodo(project.id, context.sceneId, e.currentTarget.value.trim());
                   } else {
                     const { addTodo } = useProjectStore.getState();
                     addTodo(project.id, e.currentTarget.value.trim());

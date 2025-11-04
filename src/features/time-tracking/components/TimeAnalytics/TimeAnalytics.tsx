@@ -12,7 +12,8 @@ import {
   getMostProductiveDay,
   calculateWeekOverWeekChange
 } from '../../utils';
-import type { Project } from '../../../../types/project';
+import { normalizeSoftwareName } from '../../utils/softwareUtils';
+import type { Project, SoftwareName } from '../../../../types/project';
 import type { TimeEntry } from '../../types/timeEntry';
 import { Clock } from 'lucide-react';
 
@@ -56,8 +57,20 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
   const totalMinutes = totalFocusedMinutes;
 
   // Sort software by time (descending) - use GLOBAL statistics
+  // Normalize software names to merge duplicates (e.g., "aftereffects" + "after-effects")
   const sortedSoftware = useMemo(() => {
-    return Object.entries(softwareMinutes)
+    // Normalize and merge duplicate keys
+    const normalized = new Map<SoftwareName, number>();
+
+    Object.entries(softwareMinutes).forEach(([software, minutes]) => {
+      const normalizedName = normalizeSoftwareName(software);
+      normalized.set(
+        normalizedName,
+        (normalized.get(normalizedName) || 0) + minutes
+      );
+    });
+
+    return Array.from(normalized.entries())
       .filter(([_, minutes]) => minutes > 0)
       .sort((a, b) => b[1] - a[1]);
   }, [softwareMinutes]);

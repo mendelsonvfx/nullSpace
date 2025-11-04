@@ -438,6 +438,13 @@ pub fn check_active_windows() {
         if session.window_disappeared_at.is_some() {
             println!("[TimeTracking] PID {} window reappeared, resetting grace period", session.pid);
             session.window_disappeared_at = None;
+
+            // Restore process_alive ONLY if process is verified alive in system
+            // This prevents resurrecting zombie sessions with orphaned window handles
+            if !session.process_alive && is_process_alive(session.pid) {
+                println!("[TimeTracking] PID {} process_alive restored to true (verified)", session.pid);
+                session.process_alive = true;
+            }
         }
 
         // Skip paused sessions for time counting
@@ -550,6 +557,103 @@ fn start_background_task_if_needed() {
 #[tauri::command]
 pub fn check_process_alive(pid: u32) -> bool {
     is_process_alive(pid)
+}
+
+/// Tauri command to get full session status from backend (includes window detection)
+#[tauri::command]
+pub fn get_session_status(entry_id: String) -> Result<ActiveSession, String> {
+    let sessions = ACTIVE_SESSIONS.lock();
+    sessions.get(&entry_id)
+        .cloned()
+        .ok_or_else(|| format!("Session {} not found", entry_id))
+}
+
+/// Tauri command to update session PID after migration
+#[tauri::command]
+pub fn update_session_pid(entry_id: String, new_pid: u32) -> Result<(), String> {
+    let mut sessions = ACTIVE_SESSIONS.lock();
+    match sessions.get_mut(&entry_id) {
+        Some(session) => {
+            println!("[TimeTracking] 🔄 Migrating session {} PID: {} -> {}", entry_id, session.pid, new_pid);
+            session.pid = new_pid;
+            session.process_alive = true;
+            session.window_disappeared_at = None;  // Reset grace period
+            Ok(())
+        }
+        None => Err(format!("Session {} not found", entry_id))
+    }
+}
+
+/// Find all child processes of a given parent PID
+fn find_child_processes(parent_pid: u32) -> Vec<u32> {
+    let mut system = SYSTEM.lock();
+    system.refresh_processes();
+
+    let mut children = Vec::new();
+    let parent_pid_sys = Pid::from_u32(parent_pid);
+
+    for (pid, process) in system.processes() {
+        if let Some(process_parent) = process.parent() {
+            if process_parent == parent_pid_sys {
+                children.push(pid.as_u32());
+            }
+        }
+    }
+
+    println!("[TimeTracking] Found {} child processes for PID {}", children.len(), parent_pid);
+    children
+}
+
+/// Find a process by name among children of a parent PID
+fn find_process_by_name_and_parent(name: &str, parent_pid: u32) -> Option<u32> {
+    let children = find_child_processes(parent_pid);
+    let mut system = SYSTEM.lock();
+    system.refresh_processes();
+
+    let name_lower = name.to_lowercase();
+
+    for child_pid in children {
+        if let Some(process) = system.process(Pid::from_u32(child_pid)) {
+            let process_name = process.name().to_lowercase();
+
+            // Match exact name or name.exe
+            if process_name == name_lower ||
+               process_name == format!("{}.exe", name_lower) ||
+               process_name.contains(&name_lower) {
+                println!("[TimeTracking] Found child process '{}' with PID {}", process.name(), child_pid);
+                return Some(child_pid);
+            }
+        }
+    }
+
+    None
+}
+
+/// Attempt to migrate to a child process when the parent process dies
+/// This handles launcher-based applications like Blender, Adobe apps, etc.
+fn migrate_to_child_process_internal(old_pid: u32, software_name: &str) -> Option<u32> {
+    println!("[TimeTracking] Attempting to migrate PID {} for '{}'", old_pid, software_name);
+
+    // Extract the base name (remove .exe if present)
+    let base_name = software_name
+        .to_lowercase()
+        .trim_end_matches(".exe")
+        .to_string();
+
+    // Try to find a child process matching the software name
+    if let Some(child_pid) = find_process_by_name_and_parent(&base_name, old_pid) {
+        println!("[TimeTracking] ✅ Successfully migrated to child PID {}", child_pid);
+        return Some(child_pid);
+    }
+
+    println!("[TimeTracking] ❌ No child process found for migration");
+    None
+}
+
+/// Tauri command to migrate to a child process
+#[tauri::command]
+pub fn migrate_to_child_process(old_pid: u32, software_name: String) -> Option<u32> {
+    migrate_to_child_process_internal(old_pid, &software_name)
 }
 
 /// Get focus summary for a session (how many seconds focused in last 60 seconds)

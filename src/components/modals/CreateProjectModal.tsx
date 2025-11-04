@@ -37,6 +37,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
     prepaymentAmount: '',
     clientId: '',
     thumbnailPath: '',
+    hasScenes: false,
     hasShots: false,
     category: selectedCategory
   });
@@ -239,6 +240,15 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
               />
             </div>
+            <label className="flex items-center gap-2 cursor-pointer h-[38px] px-3">
+              <span className="text-sm whitespace-nowrap">Has scenes</span>
+              <input
+                type="checkbox"
+                checked={formData.hasScenes}
+                onChange={(e) => setFormData(prev => ({ ...prev, hasScenes: e.target.checked }))}
+                className="w-4 h-4"
+              />
+            </label>
             <label className="flex items-center gap-2 cursor-pointer h-[38px] px-3">
               <span className="text-sm whitespace-nowrap">Has shots</span>
               <input

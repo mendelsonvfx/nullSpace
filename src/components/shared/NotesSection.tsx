@@ -8,7 +8,9 @@ interface NotesSectionProps {
   context: {
     notes: Array<{ id: string; content: string }>;
     isShot?: boolean;
+    isScene?: boolean;
     shotId?: string;
+    sceneId?: string;
   };
 }
 
@@ -24,6 +26,13 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
       } else {
         addShotNote(project.id, context.shotId, markdown);
       }
+    } else if (context.isScene && context.sceneId) {
+      const { addSceneNote, updateSceneNote } = useProjectStore.getState();
+      if (context.notes && context.notes.length > 0) {
+        updateSceneNote(project.id, context.sceneId, context.notes[0].id, markdown);
+      } else {
+        addSceneNote(project.id, context.sceneId, markdown);
+      }
     } else {
       const { addNote, updateNote } = useProjectStore.getState();
       if (context.notes && context.notes.length > 0) {
@@ -32,7 +41,7 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
         addNote(project.id, markdown);
       }
     }
-  }, [project.id, context.isShot, context.shotId, context.notes]);
+  }, [project.id, context.isShot, context.isScene, context.shotId, context.sceneId, context.notes]);
 
   const handleContainerClick = useCallback((e: React.MouseEvent) => {
     // Focus the editor when clicking anywhere in the container
@@ -71,9 +80,11 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
     })
   ], []); // Empty deps - plugins never change
 
-  // Create a unique key based on project and shot to reset editor on project/shot change
+  // Create a unique key based on project, scene, and shot to reset editor on context change
   const editorKey = context.isShot && context.shotId
-    ? `${project.id}-${context.shotId}`
+    ? `${project.id}-shot-${context.shotId}`
+    : context.isScene && context.sceneId
+    ? `${project.id}-scene-${context.sceneId}`
     : project.id;
 
   return (

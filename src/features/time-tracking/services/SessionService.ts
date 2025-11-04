@@ -106,4 +106,64 @@ export class SessionService {
       return false;
     }
   }
+
+  /**
+   * Attempt to migrate to a child process when parent process dies
+   * This handles launcher-based applications (Blender, Adobe apps, etc.)
+   * @param oldPid - The dead parent process PID
+   * @param softwareName - Name of the software to find (e.g., "Blender")
+   * @returns New child process PID if found, null otherwise
+   */
+  static async migrateToChildProcess(oldPid: number, softwareName: string): Promise<number | null> {
+    try {
+      console.log(`[SessionService] 🔄 Attempting to migrate PID ${oldPid} for ${softwareName}`);
+      const newPid = await invoke<number | null>('migrate_to_child_process', {
+        oldPid,
+        softwareName,
+      });
+
+      if (newPid) {
+        console.log(`[SessionService] ✅ Migrated to child process PID: ${newPid}`);
+      } else {
+        console.log(`[SessionService] ❌ No child process found for migration`);
+      }
+
+      return newPid;
+    } catch (error) {
+      console.error('[SessionService] ❌ Failed to migrate to child process:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get full session status from backend (includes window detection, grace period, etc.)
+   * This is the source of truth for whether a session should be tracking
+   * @param entryId - The session entry ID
+   * @returns Session status or null if not found
+   */
+  static async getSessionStatus(entryId: string): Promise<ActiveSession | null> {
+    try {
+      const session = await invoke<ActiveSession>('get_session_status', { entryId });
+      return session;
+    } catch (error) {
+      console.error(`[SessionService] Failed to get session status for ${entryId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Update session PID after migration
+   * This syncs the backend session PID with the new child process PID
+   * @param entryId - The session entry ID
+   * @param newPid - The new process ID to track
+   */
+  static async updateSessionPid(entryId: string, newPid: number): Promise<void> {
+    try {
+      await invoke('update_session_pid', { entryId, newPid });
+      console.log(`[SessionService] ✅ Updated backend session ${entryId} PID to ${newPid}`);
+    } catch (error) {
+      console.error(`[SessionService] ❌ Failed to update session PID:`, error);
+      throw error;
+    }
+  }
 }

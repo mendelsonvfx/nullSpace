@@ -2,6 +2,22 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { SoftwareName } from '../../../types/project';
+import { normalizeSoftwareName } from '../utils/softwareUtils';
+
+/**
+ * Migrates legacy software names to canonical forms
+ * Merges duplicates like "aftereffects" into "after-effects"
+ */
+function migrateSoftwareNames(softwareMinutes: Record<string, number>): Record<SoftwareName, number> {
+  const migrated: Record<string, number> = {};
+
+  Object.entries(softwareMinutes).forEach(([software, minutes]) => {
+    const normalized = normalizeSoftwareName(software);
+    migrated[normalized] = (migrated[normalized] || 0) + minutes;
+  });
+
+  return migrated as Record<SoftwareName, number>;
+}
 
 interface TimeStats {
   // Map of software name to total minutes (focused time only)
@@ -74,12 +90,18 @@ export const useTimeStatsStore = create<TimeStatsStore>()(
     }),
     {
       name: 'time-statistics-storage',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       onRehydrateStorage: () => (state) => {
         if (state) {
-          const totalMinutes = Object.values(state.softwareMinutes).reduce((sum, m) => sum + m, 0);
-          console.log(`[TimeStats] ✅ Loaded from localStorage: ${totalMinutes} total minutes`, state.softwareMinutes);
+          // Migrate legacy software names
+          const migratedMinutes = migrateSoftwareNames(state.softwareMinutes);
+          const totalMinutes = Object.values(migratedMinutes).reduce((sum, m) => sum + m, 0);
+
+          // Update state with migrated data
+          state.softwareMinutes = migratedMinutes;
+
+          console.log(`[TimeStats] ✅ Loaded and migrated from localStorage: ${totalMinutes} total minutes`, migratedMinutes);
         } else {
           console.log('[TimeStats] ⚠️ No data found in localStorage');
         }

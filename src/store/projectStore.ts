@@ -55,6 +55,25 @@ interface ProjectStore {
   removeCategory: (name: string) => void;
   renameCategory: (oldName: string, newName: string) => void;
   setSelectedCategory: (category: string) => void;
+  // Migration
+  migrateProjectToScenes: (project: Project) => Project;
+  // Scene management
+  addScene: (projectId: string, name?: string) => void;
+  removeScene: (projectId: string, sceneId: string) => void;
+  renameScene: (projectId: string, sceneId: string, newName: string) => void;
+  setCurrentScene: (projectId: string, sceneId: string | null) => void;
+  toggleSceneCompleted: (projectId: string, sceneId: string) => void;
+  addSceneNote: (projectId: string, sceneId: string, content: string) => void;
+  updateSceneNote: (projectId: string, sceneId: string, noteId: string, content: string) => void;
+  deleteSceneNote: (projectId: string, sceneId: string, noteId: string) => void;
+  addSceneTodo: (projectId: string, sceneId: string, text: string) => void;
+  toggleSceneTodo: (projectId: string, sceneId: string, todoId: string) => void;
+  removeSceneTodo: (projectId: string, sceneId: string, todoId: string) => void;
+  addSceneBrowserTab: (projectId: string, sceneId: string, url: string, title: string) => void;
+  removeSceneBrowserTab: (projectId: string, sceneId: string, tabId: string) => void;
+  addSceneLink: (projectId: string, sceneId: string, url: string, title: string) => string;
+  updateSceneLink: (projectId: string, sceneId: string, linkId: string, newTitle: string) => void;
+  removeSceneLink: (projectId: string, sceneId: string, linkId: string) => void;
   // Shot management
   addShot: (projectId: string, name?: string) => void;
   removeShot: (projectId: string, shotId: string) => void;
@@ -106,9 +125,22 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       });
       console.log('Loaded projects:', projects.length);
 
+      // Migrate projects to scene-based structure if needed
+      const migratedProjects = projects.map(project => get().migrateProjectToScenes(project));
+
+      // Save migrated projects back to disk
+      const migrationPromises = migratedProjects
+        .filter((project, index) => project !== projects[index]) // Only save if migrated
+        .map(project => invoke('update_project', { project }));
+
+      if (migrationPromises.length > 0) {
+        await Promise.all(migrationPromises);
+        console.log(`[Migration] Migrated ${migrationPromises.length} projects to scene-based structure`);
+      }
+
       // Clean up stale active sessions (processes that no longer exist)
       const cleanedProjects = await Promise.all(
-        projects.map(async (project) => {
+        migratedProjects.map(async (project) => {
           const activeEntries = project.timeEntries?.filter(e => e.isActive && e.pid) || [];
 
           if (activeEntries.length === 0) {
@@ -203,9 +235,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Generate random color for project
       project.color = generateProjectColor(project.id);
 
-      // If project has shots, automatically create 'Main' shot
-      if (project.hasShots) {
-        const mainShot = {
+      // Create Main scene if hasScenes is enabled
+      if (project.hasScenes) {
+        const mainScene = {
           id: crypto.randomUUID(),
           number: 0,
           name: 'Main',
@@ -214,6 +246,64 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           browserTabs: [],
           links: []
         };
+
+        project.scenes = [mainScene];
+        project.currentSceneId = mainScene.id;
+
+        // Create SC_MAIN folders
+        try {
+          await invoke('create_scene_folders', {
+            input: {
+              projectPath: project.path,
+              sceneCode: 'SC_MAIN'
+            }
+          });
+        } catch (error) {
+          console.error('Failed to create main scene folders:', error);
+        }
+
+        // If both scenes and shots, create Main shot inside Main scene
+        if (project.hasShots) {
+          const mainShot = {
+            id: crypto.randomUUID(),
+            sceneId: mainScene.id,
+            number: 0,
+            name: 'Main',
+            notes: [],
+            todos: [],
+            browserTabs: [],
+            links: []
+          };
+
+          project.shots = [mainShot];
+          project.currentShotId = mainShot.id;
+
+          // Create SH000 (Main shot) folders
+          try {
+            await invoke('create_shot_folders', {
+              input: {
+                projectPath: project.path,
+                sceneCode: 'SC_MAIN',
+                shotCode: 'SH000'
+              }
+            });
+          } catch (error) {
+            console.error('Failed to create main shot folders:', error);
+          }
+        }
+      } else if (project.hasShots) {
+        // Only shots, no scenes - legacy mode
+        const mainShot = {
+          id: crypto.randomUUID(),
+          sceneId: '', // No scene
+          number: 0,
+          name: 'Main',
+          notes: [],
+          todos: [],
+          browserTabs: [],
+          links: []
+        };
+
         project.shots = [mainShot];
         project.currentShotId = mainShot.id;
       }
@@ -346,13 +436,17 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       if (project) {
         try {
+          const sceneId = input.sceneNumber
+            ? project.scenes?.find(s => s.number === input.sceneNumber)?.id
+            : undefined;
+
           const shotId = input.shotNumber
             ? project.shots?.find(s => s.number === input.shotNumber)?.id
             : undefined;
 
           // input.software is already lowercase SoftwareName from Software.name
           const softwareKey = input.software as SoftwareName;
-          console.log('[TimeTracking] Starting tracking for software:', softwareKey, 'PID:', result.pid, 'Shot:', shotId);
+          console.log('[TimeTracking] Starting tracking for software:', softwareKey, 'PID:', result.pid, 'Scene:', sceneId, 'Shot:', shotId);
 
           // Use new time-tracking module
           const { startSession, getSession } = useTimeTrackingStore.getState();
@@ -361,6 +455,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             projectPath: project.path,
             software: softwareKey,
             pid: result.pid,
+            sceneId,
             shotId
           });
 
@@ -694,15 +789,436 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     return get().clients.find(c => c.id === clientId);
   },
 
-  // Shot management
-  addShot: (projectId: string, name?: string) => {
+  // Migration function for projects with shots but no scenes
+  migrateProjectToScenes: (project: Project): Project => {
+    // Only migrate if project has shots but no scenes
+    if (project.hasShots && !project.scenes && project.shots && project.shots.length > 0) {
+      console.log(`[Migration] Migrating project "${project.name}" to scene-based structure`);
+
+      // Create Main scene
+      const mainScene = {
+        id: crypto.randomUUID(),
+        number: 0,
+        name: 'Main',
+        notes: [],
+        todos: [],
+        browserTabs: [],
+        links: []
+      };
+
+      // Assign all existing shots to Main scene
+      const migratedShots = project.shots.map(shot => ({
+        ...shot,
+        sceneId: mainScene.id
+      }));
+
+      return {
+        ...project,
+        scenes: [mainScene],
+        currentSceneId: mainScene.id,
+        shots: migratedShots,
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    return project;
+  },
+
+  // Scene management
+  addScene: async (projectId: string, name?: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasScenes) {
+      // Count existing numbered scenes (exclude 'Main' scene which has number 0)
+      const numberedScenes = (project.scenes || []).filter(s => s.number > 0);
+      const sceneNumber = numberedScenes.length + 1;
+      const newScene = {
+        id: crypto.randomUUID(),
+        number: sceneNumber,
+        name: name || `Scene ${sceneNumber.toString().padStart(3, '0')}`,
+        todos: [],
+        notes: [],
+        browserTabs: [],
+        links: []
+      };
+
+      // Create scene code for folder creation
+      const sceneSuffix = newScene.name.replace(/^Scene\s+/i, '').trim();
+      const sceneCode = `SC_${sceneSuffix.toUpperCase().replace(/\s+/g, '_')}`;
+
+      // Create scene folders dynamically
+      try {
+        await invoke('create_scene_folders', {
+          input: {
+            projectPath: project.path,
+            sceneCode: sceneCode
+          }
+        });
+      } catch (error) {
+        console.error('Failed to create scene folders:', error);
+      }
+
+      let updatedShots = project.shots || [];
+      let newShotId: string | undefined = undefined;
+
+      // If project has shots, create Main shot for this scene
+      if (project.hasShots) {
+        const newShot = {
+          id: crypto.randomUUID(),
+          sceneId: newScene.id,
+          number: 0,
+          name: 'Main',
+          todos: [],
+          notes: [],
+          browserTabs: [],
+          links: []
+        };
+
+        updatedShots = [...updatedShots, newShot];
+        newShotId = newShot.id;
+
+        // Create SH000 (Main shot) folders
+        try {
+          await invoke('create_shot_folders', {
+            input: {
+              projectPath: project.path,
+              sceneCode: sceneCode,
+              shotCode: 'SH000'
+            }
+          });
+        } catch (error) {
+          console.error('Failed to create main shot folders:', error);
+        }
+      }
+
+      const updated = {
+        ...project,
+        scenes: [...(project.scenes || []), newScene],
+        shots: updatedShots,
+        currentSceneId: newScene.id,
+        currentShotId: newShotId || project.currentShotId
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  removeScene: (projectId: string, sceneId: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
-      // Count existing numbered shots (exclude 'main' shot which has number 0)
-      const numberedShots = (project.shots || []).filter(s => s.number > 0);
-      const shotNumber = numberedShots.length + 1;
+      // Prevent removing 'Main' scene
+      const sceneToRemove = (project.scenes || []).find(s => s.id === sceneId);
+      if (sceneToRemove?.name === 'Main') {
+        console.warn('Cannot remove Main scene');
+        return;
+      }
+
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).filter(s => s.id !== sceneId),
+        currentSceneId: project.currentSceneId === sceneId ? (project.scenes?.[0]?.id || undefined) : project.currentSceneId
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  renameScene: (projectId: string, sceneId: string, newName: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      // Prevent renaming 'Main' scene
+      const sceneToRename = (project.scenes || []).find(s => s.id === sceneId);
+      if (sceneToRename?.name === 'Main') {
+        console.warn('Cannot rename Main scene');
+        return;
+      }
+
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s => {
+          if (s.id === sceneId) {
+            // Extract number from new name (e.g., "Scene 777" -> 777)
+            const match = newName.match(/\d+/);
+            const newNumber = match ? parseInt(match[0]) : s.number;
+            return { ...s, name: newName, number: newNumber };
+          }
+          return s;
+        })
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  setCurrentScene: (projectId: string, sceneId: string | null) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasScenes) {
+      let updatedCurrentShotId = project.currentShotId;
+
+      if (sceneId && project.hasShots) {
+        const sceneShotsExist = (project.shots || []).some(s => s.sceneId === sceneId);
+
+        // Check if we have a saved shot preference for this scene
+        const savedShotId = project.sceneShotPreferences?.[sceneId];
+        const savedShotExists = savedShotId
+          ? (project.shots || []).some(s => s.id === savedShotId && s.sceneId === sceneId)
+          : false;
+
+        if (savedShotExists) {
+          // Restore saved shot selection for this scene
+          updatedCurrentShotId = savedShotId;
+        } else {
+          // No saved preference or shot doesn't exist, check if current shot is in this scene
+          const currentShotInScene = project.currentShotId
+            ? (project.shots || []).find(s => s.id === project.currentShotId && s.sceneId === sceneId)
+            : null;
+
+          if (!currentShotInScene && sceneShotsExist) {
+            // Select first shot in this scene
+            const firstShot = (project.shots || [])
+              .filter(s => s.sceneId === sceneId)
+              .sort((a, b) => a.number - b.number)[0];
+
+            if (firstShot) {
+              updatedCurrentShotId = firstShot.id;
+            }
+          }
+        }
+      }
+
+      const updated = {
+        ...project,
+        currentSceneId: sceneId || undefined,
+        currentShotId: updatedCurrentShotId
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  toggleSceneCompleted: (projectId: string, sceneId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s => {
+          if (s.id === sceneId) {
+            return { ...s, completed: !s.completed };
+          }
+          return s;
+        })
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  addSceneNote: (projectId: string, sceneId: string, content: string) => {
+    const newNote = {
+      id: crypto.randomUUID(),
+      content,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId ? { ...s, notes: [...s.notes, newNote] } : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  updateSceneNote: (projectId: string, sceneId: string, noteId: string, content: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId
+            ? {
+                ...s,
+                notes: s.notes.map(n =>
+                  n.id === noteId ? { ...n, content, updatedAt: new Date().toISOString() } : n
+                )
+              }
+            : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  deleteSceneNote: (projectId: string, sceneId: string, noteId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId ? { ...s, notes: s.notes.filter(n => n.id !== noteId) } : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  addSceneTodo: (projectId: string, sceneId: string, text: string) => {
+    const newTodo = {
+      id: crypto.randomUUID(),
+      text,
+      completed: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId ? { ...s, todos: [...s.todos, newTodo] } : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  toggleSceneTodo: (projectId: string, sceneId: string, todoId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId
+            ? {
+                ...s,
+                todos: s.todos.map(t =>
+                  t.id === todoId ? { ...t, completed: !t.completed } : t
+                )
+              }
+            : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  removeSceneTodo: (projectId: string, sceneId: string, todoId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId ? { ...s, todos: s.todos.filter(t => t.id !== todoId) } : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  addSceneBrowserTab: (projectId: string, sceneId: string, url: string, title: string) => {
+    const newTab = {
+      id: crypto.randomUUID(),
+      url,
+      title,
+      isPinned: false,
+    };
+
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId ? { ...s, browserTabs: [...s.browserTabs, newTab] } : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  removeSceneBrowserTab: (projectId: string, sceneId: string, tabId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId ? { ...s, browserTabs: s.browserTabs.filter(t => t.id !== tabId) } : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  addSceneLink: (projectId: string, sceneId: string, url: string, title: string): string => {
+    const newLink = {
+      id: crypto.randomUUID(),
+      url,
+      title,
+    };
+
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId ? { ...s, links: [...s.links, newLink] } : s
+        )
+      };
+      get().updateProject(updated);
+    }
+
+    return newLink.id;
+  },
+
+  updateSceneLink: (projectId: string, sceneId: string, linkId: string, newTitle: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId
+            ? {
+                ...s,
+                links: s.links.map(l =>
+                  l.id === linkId ? { ...l, title: newTitle } : l
+                )
+              }
+            : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  removeSceneLink: (projectId: string, sceneId: string, linkId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId ? { ...s, links: s.links.filter(l => l.id !== linkId) } : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  // Shot management
+  addShot: async (projectId: string, name?: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      // Ensure we have a current scene
+      if (!project.currentSceneId) {
+        console.warn('Cannot add shot: no current scene selected');
+        return;
+      }
+
+      // Per-scene shot numbering: count only numbered shots in current scene
+      const numberedShotsInScene = (project.shots || []).filter(
+        s => s.sceneId === project.currentSceneId && s.number > 0
+      );
+      const shotNumber = numberedShotsInScene.length + 1;
+
       const newShot = {
         id: crypto.randomUUID(),
+        sceneId: project.currentSceneId, // Assign to current scene
         number: shotNumber,
         name: name || `Shot ${shotNumber.toString().padStart(3, '0')}`,
         todos: [],
@@ -710,6 +1226,28 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         browserTabs: [],
         links: []
       };
+
+      // Get scene code for folder creation
+      const currentScene = (project.scenes || []).find(s => s.id === project.currentSceneId);
+      if (currentScene) {
+        const sceneSuffix = currentScene.name.replace(/^Scene\s+/i, '').trim();
+        const sceneCode = `SC_${sceneSuffix.toUpperCase().replace(/\s+/g, '_')}`;
+        const shotCode = `SH${shotNumber.toString().padStart(3, '0')}`;
+
+        // Create shot folders dynamically
+        try {
+          await invoke('create_shot_folders', {
+            input: {
+              projectPath: project.path,
+              sceneCode: sceneCode,
+              shotCode: shotCode
+            }
+          });
+        } catch (error) {
+          console.error('Failed to create shot folders:', error);
+        }
+      }
+
       const updated = {
         ...project,
         shots: [...(project.shots || []), newShot],
@@ -767,7 +1305,22 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   setCurrentShot: (projectId: string, shotId: string | null) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
-      const updated = { ...project, currentShotId: shotId || undefined };
+      // Save shot preference for current scene
+      let updatedPreferences = { ...(project.sceneShotPreferences || {}) };
+
+      if (shotId && project.currentSceneId) {
+        // Find the shot to verify it belongs to current scene
+        const shot = (project.shots || []).find(s => s.id === shotId);
+        if (shot && shot.sceneId === project.currentSceneId) {
+          updatedPreferences[project.currentSceneId] = shotId;
+        }
+      }
+
+      const updated = {
+        ...project,
+        currentShotId: shotId || undefined,
+        sceneShotPreferences: updatedPreferences
+      };
       get().updateProject(updated);
     }
   },

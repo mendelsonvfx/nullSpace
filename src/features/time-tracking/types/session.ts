@@ -55,6 +55,7 @@ export interface StartSessionParams {
   entryId: string;
   projectId: string;
   projectPath: string;
+  sceneId?: string;
   shotId?: string;
   software: string;
   pid: number;

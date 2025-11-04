@@ -556,6 +556,25 @@ Keep existing MDX editor but improve container styling
 
 **Commit:** `8125710` - Phase 3: Project List & Details Redesign
 
+### Phase 3.5: UX Improvements & Bug Fixes ✅ COMPLETED
+1. ✅ Changed OutputOverview to open files on double-click instead of single-click
+2. ✅ Fixed task date persistence (added `createdAt` field to Rust `TodoItem` struct)
+3. ✅ Removed unused IconCalendar import from ProjectDetails
+4. ✅ Adjusted Project Structure scrollbar positioning
+5. ✅ Improved tag badge positioning logic (conditional based on payment + deadline)
+6. ✅ Made tag badges fully rounded (rounded-full)
+7. ✅ Updated TreeView header styling for better alignment
+
+**Files modified:**
+- `src-tauri/src/main.rs`
+- `src/App.css`
+- `src/App.tsx`
+- `src/components/project/OutputOverview.tsx`
+- `src/components/project/ProjectDetails.tsx`
+- `src/components/project/TreeView.tsx`
+
+**Commit:** `4698a93` - Refactor: UX improvements and bug fixes
+
 ### Phase 4: Versions & Output (Day 4)
 1. Upgrade `VersionsOverview.tsx` with filter tabs
 2. Implement grid layout with centered icons

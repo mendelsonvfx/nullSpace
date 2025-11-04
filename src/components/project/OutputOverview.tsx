@@ -19,12 +19,19 @@ interface OutputFile {
   missing_frames?: string;
 }
 
+// Image sequence formats that should be checked for missing frames
+const IMAGE_SEQUENCE_FORMATS = [
+  'png', 'jpg', 'jpeg', 'exr', 'dpx', 'tif', 'tiff',
+  'tga', 'bmp', 'hdr', 'pic', 'psd', 'sgi', 'rgb'
+];
+
 interface OutputOverviewProps {
   project: any;
+  currentScene: any;
   currentShot: any;
 }
 
-export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
+export function OutputOverview({ project, currentScene, currentShot }: OutputOverviewProps) {
   const [outputs, setOutputs] = useState<OutputFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,16 +73,26 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
     outputsCache.setOutputState(project.path, selectedSoftware, type);
   };
 
-  // Get base path for output scanning
-  const getBasePath = () => {
-    if (currentShot) {
-      // If shot is selected, scan from shot folder
-      if (currentShot.number === 0) {
-        return `${project.path}/main`;
-      }
-      return `${project.path}/Shot_${String(currentShot.number).padStart(3, '0')}`;
+  // Get scene and shot filter for output scanning
+  const getSceneFilter = (): string | null => {
+    if (currentScene) {
+      // Extract scene code from scene name
+      // "Scene 001" → "SC_001", "Scene RIVER" → "SC_RIVER"
+      const sceneSuffix = currentScene.name.replace(/^Scene\s+/i, '').trim();
+      const sceneCode = sceneSuffix.toUpperCase().replace(/\s+/g, '_');
+      return `SC_${sceneCode}`;
     }
-    return project.path;
+    return null;
+  };
+
+  const getShotFilter = (): string | null => {
+    if (currentShot) {
+      if (currentShot.number === 0) {
+        return 'SH000';
+      }
+      return `SH${String(currentShot.number).padStart(3, '0')}`;
+    }
+    return null;
   };
 
   const loadOutputs = async (forceReload = false) => {
@@ -103,11 +120,19 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
         throw new Error('Project path is not defined');
       }
 
-      const basePath = getBasePath();
+      const sceneFilter = getSceneFilter();
+      const shotFilter = getShotFilter();
+
+      // Combine scene and shot filters for output scanning
+      const combinedFilter = sceneFilter && shotFilter
+        ? `${sceneFilter}_${shotFilter}`
+        : sceneFilter || shotFilter;
 
       // Scan for output files in Render/Preview and Render/Final folders
+      // Filter by scene/shot folder name if selected
       const result = await invoke<OutputFile[]>('get_project_outputs', {
-        projectPath: basePath
+        projectPath: project.path,
+        shotFilter: combinedFilter
       });
 
       const outputsArray = Array.isArray(result) ? result : [];
@@ -127,45 +152,21 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
   useEffect(() => {
     loadOutputs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.path]);
+  }, [project.path, currentShot]);
 
-  // Listen for version changes from file system watcher (also catches output changes)
+  // Listen for output changes from file system watcher
   useEffect(() => {
     let unlisten: any;
-    let debounceTimer: number | null = null;
-    let maxWaitTimer: number | null = null;
 
     // Import listen function
     import('@tauri-apps/api/event').then(({ listen }) => {
       // Listen to output-changed event (specific for output files)
       listen('output-changed', () => {
-        // Clear existing timers
-        if (debounceTimer !== null) {
-          clearTimeout(debounceTimer);
-        }
-
-        // Set max wait timer (ensures update happens within 1 second)
-        if (maxWaitTimer === null) {
-          maxWaitTimer = window.setTimeout(() => {
-            outputsCache.invalidate(project.path);
-            loadOutputs(true);
-            maxWaitTimer = null;
-            debounceTimer = null;
-          }, 1000);
-        }
-
-        // Debounce with 300ms delay
-        debounceTimer = window.setTimeout(() => {
-          // Clear max wait timer if debounce triggers first
-          if (maxWaitTimer !== null) {
-            clearTimeout(maxWaitTimer);
-            maxWaitTimer = null;
-          }
-
-          outputsCache.invalidate(project.path);
-          loadOutputs(true);
-          debounceTimer = null;
-        }, 300);
+        console.log('Output changed detected by file watcher');
+        // Invalidate cache and reload immediately
+        // No additional debounce needed - backend already debounces at 500ms
+        outputsCache.invalidate(project.path);
+        loadOutputs(true);
       }).then((fn) => {
         unlisten = fn;
       });
@@ -173,8 +174,6 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
 
     return () => {
       if (unlisten) unlisten();
-      if (debounceTimer !== null) clearTimeout(debounceTimer);
-      if (maxWaitTimer !== null) clearTimeout(maxWaitTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.path]);
@@ -410,7 +409,6 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
   };
 
   const getGroupFolderPath = (groupPath: string, renderType: 'preview' | 'final'): string => {
-    const basePath = getBasePath();
     const typeFolder = renderType === 'preview' ? 'Preview' : 'Final';
     const relativePath = groupPath.replace(/\s*\/\s*/g, '\\'); // Convert to backslashes and remove spaces
 
@@ -437,7 +435,7 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
       }
     }
 
-    const fallbackPath = `${basePath}\\Render\\${typeFolder}\\${relativePath}`;
+    const fallbackPath = `${project.path}\\Render\\${typeFolder}\\${relativePath}`;
     return fallbackPath;
   };
 
@@ -519,6 +517,26 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
 
       {/* Filters */}
       <div className="flex gap-2 mb-3">
+        {/* Software Filter - only show if more than one software */}
+        {availableSoftware.length > 1 && (
+          <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
+            {availableSoftware.map(software => (
+              <button
+                key={software}
+                onClick={() => updateSelectedSoftware(software)}
+                className={`px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5 ${
+                  selectedSoftware === software
+                    ? 'bg-zinc-700 text-white'
+                    : 'text-text-secondary hover:text-white'
+                }`}
+              >
+                <SoftwareIcon name={software} className="w-3.5 h-3.5" />
+                <span>{formatSoftwareName(software)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Output Type Filter */}
         <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
           <button
@@ -544,26 +562,6 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
             Final
           </button>
         </div>
-
-        {/* Software Filter - only show if more than one software */}
-        {availableSoftware.length > 1 && (
-          <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
-            {availableSoftware.map(software => (
-              <button
-                key={software}
-                onClick={() => updateSelectedSoftware(software)}
-                className={`px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5 ${
-                  selectedSoftware === software
-                    ? 'bg-zinc-700 text-white'
-                    : 'text-text-secondary hover:text-white'
-                }`}
-              >
-                <SoftwareIcon name={software} className="w-3.5 h-3.5" />
-                <span>{formatSoftwareName(software)}</span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Outputs Grid */}
@@ -604,14 +602,23 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                           )}
                           {output.name}
                         </span>
-                        {output.is_sequence && output.frame_count && (
-                          <span className="text-xs text-text-muted">
-                            {output.frame_count} frames
-                            {output.missing_frames && (
-                              <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
-                            )}
-                          </span>
-                        )}
+                        {output.is_sequence && output.frame_count && (() => {
+                          // Check if this is an image sequence format
+                          const ext = output.name.split('.').pop()?.toLowerCase() || '';
+                          const isImageSequence = IMAGE_SEQUENCE_FORMATS.includes(ext);
+
+                          // Only show frame info for image sequences
+                          if (!isImageSequence) return null;
+
+                          return (
+                            <span className="text-xs text-text-muted">
+                              {output.frame_count} frames
+                              {output.missing_frames && (
+                                <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-text-muted flex-shrink-0">
                         <span>{formatFileSize(output.size)}</span>
@@ -690,14 +697,23 @@ export function OutputOverview({ project, currentShot }: OutputOverviewProps) {
                           )}
                           {output.name}
                         </span>
-                        {output.is_sequence && output.frame_count && (
-                          <span className="text-xs text-text-muted">
-                            {output.frame_count} frames
-                            {output.missing_frames && (
-                              <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
-                            )}
-                          </span>
-                        )}
+                        {output.is_sequence && output.frame_count && (() => {
+                          // Check if this is an image sequence format
+                          const ext = output.name.split('.').pop()?.toLowerCase() || '';
+                          const isImageSequence = IMAGE_SEQUENCE_FORMATS.includes(ext);
+
+                          // Only show frame info for image sequences
+                          if (!isImageSequence) return null;
+
+                          return (
+                            <span className="text-xs text-text-muted">
+                              {output.frame_count} frames
+                              {output.missing_frames && (
+                                <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-text-muted flex-shrink-0">
                         <span>{formatFileSize(output.size)}</span>

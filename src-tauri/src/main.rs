@@ -71,8 +71,13 @@ struct Project {
     #[serde(rename = "completedAt", alias = "completed_at")]
     completed_at: Option<String>,
     todos: Option<Vec<TodoItem>>,
+    #[serde(rename = "hasScenes", alias = "has_scenes")]
+    has_scenes: Option<bool>,
     #[serde(rename = "hasShots", alias = "has_shots")]
     has_shots: Option<bool>,
+    scenes: Option<Vec<Scene>>,
+    #[serde(rename = "currentSceneId", alias = "current_scene_id")]
+    current_scene_id: Option<String>,
     shots: Option<Vec<Shot>>,
     #[serde(rename = "currentShotId", alias = "current_shot_id")]
     current_shot_id: Option<String>,
@@ -153,8 +158,24 @@ struct TodoItem {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+struct Scene {
+    id: String,
+    number: u32, // 0 for Main, 1+ for SC001, SC002...
+    name: String,
+    todos: Vec<TodoItem>,
+    notes: Vec<Note>,
+    #[serde(rename = "browserTabs")]
+    browser_tabs: Vec<BrowserTab>,
+    links: Vec<Link>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completed: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Shot {
     id: String,
+    #[serde(rename = "sceneId")]
+    scene_id: String, // Required: scene this shot belongs to
     number: u32,
     name: String,
     todos: Vec<TodoItem>,
@@ -182,6 +203,8 @@ struct CreateProjectInput {
     payment_status: Option<String>,
     #[serde(rename = "prepaymentAmount")]
     prepayment_amount: Option<f64>,
+    #[serde(rename = "hasScenes")]
+    has_scenes: Option<bool>,
     #[serde(rename = "hasShots")]
     has_shots: Option<bool>,
     category: Option<String>,
@@ -196,6 +219,10 @@ struct LaunchSoftwareInput {
     software: String,
     #[serde(rename = "projectName")]
     project_name: String,
+    #[serde(rename = "sceneName")]
+    scene_name: Option<String>,
+    #[serde(rename = "sceneNumber")]
+    scene_number: Option<u32>,
     #[serde(rename = "shotNumber")]
     shot_number: Option<u32>,
 }
@@ -217,7 +244,7 @@ fn get_software_folder_name(software: &str) -> &str {
     }
 }
 
-fn get_folder_template(software: &str) -> Vec<FolderItem> {
+fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> Vec<FolderItem> {
     match software.to_lowercase().as_str() {
         "blender" => vec![
             FolderItem::Nested {
@@ -384,7 +411,11 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
         .map_err(|e| format!("Failed to create project directory: {}", e))?;
 
     for software in &input.software {
-        let software_folders = get_folder_template(software);
+        let software_folders = get_folder_template(
+            software,
+            input.has_scenes.unwrap_or(false),
+            input.has_shots.unwrap_or(false)
+        );
         let folder_name = get_software_folder_name(software);
         let software_path = project_path.join(folder_name);
 
@@ -436,7 +467,10 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
         prepayment_amount: input.prepayment_amount,
         completed_at: None,
         todos: Some(vec![]),
+        has_scenes: input.has_scenes,
         has_shots: input.has_shots,
+        scenes: Some(vec![]),
+        current_scene_id: None,
         shots: Some(vec![]),
         current_shot_id: None,
         category: input.category,
@@ -464,8 +498,19 @@ async fn add_software_to_project(project_path: String, software_name: String) ->
         return Err("Project path does not exist".to_string());
     }
 
+    // Read project metadata to get has_scenes and has_shots
+    let metadata_path = project_path_buf.join(".project-metadata.json");
+    let metadata_content = fs::read_to_string(&metadata_path)
+        .map_err(|e| format!("Failed to read project metadata: {}", e))?;
+    let project: Project = serde_json::from_str(&metadata_content)
+        .map_err(|e| format!("Failed to parse project metadata: {}", e))?;
+
     // Get folder template for the software
-    let software_folders = get_folder_template(&software_name);
+    let software_folders = get_folder_template(
+        &software_name,
+        project.has_scenes.unwrap_or(false),
+        project.has_shots.unwrap_or(false)
+    );
     let folder_name = get_software_folder_name(&software_name);
     let software_path = project_path_buf.join(folder_name);
 
@@ -729,6 +774,9 @@ impl SoftwareLaunchConfig {
 
     /// Launch software with unified logic
     fn launch(&self, executable_path: &str, file_path: &str) -> Result<u32, String> {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         println!("[SoftwareLauncher] use_explorer: {}, needs_pid_lookup: {}, process_name: '{}'",
             self.use_explorer, self.needs_pid_lookup, self.process_name);
 
@@ -737,12 +785,14 @@ impl SoftwareLaunchConfig {
             println!("[SoftwareLauncher] Launching via explorer.exe: {}", file_path);
             Command::new("explorer")
                 .arg(file_path)
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn()
                 .map_err(|e| format!("Failed to open file via explorer: {}", e))?
         } else {
             println!("[SoftwareLauncher] Launching directly: {} {}", executable_path, file_path);
             Command::new(executable_path)
                 .arg(file_path)
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn()
                 .map_err(|e| format!("Failed to launch software: {}", e))?
         };
@@ -802,15 +852,53 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
             .map_err(|e| format!("Failed to create software directory: {}", e))?;
     }
 
-    // Build base name with optional shot number
+    // Build base name with optional scene and shot numbers
     let base_name = input.project_name.replace(" ", "");
-    let base_name_with_shot = if let Some(shot_num) = input.shot_number {
+    let base_name_with_scene_shot = if let (Some(scene_name), Some(shot_num)) = (&input.scene_name, input.shot_number) {
+        // Scene name provided: extract suffix after "Scene " and format as SC_NAME
+        let scene_suffix = scene_name
+            .replace("Scene ", "")
+            .replace("scene ", "")
+            .trim()
+            .to_string();
+
+        let scene_code = scene_suffix
+            .to_uppercase()
+            .replace(" ", "_")
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+            .collect::<String>();
+
+        let scene_part = format!("SC_{}", scene_code);
+
+        let shot_part = if shot_num == 0 {
+            "SH000".to_string()
+        } else {
+            format!("SH{:03}", shot_num)
+        };
+        format!("{}_{}_{}",base_name, scene_part, shot_part)
+    } else if let (Some(scene_num), Some(shot_num)) = (input.scene_number, input.shot_number) {
+        // Fallback: use scene number if name not provided
+        let scene_part = if scene_num == 0 {
+            "SC_000".to_string()
+        } else {
+            format!("SC_{:03}", scene_num)
+        };
+        let shot_part = if shot_num == 0 {
+            "SH000".to_string()
+        } else {
+            format!("SH{:03}", shot_num)
+        };
+        format!("{}_{}_{}",base_name, scene_part, shot_part)
+    } else if let Some(shot_num) = input.shot_number {
+        // Legacy: only shot specified (for backward compatibility)
         if shot_num == 0 {
             format!("{}_main", base_name)
         } else {
             format!("{}_Shot{:03}", base_name, shot_num)
         }
     } else {
+        // No scene/shot
         base_name.clone()
     };
 
@@ -821,10 +909,10 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
     if let Ok(entries) = fs::read_dir(&software_path) {
         for entry in entries.flatten() {
             if let Ok(file_name) = entry.file_name().into_string() {
-                // Check if file matches pattern: BaseName[_Shot###]_v###.ext
-                if file_name.starts_with(&base_name_with_shot) && file_name.contains("_v") {
+                // Check if file matches pattern: BaseName[_SC###_SH###]_v###.ext or legacy patterns
+                if file_name.starts_with(&base_name_with_scene_shot) && file_name.contains("_v") {
                     // Extract version number
-                    if let Some(version_str) = file_name.strip_prefix(&format!("{}_v", base_name_with_shot)) {
+                    if let Some(version_str) = file_name.strip_prefix(&format!("{}_v", base_name_with_scene_shot)) {
                         if let Some(version_num_str) = version_str.get(0..3) {
                             if let Ok(version_num) = version_num_str.parse::<u32>() {
                                 if version_num > highest_version {
@@ -848,7 +936,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
         (existing_file, file_name)
     } else {
         // Create new file with v001
-        let file_name = format!("{}_v001{}", base_name_with_shot, file_extension);
+        let file_name = format!("{}_v001{}", base_name_with_scene_shot, file_extension);
         let file_path = software_path.join(&file_name);
         (file_path, file_name)
     };
@@ -885,15 +973,47 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
             if let Err(e) = std::fs::write(&script_path, BLENDER_SETUP_PY) {
                 println!("Warning: Failed to write temporary script: {}", e);
             } else {
-                // Spawn Blender process
-                let child = Command::new(&input.executable_path)
-                    .arg("--background")
+                // Build scene and shot codes for render path
+                let mut cmd = Command::new(&input.executable_path);
+                cmd.arg("--background")
                     .arg("--python")
                     .arg(&script_path)
                     .arg("--")
                     .arg(file_path.to_str().unwrap())
-                    .arg(&project_path)
-                    .spawn()
+                    .arg(&project_path);
+
+                // Add scene and shot codes if available
+                if let (Some(scene_name), Some(shot_num)) = (&input.scene_name, input.shot_number) {
+                    // Extract scene code from scene name
+                    let scene_suffix = scene_name
+                        .replace("Scene ", "")
+                        .replace("scene ", "")
+                        .trim()
+                        .to_string();
+
+                    let scene_code = scene_suffix
+                        .to_uppercase()
+                        .replace(" ", "_")
+                        .chars()
+                        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+                        .collect::<String>();
+
+                    let scene_part = format!("SC_{}", scene_code);
+
+                    let shot_part = if shot_num == 0 {
+                        "SH000".to_string()
+                    } else {
+                        format!("SH{:03}", shot_num)
+                    };
+
+                    cmd.arg(&scene_part);
+                    cmd.arg(&shot_part);
+
+                    println!("Setting Blender render path with scene: {}, shot: {}", scene_part, shot_part);
+                }
+
+                // Spawn Blender process
+                let child = cmd.spawn()
                     .map_err(|e| format!("Failed to run Blender setup: {}", e))?;
 
                 let child_id = child.id();
@@ -2564,13 +2684,24 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
     result
 }
 
+// Helper function to normalize shot names for comparison
+// Removes spaces, underscores, and converts to lowercase
+fn normalize_shot_name(name: &str) -> String {
+    name.to_lowercase()
+        .replace(" ", "")
+        .replace("_", "")
+        .replace("-", "")
+}
+
 // Helper function to recursively scan directory for output files
+// shot_filter: if Some, only include files in folders matching this shot name
 fn scan_output_dir_recursive(
     dir: &PathBuf,
     software: &str,
     render_type: &str,
     outputs: &mut Vec<OutputFile>,
-    depth: usize
+    depth: usize,
+    shot_filter: &Option<String>
 ) {
     // Prevent infinite recursion with depth limit
     if depth > 10 {
@@ -2584,28 +2715,58 @@ fn scan_output_dir_recursive(
 
                 // Recursively scan subdirectories
                 if metadata.is_dir() {
-                    scan_output_dir_recursive(&path, software, render_type, outputs, depth + 1);
-                } else if metadata.is_file() {
-                    let file_name = entry.file_name().to_string_lossy().to_string();
-                    // Skip hidden files and system files
-                    if file_name.starts_with('.') || file_name.starts_with('~') {
-                        continue;
-                    }
+                    // If we have a shot filter, check if this directory matches
+                    let should_scan = if let Some(filter) = shot_filter {
+                        let dir_name = entry.file_name().to_string_lossy().to_string();
+                        let normalized_dir = normalize_shot_name(&dir_name);
+                        let normalized_filter = normalize_shot_name(filter);
 
-                    if let Ok(created) = metadata.created().or_else(|_| metadata.modified()) {
-                        if let Ok(duration) = created.duration_since(std::time::UNIX_EPOCH) {
-                            outputs.push(OutputFile {
-                                name: file_name,
-                                path: path.to_string_lossy().to_string(),
-                                software: software.to_lowercase().replace("aftereffects", "after-effects"),
-                                render_type: render_type.to_string(),
-                                created_at: duration.as_secs(),
-                                size: metadata.len(),
-                                is_sequence: false,
-                                frame_range: None,
-                                frame_count: None,
-                                missing_frames: None,
-                            });
+                        // If directory name matches shot filter exactly, scan it
+                        // Otherwise, continue deeper to find matching subdirectories (depth == 0)
+                        normalized_dir == normalized_filter || depth == 0
+                    } else {
+                        true // No filter, scan everything
+                    };
+
+                    if should_scan {
+                        scan_output_dir_recursive(&path, software, render_type, outputs, depth + 1, shot_filter);
+                    }
+                } else if metadata.is_file() {
+                    // If we have a shot filter, check if we're inside a matching folder
+                    let should_include = if let Some(filter) = shot_filter {
+                        // Check if any folder in the path matches the shot name
+                        let path_str = path.to_string_lossy().to_string();
+                        let normalized_filter = normalize_shot_name(filter);
+
+                        // Split path and check each folder component
+                        path_str.split(['/', '\\'].as_ref())
+                            .any(|component| normalize_shot_name(component) == normalized_filter)
+                    } else {
+                        true // No filter, include all files
+                    };
+
+                    if should_include {
+                        let file_name = entry.file_name().to_string_lossy().to_string();
+                        // Skip hidden files and system files
+                        if file_name.starts_with('.') || file_name.starts_with('~') {
+                            continue;
+                        }
+
+                        if let Ok(created) = metadata.created().or_else(|_| metadata.modified()) {
+                            if let Ok(duration) = created.duration_since(std::time::UNIX_EPOCH) {
+                                outputs.push(OutputFile {
+                                    name: file_name,
+                                    path: path.to_string_lossy().to_string(),
+                                    software: software.to_lowercase().replace("aftereffects", "after-effects"),
+                                    render_type: render_type.to_string(),
+                                    created_at: duration.as_secs(),
+                                    size: metadata.len(),
+                                    is_sequence: false,
+                                    frame_range: None,
+                                    frame_count: None,
+                                    missing_frames: None,
+                                });
+                            }
                         }
                     }
                 }
@@ -2615,7 +2776,7 @@ fn scan_output_dir_recursive(
 }
 
 #[tauri::command]
-async fn get_project_outputs(project_path: String) -> Result<Vec<OutputFile>, String> {
+async fn get_project_outputs(project_path: String, shot_filter: Option<String>) -> Result<Vec<OutputFile>, String> {
     let project_dir = PathBuf::from(&project_path);
     let mut outputs = Vec::new();
 
@@ -2635,15 +2796,15 @@ async fn get_project_outputs(project_path: String) -> Result<Vec<OutputFile>, St
         // Check Render/Preview (recursively scan all subdirs)
         let preview_dir = software_dir.join("Render").join("Preview");
         if preview_dir.exists() {
-            println!("Scanning Preview dir: {:?}", preview_dir);
-            scan_output_dir_recursive(&preview_dir, software, "preview", &mut outputs, 0);
+            println!("Scanning Preview dir: {:?} with shot_filter: {:?}", preview_dir, shot_filter);
+            scan_output_dir_recursive(&preview_dir, software, "preview", &mut outputs, 0, &shot_filter);
         }
 
         // Check Render/Final (recursively scan all subdirs)
         let final_dir = software_dir.join("Render").join("Final");
         if final_dir.exists() {
-            println!("Scanning Final dir: {:?}", final_dir);
-            scan_output_dir_recursive(&final_dir, software, "final", &mut outputs, 0);
+            println!("Scanning Final dir: {:?} with shot_filter: {:?}", final_dir, shot_filter);
+            scan_output_dir_recursive(&final_dir, software, "final", &mut outputs, 0, &shot_filter);
         }
     }
 
@@ -2653,13 +2814,13 @@ async fn get_project_outputs(project_path: String) -> Result<Vec<OutputFile>, St
         // Preview
         let preview_dir = output_dir.join("Preview");
         if preview_dir.exists() {
-            scan_output_dir_recursive(&preview_dir, "AfterEffects", "preview", &mut outputs, 0);
+            scan_output_dir_recursive(&preview_dir, "AfterEffects", "preview", &mut outputs, 0, &shot_filter);
         }
 
         // Final
         let final_dir = output_dir.join("Final");
         if final_dir.exists() {
-            scan_output_dir_recursive(&final_dir, "AfterEffects", "final", &mut outputs, 0);
+            scan_output_dir_recursive(&final_dir, "AfterEffects", "final", &mut outputs, 0, &shot_filter);
         }
     }
 
@@ -2667,6 +2828,71 @@ async fn get_project_outputs(project_path: String) -> Result<Vec<OutputFile>, St
     let grouped_outputs = group_sequences(outputs);
 
     Ok(grouped_outputs)
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateSceneFoldersInput {
+    project_path: String,
+    scene_code: String, // e.g., "SC_001", "SC_RIVER"
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateShotFoldersInput {
+    project_path: String,
+    scene_code: String, // e.g., "SC_001", "SC_RIVER"
+    shot_code: String,  // e.g., "SH001", "SH000"
+}
+
+#[tauri::command]
+fn create_scene_folders(input: CreateSceneFoldersInput) -> Result<(), String> {
+    let project_path = PathBuf::from(&input.project_path);
+
+    // List of software and their render/output folders
+    let software_configs = vec![
+        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
+    ];
+
+    for (software, folders) in software_configs {
+        let software_path = project_path.join(software);
+        if software_path.exists() {
+            for folder in folders {
+                let scene_folder = software_path.join(folder).join(&input.scene_code);
+                fs::create_dir_all(&scene_folder)
+                    .map_err(|e| format!("Failed to create scene folder {}: {}", scene_folder.display(), e))?;
+                println!("Created scene folder: {:?}", scene_folder);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn create_shot_folders(input: CreateShotFoldersInput) -> Result<(), String> {
+    let project_path = PathBuf::from(&input.project_path);
+
+    // List of software and their render/output folders
+    let software_configs = vec![
+        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
+    ];
+
+    for (software, folders) in software_configs {
+        let software_path = project_path.join(software);
+        if software_path.exists() {
+            for folder in folders {
+                let shot_folder = software_path.join(folder).join(&input.scene_code).join(&input.shot_code);
+                fs::create_dir_all(&shot_folder)
+                    .map_err(|e| format!("Failed to create shot folder {}: {}", shot_folder.display(), e))?;
+                println!("Created shot folder: {:?}", shot_folder);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn main() {
@@ -2701,6 +2927,8 @@ fn main() {
             read_feedback_full,
             check_shot_files_accessible,
             rename_shot_files,
+            create_scene_folders,
+            create_shot_folders,
             time_tracking::start_time_tracking,
             time_tracking::stop_time_tracking,
             time_tracking::pause_time_tracking,
@@ -2709,6 +2937,9 @@ fn main() {
             time_tracking::is_session_focused,
             time_tracking::increment_software_stats,
             time_tracking::check_process_alive,
+            time_tracking::get_session_status,
+            time_tracking::update_session_pid,
+            time_tracking::migrate_to_child_process,
             time_tracking::get_focus_summary,
             detect_software_paths,
             get_project_outputs,

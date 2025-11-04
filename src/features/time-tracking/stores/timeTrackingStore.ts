@@ -117,6 +117,8 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
     }, now, 0);
 
     // Set up process check callback to auto-stop session if process dies
+    // Uses backend session status (includes window detection, grace period)
+    // Also handles PID migration for launcher-based apps (Blender, Adobe, etc.)
     TimerService.setProcessCheckCallback(entryId, async (id) => {
       const session = get().sessions.get(id);
       if (!session || !session.pid) {
@@ -125,19 +127,67 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
       }
 
       try {
-        // Check the actual PID directly (more reliable than backend session check)
-        const isAlive = await SessionService.checkProcessAlive(session.pid);
-        console.log(`[TimeTrackingStore] 🔍 Process check for ${session.software} (PID: ${session.pid}): ${isAlive ? '✅ ALIVE' : '❌ DEAD'}`);
+        // STEP 1: Check backend session status (respects window detection & grace periods)
+        const backendSession = await SessionService.getSessionStatus(session.id);
 
-        if (!isAlive) {
-          console.log(`[TimeTrackingStore] ❌ Process died for ${session.software}, auto-stopping session`);
-          await get().stopSession(id);
+        if (backendSession?.process_alive) {
+          // Backend says alive (may be in grace period for window detection) - trust it
+          console.log(`[TimeTrackingStore] ✅ Backend confirms ${session.software} alive (PID: ${backendSession.pid})`);
+
+          // Sync PID if backend changed it (defensive check)
+          if (backendSession.pid !== session.pid) {
+            console.log(`[TimeTrackingStore] 🔄 Syncing PID: ${session.pid} -> ${backendSession.pid}`);
+            const updatedSessions = new Map(get().sessions);
+            updatedSessions.set(id, { ...session, pid: backendSession.pid });
+            set({ sessions: updatedSessions });
+          }
+
+          return true;
         }
 
-        return isAlive;
-      } catch (error) {
-        console.error('[TimeTrackingStore] ❌ Process check failed:', error);
+        // STEP 2: Backend says dead - try PID migration (handles Blender launcher case)
+        console.log(`[TimeTrackingStore] ⚠️ Backend says dead (PID: ${session.pid}), attempting migration...`);
+        const newPid = await SessionService.migrateToChildProcess(session.pid, session.software);
+
+        if (newPid) {
+          // Successfully found child process
+          console.log(`[TimeTrackingStore] ✅ Migrated to child PID: ${newPid}`);
+
+          // Update BOTH backend and frontend session PIDs
+          try {
+            await SessionService.updateSessionPid(session.id, newPid);
+            console.log(`[TimeTrackingStore] ✅ Backend PID updated`);
+          } catch (error) {
+            console.error(`[TimeTrackingStore] ⚠️ Failed to update backend PID:`, error);
+          }
+
+          // Update frontend session
+          const updatedSessions = new Map(get().sessions);
+          updatedSessions.set(id, { ...session, pid: newPid });
+          set({ sessions: updatedSessions });
+
+          return true;
+        }
+
+        // STEP 3: No migration possible - session truly dead
+        console.log(`[TimeTrackingStore] ❌ No migration possible, stopping session for ${session.software}`);
+        await get().stopSession(id);
         return false;
+
+      } catch (error) {
+        console.error('[TimeTrackingStore] ❌ Session status check failed:', error);
+
+        // Fallback: use simple process check if backend communication fails
+        try {
+          const isAlive = await SessionService.checkProcessAlive(session.pid);
+          if (!isAlive) {
+            await get().stopSession(id);
+          }
+          return isAlive;
+        } catch (fallbackError) {
+          console.error('[TimeTrackingStore] ❌ Fallback process check also failed:', fallbackError);
+          return false;
+        }
       }
     });
 

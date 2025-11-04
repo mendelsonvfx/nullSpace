@@ -16,6 +16,8 @@ import { useProjectStore } from '../../store/projectStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { writeText } from '@tauri-apps/api/clipboard';
+import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
+import type { SoftwareName } from '../../types/project';
 import SimpleBar from 'simplebar-react';
 
 // Import folder icons
@@ -105,6 +107,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   const isPendingReloadRef = useRef(false);
   const currentProjectPathRef = useRef(project.path);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const startSession = useTimeTrackingStore(state => state.startSession);
 
   // Save expanded dirs to localStorage whenever they change
   useEffect(() => {
@@ -466,9 +469,77 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       const { openInExplorer } = useProjectStore.getState();
       openInExplorer(node.path);
     } else {
-      // Open file with default application
+      // Open file with time tracking
       try {
-        await invoke('open_file', { filePath: node.path });
+        // Detect software from file extension
+        const ext = node.path.toLowerCase().split('.').pop() || '';
+        const extToSoftware: Record<string, { name: string; key: SoftwareName }> = {
+          'blend': { name: 'Blender', key: 'blender' },
+          'aep': { name: 'After Effects', key: 'after-effects' },
+          'hip': { name: 'Houdini', key: 'houdini' },
+          'hiplc': { name: 'Houdini', key: 'houdini' },
+          'hipnc': { name: 'Houdini', key: 'houdini' },
+          'mb': { name: 'Maya', key: 'maya' },
+          'ma': { name: 'Maya', key: 'maya' },
+          'c4d': { name: 'Cinema 4D', key: 'cinema4d' },
+          'uproject': { name: 'Unreal Engine', key: 'unreal' },
+          'unity': { name: 'Unity', key: 'unity' },
+          'spp': { name: 'Substance Painter', key: 'substance' },
+          'sbs': { name: 'Substance Designer', key: 'substance' },
+          'ztl': { name: 'ZBrush', key: 'zbrush' },
+          'zpr': { name: 'ZBrush', key: 'zbrush' },
+          'tbscene': { name: 'Marmoset', key: 'marmoset' }
+        };
+
+        const softwareMapping = extToSoftware[ext];
+
+        if (!softwareMapping) {
+          // Unknown file type - just open with default application
+          await invoke('open_file', { filePath: node.path });
+          return;
+        }
+
+        // Get software info from project
+        const softwareInfo = project.software?.find((s: any) => s.name === softwareMapping.name);
+        if (!softwareInfo) {
+          // Software not in project - fallback to regular open
+          await invoke('open_file', { filePath: node.path });
+          return;
+        }
+
+        // Get executable path from project or fallback to global settings
+        let executablePath = softwareInfo.path || softwareInfo.executable_path || softwareInfo.executablePath;
+
+        // If still empty, try to get from global localStorage settings
+        if (!executablePath) {
+          const savedPaths = localStorage.getItem('softwarePaths');
+          if (savedPaths) {
+            const paths = JSON.parse(savedPaths);
+            executablePath = paths[softwareMapping.key];
+          }
+        }
+
+        if (!executablePath) {
+          // No executable path configured - fallback to regular open
+          await invoke('open_file', { filePath: node.path });
+          return;
+        }
+
+        // Launch file with time tracking
+        const result = await invoke<{ file_name: string; pid: number }>('open_file_with_tracking', {
+          filePath: node.path,
+          executablePath: executablePath
+        });
+
+        // Start time tracking
+        await startSession({
+          projectId: project.id,
+          projectPath: project.path,
+          software: softwareMapping.key,
+          pid: result.pid
+        });
+
+        console.log(`[TreeView] Started time tracking for ${softwareMapping.name} (PID: ${result.pid})`);
       } catch (error) {
         console.error('Failed to open file:', error);
       }
@@ -620,7 +691,11 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         className={`transition-opacity duration-150 ${!shouldShow ? 'opacity-0 h-0 overflow-hidden pointer-events-none' : isHidden ? 'opacity-40' : 'opacity-100'}`}
       >
         <div
-          className={`flex items-center gap-2 px-2.5 py-2 bg-card-bg border border-border-primary rounded-badge text-xs select-none group transition-all cursor-pointer hover:bg-hover-bg hover:border-border-secondary ${isExpanded && node.is_dir ? 'bg-hover-bg border-border-secondary' : ''}`}
+          className={`flex items-center gap-2 px-2.5 py-2 text-xs select-none group transition-all cursor-pointer ${
+            node.is_dir
+              ? `bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary ${isExpanded ? 'bg-hover-bg border-border-secondary' : ''}`
+              : 'hover:bg-hover-bg/30 rounded'
+          }`}
           onDoubleClick={(e) => handleDoubleClick(e, node)}
           onContextMenu={(e) => handleContextMenu(e, node)}
         >

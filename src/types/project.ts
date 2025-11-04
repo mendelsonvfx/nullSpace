@@ -45,8 +45,20 @@ export interface TodoItem {
   createdAt?: string; // ISO date string for date separator
 }
 
+export interface Scene {
+  id: string;
+  number: number; // 0 for Main, 1+ for SC001, SC002...
+  name: string; // "Main", "Scene 001", "Scene 002"
+  todos: TodoItem[];
+  notes: Note[];
+  browserTabs: BrowserTab[];
+  links: Link[];
+  completed?: boolean;
+}
+
 export interface Shot {
   id: string;
+  sceneId: string; // Required: scene this shot belongs to
   number: number;
   name: string;
   todos: TodoItem[];
@@ -80,6 +92,7 @@ export interface Link {
 export interface TimeEntry {
   id: string;
   projectId: string;
+  sceneId?: string; // Optional: scene this entry belongs to
   shotId?: string;
   software: SoftwareName;
   startTime: string;         // ISO timestamp
@@ -138,9 +151,13 @@ export interface Project {
   prepaymentAmount?: number;
   completedAt?: string; // ISO date string - when payment status was set to "paid"
   clientId?: string;
+  hasScenes?: boolean;
   hasShots?: boolean;
+  scenes?: Scene[];
+  currentSceneId?: string;
   shots?: Shot[];
   currentShotId?: string;
+  sceneShotPreferences?: Record<string, string>; // sceneId -> shotId mapping
   category?: string;
   timeEntries?: TimeEntry[];
   totalMinutesSpent?: number;        // Completed sessions total
@@ -282,6 +299,7 @@ export interface CreateProjectCommand {
   software: SoftwareName[];
   tags: string[];
   deadline?: string; // ISO date string
+  hasScenes?: boolean;
   hasShots?: boolean;
 }
 
@@ -290,6 +308,8 @@ export interface LaunchSoftwareCommand {
   software: string;
   executablePath: string;
   projectName: string;
+  sceneName?: string;
+  sceneNumber?: number;
   shotNumber?: number;
 }
 
@@ -297,6 +317,7 @@ export interface StartTimeTrackingCommand {
   entryId: string;
   projectId: string;
   projectPath: string;
+  sceneId?: string;
   shotId?: string;
   software: SoftwareName;
   pid: number;

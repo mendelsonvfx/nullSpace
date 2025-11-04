@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { FolderTree, Eye } from 'lucide-react';
 import { TreeView } from './TreeView';
 
 interface RightSidebarProps {

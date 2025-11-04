@@ -1618,6 +1618,10 @@ function App() {
                openInExplorer(selectedProject.path);
                }}
               onLaunchSoftware={(sw: any) => {
+                const currentScene = selectedProject.hasScenes && selectedProject.currentSceneId
+                  ? selectedProject.scenes?.find((s: any) => s.id === selectedProject.currentSceneId)
+                  : null;
+
                 const currentShot = selectedProject.hasShots && selectedProject.currentShotId
                   ? selectedProject.shots?.find((s: any) => s.id === selectedProject.currentShotId)
                   : null;
@@ -1644,6 +1648,8 @@ function App() {
                   executablePath: sw.executablePath,
                   software: softwareKey,
                   projectName: selectedProject.name,
+                  sceneName: currentScene?.name,
+                  sceneNumber: currentScene?.number,
                   shotNumber: currentShot?.number
                 });
               }}
