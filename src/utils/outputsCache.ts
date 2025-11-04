@@ -26,7 +26,7 @@ interface ExpandedGroupsEntry {
 }
 
 interface OutputStateEntry {
-  selectedSoftware: string;
+  selectedSoftware: SoftwareName;
   selectedOutputType: 'preview' | 'final';
   timestamp: number;
 }
@@ -211,7 +211,7 @@ class OutputsCache {
   }
 
   // Set output state for a project
-  setOutputState(projectPath: string, selectedSoftware: string, selectedOutputType: 'preview' | 'final'): void {
+  setOutputState(projectPath: string, selectedSoftware: SoftwareName, selectedOutputType: 'preview' | 'final'): void {
     const entry: OutputStateEntry = {
       selectedSoftware,
       selectedOutputType,
