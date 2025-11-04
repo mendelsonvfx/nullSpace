@@ -233,7 +233,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
         isRestoringStateRef.current = true; // Mark as programmatic change
         const firstSoftware = availableSoftware[0];
         setSelectedSoftware(firstSoftware);
-        outputsCache.setOutputState(getCacheKey(), firstSoftware, selectedOutputType);
+        outputsCache.setOutputState(getCacheKey(), firstSoftware as SoftwareName, selectedOutputType);
         setTimeout(() => {
           isRestoringStateRef.current = false;
         }, 0);
