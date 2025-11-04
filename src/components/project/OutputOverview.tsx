@@ -68,13 +68,13 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   // Save selected software and persist to cache
   const updateSelectedSoftware = (software: string) => {
     setSelectedSoftware(software);
-    outputsCache.setOutputState(getCacheKey(), software, selectedOutputType);
+    outputsCache.setOutputState(getCacheKey(), software as SoftwareName, selectedOutputType);
   };
 
   // Save selected output type and persist to cache
   const updateSelectedOutputType = (type: 'preview' | 'final') => {
     setSelectedOutputType(type);
-    outputsCache.setOutputState(getCacheKey(), selectedSoftware, type);
+    outputsCache.setOutputState(getCacheKey(), selectedSoftware as SoftwareName, type);
   };
 
   // Get scene and shot filter for output scanning
