@@ -50,6 +50,9 @@ export interface TimeEntry {
 
   /** Whether inline widget is visible (UI state) */
   widgetVisible?: boolean;
+
+  /** Timeout ID for widget visibility (internal use) */
+  _visibilityTimeoutId?: ReturnType<typeof setTimeout>;
 }
 
 /**
