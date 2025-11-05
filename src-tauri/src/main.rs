@@ -169,6 +169,8 @@ struct Scene {
     links: Vec<Link>,
     #[serde(skip_serializing_if = "Option::is_none")]
     completed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    wip: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -185,6 +187,8 @@ struct Shot {
     links: Vec<Link>,
     #[serde(skip_serializing_if = "Option::is_none")]
     completed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    wip: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1226,7 +1230,11 @@ async fn open_file(file_path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         // Use cmd /c start to open file with default application
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         Command::new("cmd")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(&["/c", "start", "", &file_path])
             .spawn()
             .map_err(|e| format!("Failed to open file: {}", e))?;

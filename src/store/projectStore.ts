@@ -1775,7 +1775,7 @@ useTimeTrackingStore.subscribe((state) => {
           updatedEntries[entryIndex] = {
             ...existingEntry,
             ...session,
-            widgetVisible: existingEntry.widgetVisible // Preserve widget visibility
+            widgetVisible: session.widgetVisible ?? existingEntry.widgetVisible // Prioritize timeTrackingStore
           };
           hasChanges = true;
         }

@@ -1591,13 +1591,24 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         )}
 
           {/* Time Analytics Section */}
-          {!selectedProject && timeTrackingEnabled && (
-            <TimeAnalytics
-              projects={projects}
-              baseCurrency={baseCurrency}
-              convertCurrency={convertCurrency}
-            />
-          )}
+          {!selectedProject && timeTrackingEnabled && (() => {
+            // Calculate total revenue in base currency for hourly rate calculation
+            // Even if convertToBaseCurrency is false, we need to convert for accurate hourly rate
+            const totalRevenueInBaseCurrency = Object.entries(totalRevenue).reduce((sum, [currency, amount]) => {
+              if (currency === baseCurrency) {
+                return sum + amount;
+              }
+              return sum + convertCurrency(amount, currency, baseCurrency);
+            }, 0);
+
+            return (
+              <TimeAnalytics
+                projects={projects}
+                baseCurrency={baseCurrency}
+                totalRevenue={totalRevenueInBaseCurrency}
+              />
+            );
+          })()}
             </div>
           )}
         </div>

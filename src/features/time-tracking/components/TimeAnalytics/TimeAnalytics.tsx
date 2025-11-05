@@ -20,7 +20,7 @@ import { Clock } from 'lucide-react';
 interface TimeAnalyticsProps {
   projects: Project[];
   baseCurrency?: string;
-  convertCurrency?: (amount: number, from: string, to: string) => number;
+  totalRevenue?: number;
 }
 
 /**
@@ -30,7 +30,7 @@ interface TimeAnalyticsProps {
 export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
   projects,
   baseCurrency = 'USD',
-  convertCurrency
+  totalRevenue = 0
 }) => {
   // Get global software statistics (persisted)
   const { softwareMinutes } = useTimeStatsStore();
@@ -147,26 +147,13 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
       .slice(0, 3);
   }, [projects]);
 
-  // Calculate global hourly rate based on ALL time spent across ALL projects
+  // Calculate global hourly rate: Total Revenue / Total Time
+  // Simple and accurate - includes all revenue (paid, prepaid, manual transactions)
+  // divided by all time tracked across all projects
   const globalHourlyRate = useMemo(() => {
-    const paidProjects = projects.filter(p => p.paymentStatus === 'paid' && p.cost);
-
-    // Convert all revenues to base currency if converter is provided
-    const totalRevenue = paidProjects.reduce((sum, p) => {
-      const projectCost = p.cost || 0;
-      const projectCurrency = p.currency || 'USD';
-
-      if (convertCurrency && projectCurrency !== baseCurrency) {
-        return sum + convertCurrency(projectCost, projectCurrency, baseCurrency);
-      }
-
-      return sum + projectCost;
-    }, 0);
-
-    // Use total time from ALL projects (not just paid ones)
     if (totalMinutesAllProjects === 0) return 0;
     return totalRevenue / (totalMinutesAllProjects / 60);
-  }, [projects, baseCurrency, convertCurrency, totalMinutesAllProjects]);
+  }, [totalRevenue, totalMinutesAllProjects]);
 
   // Empty state
   if (totalMinutes === 0) {

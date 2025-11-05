@@ -83,7 +83,8 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
       isManual: false,
       pid: params.pid,
       countedInStats: true,
-      widgetVisible: false  // Widget starts hidden, shown after 1.5s delay
+      widgetVisible: false,  // Widget starts hidden, shown after 1.5s delay
+      _visibilityTimeoutId: undefined  // For clearing timeout on stopSession
     };
 
     // Start backend tracking
@@ -214,13 +215,13 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
     }
 
     // Show widget after 1.5 second delay
-    setTimeout(async () => {
+    const timeoutId = setTimeout(async () => {
       // Update widgetVisible in timeTrackingStore
       set(state => {
         const sessions = new Map(state.sessions);
         const entry = sessions.get(entryId);
         if (entry) {
-          sessions.set(entryId, { ...entry, widgetVisible: true });
+          sessions.set(entryId, { ...entry, widgetVisible: true, _visibilityTimeoutId: undefined });
         }
         return { sessions };
       });
@@ -249,6 +250,16 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
       }
     }, 1500);
 
+    // Store timeout ID for cleanup on stopSession
+    set(state => {
+      const sessions = new Map(state.sessions);
+      const entry = sessions.get(entryId);
+      if (entry) {
+        sessions.set(entryId, { ...entry, _visibilityTimeoutId: timeoutId });
+      }
+      return { sessions };
+    });
+
     return entryId;
   },
 
@@ -263,6 +274,12 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
     if (!entry) {
       console.warn('[TimeTrackingStore] Cannot stop - entry not found:', entryId);
       return 0;
+    }
+
+    // Clear visibility timeout if exists (prevent widgetVisible: true on stopped session)
+    if (entry._visibilityTimeoutId) {
+      clearTimeout(entry._visibilityTimeoutId);
+      console.log('[TimeTrackingStore] ⏹️  Cleared visibility timeout for', entryId);
     }
 
     // Stop widget timer
@@ -284,7 +301,8 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
         ...entry,
         endTime: now,
         durationMinutes: finalMinutes,
-        isActive: false
+        isActive: false,
+        widgetVisible: false
       });
       return { sessions };
     });
@@ -326,7 +344,8 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
                   endTime: now,
                   durationMinutes: finalMinutes,
                   softwareMinutes: updatedEntry?.softwareMinutes || 0,  // Save focused minutes
-                  isActive: false
+                  isActive: false,
+                  widgetVisible: false
                 }
               : e
           );
