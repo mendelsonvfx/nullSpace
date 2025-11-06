@@ -47,6 +47,7 @@ import 'simplebar-react/dist/simplebar.min.css';
 import { EmptyState } from './components/shared';
 import { FinancePage } from './components/finance';
 import { ProjectDetails, RightSidebar } from './components/project';
+import ShotsBrowser from './components/project/ShotsBrowser';
 import { CreateProjectModal } from './components/modals';
 import { darkenColor, STATUS_COLORS, STATUS_LABELS, hslStringToHex } from './utils';
 
@@ -1668,6 +1669,11 @@ function App() {
         )}
         </div>
       </div>
+
+      {/* ShotsBrowser - between ProjectDetails and TreeView */}
+      {selectedProject && viewMode !== 'finance' && selectedProject.hasShots && (
+        <ShotsBrowser className="w-80 flex-shrink-0" />
+      )}
 
       {/* Right Sidebar */}
       {selectedProject && viewMode !== 'finance' && <RightSidebar project={selectedProject} />}
