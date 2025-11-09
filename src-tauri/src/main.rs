@@ -162,6 +162,8 @@ struct Scene {
     id: String,
     number: u32, // 0 for Main, 1+ for SC001, SC002...
     name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
     todos: Vec<TodoItem>,
     notes: Vec<Note>,
     #[serde(rename = "browserTabs")]

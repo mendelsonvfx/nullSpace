@@ -1619,6 +1619,30 @@ function App() {
                openInExplorer(selectedProject.path);
                }}
               onLaunchSoftware={(sw: any) => {
+                // Check if we're in a special context (Asset/Compose)
+                let projectNameOverride = selectedProject.name;
+
+                if (selectedProject.currentSpecialContextId) {
+                  const specialContext = selectedProject.specialContexts?.find(
+                    (c: any) => c.id === selectedProject.currentSpecialContextId
+                  );
+
+                  if (specialContext) {
+                    const contextSuffix = specialContext.type === 'asset' ? 'ASSET' : 'COMP';
+
+                    if (specialContext.sceneId) {
+                      // Scene-level special context: PROJECTNAME_SCENENAME_ASSET_v01
+                      const scene = selectedProject.scenes?.find((s: any) => s.id === specialContext.sceneId);
+                      if (scene) {
+                        projectNameOverride = `${selectedProject.name}_${scene.name}_${contextSuffix}_v01`;
+                      }
+                    } else {
+                      // Project-level special context: PROJECTNAME_ASSET_v01
+                      projectNameOverride = `${selectedProject.name}_${contextSuffix}_v01`;
+                    }
+                  }
+                }
+
                 const currentScene = selectedProject.hasScenes && selectedProject.currentSceneId
                   ? selectedProject.scenes?.find((s: any) => s.id === selectedProject.currentSceneId)
                   : null;
@@ -1648,7 +1672,7 @@ function App() {
                   projectPath: selectedProject.path,
                   executablePath: sw.executablePath,
                   software: softwareKey,
-                  projectName: selectedProject.name,
+                  projectName: projectNameOverride,
                   sceneName: currentScene?.name,
                   sceneNumber: currentScene?.number,
                   shotNumber: currentShot?.number
@@ -1672,7 +1696,7 @@ function App() {
 
       {/* ShotsBrowser - between ProjectDetails and TreeView */}
       {selectedProject && viewMode !== 'finance' && selectedProject.hasShots && (
-        <ShotsBrowser className="w-80 flex-shrink-0" />
+        <ShotsBrowser projectId={selectedProject.id} className="w-80 flex-shrink-0" />
       )}
 
       {/* Right Sidebar */}

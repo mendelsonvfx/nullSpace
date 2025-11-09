@@ -144,7 +144,7 @@ export default {
             'box-shadow': '0 0 0 rgba(16, 185, 129, 0)'
           },
           '50%': {
-            'box-shadow': '0 0 4px rgba(16, 185, 129, 0.4)'
+            'box-shadow': '0 0 8px rgba(16, 185, 129, 0.3), inset 0 0 8px rgba(16, 185, 129, 0.1)'
           },
         },
         'slideDown': {

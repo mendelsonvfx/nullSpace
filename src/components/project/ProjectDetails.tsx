@@ -96,8 +96,28 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
   // Widget visibility is now handled by timeTrackingStore (after 1.5s delay)
 
-  // Get current context (todos, notes, links, browserTabs) based on scene/shot selection
+  // Get current context (todos, notes, links, browserTabs) based on scene/shot/special context selection
   const getCurrentContext = () => {
+    // Check if special context (Asset/Compose) is active
+    if (project.currentSpecialContextId) {
+      const specialContext = project.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId);
+      if (specialContext) {
+        return {
+          todos: specialContext.todos || [],
+          notes: specialContext.notes || [],
+          links: specialContext.links || [],
+          browserTabs: specialContext.browserTabs || [],
+          isShot: false,
+          isScene: false,
+          isSpecialContext: true,
+          specialContextType: specialContext.type,
+          specialContextSceneId: specialContext.sceneId,
+          shotId: null,
+          sceneId: specialContext.sceneId || null
+        };
+      }
+    }
+
     if (project.hasShots && project.currentSceneId) {
       const currentScene = project.scenes?.find((s: any) => s.id === project.currentSceneId);
 
@@ -113,6 +133,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               browserTabs: currentShot.browserTabs || [],
               isShot: true,
               isScene: false,
+              isSpecialContext: false,
               shotId: currentShot.id,
               sceneId: currentScene.id
             };
@@ -127,6 +148,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           browserTabs: currentScene.browserTabs || [],
           isShot: false,
           isScene: true,
+          isSpecialContext: false,
           shotId: null,
           sceneId: currentScene.id
         };
@@ -141,6 +163,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       browserTabs: project.browserTabs || [],
       isShot: false,
       isScene: false,
+      isSpecialContext: false,
       shotId: null,
       sceneId: null
     };
@@ -768,7 +791,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       {/* Content */}
       <SimpleBar className="flex-1 custom-page-scrollbar" autoHide={false} scrollableNodeProps={{ ref: contentScrollRef }}>
         <div className="px-7 pb-16 pt-4">
-        {/* Quick Actions */}
+        {/* Quick Actions - hidden when only scene is selected (without shot) */}
+        {!(context.isScene && !context.isShot) && (
         <div className="mb-7">
           <h3 className="text-sm font-semibold text-text-primary mb-3.5">Quick Actions</h3>
           <div className="grid grid-cols-3 gap-3">
@@ -803,8 +827,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             )}
           </div>
         </div>
+        )}
 
-        {/* Software Launchers */}
+        {/* Software Launchers - hidden when only scene is selected (without shot) */}
+        {!(context.isScene && !context.isShot) && (
         <div className="mb-7">
           <h3 className="text-sm font-semibold text-text-primary mb-3.5">Launch Software</h3>
           <div className="grid grid-cols-2 gap-2">
@@ -940,20 +966,25 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             })}
           </div>
         </div>
+        )}
 
-        {/* Versions Overview */}
+        {/* Versions Overview - hidden when only scene is selected (without shot) */}
+        {!(context.isScene && !context.isShot) && (
         <VersionsOverview
           project={project}
           currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
           currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
         />
+        )}
 
-        {/* Output Overview */}
+        {/* Output Overview - hidden when only scene is selected (without shot) */}
+        {!(context.isScene && !context.isShot) && (
         <OutputOverview
           project={project}
           currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
           currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
         />
+        )}
 
         {/* Links Section */}
         <div className="mb-7">

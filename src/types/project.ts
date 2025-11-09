@@ -49,6 +49,7 @@ export interface Scene {
   id: string;
   number: number; // 0 for Main, 1+ for SC001, SC002...
   name: string; // "Main", "Scene 001", "Scene 002"
+  description?: string; // Optional scene description
   todos: TodoItem[];
   notes: Note[];
   browserTabs: BrowserTab[];
@@ -68,6 +69,16 @@ export interface Shot {
   links: Link[];
   wip?: boolean; // Work in progress status
   completed?: boolean;
+}
+
+export interface SpecialContext {
+  id: string;
+  type: 'asset' | 'compose'; // Type of special context
+  sceneId?: string; // Optional: scene this context belongs to (for scene-level asset/compose)
+  todos: TodoItem[];
+  notes: Note[];
+  browserTabs: BrowserTab[];
+  links: Link[];
 }
 
 export interface Note {
@@ -160,6 +171,8 @@ export interface Project {
   shots?: Shot[];
   currentShotId?: string;
   sceneShotPreferences?: Record<string, string>; // sceneId -> shotId mapping
+  specialContexts?: SpecialContext[]; // Asset/Compose contexts
+  currentSpecialContextId?: string; // Currently selected special context (asset/compose)
   category?: string;
   timeEntries?: TimeEntry[];
   totalMinutesSpent?: number;        // Completed sessions total

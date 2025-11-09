@@ -61,6 +61,7 @@ interface ProjectStore {
   addScene: (projectId: string, name?: string) => void;
   removeScene: (projectId: string, sceneId: string) => void;
   renameScene: (projectId: string, sceneId: string, newName: string) => void;
+  setSceneDescription: (projectId: string, sceneId: string, description: string) => void;
   setCurrentScene: (projectId: string, sceneId: string | null) => void;
   toggleSceneCompleted: (projectId: string, sceneId: string) => void;
   addSceneNote: (projectId: string, sceneId: string, content: string) => void;
@@ -80,6 +81,7 @@ interface ProjectStore {
   renameShot: (projectId: string, shotId: string, newName: string) => void;
   setCurrentShot: (projectId: string, shotId: string | null) => void;
   toggleShotCompleted: (projectId: string, shotId: string) => void;
+  setShotStatus: (projectId: string, shotId: string, status: 'none' | 'wip' | 'done') => void;
   addShotNote: (projectId: string, shotId: string, content: string) => void;
   updateShotNote: (projectId: string, shotId: string, noteId: string, content: string) => void;
   deleteShotNote: (projectId: string, shotId: string, noteId: string) => void;
@@ -91,6 +93,9 @@ interface ProjectStore {
   addShotLink: (projectId: string, shotId: string, url: string, title: string) => string;
   updateShotLink: (projectId: string, shotId: string, linkId: string, newTitle: string) => void;
   removeShotLink: (projectId: string, shotId: string, linkId: string) => void;
+  // Special context management (Assets/Compose)
+  setSpecialContext: (projectId: string, contextType: 'asset' | 'compose', sceneId?: string) => void;
+  clearSpecialContext: (projectId: string) => void;
   // Time tracking (project data only - session management moved to time-tracking feature)
   addManualTimeEntry: (projectId: string, software: SoftwareName, durationMinutes: number, date: string, shotId?: string, notes?: string, countInStats?: boolean) => void;
   removeTimeEntry: (projectId: string, entryId: string) => void;
@@ -800,6 +805,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         id: crypto.randomUUID(),
         number: 0,
         name: 'Main',
+        description: undefined,
         notes: [],
         todos: [],
         browserTabs: [],
@@ -835,6 +841,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         id: crypto.randomUUID(),
         number: sceneNumber,
         name: name || `Scene ${sceneNumber.toString().padStart(3, '0')}`,
+        description: undefined,
         todos: [],
         notes: [],
         browserTabs: [],
@@ -946,6 +953,22 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
+  setSceneDescription: (projectId: string, sceneId: string, description: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s => {
+          if (s.id === sceneId) {
+            return { ...s, description: description.trim() || undefined };
+          }
+          return s;
+        })
+      };
+      get().updateProject(updated);
+    }
+  },
+
   setCurrentScene: (projectId: string, sceneId: string | null) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasScenes) {
@@ -985,7 +1008,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const updated = {
         ...project,
         currentSceneId: sceneId || undefined,
-        currentShotId: updatedCurrentShotId
+        currentShotId: updatedCurrentShotId,
+        currentSpecialContextId: undefined // Clear special context when selecting a scene
       };
       get().updateProject(updated);
     }
@@ -1326,7 +1350,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const updated = {
         ...project,
         currentShotId: shotId || undefined,
-        sceneShotPreferences: updatedPreferences
+        sceneShotPreferences: updatedPreferences,
+        currentSpecialContextId: undefined // Clear special context when selecting a shot
       };
       get().updateProject(updated);
     }
@@ -1346,6 +1371,28 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               return { ...s, wip: false, completed: true };
             } else {
               return { ...s, wip: false, completed: false };
+            }
+          }
+          return s;
+        })
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  setShotStatus: (projectId: string, shotId: string, status: 'none' | 'wip' | 'done') => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s => {
+          if (s.id === shotId) {
+            if (status === 'none') {
+              return { ...s, wip: false, completed: false };
+            } else if (status === 'wip') {
+              return { ...s, wip: true, completed: false };
+            } else if (status === 'done') {
+              return { ...s, wip: false, completed: true };
             }
           }
           return s;
@@ -1741,6 +1788,72 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     };
 
     get().updateProject(updatedProject);
+  },
+
+  // Special context management
+  setSpecialContext: (projectId: string, contextType: 'asset' | 'compose', sceneId?: string) => {
+    console.log('[setSpecialContext] Called with:', { projectId, contextType, sceneId });
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project) {
+      console.log('[setSpecialContext] Project not found');
+      return;
+    }
+
+    const contexts = project.specialContexts || [];
+    console.log('[setSpecialContext] Existing contexts:', contexts);
+
+    // Try to find existing context for this type and scene
+    let contextId: string;
+    let updatedContexts = contexts;
+
+    const existingContext = contexts.find(
+      ctx => ctx.type === contextType && ctx.sceneId === sceneId
+    );
+
+    if (existingContext) {
+      console.log('[setSpecialContext] Found existing context:', existingContext.id);
+      contextId = existingContext.id;
+    } else {
+      // Create new context
+      const newContext = {
+        id: crypto.randomUUID(),
+        type: contextType,
+        sceneId,
+        todos: [],
+        notes: [],
+        browserTabs: [],
+        links: []
+      };
+      console.log('[setSpecialContext] Creating new context:', newContext);
+      contextId = newContext.id;
+      updatedContexts = [...contexts, newContext];
+    }
+
+    const updated = {
+      ...project,
+      specialContexts: updatedContexts,
+      currentSpecialContextId: contextId,
+      // Clear scene/shot selection when entering special context
+      currentSceneId: undefined,
+      currentShotId: undefined,
+      updatedAt: new Date().toISOString()
+    };
+
+    console.log('[setSpecialContext] Updating project with currentSpecialContextId:', contextId);
+    get().updateProject(updated);
+  },
+
+  clearSpecialContext: (projectId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    const updated = {
+      ...project,
+      currentSpecialContextId: undefined,
+      updatedAt: new Date().toISOString()
+    };
+
+    get().updateProject(updated);
   }
 }));
 
