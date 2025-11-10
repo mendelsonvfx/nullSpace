@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconPencil, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconProgress } from '@tabler/icons-react';
+import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconPencil } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api';
 import { useProjectStore } from '../../store/projectStore';
 import { LinkItem, LinkInputForm, NotesSection } from '../shared';
@@ -7,7 +7,6 @@ import { VersionsOverview } from './VersionsOverview';
 import { OutputOverview } from './OutputOverview';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { STATUS_LABELS, SOFTWARE_OPTIONS } from '../../utils';
-import { versionsCache } from '../../utils/versionsCache';
 import { InlineTimer, TimeInfoBar } from '../time';
 import { ManualTimeEntryModal } from '../modals/ManualTimeEntryModal';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
@@ -32,21 +31,20 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showManualTimeEntry, setShowManualTimeEntry] = useState(false);
   const [isPaymentModalAnimating, setIsPaymentModalAnimating] = useState(false);
-  const [isSceneEditMode, setIsSceneEditMode] = useState(false);
-  const [isShotEditMode, setIsShotEditMode] = useState(false);
   const [isFavoriteAnimating, setIsFavoriteAnimating] = useState(false);
   const [shotToDelete, setShotToDelete] = useState<{ id: string; name: string } | null>(null);
   const [softwareToRemove, setSoftwareToRemove] = useState<string | null>(null);
-  const [editingSceneId, setEditingSceneId] = useState<string | null>(null);
-  const [editingSceneNumber, setEditingSceneNumber] = useState('');
-  const [animatingSceneId, setAnimatingSceneId] = useState<string | null>(null);
-  const [editingShotId, setEditingShotId] = useState<string | null>(null);
-  const [editingShotNumber, setEditingShotNumber] = useState('');
-  const [animatingShotId, setAnimatingShotId] = useState<string | null>(null);
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [showTopShadow, setShowTopShadow] = useState(false);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [descriptionValue, setDescriptionValue] = useState(project.description || '');
   const contentScrollRef = useRef<HTMLElement | null>(null);
+
+  // Sync description value when project changes
+  useEffect(() => {
+    setDescriptionValue(project.description || '');
+  }, [project.description]);
 
   // Animation effect for Payment Modal
   useEffect(() => {
@@ -112,8 +110,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           isSpecialContext: true,
           specialContextType: specialContext.type,
           specialContextSceneId: specialContext.sceneId,
-          shotId: null,
-          sceneId: specialContext.sceneId || null
+          shotId: undefined,
+          sceneId: specialContext.sceneId || undefined
         };
       }
     }
@@ -149,7 +147,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           isShot: false,
           isScene: true,
           isSpecialContext: false,
-          shotId: null,
+          shotId: undefined,
           sceneId: currentScene.id
         };
       }
@@ -164,8 +162,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       isShot: false,
       isScene: false,
       isSpecialContext: false,
-      shotId: null,
-      sceneId: null
+      shotId: undefined,
+      sceneId: undefined
     };
   };
 
@@ -369,7 +367,45 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-4 flex-wrap">
-              <h1 className="text-project-title font-bold">{project.name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-project-title font-bold">{project.name}</h1>
+                {/* Context Breadcrumb */}
+                {(() => {
+                  const parts: string[] = [];
+
+                  // Check for special context (Asset/Compose)
+                  if (project.currentSpecialContextId) {
+                    const specialContext = project.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId);
+                    if (specialContext) {
+                      if (specialContext.sceneId) {
+                        const scene = project.scenes?.find((s: any) => s.id === specialContext.sceneId);
+                        if (scene) parts.push(scene.name);
+                      }
+                      parts.push(specialContext.type === 'asset' ? 'Asset Projects' : 'Compose Projects');
+                    }
+                  } else {
+                    // Regular scene/shot context
+                    if (project.currentSceneId) {
+                      const scene = project.scenes?.find((s: any) => s.id === project.currentSceneId);
+                      if (scene) parts.push(scene.name);
+                    }
+                    if (project.currentShotId) {
+                      const shot = project.shots?.find((s: any) => s.id === project.currentShotId);
+                      if (shot) parts.push(shot.name);
+                    }
+                  }
+
+                  if (parts.length > 0) {
+                    return (
+                      <span className="text-sm font-normal text-text-muted flex items-center gap-1.5">
+                        <span>/</span>
+                        {parts.join(' / ')}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
               <span className={`px-2.5 py-1 rounded-badge text-xs font-medium ${
               project.status === 'active' ? 'bg-status-active/15 text-status-active border border-status-active/30' :
               project.status === 'completed' ? 'bg-status-completed/15 text-status-completed border border-status-completed/30' :
@@ -464,328 +500,60 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             </button>
             </div>
           </div>
+
+          {/* Project Description */}
+          {(project.description || isEditingDescription) && (
+            <div className="group/desc inline-flex items-center gap-1.5">
+              {isEditingDescription ? (
+                <>
+                  <input
+                    type="text"
+                    value={descriptionValue}
+                    onChange={(e) => setDescriptionValue(e.target.value)}
+                    onBlur={() => {
+                      const { updateProject } = useProjectStore.getState();
+                      updateProject({ ...project, description: descriptionValue });
+                      setIsEditingDescription(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setDescriptionValue(project.description || '');
+                        setIsEditingDescription(false);
+                      }
+                      if (e.key === 'Enter') {
+                        const { updateProject } = useProjectStore.getState();
+                        updateProject({ ...project, description: descriptionValue });
+                        setIsEditingDescription(false);
+                      }
+                    }}
+                    autoFocus
+                    className="bg-transparent text-sm text-text-primary focus:outline-none"
+                    placeholder="Add a description..."
+                    style={{ width: `${Math.max(descriptionValue.length || 20, 20)}ch` }}
+                  />
+                  <IconPencil size={16} stroke={1.5} className="text-accent" />
+                </>
+              ) : (
+                <>
+                  <span
+                    className="text-sm text-text-muted cursor-text"
+                    onClick={() => setIsEditingDescription(true)}
+                  >
+                    {project.description}
+                  </span>
+                  <button
+                    onClick={() => setIsEditingDescription(true)}
+                    className="opacity-0 group-hover/desc:opacity-100 transition-opacity p-0.5 hover:bg-hover-bg rounded"
+                    title="Edit description"
+                  >
+                    <IconPencil size={16} stroke={1.5} className="text-text-muted" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Scene Tabs */}
-        {project.hasShots === true && (
-          <div className="mb-1">
-            <div className="flex gap-1.5 overflow-x-auto pb-1 items-center group">
-            {(project.scenes || []).map((scene: any) => {
-              const isEditing = editingSceneId === scene.id;
-
-              if (isEditing) {
-                return (
-                  <div key={scene.id} className="flex items-center gap-2 px-3 py-1 bg-card-bg border border-accent rounded-button">
-                    <span className="text-[13px] text-text-muted">Scene</span>
-                    <input
-                      type="text"
-                      value={editingSceneNumber}
-                      onChange={(e) => {
-                        // Allow any text for scene suffix
-                        setEditingSceneNumber(e.target.value);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.currentTarget.blur();
-                        } else if (e.key === 'Escape') {
-                          setEditingSceneId(null);
-                          setEditingSceneNumber('');
-                          setIsSceneEditMode(false);
-                        }
-                      }}
-                      onBlur={() => {
-                        if (editingSceneNumber.trim()) {
-                          const newSceneName = `Scene ${editingSceneNumber.trim()}`;
-                          const { renameScene } = useProjectStore.getState();
-                          renameScene(project.id, scene.id, newSceneName);
-                        }
-                        setEditingSceneId(null);
-                        setEditingSceneNumber('');
-                        setIsSceneEditMode(false);
-                      }}
-                      autoFocus
-                      className="w-32 bg-transparent text-[13px] text-text-primary focus:outline-none"
-                    />
-                  </div>
-                );
-              }
-
-              return (
-                <button
-                  key={scene.id}
-                  onClick={() => {
-                    if (!isSceneEditMode) {
-                      const { setCurrentScene } = useProjectStore.getState();
-                      setCurrentScene(project.id, scene.id);
-                    } else {
-                      setEditingSceneId(scene.id);
-                      // Extract suffix after "Scene " for editing
-                      const suffix = scene.name.replace(/^Scene\s+/i, '');
-                      setEditingSceneNumber(suffix);
-                    }
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    const { toggleSceneCompleted } = useProjectStore.getState();
-                    const isGoingToWip = !scene.wip && !scene.completed;
-                    const isGoingToCompleted = scene.wip && !scene.completed;
-                    toggleSceneCompleted(project.id, scene.id);
-                    // Animate only when going to WIP or Completed
-                    if (isGoingToWip || isGoingToCompleted) {
-                      setAnimatingSceneId(scene.id);
-                      setTimeout(() => setAnimatingSceneId(null), 600);
-                    }
-                  }}
-                  className={`px-3 py-1 rounded-button text-[13px] font-medium whitespace-nowrap transition-all duration-300 flex items-center justify-center gap-2 ${
-                    project.currentSceneId === scene.id
-                      ? 'bg-hover-bg border border-accent text-white'
-                      : scene.completed
-                      ? 'bg-card-bg border border-status-active/30 text-text-muted hover:bg-hover-bg'
-                      : scene.wip
-                      ? 'bg-card-bg border border-yellow-500/30 text-text-muted hover:bg-hover-bg'
-                      : 'bg-card-bg border border-border-primary text-text-muted hover:bg-hover-bg hover:border-border-secondary'
-                  } ${animatingSceneId === scene.id ? 'animate-shot-complete-glow' : ''}`}
-                >
-                  <span>{scene.name}</span>
-                  <IconProgress
-                    stroke={1.5}
-                    className={`text-yellow-500 transition-all duration-300 ${
-                      scene.wip ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
-                    }`}
-                    style={{ overflow: 'hidden' }}
-                  />
-                  <IconCheck
-                    stroke={1.5}
-                    className={`text-status-active transition-all duration-300 ${
-                      scene.completed ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
-                    }`}
-                    style={{ overflow: 'hidden' }}
-                  />
-                  <IconX
-                    stroke={1.5}
-                    onClick={(e: React.MouseEvent) => {
-                      e.stopPropagation();
-                      const { removeScene } = useProjectStore.getState();
-                      removeScene(project.id, scene.id);
-                    }}
-                    className={`hover:text-red-500 cursor-pointer transition-all duration-300 ${
-                      project.currentSceneId === scene.id ? 'text-white' : 'text-text-muted'
-                    } ${
-                      isSceneEditMode ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
-                    }`}
-                    style={{ overflow: 'hidden' }}
-                  />
-                </button>
-              );
-            })}
-            <button
-              onClick={() => {
-                const { addScene } = useProjectStore.getState();
-                addScene(project.id);
-              }}
-              className="px-3 py-1 bg-transparent border border-border-secondary border-dashed rounded-button text-[13px] text-text-muted hover:border-accent hover:text-accent transition-all whitespace-nowrap opacity-0 group-hover:opacity-100"
-            >
-              + Add scene...
-            </button>
-            <button
-              onClick={() => setIsSceneEditMode(!isSceneEditMode)}
-              className={`p-2 transition-all ${
-                isSceneEditMode ? 'text-accent opacity-100' : 'text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100'
-              }`}
-              title={isSceneEditMode ? 'Done editing' : 'Edit scenes'}
-            >
-              <IconPencil stroke={1.5} className="w-4 h-4" />
-            </button>
-            </div>
-          </div>
-        )}
-
-        {/* Shot Tabs */}
-        {project.hasShots === true && (
-          <div className="mb-3">
-            <div className="flex gap-1.5 overflow-x-auto pb-1 items-center group">
-            {(project.shots || []).filter((shot: any) => shot.sceneId === project.currentSceneId).map((shot: any) => {
-              const isEditing = editingShotId === shot.id;
-
-              if (isEditing) {
-                return (
-                  <div key={shot.id} className="flex items-center gap-2 px-3 py-1 bg-card-bg border border-accent rounded-button">
-                    <span className="text-[13px] text-text-muted">Shot</span>
-                    <input
-                      type="text"
-                      value={editingShotNumber}
-                      onChange={(e) => {
-                        // Only allow digits, max 3 characters
-                        const value = e.target.value.replace(/[^\d]/g, '').slice(0, 3);
-                        setEditingShotNumber(value);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.currentTarget.blur();
-                        } else if (e.key === 'Escape') {
-                          setEditingShotId(null);
-                          setEditingShotNumber('');
-                          setIsShotEditMode(false);
-                        }
-                      }}
-                      onBlur={async () => {
-                        if (editingShotNumber.trim()) {
-                          try {
-                            const newShotName = `Shot ${editingShotNumber.trim()}`;
-                            const currentShotMatch = shot.name.match(/\d+/);
-                            const newShotMatch = newShotName.match(/\d+/);
-
-                            // Only rename files if shot number changed
-                            if (currentShotMatch && newShotMatch && currentShotMatch[0] !== newShotMatch[0]) {
-                              const currentShotNumber = parseInt(currentShotMatch[0], 10);
-                              const shotNum = parseInt(newShotMatch[0], 10);
-
-                              // Check if files are accessible
-                              const accessible = await invoke<boolean>('check_shot_files_accessible', {
-                                projectPath: project.path,
-                                shotNumber: currentShotNumber
-                              });
-
-                              if (!accessible) {
-                                alert(`Cannot rename shot ${currentShotMatch[0]} because some files are currently in use. Please close the files and try again.`);
-                                setEditingShotId(null);
-                                setEditingShotNumber('');
-                                setIsShotEditMode(false);
-                                return;
-                              }
-
-                              // Rename files
-                              const renamedCount = await invoke<number>('rename_shot_files', {
-                                projectPath: project.path,
-                                oldShotNumber: currentShotNumber,
-                                newShotNumber: shotNum
-                              });
-
-                              console.log(`Renamed ${renamedCount} files for shot ${currentShotNumber} -> ${shotNum}`);
-
-                              // Invalidate versions cache and trigger reload
-                              versionsCache.invalidate(project.path);
-
-                              // Wait a bit for file system to sync, then trigger version update event
-                              setTimeout(() => {
-                                window.dispatchEvent(new CustomEvent('version-created', {
-                                  detail: { projectPath: project.path }
-                                }));
-                              }, 100);
-                            }
-
-                            // Rename shot in metadata
-                            const { renameShot } = useProjectStore.getState();
-                            renameShot(project.id, shot.id, newShotName);
-                          } catch (error) {
-                            console.error('Failed to rename shot:', error);
-                            alert(`Failed to rename shot: ${error}`);
-                          }
-                        }
-                        setEditingShotId(null);
-                        setEditingShotNumber('');
-                        setIsShotEditMode(false);
-                      }}
-                      autoFocus
-                      className="w-16 bg-transparent text-[13px] text-text-primary focus:outline-none"
-                    />
-                  </div>
-                );
-              }
-
-              return (
-                <button
-                  key={shot.id}
-                  onClick={() => {
-                    if (!isShotEditMode) {
-                      const { setCurrentShot } = useProjectStore.getState();
-                      setCurrentShot(project.id, shot.id);
-                    } else {
-                      setEditingShotId(shot.id);
-                      // Extract only the number from "Shot 123"
-                      const numberOnly = shot.name.replace(/[^\d]/g, '');
-                      setEditingShotNumber(numberOnly);
-                    }
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    const { toggleShotCompleted } = useProjectStore.getState();
-                    const isGoingToWip = !shot.wip && !shot.completed;
-                    const isGoingToCompleted = shot.wip && !shot.completed;
-                    toggleShotCompleted(project.id, shot.id);
-                    // Animate only when going to WIP or Completed
-                    if (isGoingToWip || isGoingToCompleted) {
-                      setAnimatingShotId(shot.id);
-                      setTimeout(() => setAnimatingShotId(null), 600);
-                    }
-                  }}
-                  className={`px-3 py-1 rounded-button text-[13px] font-medium whitespace-nowrap transition-all duration-300 flex items-center justify-center gap-2 ${
-                    project.currentShotId === shot.id
-                      ? 'bg-hover-bg border border-accent text-white'
-                      : shot.completed
-                      ? 'bg-card-bg border border-status-active/30 text-text-muted hover:bg-hover-bg'
-                      : shot.wip
-                      ? 'bg-card-bg border border-yellow-500/30 text-text-muted hover:bg-hover-bg'
-                      : 'bg-card-bg border border-border-primary text-text-muted hover:bg-hover-bg hover:border-border-secondary'
-                  } ${animatingShotId === shot.id ? 'animate-shot-complete-glow' : ''}`}
-                >
-                  <span>{shot.name}</span>
-                  <IconProgress
-                    stroke={1.5}
-                    className={`text-yellow-500 transition-all duration-300 ${
-                      shot.wip ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
-                    }`}
-                    style={{ overflow: 'hidden' }}
-                  />
-                  <IconCheck
-                    stroke={1.5}
-                    className={`text-status-active transition-all duration-300 ${
-                      shot.completed ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
-                    }`}
-                    style={{
-                      overflow: 'hidden'
-                    }}
-                  />
-                  <IconX
-                    stroke={1.5}
-                    onClick={(e: React.MouseEvent) => {
-                      e.stopPropagation();
-                      const { removeShot } = useProjectStore.getState();
-                      removeShot(project.id, shot.id);
-                    }}
-                    className={`hover:text-red-500 cursor-pointer transition-all duration-300 ${
-                      project.currentShotId === shot.id ? 'text-white' : 'text-text-muted'
-                    } ${
-                      isShotEditMode ? 'w-4 h-4 opacity-100' : 'w-0 h-4 opacity-0 -ml-2'
-                    }`}
-                    style={{
-                      overflow: 'hidden'
-                    }}
-                  />
-                </button>
-              );
-            })}
-            <button
-              onClick={() => {
-                const { addShot } = useProjectStore.getState();
-                addShot(project.id);
-              }}
-              className="px-3 py-1 bg-transparent border border-border-secondary border-dashed rounded-button text-[13px] text-text-muted hover:border-accent hover:text-accent transition-all whitespace-nowrap opacity-0 group-hover:opacity-100"
-            >
-              + Add shot...
-            </button>
-            <button
-              onClick={() => setIsShotEditMode(!isShotEditMode)}
-              className={`p-2 transition-all ${
-                isShotEditMode ? 'text-accent opacity-100' : 'text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100'
-              }`}
-              title={isShotEditMode ? 'Done editing' : 'Edit shots'}
-            >
-              <IconPencil stroke={1.5} className="w-4 h-4" />
-            </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Content */}

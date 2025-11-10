@@ -2209,6 +2209,7 @@ dependencies = [
 name = "nullspace"
 version = "0.1.0"
 dependencies = [
+ "arboard",
  "chrono",
  "dirs",
  "lazy_static",

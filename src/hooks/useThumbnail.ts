@@ -119,5 +119,17 @@ export function useThumbnail(projectPath: string, thumbnail: string | undefined)
   return imageSrc;
 }
 
+// Function to clear cache for specific thumbnail
+export function clearThumbnailCache(projectPath: string, thumbnail: string) {
+  const cacheKey = `${projectPath}::${thumbnail}`;
+  memoryCache.delete(cacheKey);
+
+  if (USE_INDEXED_DB) {
+    indexedDBThumbnailCache.clear(projectPath, thumbnail);
+  } else {
+    thumbnailCache.clear(projectPath, thumbnail);
+  }
+}
+
 // Export caches for manual cache management if needed
 export { thumbnailCache, indexedDBThumbnailCache };

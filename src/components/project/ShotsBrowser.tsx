@@ -19,17 +19,30 @@ import {
   IconPlus,
   IconBox,
   IconStack2,
+  IconMoon,
 } from '@tabler/icons-react';
+import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
+import { useThumbnail } from '../../hooks/useThumbnail';
+
+interface ProjectVersion {
+  name: string;
+  path: string;
+  software: string[];
+  created_at: number;
+  is_versioned: boolean;
+}
 
 // Local types for component
 interface Shot {
   id: string;
   name: string;
+  number: number;
   sceneId: string;
   versions: number;
   thumbnail?: string;
+  preview?: string;
   wip?: boolean;
   completed?: boolean;
 }
@@ -37,9 +50,11 @@ interface Shot {
 interface Scene {
   id: string;
   name: string;
+  number: number;
   description?: string;
   shots: Shot[];
   thumbnail?: string;
+  preview?: string;
   color?: string;
   wip?: boolean;
   completed?: boolean;
@@ -49,9 +64,11 @@ interface ShotCardProps {
   shot: Shot;
   isSelected: boolean;
   viewMode: 'grid' | 'list';
+  projectPath: string;
   onClick: () => void;
   onStatusChange: (shotId: string) => void;
   onContextMenu: (e: React.MouseEvent, shotId: string, type: 'preview' | 'name') => void;
+  onHover: (shotId: string | null) => void;
   isAnimating: boolean;
   isEditing: boolean;
   editValue: string;
@@ -64,9 +81,11 @@ const ShotCard: React.FC<ShotCardProps> = ({
   shot,
   isSelected,
   viewMode,
+  projectPath,
   onClick,
   onStatusChange,
   onContextMenu,
+  onHover,
   isAnimating,
   isEditing,
   editValue,
@@ -74,6 +93,8 @@ const ShotCard: React.FC<ShotCardProps> = ({
   onEditSave,
   onEditCancel
 }) => {
+  const shotPreviewSrc = useThumbnail(projectPath, shot.preview);
+
   const handleNameContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -112,24 +133,38 @@ const ShotCard: React.FC<ShotCardProps> = ({
         <>
           {/* Thumbnail area */}
           <div
+            data-context-menu="shot"
             className="relative w-full h-20 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center"
             onContextMenu={handlePreviewContextMenu}
+            onMouseEnter={() => onHover(shot.id)}
+            onMouseLeave={() => onHover(null)}
           >
-            <span className="text-xs text-text-muted">No preview</span>
-            {/* Versions badge in top right corner */}
-            <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-sidebar-bg/90 rounded-badge flex items-center gap-1">
-              <IconVersions size={10} className="text-text-secondary" />
-              <span className="text-xs font-medium text-text-secondary">{shot.versions}</span>
-            </div>
+            {shotPreviewSrc ? (
+              <img
+                src={shotPreviewSrc}
+                alt={shot.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-xs text-text-muted">No preview</span>
+            )}
+            {/* Versions badge in top right corner - only show if versions exist */}
+            {shot.versions > 0 && (
+              <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-sidebar-bg/90 rounded-badge flex items-center gap-1">
+                <IconVersions size={10} className="text-text-secondary" />
+                <span className="text-xs font-medium text-text-secondary">{shot.versions}</span>
+              </div>
+            )}
           </div>
           {/* Shot info */}
           <div
+            data-context-menu="shot"
             className="p-2.5"
             onContextMenu={handleNameContextMenu}
           >
             <div className="flex items-center justify-between gap-2">
               {isEditing ? (
-                <div className="flex items-center gap-0 flex-1">
+                <div className="flex items-center gap-1 flex-1">
                   <span className="text-xs font-semibold text-text-primary">
                     {shot.name.replace(/\d+$/, '')}
                   </span>
@@ -149,29 +184,32 @@ const ShotCard: React.FC<ShotCardProps> = ({
                     onBlur={onEditSave}
                     autoFocus
                     maxLength={3}
-                    className="text-xs font-semibold text-text-primary bg-transparent border-none p-0 w-8 focus:outline-none focus:ring-0"
-                    style={{ width: `${Math.max(editValue.length * 8, 8)}px` }}
+                    placeholder="000"
+                    className="text-xs font-semibold text-text-primary bg-transparent border-none p-0 focus:outline-none focus:ring-0"
+                    style={{ width: '24px' }}
                   />
                 </div>
               ) : (
                 <span className="text-xs font-semibold text-text-primary truncate">{shot.name}</span>
               )}
-              {(shot.wip || shot.completed) && (
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {shot.wip && (
-                    <>
-                      <IconClock size={11} className="text-yellow-500 transition-all duration-300" />
-                      <span className="text-xs text-yellow-500 whitespace-nowrap">WIP</span>
-                    </>
-                  )}
-                  {shot.completed && (
-                    <>
-                      <IconCircleCheck size={11} className="text-green-500 transition-all duration-300" />
-                      <span className="text-xs text-green-500 whitespace-nowrap">Done</span>
-                    </>
-                  )}
-                </div>
-              )}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {shot.wip ? (
+                  <>
+                    <IconClock size={11} className="text-yellow-500 transition-all duration-300" />
+                    <span className="text-xs text-yellow-500 whitespace-nowrap">WIP</span>
+                  </>
+                ) : shot.completed ? (
+                  <>
+                    <IconCircleCheck size={11} className="text-green-500 transition-all duration-300" />
+                    <span className="text-xs text-green-500 whitespace-nowrap">Done</span>
+                  </>
+                ) : (
+                  <>
+                    <IconMoon size={11} className="text-zinc-500 transition-all duration-300" />
+                    <span className="text-xs text-zinc-500 whitespace-nowrap">Idle</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </>
@@ -179,18 +217,30 @@ const ShotCard: React.FC<ShotCardProps> = ({
         <>
           {/* List view */}
           <div
-            className="w-16 h-10 rounded-badge bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center flex-shrink-0"
+            data-context-menu="shot"
+            className="w-16 h-10 rounded-badge bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center flex-shrink-0 overflow-hidden"
             onContextMenu={handlePreviewContextMenu}
+            onMouseEnter={() => onHover(shot.id)}
+            onMouseLeave={() => onHover(null)}
           >
-            <IconCamera size={16} className="text-text-muted" />
+            {shotPreviewSrc ? (
+              <img
+                src={shotPreviewSrc}
+                alt={shot.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <IconCamera size={16} className="text-text-muted" />
+            )}
           </div>
           <div
+            data-context-menu="shot"
             className="flex-1 min-w-0"
             onContextMenu={handleNameContextMenu}
           >
             <div className="flex items-center justify-between gap-2">
               {isEditing ? (
-                <div className="flex items-center gap-0">
+                <div className="flex items-center gap-1">
                   <span className="text-xs font-medium text-text-primary">
                     {shot.name.replace(/\d+$/, '')}
                   </span>
@@ -210,34 +260,39 @@ const ShotCard: React.FC<ShotCardProps> = ({
                     onBlur={onEditSave}
                     autoFocus
                     maxLength={3}
-                    className="text-xs font-medium text-text-primary bg-transparent border-none p-0 w-8 focus:outline-none focus:ring-0"
-                    style={{ width: `${Math.max(editValue.length * 8, 8)}px` }}
+                    placeholder="000"
+                    className="text-xs font-medium text-text-primary bg-transparent border-none p-0 focus:outline-none focus:ring-0"
+                    style={{ width: '24px' }}
                   />
                 </div>
               ) : (
                 <div className="text-xs font-medium text-text-primary truncate">{shot.name}</div>
               )}
-              {(shot.wip || shot.completed) && (
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {shot.wip && (
-                    <>
-                      <IconClock size={11} className="text-yellow-500" />
-                      <span className="text-xs text-yellow-500 whitespace-nowrap">WIP</span>
-                    </>
-                  )}
-                  {shot.completed && (
-                    <>
-                      <IconCircleCheck size={11} className="text-green-500" />
-                      <span className="text-xs text-green-500 whitespace-nowrap">Done</span>
-                    </>
-                  )}
-                </div>
-              )}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {shot.wip ? (
+                  <>
+                    <IconClock size={11} className="text-yellow-500" />
+                    <span className="text-xs text-yellow-500 whitespace-nowrap">WIP</span>
+                  </>
+                ) : shot.completed ? (
+                  <>
+                    <IconCircleCheck size={11} className="text-green-500" />
+                    <span className="text-xs text-green-500 whitespace-nowrap">Done</span>
+                  </>
+                ) : (
+                  <>
+                    <IconMoon size={11} className="text-zinc-500" />
+                    <span className="text-xs text-zinc-500 whitespace-nowrap">Idle</span>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-1 text-text-secondary mt-0.5">
-              <IconVersions size={11} />
-              <span className="text-xs">{shot.versions} versions</span>
-            </div>
+            {shot.versions > 0 && (
+              <div className="flex items-center gap-1 text-text-secondary mt-0.5">
+                <IconVersions size={11} />
+                <span className="text-xs">{shot.versions} version{shot.versions !== 1 ? 's' : ''}</span>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -252,7 +307,6 @@ interface SceneCardProps {
   isSelected: boolean;
   selectedShotId: string | null;
   viewMode: 'grid' | 'list';
-  projectId: string;
   project: any; // Full project object to check special context state
   onSetSpecialContext: (contextType: 'asset' | 'compose', sceneId: string) => void;
   onToggle: () => void;
@@ -261,6 +315,8 @@ interface SceneCardProps {
   onShotStatusChange: (shotId: string) => void;
   onShotContextMenu: (e: React.MouseEvent, shotId: string, type: 'preview' | 'name') => void;
   onSceneContextMenu: (e: React.MouseEvent, sceneId: string) => void;
+  onSceneHover: (sceneId: string | null) => void;
+  onShotHover: (shotId: string | null) => void;
   animatingShotId: string | null;
   editingItem: { type: 'shot' | 'scene' | 'description'; id: string; value: string } | null;
   onEditChange: (value: string) => void;
@@ -274,7 +330,6 @@ const SceneCard: React.FC<SceneCardProps> = ({
   isSelected,
   selectedShotId,
   viewMode,
-  projectId,
   project,
   onSetSpecialContext,
   onToggle,
@@ -283,12 +338,16 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onShotStatusChange,
   onShotContextMenu,
   onSceneContextMenu,
+  onSceneHover,
+  onShotHover,
   animatingShotId,
   editingItem,
   onEditChange,
   onEditSave,
   onEditCancel,
 }) => {
+  const scenePreviewSrc = useThumbnail(project.path, scene.preview);
+
   // Grid view: large preview card
   if (viewMode === 'grid') {
     return (
@@ -304,6 +363,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
       >
         {/* Scene preview */}
         <div
+          data-context-menu="scene"
           onClick={() => {
             onSceneClick(scene.id);
           }}
@@ -317,6 +377,8 @@ const SceneCard: React.FC<SceneCardProps> = ({
             e.stopPropagation();
             onSceneContextMenu(e, scene.id);
           }}
+          onMouseEnter={() => onSceneHover(scene.id)}
+          onMouseLeave={() => onSceneHover(null)}
           className="relative w-full h-28 bg-gradient-to-br from-zinc-800 to-zinc-900 cursor-pointer overflow-hidden select-none"
         >
           {/* Expand indicator */}
@@ -339,20 +401,46 @@ const SceneCard: React.FC<SceneCardProps> = ({
             <span>{scene.shots.length} {scene.shots.length === 1 ? 'shot' : 'shots'}</span>
           </div>
 
-          {/* Scene icon */}
-          <div className="w-full h-full flex items-center justify-center flex-col gap-2 scene-preview-content">
-            <div
-              className="w-10 h-10 rounded-badge flex items-center justify-center text-white text-lg font-bold"
-              style={{
-                background: scene.color
-                  ? `linear-gradient(135deg, ${scene.color}, ${scene.color}aa)`
-                  : 'linear-gradient(135deg, #8b5cf6, #8b5cf6aa)',
-              }}
-            >
-              {scene.name.charAt(0).toUpperCase()}
+          {/* Status badges in bottom right */}
+          {(scene.wip || scene.completed) && (
+            <div className="absolute bottom-2 right-2 flex items-center gap-1 z-10">
+              {scene.wip && (
+                <div className="px-1.5 py-0.5 bg-yellow-500/90 text-yellow-950 rounded-badge text-[10px] font-semibold flex items-center gap-0.5">
+                  <IconClock size={10} />
+                  WIP
+                </div>
+              )}
+              {scene.completed && (
+                <div className="px-1.5 py-0.5 bg-green-500/90 text-green-950 rounded-badge text-[10px] font-semibold flex items-center gap-0.5">
+                  <IconCircleCheck size={10} />
+                  Done
+                </div>
+              )}
             </div>
-            <span className="text-xs text-text-muted">No preview</span>
-          </div>
+          )}
+
+          {/* Scene preview or icon */}
+          {scenePreviewSrc ? (
+            <img
+              src={scenePreviewSrc}
+              alt={scene.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center flex-col gap-2 scene-preview-content">
+              <div
+                className="w-10 h-10 rounded-badge flex items-center justify-center text-white text-lg font-bold"
+                style={{
+                  background: scene.color
+                    ? `linear-gradient(135deg, ${scene.color}, ${scene.color}aa)`
+                    : 'linear-gradient(135deg, #8b5cf6, #8b5cf6aa)',
+                }}
+              >
+                {scene.name.charAt(0).toUpperCase()}
+              </div>
+              <span className="text-xs text-text-muted">No preview</span>
+            </div>
+          )}
 
           {/* Scene overlay */}
           <div className="absolute inset-x-0 bottom-0 p-2.5 bg-gradient-to-t from-black/60 to-transparent">
@@ -445,9 +533,11 @@ const SceneCard: React.FC<SceneCardProps> = ({
                   shot={shot}
                   isSelected={selectedShotId === shot.id}
                   viewMode={viewMode}
+                  projectPath={project.path}
                   onClick={() => onShotSelect(shot.id)}
                   onStatusChange={onShotStatusChange}
                   onContextMenu={onShotContextMenu}
+                  onHover={onShotHover}
                   isAnimating={animatingShotId === shot.id}
                   isEditing={editingItem?.type === 'shot' && editingItem.id === shot.id}
                   editValue={editingItem?.type === 'shot' && editingItem.id === shot.id ? editingItem.value : ''}
@@ -468,6 +558,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
     <div onContextMenu={(e) => e.stopPropagation()}>
       {/* Compact header (list mode style) */}
       <div
+        data-context-menu="scene"
         onClick={() => {
           onSceneClick(scene.id);
         }}
@@ -475,6 +566,11 @@ const SceneCard: React.FC<SceneCardProps> = ({
           e.preventDefault();
           e.stopPropagation();
           onToggle();
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onSceneContextMenu(e, scene.id);
         }}
         className={`px-3 py-2.5 bg-card-bg border rounded-med cursor-pointer hover:bg-hover-bg select-none ${
           isSelected && !selectedShotId
@@ -502,14 +598,19 @@ const SceneCard: React.FC<SceneCardProps> = ({
 
           {/* Scene preview */}
           <div
-            className="w-16 h-10 rounded-badge bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center flex-shrink-0"
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onSceneContextMenu(e, scene.id);
-            }}
+            className="w-16 h-10 rounded-badge bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center flex-shrink-0 overflow-hidden"
+            onMouseEnter={() => onSceneHover(scene.id)}
+            onMouseLeave={() => onSceneHover(null)}
           >
-            <IconMovie size={16} className="text-text-muted" />
+            {scenePreviewSrc ? (
+              <img
+                src={scenePreviewSrc}
+                alt={scene.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <IconMovie size={16} className="text-text-muted" />
+            )}
           </div>
 
           {/* Scene info */}
@@ -532,18 +633,18 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 <div className="text-xs font-semibold text-text-primary truncate">{scene.name}</div>
               )}
               {(scene.wip || scene.completed) && (
-                <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                   {scene.wip && (
-                    <>
-                      <IconClock size={11} className="text-yellow-500" />
-                      <span className="text-xs text-yellow-500 whitespace-nowrap">WIP</span>
-                    </>
+                    <div className="px-1.5 py-0.5 bg-yellow-500/90 text-yellow-950 rounded-badge text-[10px] font-semibold flex items-center gap-0.5">
+                      <IconClock size={10} />
+                      WIP
+                    </div>
                   )}
                   {scene.completed && (
-                    <>
-                      <IconCircleCheck size={11} className="text-green-500" />
-                      <span className="text-xs text-green-500 whitespace-nowrap">Done</span>
-                    </>
+                    <div className="px-1.5 py-0.5 bg-green-500/90 text-green-950 rounded-badge text-[10px] font-semibold flex items-center gap-0.5">
+                      <IconCircleCheck size={10} />
+                      Done
+                    </div>
                   )}
                 </div>
               )}
@@ -604,9 +705,11 @@ const SceneCard: React.FC<SceneCardProps> = ({
               shot={shot}
               isSelected={selectedShotId === shot.id}
               viewMode={viewMode}
+              projectPath={project.path}
               onClick={() => onShotSelect(shot.id)}
               onStatusChange={onShotStatusChange}
               onContextMenu={onShotContextMenu}
+              onHover={onShotHover}
               isAnimating={animatingShotId === shot.id}
               isEditing={editingItem?.type === 'shot' && editingItem.id === shot.id}
               editValue={editingItem?.type === 'shot' && editingItem.id === shot.id ? editingItem.value : ''}
@@ -643,11 +746,25 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
   const setSpecialContext = useProjectStore(state => state.setSpecialContext);
   const { setActiveMenu } = useContextMenuStore();
 
-  const [expandedScenes, setExpandedScenes] = useState<Set<string>>(new Set());
+  // Load expanded scenes from localStorage
+  const [expandedScenes, setExpandedScenes] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(`shotsbrowser_expanded_${projectId}`);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [animatingShotId, setAnimatingShotId] = useState<string | null>(null);
   const [isContainerHovered, setIsContainerHovered] = useState(false);
+  const [showTopShadow, setShowTopShadow] = useState(false);
+  const [hoveredSceneId, setHoveredSceneId] = useState<string | null>(null);
+  const [hoveredShotId, setHoveredShotId] = useState<string | null>(null);
+  const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
+  const scrollRef = useRef<any>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -724,13 +841,6 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     setContextMenu({ x: e.clientX, y: e.clientY, type: 'scene', id: sceneId });
   };
 
-  // Handle container context menu
-  const handleContainerContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setActiveMenu('container');
-    setContextMenu({ x: e.clientX, y: e.clientY, type: 'container' });
-  };
-
   // Close context menu
   const closeContextMenu = () => {
     setContextMenu(null);
@@ -763,7 +873,32 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
       if (shot) {
         // For shots, only update the number part
         const prefix = shot.name.replace(/\d+$/, '');
-        const newName = prefix + editingItem.value;
+        let numberPart = editingItem.value;
+
+        // If empty, find the next available number
+        if (!numberPart || numberPart.trim() === '') {
+          const shotsInScene = project?.shots?.filter(s => s.sceneId === shot.sceneId) || [];
+          const existingNumbers = shotsInScene
+            .map(s => {
+              const match = s.name.match(/\d+$/);
+              return match ? parseInt(match[0], 10) : 0;
+            })
+            .sort((a, b) => a - b);
+
+          // Find the first available number starting from 1
+          let nextNumber = 1;
+          for (const num of existingNumbers) {
+            if (num === nextNumber) {
+              nextNumber++;
+            } else {
+              break;
+            }
+          }
+
+          numberPart = String(nextNumber).padStart(3, '0');
+        }
+
+        const newName = prefix + numberPart;
         renameShot(projectId, editingItem.id, newName);
       }
     } else if (editingItem.type === 'scene') {
@@ -839,6 +974,375 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     closeContextMenu();
   };
 
+  // Process image blob for scene preview
+  const processImageBlobForScene = async (sceneId: string, blob: Blob) => {
+    if (!project) return;
+
+    const scene = project.scenes?.find(s => s.id === sceneId);
+    if (!scene) return;
+
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+
+      const { writeBinaryFile, createDir, BaseDirectory } = await import('@tauri-apps/api/fs');
+      const { join, appDataDir } = await import('@tauri-apps/api/path');
+      const tempFileName = `temp_scene_preview_${Date.now()}.png`;
+
+      try {
+        await createDir('', { dir: BaseDirectory.AppData, recursive: true });
+      } catch (e) {
+        // Directory might already exist
+      }
+
+      await writeBinaryFile(tempFileName, uint8Array, { dir: BaseDirectory.AppData });
+
+      const appDir = await appDataDir();
+      const tempPath = await join(appDir, tempFileName);
+
+      const { invoke } = await import('@tauri-apps/api/tauri');
+      const previewPath = await invoke<string>('set_scene_preview', {
+        projectPath: project.path,
+        sceneNumber: scene.number,
+        imagePath: tempPath
+      });
+
+      // Clear cache for old preview if it exists
+      if (scene.preview) {
+        const { clearThumbnailCache } = await import('../../hooks/useThumbnail');
+        clearThumbnailCache(project.path, scene.preview);
+      }
+
+      const updatedScenes = project.scenes!.map(s =>
+        s.id === sceneId ? { ...s, preview: previewPath } : s
+      );
+
+      const { updateProject } = useProjectStore.getState();
+      await updateProject({
+        ...project,
+        scenes: updatedScenes,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to process scene image:', error);
+    }
+  };
+
+  // Process image blob for shot preview
+  const processImageBlobForShot = async (shotId: string, blob: Blob) => {
+    if (!project) return;
+
+    const shot = project.shots?.find(s => s.id === shotId);
+    if (!shot) return;
+
+    const scene = project.scenes?.find(s => s.id === shot.sceneId);
+    if (!scene) return;
+
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+
+      const { writeBinaryFile, createDir, BaseDirectory } = await import('@tauri-apps/api/fs');
+      const { join, appDataDir } = await import('@tauri-apps/api/path');
+      const tempFileName = `temp_shot_preview_${Date.now()}.png`;
+
+      try {
+        await createDir('', { dir: BaseDirectory.AppData, recursive: true });
+      } catch (e) {
+        // Directory might already exist
+      }
+
+      await writeBinaryFile(tempFileName, uint8Array, { dir: BaseDirectory.AppData });
+
+      const appDir = await appDataDir();
+      const tempPath = await join(appDir, tempFileName);
+
+      const { invoke } = await import('@tauri-apps/api/tauri');
+      const previewPath = await invoke<string>('set_shot_preview', {
+        projectPath: project.path,
+        sceneNumber: scene.number,
+        shotNumber: shot.number,
+        imagePath: tempPath
+      });
+
+      // Clear cache for old preview if it exists
+      if (shot.preview) {
+        const { clearThumbnailCache } = await import('../../hooks/useThumbnail');
+        clearThumbnailCache(project.path, shot.preview);
+      }
+
+      const updatedShots = project.shots!.map(s =>
+        s.id === shotId ? { ...s, preview: previewPath } : s
+      );
+
+      const { updateProject } = useProjectStore.getState();
+      updateProject({
+        ...project,
+        shots: updatedShots,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to process shot image:', error);
+    }
+  };
+
+  // Remove scene preview
+  const removeScenePreview = async (sceneId: string) => {
+    if (!project) return;
+
+    const scene = project.scenes?.find(s => s.id === sceneId);
+    if (!scene || !scene.preview) return;
+
+    try {
+      // Clear cache for old preview
+      const { clearThumbnailCache } = await import('../../hooks/useThumbnail');
+      clearThumbnailCache(project.path, scene.preview);
+
+      // Delete preview file from filesystem
+      const previewPath = `${project.path}/${scene.preview}`;
+      const { removeFile } = await import('@tauri-apps/api/fs');
+
+      try {
+        await removeFile(previewPath);
+      } catch (error) {
+        console.warn('Failed to delete preview file:', error);
+      }
+
+      // Update project state
+      const updatedScenes = project.scenes!.map(s =>
+        s.id === sceneId ? { ...s, preview: undefined } : s
+      );
+
+      const { updateProject } = useProjectStore.getState();
+      updateProject({
+        ...project,
+        scenes: updatedScenes,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to remove scene preview:', error);
+    }
+  };
+
+  // Remove shot preview
+  const removeShotPreview = async (shotId: string) => {
+    if (!project) return;
+
+    const shot = project.shots?.find(s => s.id === shotId);
+    if (!shot || !shot.preview) return;
+
+    try {
+      // Clear cache for old preview
+      const { clearThumbnailCache } = await import('../../hooks/useThumbnail');
+      clearThumbnailCache(project.path, shot.preview);
+
+      // Delete preview file from filesystem
+      const previewPath = `${project.path}/${shot.preview}`;
+      const { removeFile } = await import('@tauri-apps/api/fs');
+
+      try {
+        await removeFile(previewPath);
+      } catch (error) {
+        console.warn('Failed to delete preview file:', error);
+      }
+
+      // Update project state
+      const updatedShots = project.shots!.map(s =>
+        s.id === shotId ? { ...s, preview: undefined } : s
+      );
+
+      const { updateProject } = useProjectStore.getState();
+      updateProject({
+        ...project,
+        shots: updatedShots,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Failed to remove shot preview:', error);
+    }
+  };
+
+  // Global paste handler
+  useEffect(() => {
+    const handleGlobalPaste = async (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      // Check if hovering over a shot first, then scene
+      if (hoveredShotId) {
+        const items = e.clipboardData?.items;
+        const files = e.clipboardData?.files;
+
+        if (items) {
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.indexOf('image') !== -1) {
+              e.preventDefault();
+              const blob = item.getAsFile();
+              if (blob) {
+                await processImageBlobForShot(hoveredShotId, blob);
+                return;
+              }
+            }
+          }
+        }
+
+        if (files && files.length > 0) {
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (file.type.indexOf('image') !== -1) {
+              e.preventDefault();
+              await processImageBlobForShot(hoveredShotId, file);
+              return;
+            }
+          }
+        }
+
+        const text = e.clipboardData?.getData('text');
+        if (text && text.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
+          e.preventDefault();
+          if (!project) return;
+          try {
+            const { invoke } = await import('@tauri-apps/api/tauri');
+            const shot = project.shots?.find(s => s.id === hoveredShotId);
+            const scene = project.scenes?.find(s => s.id === shot?.sceneId);
+            if (shot && scene) {
+              const previewPath = await invoke<string>('set_shot_preview', {
+                projectPath: project.path,
+                sceneNumber: scene.number,
+                shotNumber: shot.number,
+                imagePath: text
+              });
+              const updatedShots = project.shots!.map(s =>
+                s.id === hoveredShotId ? { ...s, preview: previewPath } : s
+              );
+              const { updateProject } = useProjectStore.getState();
+              updateProject({
+                ...project,
+                shots: updatedShots,
+                updatedAt: new Date().toISOString()
+              });
+            }
+          } catch (error) {
+            console.error('Failed to set shot preview from path:', error);
+          }
+        }
+      } else if (hoveredSceneId) {
+        const items = e.clipboardData?.items;
+        const files = e.clipboardData?.files;
+
+        if (items) {
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.indexOf('image') !== -1) {
+              e.preventDefault();
+              const blob = item.getAsFile();
+              if (blob) {
+                await processImageBlobForScene(hoveredSceneId, blob);
+                return;
+              }
+            }
+          }
+        }
+
+        if (files && files.length > 0) {
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (file.type.indexOf('image') !== -1) {
+              e.preventDefault();
+              await processImageBlobForScene(hoveredSceneId, file);
+              return;
+            }
+          }
+        }
+
+        const text = e.clipboardData?.getData('text');
+        if (text && text.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/i)) {
+          e.preventDefault();
+          if (!project) return;
+          try {
+            const { invoke } = await import('@tauri-apps/api/tauri');
+            const scene = project.scenes?.find(s => s.id === hoveredSceneId);
+            if (scene) {
+              const previewPath = await invoke<string>('set_scene_preview', {
+                projectPath: project.path,
+                sceneNumber: scene.number,
+                imagePath: text
+              });
+              const updatedScenes = project.scenes!.map(s =>
+                s.id === hoveredSceneId ? { ...s, preview: previewPath } : s
+              );
+              const { updateProject } = useProjectStore.getState();
+              updateProject({
+                ...project,
+                scenes: updatedScenes,
+                updatedAt: new Date().toISOString()
+              });
+            }
+          } catch (error) {
+            console.error('Failed to set scene preview from path:', error);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, [hoveredSceneId, hoveredShotId, project]);
+
+  // Save expanded scenes to localStorage
+  useEffect(() => {
+    localStorage.setItem(`shotsbrowser_expanded_${projectId}`, JSON.stringify(Array.from(expandedScenes)));
+  }, [expandedScenes, projectId]);
+
+  // Auto-expand scene with current shot on load
+  useEffect(() => {
+    if (project?.currentShotId && project?.shots) {
+      const currentShot = project.shots.find(s => s.id === project.currentShotId);
+      if (currentShot?.sceneId) {
+        setExpandedScenes(prev => {
+          const newSet = new Set(prev);
+          newSet.add(currentShot.sceneId);
+          return newSet;
+        });
+      }
+    }
+  }, [project?.currentShotId, project?.shots]);
+
+  // Load versions to calculate shot version counts
+  useEffect(() => {
+    if (!project?.path) return;
+
+    const loadVersions = async () => {
+      try {
+        const result = await invoke<ProjectVersion[]>('get_project_versions', {
+          projectPath: project.path
+        });
+        setAllVersions(result);
+      } catch (error) {
+        console.error('Failed to load versions:', error);
+        setAllVersions([]);
+      }
+    };
+
+    loadVersions();
+
+    // Listen for version updates
+    const handleVersionUpdate = () => {
+      loadVersions();
+    };
+
+    window.addEventListener('version-created', handleVersionUpdate);
+    window.addEventListener('refresh-all', handleVersionUpdate);
+
+    return () => {
+      window.removeEventListener('version-created', handleVersionUpdate);
+      window.removeEventListener('refresh-all', handleVersionUpdate);
+    };
+  }, [project?.path]);
+
   // Close context menu on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -878,6 +1382,64 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     }
   }, [deleteConfirm, projectId, removeShot, removeScene]);
 
+  // Handle scroll for top shadow
+  useEffect(() => {
+    const scrollElement = scrollRef.current?.getScrollElement();
+    if (!scrollElement) return;
+
+    const handleScroll = () => {
+      const scrollTop = scrollElement.scrollTop;
+      setShowTopShadow(scrollTop > 5);
+    };
+
+    scrollElement.addEventListener('scroll', handleScroll);
+    return () => scrollElement.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Helper function to extract version number from filename
+  const extractVersionNumber = (filename: string): number => {
+    const match = filename.match(/_v(\d+)/i);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  // Calculate highest version number for each shot
+  const shotVersions = useMemo(() => {
+    const versionMap = new Map<number, number>();
+
+    if (!project?.shots || !allVersions.length) return versionMap;
+
+    // Process each version file
+    allVersions.forEach(version => {
+      if (!version.is_versioned) return;
+
+      // Extract shot number from filename
+      // Pattern: _SH001_, _SH002_, etc. or _main_ for shot 0
+      const shotMatch = version.name.match(/_SH(\d{3})_/);
+      const mainMatch = version.name.includes('_main_');
+
+      let shotNumber: number | null = null;
+      if (mainMatch) {
+        shotNumber = 0;
+      } else if (shotMatch) {
+        shotNumber = parseInt(shotMatch[1], 10);
+      }
+
+      if (shotNumber === null) return;
+
+      // Extract version number
+      const versionNum = extractVersionNumber(version.name);
+      if (versionNum === 0) return;
+
+      // Update highest version for this shot
+      const currentHighest = versionMap.get(shotNumber) || 0;
+      if (versionNum > currentHighest) {
+        versionMap.set(shotNumber, versionNum);
+      }
+    });
+
+    return versionMap;
+  }, [allVersions, project?.shots]);
+
   // Get scenes and shots from project
   const scenes = useMemo(() => {
     if (!project?.hasShots || !project.scenes || !project.shots) return [];
@@ -889,9 +1451,11 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
           id: shot.id,
           name: shot.name,
           sceneId: shot.sceneId,
-          versions: 1, // TODO: get real version count
+          versions: shotVersions.get(shot.number) || 0,
           wip: shot.wip,
           completed: shot.completed,
+          preview: shot.preview,
+          number: shot.number,
         })) || [];
 
       // Calculate scene status based on shots
@@ -917,12 +1481,14 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
         id: scene.id,
         name: scene.name,
         description: scene.description,
+        preview: scene.preview,
+        number: scene.number,
         wip: sceneWip,
         completed: sceneCompleted,
         shots: sceneShots,
       };
     });
-  }, [project]);
+  }, [project, shotVersions]);
 
   // Filter scenes and shots based on search
   const filteredScenes = useMemo(() => {
@@ -965,7 +1531,19 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
   }
 
   return (
-    <div className={`flex flex-col bg-sidebar-bg border-l border-l-border-primary border-t border-t-border-primary p-4 relative ${className}`}>
+    <div
+      className={`flex flex-col bg-sidebar-bg border-l border-l-border-primary border-t border-t-border-primary p-4 relative ${className}`}
+      onContextMenuCapture={(e) => {
+        // Check if element or its parents have custom context menu
+        const target = e.target as HTMLElement;
+        const hasCustomMenu = target.closest('[data-context-menu]');
+
+        // If no custom menu, prevent default Windows context menu
+        if (!hasCustomMenu) {
+          e.preventDefault();
+        }
+      }}
+    >
       {/* Header */}
       <div className="flex items-center gap-2 mb-4 justify-between">
         <div className="flex items-center gap-2.5">
@@ -1054,11 +1632,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
         </button>
       </div>
 
+      {/* Top gradient shadow */}
+      <div
+        className="h-4 pointer-events-none transition-opacity duration-300 -mb-4 relative z-10"
+        style={{
+          background: 'linear-gradient(to bottom, #0f0f0f 0%, rgba(15, 15, 15, 0.7) 30%, rgba(15, 15, 15, 0.3) 60%, transparent 100%)',
+          opacity: showTopShadow ? 1 : 0
+        }}
+      ></div>
+
       {/* Scenes list */}
       <SimpleBar
+        ref={scrollRef}
         className="flex-1 custom-scrollbar"
-        style={{ paddingBottom: '45px' }}
-        onContextMenu={handleContainerContextMenu}
+        style={{ paddingBottom: '45px', minHeight: 0 }}
         onMouseEnter={() => setIsContainerHovered(true)}
         onMouseLeave={() => setIsContainerHovered(false)}
       >
@@ -1072,7 +1659,6 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                 isSelected={project?.currentSceneId === scene.id}
                 selectedShotId={project?.currentShotId || null}
                 viewMode={viewMode}
-                projectId={projectId}
                 project={project}
                 onSetSpecialContext={(contextType, sceneId) => setSpecialContext(projectId, contextType, sceneId)}
                 onToggle={() => toggleScene(scene.id)}
@@ -1086,6 +1672,8 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                 onEditChange={(value) => setEditingItem(editingItem ? { ...editingItem, value } : null)}
                 onEditSave={handleSaveRename}
                 onEditCancel={handleCancelRename}
+                onSceneHover={setHoveredSceneId}
+                onShotHover={setHoveredShotId}
               />
             ))
           ) : (
@@ -1144,24 +1732,73 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
             <>
               {/* Shot Context Menu */}
               <button
-                onClick={() => {
-                  // TODO: Paste thumbnail
+                onClick={async () => {
+                  const shot = project?.shots?.find(s => s.id === contextMenu.id);
+                  if (!shot || !project) return;
+
+                  try {
+                    const { open } = await import('@tauri-apps/api/dialog');
+                    const selected = await open({
+                      multiple: false,
+                      filters: [{
+                        name: 'Image',
+                        extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+                      }]
+                    });
+
+                    if (selected && typeof selected === 'string') {
+                      const { readBinaryFile } = await import('@tauri-apps/api/fs');
+                      const fileData = await readBinaryFile(selected);
+                      const arrayBuffer = fileData.buffer as ArrayBuffer;
+                      const blob = new Blob([arrayBuffer]);
+                      await processImageBlobForShot(contextMenu.id!, blob);
+                    }
+                  } catch (error) {
+                    console.error('Failed to set shot preview:', error);
+                  }
                   closeContextMenu();
                 }}
                 className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
                 <IconPhoto stroke={1.5} className="w-4 h-4" />
-                Paste Thumbnail
+                Set Preview
               </button>
               <button
-                onClick={() => {
-                  // TODO: Remove thumbnail
+                onClick={async () => {
+                  const shot = project?.shots?.find(s => s.id === contextMenu.id);
+                  if (shot) {
+                    try {
+                      const clipboardItems = await navigator.clipboard.read();
+                      for (const item of clipboardItems) {
+                        const imageTypes = item.types.filter(type => type.startsWith('image/'));
+                        if (imageTypes.length > 0) {
+                          const blob = await item.getType(imageTypes[0]);
+                          await processImageBlobForShot(contextMenu.id!, blob);
+                          break;
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Failed to paste shot preview from clipboard:', error);
+                    }
+                  }
+                  closeContextMenu();
+                }}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+              >
+                <IconPhoto stroke={1.5} className="w-4 h-4" />
+                Paste Preview
+              </button>
+              <button
+                onClick={async () => {
+                  if (contextMenu.id) {
+                    await removeShotPreview(contextMenu.id);
+                  }
                   closeContextMenu();
                 }}
                 className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
                 <IconX stroke={1.5} className="w-4 h-4" />
-                Remove Thumbnail
+                Remove Preview
               </button>
               <div className="border-t border-zinc-700 my-1" />
               <div className="px-2 py-1 text-xs text-zinc-500 font-medium">Status</div>
@@ -1200,13 +1837,28 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                 className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
                 <IconPencil stroke={1.5} className="w-4 h-4" />
-                Rename
+                Renumber
               </button>
               <button
                 onClick={() => {
                   handleDeleteShot(contextMenu.id!);
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-red-900/50 text-red-400 flex items-center gap-2"
+                disabled={(() => {
+                  const shot = project?.shots?.find(s => s.id === contextMenu.id);
+                  if (!shot) return true;
+                  const shotsInScene = project?.shots?.filter(s => s.sceneId === shot.sceneId) || [];
+                  return shotsInScene.length <= 1;
+                })()}
+                className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${
+                  (() => {
+                    const shot = project?.shots?.find(s => s.id === contextMenu.id);
+                    if (!shot) return 'text-zinc-600 cursor-not-allowed';
+                    const shotsInScene = project?.shots?.filter(s => s.sceneId === shot.sceneId) || [];
+                    return shotsInScene.length <= 1
+                      ? 'text-zinc-600 cursor-not-allowed'
+                      : 'hover:bg-red-900/50 text-red-400';
+                  })()
+                }`}
               >
                 <IconTrash stroke={1.5} className="w-4 h-4" />
                 Delete
@@ -1216,24 +1868,73 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
             <>
               {/* Scene Context Menu */}
               <button
-                onClick={() => {
-                  // TODO: Paste thumbnail
+                onClick={async () => {
+                  const scene = project?.scenes?.find(s => s.id === contextMenu.id);
+                  if (!scene || !project) return;
+
+                  try {
+                    const { open } = await import('@tauri-apps/api/dialog');
+                    const selected = await open({
+                      multiple: false,
+                      filters: [{
+                        name: 'Image',
+                        extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+                      }]
+                    });
+
+                    if (selected && typeof selected === 'string') {
+                      const { readBinaryFile } = await import('@tauri-apps/api/fs');
+                      const fileData = await readBinaryFile(selected);
+                      const arrayBuffer = fileData.buffer as ArrayBuffer;
+                      const blob = new Blob([arrayBuffer]);
+                      await processImageBlobForScene(contextMenu.id!, blob);
+                    }
+                  } catch (error) {
+                    console.error('Failed to set scene preview:', error);
+                  }
                   closeContextMenu();
                 }}
                 className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
                 <IconPhoto stroke={1.5} className="w-4 h-4" />
-                Paste Thumbnail
+                Set Preview
               </button>
               <button
-                onClick={() => {
-                  // TODO: Remove thumbnail
+                onClick={async () => {
+                  const scene = project?.scenes?.find(s => s.id === contextMenu.id);
+                  if (scene) {
+                    try {
+                      const clipboardItems = await navigator.clipboard.read();
+                      for (const item of clipboardItems) {
+                        const imageTypes = item.types.filter(type => type.startsWith('image/'));
+                        if (imageTypes.length > 0) {
+                          const blob = await item.getType(imageTypes[0]);
+                          await processImageBlobForScene(contextMenu.id!, blob);
+                          break;
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Failed to paste scene preview from clipboard:', error);
+                    }
+                  }
+                  closeContextMenu();
+                }}
+                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+              >
+                <IconPhoto stroke={1.5} className="w-4 h-4" />
+                Paste Preview
+              </button>
+              <button
+                onClick={async () => {
+                  if (contextMenu.id) {
+                    await removeScenePreview(contextMenu.id);
+                  }
                   closeContextMenu();
                 }}
                 className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
                 <IconX stroke={1.5} className="w-4 h-4" />
-                Remove Thumbnail
+                Remove Preview
               </button>
               <div className="border-t border-zinc-700 my-1" />
               <button
@@ -1267,7 +1968,12 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                 onClick={() => {
                   handleDeleteScene(contextMenu.id!);
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-red-900/50 text-red-400 flex items-center gap-2"
+                disabled={(project?.scenes || []).length <= 1}
+                className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${
+                  (project?.scenes || []).length <= 1
+                    ? 'text-zinc-600 cursor-not-allowed'
+                    : 'hover:bg-red-900/50 text-red-400'
+                }`}
               >
                 <IconTrash stroke={1.5} className="w-4 h-4" />
                 Delete

@@ -59,7 +59,7 @@ interface ProjectStore {
   migrateProjectToScenes: (project: Project) => Project;
   // Scene management
   addScene: (projectId: string, name?: string) => void;
-  removeScene: (projectId: string, sceneId: string) => void;
+  removeScene: (projectId: string, sceneId: string) => Promise<void>;
   renameScene: (projectId: string, sceneId: string, newName: string) => void;
   setSceneDescription: (projectId: string, sceneId: string, description: string) => void;
   setCurrentScene: (projectId: string, sceneId: string | null) => void;
@@ -77,7 +77,7 @@ interface ProjectStore {
   removeSceneLink: (projectId: string, sceneId: string, linkId: string) => void;
   // Shot management
   addShot: (projectId: string, name?: string) => void;
-  removeShot: (projectId: string, shotId: string) => void;
+  removeShot: (projectId: string, shotId: string) => Promise<void>;
   renameShot: (projectId: string, shotId: string, newName: string) => void;
   setCurrentShot: (projectId: string, shotId: string | null) => void;
   toggleShotCompleted: (projectId: string, shotId: string) => void;
@@ -96,6 +96,9 @@ interface ProjectStore {
   // Special context management (Assets/Compose)
   setSpecialContext: (projectId: string, contextType: 'asset' | 'compose', sceneId?: string) => void;
   clearSpecialContext: (projectId: string) => void;
+  // Preview management
+  setScenePreview: (projectId: string, sceneId: string) => Promise<void>;
+  setShotPreview: (projectId: string, shotId: string) => Promise<void>;
   // Time tracking (project data only - session management moved to time-tracking feature)
   addManualTimeEntry: (projectId: string, software: SoftwareName, durationMinutes: number, date: string, shotId?: string, notes?: string, countInStats?: boolean) => void;
   removeTimeEntry: (projectId: string, entryId: string) => void;
@@ -240,77 +243,77 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Generate random color for project
       project.color = generateProjectColor(project.id);
 
-      // Create Main scene if hasScenes is enabled
+      // Create Scene 001 if hasScenes is enabled
       if (project.hasScenes) {
-        const mainScene = {
+        const firstScene = {
           id: crypto.randomUUID(),
-          number: 0,
-          name: 'Main',
+          number: 1,
+          name: 'Scene 001',
           notes: [],
           todos: [],
           browserTabs: [],
           links: []
         };
 
-        project.scenes = [mainScene];
-        project.currentSceneId = mainScene.id;
+        project.scenes = [firstScene];
+        project.currentSceneId = firstScene.id;
 
-        // Create SC_MAIN folders
+        // Create SC_001 folders
         try {
           await invoke('create_scene_folders', {
             input: {
               projectPath: project.path,
-              sceneCode: 'SC_MAIN'
+              sceneCode: 'SC_001'
             }
           });
         } catch (error) {
-          console.error('Failed to create main scene folders:', error);
+          console.error('Failed to create first scene folders:', error);
         }
 
-        // If both scenes and shots, create Main shot inside Main scene
+        // If both scenes and shots, create Shot 001 inside Scene 001
         if (project.hasShots) {
-          const mainShot = {
+          const firstShot = {
             id: crypto.randomUUID(),
-            sceneId: mainScene.id,
-            number: 0,
-            name: 'Main',
+            sceneId: firstScene.id,
+            number: 1,
+            name: 'Shot 001',
             notes: [],
             todos: [],
             browserTabs: [],
             links: []
           };
 
-          project.shots = [mainShot];
-          project.currentShotId = mainShot.id;
+          project.shots = [firstShot];
+          project.currentShotId = firstShot.id;
 
-          // Create SH000 (Main shot) folders
+          // Create SH001 folders
           try {
             await invoke('create_shot_folders', {
               input: {
                 projectPath: project.path,
-                sceneCode: 'SC_MAIN',
-                shotCode: 'SH000'
+                sceneCode: 'SC_001',
+                shotCode: 'SH001'
               }
             });
           } catch (error) {
-            console.error('Failed to create main shot folders:', error);
+            console.error('Failed to create first shot folders:', error);
           }
         }
       } else if (project.hasShots) {
         // Only shots, no scenes - legacy mode
-        const mainShot = {
+        const firstShot = {
           id: crypto.randomUUID(),
           sceneId: '', // No scene
-          number: 0,
-          name: 'Main',
+          number: 1,
+          name: 'Shot 001',
           notes: [],
           todos: [],
           browserTabs: [],
           links: []
         };
 
-        project.shots = [mainShot];
-        project.currentShotId = mainShot.id;
+        project.shots = [firstShot];
+        project.currentShotId = firstShot.id;
       }
 
       // Save the updated project with color (and Shot 001 if applicable)
@@ -800,11 +803,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (project.hasShots && !project.scenes && project.shots && project.shots.length > 0) {
       console.log(`[Migration] Migrating project "${project.name}" to scene-based structure`);
 
-      // Create Main scene
-      const mainScene = {
+      // Create Scene 001
+      const firstScene = {
         id: crypto.randomUUID(),
-        number: 0,
-        name: 'Main',
+        number: 1,
+        name: 'Scene 001',
         description: undefined,
         notes: [],
         todos: [],
@@ -812,16 +815,16 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         links: []
       };
 
-      // Assign all existing shots to Main scene
+      // Assign all existing shots to Scene 001
       const migratedShots = project.shots.map(shot => ({
         ...shot,
-        sceneId: mainScene.id
+        sceneId: firstScene.id
       }));
 
       return {
         ...project,
-        scenes: [mainScene],
-        currentSceneId: mainScene.id,
+        scenes: [firstScene],
+        currentSceneId: firstScene.id,
         shots: migratedShots,
         updatedAt: new Date().toISOString()
       };
@@ -867,13 +870,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       let updatedShots = project.shots || [];
       let newShotId: string | undefined = undefined;
 
-      // If project has shots, create Main shot for this scene
+      // If project has shots, create Shot 001 for this scene
       if (project.hasShots) {
         const newShot = {
           id: crypto.randomUUID(),
           sceneId: newScene.id,
-          number: 0,
-          name: 'Main',
+          number: 1,
+          name: 'Shot 001',
           todos: [],
           notes: [],
           browserTabs: [],
@@ -883,13 +886,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         updatedShots = [...updatedShots, newShot];
         newShotId = newShot.id;
 
-        // Create SH000 (Main shot) folders
+        // Create SH001 folders
         try {
           await invoke('create_shot_folders', {
             input: {
               projectPath: project.path,
               sceneCode: sceneCode,
-              shotCode: 'SH000'
+              shotCode: 'SH001'
             }
           });
         } catch (error) {
@@ -908,14 +911,29 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  removeScene: (projectId: string, sceneId: string) => {
+  removeScene: async (projectId: string, sceneId: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
-      // Prevent removing 'Main' scene
-      const sceneToRemove = (project.scenes || []).find(s => s.id === sceneId);
-      if (sceneToRemove?.name === 'Main') {
-        console.warn('Cannot remove Main scene');
+      // Prevent removing the last scene
+      if ((project.scenes || []).length <= 1) {
+        console.warn('Cannot remove the last scene');
         return;
+      }
+
+      // Find scene to get its number
+      const scene = project.scenes?.find(s => s.id === sceneId);
+      if (scene) {
+        // Delete all version files for this scene
+        try {
+          const { invoke } = await import('@tauri-apps/api/tauri');
+          const deletedCount = await invoke<number>('delete_scene_files', {
+            projectPath: project.path,
+            sceneNumber: scene.number
+          });
+          console.log(`Deleted ${deletedCount} files for scene ${scene.number}`);
+        } catch (error) {
+          console.error('Failed to delete scene files:', error);
+        }
       }
 
       const updated = {
@@ -930,13 +948,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   renameScene: (projectId: string, sceneId: string, newName: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
-      // Prevent renaming 'Main' scene
-      const sceneToRename = (project.scenes || []).find(s => s.id === sceneId);
-      if (sceneToRename?.name === 'Main') {
-        console.warn('Cannot rename Main scene');
-        return;
-      }
-
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s => {
@@ -1288,14 +1299,31 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  removeShot: (projectId: string, shotId: string) => {
+  removeShot: async (projectId: string, shotId: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
-      // Prevent removing 'Main' shot
+      // Find shots in the same scene as the shot being removed
       const shotToRemove = (project.shots || []).find(s => s.id === shotId);
-      if (shotToRemove?.name === 'Main') {
-        console.warn('Cannot remove Main shot');
+      if (!shotToRemove) return;
+
+      const shotsInScene = (project.shots || []).filter(s => s.sceneId === shotToRemove.sceneId);
+
+      // Prevent removing the last shot in a scene
+      if (shotsInScene.length <= 1) {
+        console.warn('Cannot remove the last shot in a scene');
         return;
+      }
+
+      // Delete all version files for this shot
+      try {
+        const { invoke } = await import('@tauri-apps/api/tauri');
+        const deletedCount = await invoke<number>('delete_shot_files', {
+          projectPath: project.path,
+          shotNumber: shotToRemove.number
+        });
+        console.log(`Deleted ${deletedCount} files for shot ${shotToRemove.number}`);
+      } catch (error) {
+        console.error('Failed to delete shot files:', error);
       }
 
       const updated = {
@@ -1310,13 +1338,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   renameShot: (projectId: string, shotId: string, newName: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
-      // Prevent renaming 'Main' shot
-      const shotToRename = (project.shots || []).find(s => s.id === shotId);
-      if (shotToRename?.name === 'Main') {
-        console.warn('Cannot rename Main shot');
-        return;
-      }
-
       const updated = {
         ...project,
         shots: (project.shots || []).map(s => {
@@ -1854,6 +1875,99 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     };
 
     get().updateProject(updated);
+  },
+
+  // Preview management
+  setScenePreview: async (projectId: string, sceneId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project || !project.hasShots) return;
+
+    const scene = project.scenes?.find(s => s.id === sceneId);
+    if (!scene) return;
+
+    try {
+      // Open file dialog
+      const { open } = await import('@tauri-apps/api/dialog');
+      const selected = await open({
+        multiple: false,
+        filters: [{
+          name: 'Images',
+          extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+        }]
+      });
+
+      if (!selected || Array.isArray(selected)) return;
+
+      // Call Rust command to copy and set preview
+      const previewPath = await invoke<string>('set_scene_preview', {
+        projectPath: project.path,
+        sceneNumber: scene.number,
+        imagePath: selected
+      });
+
+      // Update project in store
+      const updatedScenes = project.scenes!.map(s =>
+        s.id === sceneId ? { ...s, preview: previewPath } : s
+      );
+
+      const updated = {
+        ...project,
+        scenes: updatedScenes,
+        updatedAt: new Date().toISOString()
+      };
+
+      get().updateProject(updated);
+    } catch (error) {
+      console.error('Failed to set scene preview:', error);
+    }
+  },
+
+  setShotPreview: async (projectId: string, shotId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project || !project.hasShots) return;
+
+    const shot = project.shots?.find(s => s.id === shotId);
+    if (!shot) return;
+
+    const scene = project.scenes?.find(s => s.id === shot.sceneId);
+    if (!scene) return;
+
+    try {
+      // Open file dialog
+      const { open } = await import('@tauri-apps/api/dialog');
+      const selected = await open({
+        multiple: false,
+        filters: [{
+          name: 'Images',
+          extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+        }]
+      });
+
+      if (!selected || Array.isArray(selected)) return;
+
+      // Call Rust command to copy and set preview
+      const previewPath = await invoke<string>('set_shot_preview', {
+        projectPath: project.path,
+        sceneNumber: scene.number,
+        shotNumber: shot.number,
+        imagePath: selected
+      });
+
+      // Update project in store
+      const updatedShots = project.shots!.map(s =>
+        s.id === shotId ? { ...s, preview: previewPath } : s
+      );
+
+      const updated = {
+        ...project,
+        shots: updatedShots,
+        updatedAt: new Date().toISOString()
+      };
+
+      get().updateProject(updated);
+    } catch (error) {
+      console.error('Failed to set shot preview:', error);
+    }
   }
 }));
 

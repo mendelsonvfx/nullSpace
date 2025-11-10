@@ -50,6 +50,7 @@ export interface Scene {
   number: number; // 0 for Main, 1+ for SC001, SC002...
   name: string; // "Main", "Scene 001", "Scene 002"
   description?: string; // Optional scene description
+  preview?: string; // Path to preview image
   todos: TodoItem[];
   notes: Note[];
   browserTabs: BrowserTab[];
@@ -63,6 +64,7 @@ export interface Shot {
   sceneId: string; // Required: scene this shot belongs to
   number: number;
   name: string;
+  preview?: string; // Path to preview image
   todos: TodoItem[];
   notes: Note[];
   browserTabs: BrowserTab[];

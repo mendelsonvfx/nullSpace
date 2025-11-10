@@ -164,6 +164,8 @@ struct Scene {
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preview: Option<String>, // Path to preview image
     todos: Vec<TodoItem>,
     notes: Vec<Note>,
     #[serde(rename = "browserTabs")]
@@ -182,6 +184,8 @@ struct Shot {
     scene_id: String, // Required: scene this shot belongs to
     number: u32,
     name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preview: Option<String>, // Path to preview image
     todos: Vec<TodoItem>,
     notes: Vec<Note>,
     #[serde(rename = "browserTabs")]
@@ -1419,6 +1423,113 @@ async fn set_project_thumbnail(project_path: String, image_path: String) -> Resu
     Ok(thumbnail_name)
 }
 
+#[tauri::command]
+async fn set_scene_preview(project_path: String, scene_number: u32, image_path: String) -> Result<String, String> {
+    let project_dir = PathBuf::from(&project_path);
+    let source_path = PathBuf::from(&image_path);
+
+    if !source_path.exists() {
+        return Err("Source image does not exist".to_string());
+    }
+
+    // Create previews directory if it doesn't exist
+    let previews_dir = project_dir.join("previews");
+    fs::create_dir_all(&previews_dir)
+        .map_err(|e| format!("Failed to create previews directory: {}", e))?;
+
+    // Create scene directory
+    let scene_dir = previews_dir.join(format!("scene{:03}", scene_number));
+    fs::create_dir_all(&scene_dir)
+        .map_err(|e| format!("Failed to create scene directory: {}", e))?;
+
+    // Delete old scene preview
+    if let Ok(entries) = fs::read_dir(&scene_dir) {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let name_str = file_name.to_string_lossy();
+            if name_str.starts_with("scene") {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+
+    // Get file extension
+    let extension = source_path.extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("jpg");
+
+    // Add timestamp to force cache refresh
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+
+    let preview_name = format!("scene{:03}_{}.{}", scene_number, timestamp, extension);
+    let dest_path = scene_dir.join(&preview_name);
+
+    // Copy the file
+    fs::copy(&source_path, &dest_path)
+        .map_err(|e| format!("Failed to copy preview: {}", e))?;
+
+    // Return relative path from project root
+    Ok(format!("previews/scene{:03}/{}", scene_number, preview_name))
+}
+
+#[tauri::command]
+async fn set_shot_preview(project_path: String, scene_number: u32, shot_number: u32, image_path: String) -> Result<String, String> {
+    let project_dir = PathBuf::from(&project_path);
+    let source_path = PathBuf::from(&image_path);
+
+    if !source_path.exists() {
+        return Err("Source image does not exist".to_string());
+    }
+
+    // Create previews directory if it doesn't exist
+    let previews_dir = project_dir.join("previews");
+    fs::create_dir_all(&previews_dir)
+        .map_err(|e| format!("Failed to create previews directory: {}", e))?;
+
+    // Create scene directory
+    let scene_dir = previews_dir.join(format!("scene{:03}", scene_number));
+    fs::create_dir_all(&scene_dir)
+        .map_err(|e| format!("Failed to create scene directory: {}", e))?;
+
+    // Delete old shot preview
+    let shot_pattern = format!("shot{:03}", shot_number);
+    if let Ok(entries) = fs::read_dir(&scene_dir) {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let name_str = file_name.to_string_lossy();
+            if name_str.starts_with(&shot_pattern) {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+
+    // Get file extension
+    let extension = source_path.extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("jpg");
+
+    // Add timestamp to force cache refresh
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+
+    let preview_name = format!("shot{:03}_{}.{}", shot_number, timestamp, extension);
+    let dest_path = scene_dir.join(&preview_name);
+
+    // Copy the file
+    fs::copy(&source_path, &dest_path)
+        .map_err(|e| format!("Failed to copy preview: {}", e))?;
+
+    // Return relative path from project root
+    Ok(format!("previews/scene{:03}/{}", scene_number, preview_name))
+}
+
 #[derive(Debug, Serialize)]
 struct ProjectVersion {
     name: String,
@@ -1572,6 +1683,137 @@ async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
                             if fs::remove_file(&file_path).is_ok() {
                                 deleted_count += 1;
                                 println!("Deleted backup file: {:?}", file_path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(deleted_count)
+}
+
+#[tauri::command]
+async fn delete_shot_files(project_path: String, shot_number: u32) -> Result<u32, String> {
+    let project_dir = PathBuf::from(&project_path);
+    let mut deleted_count = 0u32;
+
+    // Get project name from metadata
+    let metadata_path = project_dir.join(".project-metadata.json");
+    let project_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+        if let Ok(project) = serde_json::from_str::<Project>(&content) {
+            project.name
+        } else {
+            return Err("Failed to parse project metadata".to_string());
+        }
+    } else {
+        return Err("Project metadata not found".to_string());
+    };
+
+    let base_name = project_name.replace(" ", "");
+
+    // List of software folders to search
+    let software_folders = vec![
+        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
+        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+    ];
+
+    // Build shot pattern
+    let shot_pattern = if shot_number == 0 {
+        "_main_".to_string()
+    } else {
+        format!("_SH{:03}_", shot_number)
+    };
+
+    // Search in each software folder
+    for software_folder in software_folders {
+        let software_dir = project_dir.join(software_folder);
+        if !software_dir.exists() {
+            continue;
+        }
+
+        if let Ok(entries) = fs::read_dir(&software_dir) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        let file_name = entry.file_name();
+                        let file_name_str = file_name.to_string_lossy();
+                        let file_path = entry.path();
+
+                        // Check if file matches shot pattern
+                        if file_name_str.starts_with(&base_name) && file_name_str.contains(&shot_pattern) {
+                            if fs::remove_file(&file_path).is_ok() {
+                                deleted_count += 1;
+                                println!("Deleted shot file: {:?}", file_path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(deleted_count)
+}
+
+#[tauri::command]
+async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u32, String> {
+    let project_dir = PathBuf::from(&project_path);
+    let mut deleted_count = 0u32;
+
+    // Get project name and scenes from metadata
+    let metadata_path = project_dir.join(".project-metadata.json");
+    let (project_name, scene_name) = if let Ok(content) = fs::read_to_string(&metadata_path) {
+        if let Ok(project) = serde_json::from_str::<Project>(&content) {
+            // Find scene by number
+            let scene = project.scenes
+                .and_then(|scenes| scenes.into_iter().find(|s| s.number == scene_number));
+
+            if let Some(scene) = scene {
+                // Extract scene code from scene name (e.g., "Scene 001" -> "001")
+                let scene_suffix = scene.name.replace("Scene ", "").trim().to_string();
+                let scene_code = scene_suffix.to_uppercase().replace(" ", "_");
+                (project.name, scene_code)
+            } else {
+                return Err("Scene not found".to_string());
+            }
+        } else {
+            return Err("Failed to parse project metadata".to_string());
+        }
+    } else {
+        return Err("Project metadata not found".to_string());
+    };
+
+    let base_name = project_name.replace(" ", "");
+    let scene_pattern = format!("_SC_{}_", scene_name);
+
+    // List of software folders to search
+    let software_folders = vec![
+        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
+        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+    ];
+
+    // Search in each software folder
+    for software_folder in software_folders {
+        let software_dir = project_dir.join(software_folder);
+        if !software_dir.exists() {
+            continue;
+        }
+
+        if let Ok(entries) = fs::read_dir(&software_dir) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        let file_name = entry.file_name();
+                        let file_name_str = file_name.to_string_lossy();
+                        let file_path = entry.path();
+
+                        // Check if file matches scene pattern
+                        if file_name_str.starts_with(&base_name) && file_name_str.contains(&scene_pattern) {
+                            if fs::remove_file(&file_path).is_ok() {
+                                deleted_count += 1;
+                                println!("Deleted scene file: {:?}", file_path);
                             }
                         }
                     }
@@ -2943,8 +3185,12 @@ fn main() {
             open_file_with_tracking,
             get_folder_structure,
             set_project_thumbnail,
+            set_scene_preview,
+            set_shot_preview,
             get_project_versions,
             cleanup_backup_files,
+            delete_shot_files,
+            delete_scene_files,
             move_version_to_shot,
             copy_version_to_shot,
             get_directory_size,
