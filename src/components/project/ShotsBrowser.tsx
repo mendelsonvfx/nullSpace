@@ -383,6 +383,8 @@ const SceneCard: React.FC<SceneCardProps> = ({
             e.stopPropagation();
             onSceneContextMenu(e, scene.id);
           }}
+          onMouseEnter={() => onSceneHover(scene.id)}
+          onMouseLeave={() => onSceneHover(null)}
           className="relative w-full h-28 bg-gradient-to-br from-zinc-800 to-zinc-900 cursor-pointer overflow-hidden select-none"
         >
           {/* Expand indicator */}
@@ -604,6 +606,8 @@ const SceneCard: React.FC<SceneCardProps> = ({
           e.stopPropagation();
           onSceneContextMenu(e, scene.id);
         }}
+        onMouseEnter={() => onSceneHover(scene.id)}
+        onMouseLeave={() => onSceneHover(null)}
         className={`px-3 py-2.5 bg-card-bg border rounded-med cursor-pointer hover:bg-hover-bg select-none ${
           isSelected && !selectedShotId
             ? 'border-accent bg-accent/10'
