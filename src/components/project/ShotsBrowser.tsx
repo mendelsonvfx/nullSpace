@@ -320,7 +320,7 @@ interface SceneCardProps {
   onSceneContextMenu: (e: React.MouseEvent, sceneId: string) => void;
   onSceneHover: (sceneId: string | null) => void;
   onShotHover: (shotId: string | null) => void;
-  onAddShot: (sceneId: string) => void;
+  onAddShot?: (sceneId: string) => void;
   animatingShotId: string | null;
   editingItem: { type: 'shot' | 'scene' | 'description'; id: string; value: string } | null;
   onEditChange: (value: string) => void;
@@ -376,7 +376,9 @@ const SceneCard: React.FC<SceneCardProps> = ({
           onDoubleClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            onToggle();
+            if (project.hasShots) {
+              onToggle();
+            }
           }}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -387,25 +389,29 @@ const SceneCard: React.FC<SceneCardProps> = ({
           onMouseLeave={() => onSceneHover(null)}
           className="relative w-full h-28 bg-gradient-to-br from-zinc-800 to-zinc-900 cursor-pointer overflow-hidden select-none"
         >
-          {/* Expand indicator */}
-          <div
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle();
-            }}
-            className="absolute top-2 left-2 w-6 h-6 bg-sidebar-bg rounded-badge flex items-center justify-center hover:bg-hover-bg cursor-pointer z-10"
-          >
-            <IconChevronRight
-              size={14}
-              className={`text-text-secondary transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}
-            />
-          </div>
+          {/* Expand indicator - only show if project has shots */}
+          {project.hasShots && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle();
+              }}
+              className="absolute top-2 left-2 w-6 h-6 bg-sidebar-bg rounded-badge flex items-center justify-center hover:bg-hover-bg cursor-pointer z-10"
+            >
+              <IconChevronRight
+                size={14}
+                className={`text-text-secondary transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}
+              />
+            </div>
+          )}
 
-          {/* Shot count badge */}
-          <div className="absolute top-2 right-2 px-2 py-1 bg-sidebar-bg rounded-badge text-xs font-semibold text-text-secondary flex items-center gap-1">
-            <IconMovie size={13} />
-            <span>{scene.shots.length} {scene.shots.length === 1 ? 'shot' : 'shots'}</span>
-          </div>
+          {/* Shot count badge - only show if project has shots */}
+          {project.hasShots && (
+            <div className="absolute top-2 right-2 px-2 py-1 bg-sidebar-bg rounded-badge text-xs font-semibold text-text-secondary flex items-center gap-1">
+              <IconMovie size={13} />
+              <span>{scene.shots.length} {scene.shots.length === 1 ? 'shot' : 'shots'}</span>
+            </div>
+          )}
 
           {/* Status badges in bottom right */}
           {(scene.wip || scene.completed) && (
@@ -562,23 +568,25 @@ const SceneCard: React.FC<SceneCardProps> = ({
               ))}
             </div>
 
-            {/* Add Shot button - appears on hover */}
-            <div
-              className={`transition-all duration-200 ease-in-out overflow-hidden ${
-                isShotsAreaHovered ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'
-              }`}
-            >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddShot(scene.id);
-                }}
-                className="w-full px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary bg-sidebar-bg hover:bg-hover-bg border border-border-primary hover:border-border-secondary rounded-med transition-colors flex items-center justify-center gap-1.5"
+            {/* Add Shot button - appears on hover (only if onAddShot is provided) */}
+            {onAddShot && (
+              <div
+                className={`transition-all duration-200 ease-in-out overflow-hidden ${
+                  isShotsAreaHovered ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'
+                }`}
               >
-                <span className="text-base leading-none">+</span>
-                <span>Add Shot</span>
-              </button>
-            </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddShot(scene.id);
+                  }}
+                  className="w-full px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary bg-sidebar-bg hover:bg-hover-bg border border-border-primary hover:border-border-secondary rounded-med transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <span className="text-base leading-none">+</span>
+                  <span>Add Shot</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -599,7 +607,9 @@ const SceneCard: React.FC<SceneCardProps> = ({
         onDoubleClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          onToggle();
+          if (project.hasShots) {
+            onToggle();
+          }
         }}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -618,19 +628,21 @@ const SceneCard: React.FC<SceneCardProps> = ({
       >
         {/* Top row: Chevron, Preview, Info */}
         <div className="flex items-center gap-2.5">
-          {/* Chevron */}
-          <div
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle();
-            }}
-            className="hover:bg-hover-bg rounded p-0.5 -m-0.5 cursor-pointer"
-          >
-            <IconChevronRight
-              size={14}
-              className={`text-text-muted flex-shrink-0 transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}
-            />
-          </div>
+          {/* Chevron - only show if project has shots */}
+          {project.hasShots && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle();
+              }}
+              className="hover:bg-hover-bg rounded p-0.5 -m-0.5 cursor-pointer"
+            >
+              <IconChevronRight
+                size={14}
+                className={`text-text-muted flex-shrink-0 transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}
+              />
+            </div>
+          )}
 
           {/* Scene preview */}
           <div
@@ -683,9 +695,11 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 </div>
               )}
             </div>
-            <div className="text-xs text-text-muted">
-              {scene.shots.length} {scene.shots.length === 1 ? 'shot' : 'shots'}
-            </div>
+            {project.hasShots && (
+              <div className="text-xs text-text-muted">
+                {scene.shots.length} {scene.shots.length === 1 ? 'shot' : 'shots'}
+              </div>
+            )}
           </div>
         </div>
 
@@ -803,23 +817,25 @@ const SceneCard: React.FC<SceneCardProps> = ({
             );
           })}
 
-          {/* Add Shot button - appears on hover */}
-          <div
-            className={`transition-all duration-200 ease-in-out overflow-hidden ${
-              isShotsAreaHovered ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'
-            }`}
-          >
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddShot(scene.id);
-              }}
-              className="w-full px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary bg-sidebar-bg hover:bg-hover-bg border border-border-primary hover:border-border-secondary rounded-med transition-colors flex items-center justify-center gap-1.5"
+          {/* Add Shot button - appears on hover (only if onAddShot is provided) */}
+          {onAddShot && (
+            <div
+              className={`transition-all duration-200 ease-in-out overflow-hidden ${
+                isShotsAreaHovered ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'
+              }`}
             >
-              <span className="text-base leading-none">+</span>
-              <span>Add Shot</span>
-            </button>
-          </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddShot(scene.id);
+                }}
+                className="w-full px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary bg-sidebar-bg hover:bg-hover-bg border border-border-primary hover:border-border-secondary rounded-med transition-colors flex items-center justify-center gap-1.5"
+              >
+                <span className="text-base leading-none">+</span>
+                <span>Add Shot</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1534,27 +1550,31 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
 
   // Get scenes and shots from project
   const scenes = useMemo(() => {
-    if (!project?.hasShots || !project.scenes || !project.shots) return [];
+    // Mode check: If no scenes, return empty (we'll handle shots-only mode separately)
+    if (!project?.hasScenes || !project.scenes) return [];
 
     return project.scenes.map(scene => {
-      const sceneShots = project.shots
-        ?.filter(shot => shot.sceneId === scene.id)
-        .map(shot => ({
-          id: shot.id,
-          name: shot.name,
-          sceneId: shot.sceneId,
-          versions: shotVersions.get(shot.number) || 0,
-          wip: shot.wip,
-          completed: shot.completed,
-          preview: shot.preview,
-          number: shot.number,
-        })) || [];
+      // Get shots for this scene (only if project has shots enabled)
+      const sceneShots = project.hasShots && project.shots
+        ? project.shots
+            .filter(shot => shot.sceneId === scene.id)
+            .map(shot => ({
+              id: shot.id,
+              name: shot.name,
+              sceneId: shot.sceneId,
+              versions: shotVersions.get(shot.number) || 0,
+              wip: shot.wip,
+              completed: shot.completed,
+              preview: shot.preview,
+              number: shot.number,
+            }))
+        : [];
 
-      // Calculate scene status based on shots
-      let sceneWip = false;
-      let sceneCompleted = false;
+      // Calculate scene status based on shots (only if has shots)
+      let sceneWip = scene.wip || false;
+      let sceneCompleted = scene.completed || false;
 
-      if (sceneShots.length > 0) {
+      if (project.hasShots && sceneShots.length > 0) {
         // If all shots are completed, scene is completed
         const allCompleted = sceneShots.every(shot => shot.completed);
         // If at least one shot is WIP (and not all completed), scene is WIP
@@ -1582,6 +1602,22 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     });
   }, [project, shotVersions]);
 
+  // Flat shots list for shots-only mode (no scenes)
+  const flatShots = useMemo(() => {
+    if (!project?.hasShots || project.hasScenes || !project.shots) return [];
+
+    return project.shots.map(shot => ({
+      id: shot.id,
+      name: shot.name,
+      sceneId: shot.sceneId,
+      versions: shotVersions.get(shot.number) || 0,
+      wip: shot.wip,
+      completed: shot.completed,
+      preview: shot.preview,
+      number: shot.number,
+    }));
+  }, [project, shotVersions]);
+
   // Filter scenes and shots based on search
   const filteredScenes = useMemo(() => {
     if (!searchTerm.trim()) return scenes;
@@ -1598,6 +1634,14 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     );
   }, [searchTerm, scenes]);
 
+  // Filter flat shots for shots-only mode
+  const filteredFlatShots = useMemo(() => {
+    if (!searchTerm.trim()) return flatShots;
+
+    const term = searchTerm.toLowerCase();
+    return flatShots.filter(shot => shot.name.toLowerCase().includes(term));
+  }, [searchTerm, flatShots]);
+
   const toggleScene = (sceneId: string) => {
     setExpandedScenes(prev => {
       const next = new Set(prev);
@@ -1610,13 +1654,17 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     });
   };
 
-  const totalShots = scenes.reduce((sum, scene) => sum + scene.shots.length, 0);
+  const totalShots = project?.hasShots
+    ? (project.hasScenes
+        ? scenes.reduce((sum, scene) => sum + scene.shots.length, 0)
+        : flatShots.length)
+    : 0;
 
-  if (!project || !project.hasShots) {
+  if (!project || (!project.hasShots && !project.hasScenes)) {
     return (
       <div className={`flex flex-col bg-sidebar-bg border-l border-l-border-primary border-t border-t-border-primary p-4 relative ${className}`}>
         <div className="flex items-center justify-center h-full text-text-muted text-sm">
-          This project doesn't have shots enabled
+          This project doesn't have scenes or shots enabled
         </div>
       </div>
     );
@@ -1678,7 +1726,13 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
           />
           <input
             type="text"
-            placeholder="Search scenes & shots..."
+            placeholder={
+              project?.hasScenes && project?.hasShots
+                ? "Search scenes & shots..."
+                : project?.hasScenes
+                ? "Search scenes..."
+                : "Search shots..."
+            }
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-3 py-2 bg-card-bg border border-border-primary rounded-button text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
@@ -1745,48 +1799,101 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
         }}
       >
         <div className="space-y-3">
-          {filteredScenes.length > 0 ? (
-            filteredScenes.map(scene => (
-              <SceneCard
-                key={scene.id}
-                scene={scene}
-                isExpanded={expandedScenes.has(scene.id)}
-                isSelected={project?.currentSceneId === scene.id}
-                selectedShotId={project?.currentShotId || null}
-                viewMode={viewMode}
-                project={project}
-                onSetSpecialContext={(contextType, sceneId) => setSpecialContext(projectId, contextType, sceneId)}
-                onToggle={() => toggleScene(scene.id)}
-                onShotSelect={handleShotSelect}
-                onSceneClick={handleSceneClick}
-                onShotStatusChange={handleShotStatusChange}
-                onShotContextMenu={handleShotContextMenu}
-                onSceneContextMenu={handleSceneContextMenu}
-                animatingShotId={animatingShotId}
-                editingItem={editingItem}
-                onEditChange={(value) => setEditingItem(editingItem ? { ...editingItem, value } : null)}
-                onEditSave={handleSaveRename}
-                onEditCancel={handleCancelRename}
-                onSceneHover={setHoveredSceneId}
-                onShotHover={setHoveredShotId}
-                onAddShot={(sceneId) => addShot(projectId, sceneId)}
-              />
-            ))
-          ) : (
-            <div className="text-center py-8 text-text-muted text-xs">
-              No scenes or shots found
-            </div>
+          {/* Mode 1 & 3: Has Scenes (with or without shots) */}
+          {project?.hasScenes && (
+            <>
+              {filteredScenes.length > 0 ? (
+                filteredScenes.map(scene => (
+                  <SceneCard
+                    key={scene.id}
+                    scene={scene}
+                    isExpanded={expandedScenes.has(scene.id)}
+                    isSelected={project?.currentSceneId === scene.id}
+                    selectedShotId={project?.currentShotId || null}
+                    viewMode={viewMode}
+                    project={project}
+                    onSetSpecialContext={(contextType, sceneId) => setSpecialContext(projectId, contextType, sceneId)}
+                    onToggle={() => toggleScene(scene.id)}
+                    onShotSelect={handleShotSelect}
+                    onSceneClick={handleSceneClick}
+                    onShotStatusChange={handleShotStatusChange}
+                    onShotContextMenu={handleShotContextMenu}
+                    onSceneContextMenu={handleSceneContextMenu}
+                    animatingShotId={animatingShotId}
+                    editingItem={editingItem}
+                    onEditChange={(value) => setEditingItem(editingItem ? { ...editingItem, value } : null)}
+                    onEditSave={handleSaveRename}
+                    onEditCancel={handleCancelRename}
+                    onSceneHover={setHoveredSceneId}
+                    onShotHover={setHoveredShotId}
+                    onAddShot={project.hasShots ? (sceneId) => addShot(projectId, sceneId) : undefined}
+                  />
+                ))
+              ) : (
+                <div className="text-center py-8 text-text-muted text-xs">
+                  No scenes found
+                </div>
+              )}
+
+              {/* Add Scene button - hide when hovering over a scene */}
+              <button
+                onClick={() => addScene(projectId)}
+                className={`w-full mt-2 px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-button text-xs text-text-muted hover:border-accent hover:text-accent transition-all ${
+                  isContainerHovered && !hoveredSceneId ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              >
+                + Add Scene...
+              </button>
+            </>
           )}
 
-          {/* Add Scene button - hide when hovering over a scene */}
-          <button
-            onClick={() => addScene(projectId)}
-            className={`w-full mt-2 px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-button text-xs text-text-muted hover:border-accent hover:text-accent transition-all ${
-              isContainerHovered && !hoveredSceneId ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
-          >
-            + Add Scene...
-          </button>
+          {/* Mode 2: Only Shots (no scenes) */}
+          {!project?.hasScenes && project?.hasShots && (
+            <>
+              {filteredFlatShots.length > 0 ? (
+                <div className={viewMode === 'grid' ? 'grid grid-cols-2 gap-3' : 'space-y-2'}>
+                  {filteredFlatShots.map(shot => (
+                    <ShotCard
+                      key={shot.id}
+                      shot={shot}
+                      isSelected={project?.currentShotId === shot.id}
+                      viewMode={viewMode}
+                      projectPath={project.path}
+                      onClick={() => handleShotSelect(shot.id)}
+                      onStatusChange={handleShotStatusChange}
+                      onContextMenu={handleShotContextMenu}
+                      onHover={setHoveredShotId}
+                      isAnimating={animatingShotId === shot.id}
+                      isEditing={editingItem?.type === 'shot' && editingItem.id === shot.id}
+                      editValue={editingItem?.value || ''}
+                      onEditChange={(value) => setEditingItem(editingItem ? { ...editingItem, value } : null)}
+                      onEditSave={handleSaveRename}
+                      onEditCancel={handleCancelRename}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-text-muted text-xs">
+                  No shots found
+                </div>
+              )}
+
+              {/* Add Shot button for shots-only mode */}
+              <button
+                onClick={() => {
+                  // Add shot without scene - need to implement this
+                  if (project) {
+                    addShot(projectId, '');
+                  }
+                }}
+                className={`w-full mt-2 px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-button text-xs text-text-muted hover:border-accent hover:text-accent transition-all ${
+                  isContainerHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              >
+                + Add Shot...
+              </button>
+            </>
+          )}
         </div>
       </SimpleBar>
 
@@ -1810,7 +1917,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
           className="fixed bg-zinc-800 border border-zinc-700 rounded-button shadow-lg py-1 z-50 min-w-[180px] animate-slideDown"
           style={{
             top: `${(() => {
-              const menuHeight = contextMenu.type === 'shot' ? 320 : contextMenu.type === 'scene' ? 220 : 200;
+              const menuHeight = contextMenu.type === 'shot' ? 320 : contextMenu.type === 'scene' ? 320 : 200;
               const windowHeight = window.innerHeight;
               const wouldOverflow = contextMenu.y + menuHeight > windowHeight;
               return wouldOverflow ? Math.max(10, windowHeight - menuHeight - 10) : contextMenu.y;
@@ -1942,17 +2049,27 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                 disabled={(() => {
                   const shot = project?.shots?.find(s => s.id === contextMenu.id);
                   if (!shot) return true;
-                  const shotsInScene = project?.shots?.filter(s => s.sceneId === shot.sceneId) || [];
-                  return shotsInScene.length <= 1;
+                  // In scenes mode, prevent deleting last shot in a scene
+                  if (project?.hasScenes) {
+                    const shotsInScene = project?.shots?.filter(s => s.sceneId === shot.sceneId) || [];
+                    return shotsInScene.length <= 1;
+                  }
+                  // In shots-only mode, allow deleting any shot
+                  return false;
                 })()}
                 className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${
                   (() => {
                     const shot = project?.shots?.find(s => s.id === contextMenu.id);
                     if (!shot) return 'text-zinc-600 cursor-not-allowed';
-                    const shotsInScene = project?.shots?.filter(s => s.sceneId === shot.sceneId) || [];
-                    return shotsInScene.length <= 1
-                      ? 'text-zinc-600 cursor-not-allowed'
-                      : 'hover:bg-red-900/50 text-red-400';
+                    // In scenes mode, prevent deleting last shot in a scene
+                    if (project?.hasScenes) {
+                      const shotsInScene = project?.shots?.filter(s => s.sceneId === shot.sceneId) || [];
+                      return shotsInScene.length <= 1
+                        ? 'text-zinc-600 cursor-not-allowed'
+                        : 'hover:bg-red-900/50 text-red-400';
+                    }
+                    // In shots-only mode, always allow
+                    return 'hover:bg-red-900/50 text-red-400';
                   })()
                 }`}
               >
@@ -2033,15 +2150,17 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                 Remove Preview
               </button>
               <div className="border-t border-zinc-700 my-1" />
-              <button
-                onClick={() => {
-                  handleAddShot(contextMenu.id!);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
-              >
-                <IconPlus stroke={1.5} className="w-4 h-4" />
-                Add Shot
-              </button>
+              {project?.hasShots && (
+                <button
+                  onClick={() => {
+                    handleAddShot(contextMenu.id!);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+                >
+                  <IconPlus stroke={1.5} className="w-4 h-4" />
+                  Add Shot
+                </button>
+              )}
               <button
                 onClick={() => {
                   handleSetDescription(contextMenu.id!);

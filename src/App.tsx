@@ -1695,7 +1695,7 @@ function App() {
       </div>
 
       {/* ShotsBrowser - between ProjectDetails and TreeView */}
-      {selectedProject && viewMode !== 'finance' && selectedProject.hasShots && (
+      {selectedProject && viewMode !== 'finance' && (selectedProject.hasShots || selectedProject.hasScenes) && (
         <ShotsBrowser projectId={selectedProject.id} className="w-80 flex-shrink-0" />
       )}
 

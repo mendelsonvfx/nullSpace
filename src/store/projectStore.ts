@@ -913,7 +913,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   removeScene: async (projectId: string, sceneId: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       // Prevent removing the last scene
       if ((project.scenes || []).length <= 1) {
         console.warn('Cannot remove the last scene');
@@ -947,7 +947,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   renameScene: (projectId: string, sceneId: string, newName: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s => {
@@ -966,7 +966,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   setSceneDescription: (projectId: string, sceneId: string, description: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s => {
@@ -1028,7 +1028,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   toggleSceneCompleted: (projectId: string, sceneId: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s => {
@@ -1058,7 +1058,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     };
 
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1071,7 +1071,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   updateSceneNote: (projectId: string, sceneId: string, noteId: string, content: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1091,7 +1091,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   deleteSceneNote: (projectId: string, sceneId: string, noteId: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1111,7 +1111,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     };
 
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1124,7 +1124,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   toggleSceneTodo: (projectId: string, sceneId: string, todoId: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1144,7 +1144,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   removeSceneTodo: (projectId: string, sceneId: string, todoId: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1164,7 +1164,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     };
 
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1177,7 +1177,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   removeSceneBrowserTab: (projectId: string, sceneId: string, tabId: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1196,7 +1196,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     };
 
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1211,7 +1211,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   updateSceneLink: (projectId: string, sceneId: string, linkId: string, newTitle: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1231,7 +1231,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   removeSceneLink: (projectId: string, sceneId: string, linkId: string) => {
     const project = get().projects.find(p => p.id === projectId);
-    if (project && project.hasShots) {
+    if (project && project.hasScenes) {
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
@@ -1309,17 +1309,22 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const shotToRemove = (project.shots || []).find(s => s.id === shotId);
       if (!shotToRemove) return;
 
-      const shotsInScene = (project.shots || []).filter(s => s.sceneId === shotToRemove.sceneId);
+      // In scenes mode, prevent removing the last shot in a scene
+      if (project.hasScenes) {
+        const shotsInScene = (project.shots || []).filter(s => s.sceneId === shotToRemove.sceneId);
 
-      // Prevent removing the last shot in a scene
-      if (shotsInScene.length <= 1) {
-        console.warn('Cannot remove the last shot in a scene');
-        return;
+        if (shotsInScene.length <= 1) {
+          console.warn('Cannot remove the last shot in a scene');
+          return;
+        }
       }
 
-      // Find the scene for this shot to get scene number
-      const scene = (project.scenes || []).find(s => s.id === shotToRemove.sceneId);
-      if (!scene) {
+      // Find the scene for this shot to get scene number (only in scenes mode)
+      const scene = project.hasScenes
+        ? (project.scenes || []).find(s => s.id === shotToRemove.sceneId)
+        : null;
+
+      if (project.hasScenes && !scene) {
         console.error('Scene not found for shot');
         return;
       }
@@ -1330,7 +1335,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         const deletedCount = await invoke<number>('delete_shot_files', {
           projectPath: project.path,
           shotNumber: shotToRemove.number,
-          sceneNumber: scene.number
+          sceneNumber: scene?.number || 0
         });
         console.log(`Deleted ${deletedCount} files for shot ${shotToRemove.number}`);
       } catch (error) {

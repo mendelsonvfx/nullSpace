@@ -5,6 +5,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { LinkItem, LinkInputForm, NotesSection } from '../shared';
 import { VersionsOverview } from './VersionsOverview';
 import { OutputOverview } from './OutputOverview';
+import { ShotsOverviewTable } from './ShotsOverviewTable';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { STATUS_LABELS, SOFTWARE_OPTIONS } from '../../utils';
 import { InlineTimer, TimeInfoBar } from '../time';
@@ -597,11 +598,21 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         </div>
         )}
 
-        {/* Software Launchers - hidden when only scene is selected (without shot) */}
-        {!(context.isScene && !context.isShot) && (
-        <div className="mb-7">
-          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Launch Software</h3>
-          <div className="grid grid-cols-2 gap-2">
+        {/* Shots Overview Table - shown only in scenes+shots mode when scene is selected */}
+        {context.isScene && !context.isShot && project.hasShots && project.hasScenes && (
+          <ShotsOverviewTable
+            projectId={project.id}
+            projectPath={project.path}
+            currentScene={project.scenes?.find((s: any) => s.id === context.sceneId)}
+            shots={project.shots?.filter((s: any) => s.sceneId === context.sceneId) || []}
+          />
+        )}
+
+        {/* Software Launchers - hidden when only scene is selected in scenes+shots mode */}
+        {!(context.isScene && !context.isShot && project.hasScenes && project.hasShots) && (
+          <div className="mb-7">
+            <h3 className="text-sm font-semibold text-text-primary mb-3.5">Launch Software</h3>
+            <div className="grid grid-cols-2 gap-2">
             {project.software.map((sw: any) => {
               // Get executable path from localStorage
               const savedPaths = localStorage.getItem('softwarePaths');
@@ -1035,17 +1046,43 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
             <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
               <div className="p-4 space-y-2.5">
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Project Name</label>
-                <input
-                  type="text"
-                  value={project.name}
-                  onChange={(e) => {
-                    const { updateProject } = useProjectStore.getState();
-                    updateProject({ ...project, name: e.target.value });
-                  }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
-                />
+              <div className="flex gap-3 items-center">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium mb-1.5">Project Name</label>
+                  <input
+                    type="text"
+                    value={project.name}
+                    onChange={(e) => {
+                      const { updateProject } = useProjectStore.getState();
+                      updateProject({ ...project, name: e.target.value });
+                    }}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                  />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer h-[38px] px-3 mt-6">
+                  <span className="text-sm whitespace-nowrap">Has scenes</span>
+                  <input
+                    type="checkbox"
+                    checked={project.hasScenes || false}
+                    onChange={(e) => {
+                      const { updateProject } = useProjectStore.getState();
+                      updateProject({ ...project, hasScenes: e.target.checked });
+                    }}
+                    className="w-4 h-4"
+                  />
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer h-[38px] px-3 mt-6">
+                  <span className="text-sm whitespace-nowrap">Has shots</span>
+                  <input
+                    type="checkbox"
+                    checked={project.hasShots || false}
+                    onChange={(e) => {
+                      const { updateProject } = useProjectStore.getState();
+                      updateProject({ ...project, hasShots: e.target.checked });
+                    }}
+                    className="w-4 h-4"
+                  />
+                </label>
               </div>
 
               <div className="flex gap-3 items-start">
