@@ -76,7 +76,7 @@ interface ProjectStore {
   updateSceneLink: (projectId: string, sceneId: string, linkId: string, newTitle: string) => void;
   removeSceneLink: (projectId: string, sceneId: string, linkId: string) => void;
   // Shot management
-  addShot: (projectId: string, name?: string) => void;
+  addShot: (projectId: string, sceneId?: string, name?: string) => void;
   removeShot: (projectId: string, shotId: string) => Promise<void>;
   renameShot: (projectId: string, shotId: string, newName: string) => void;
   setCurrentShot: (projectId: string, shotId: string | null) => void;
@@ -290,9 +290,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           try {
             await invoke('create_shot_folders', {
               input: {
-                projectPath: project.path,
-                sceneCode: 'SC_001',
-                shotCode: 'SH001'
+                project_path: project.path,
+                scene_code: 'SC_001',
+                shot_code: 'SH001'
               }
             });
           } catch (error) {
@@ -890,9 +890,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         try {
           await invoke('create_shot_folders', {
             input: {
-              projectPath: project.path,
-              sceneCode: sceneCode,
-              shotCode: 'SH001'
+              project_path: project.path,
+              scene_code: sceneCode,
+              shot_code: 'SH001'
             }
           });
         } catch (error) {
@@ -1243,24 +1243,27 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   // Shot management
-  addShot: async (projectId: string, name?: string) => {
+  addShot: async (projectId: string, sceneId?: string, name?: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
-      // Ensure we have a current scene
-      if (!project.currentSceneId) {
-        console.warn('Cannot add shot: no current scene selected');
+      // Use provided sceneId or current scene
+      const targetSceneId = sceneId || project.currentSceneId;
+
+      // Ensure we have a scene to add to
+      if (!targetSceneId) {
+        console.warn('Cannot add shot: no scene specified or selected');
         return;
       }
 
-      // Per-scene shot numbering: count only numbered shots in current scene
+      // Per-scene shot numbering: count only numbered shots in target scene
       const numberedShotsInScene = (project.shots || []).filter(
-        s => s.sceneId === project.currentSceneId && s.number > 0
+        s => s.sceneId === targetSceneId && s.number > 0
       );
       const shotNumber = numberedShotsInScene.length + 1;
 
       const newShot = {
         id: crypto.randomUUID(),
-        sceneId: project.currentSceneId, // Assign to current scene
+        sceneId: targetSceneId, // Assign to target scene
         number: shotNumber,
         name: name || `Shot ${shotNumber.toString().padStart(3, '0')}`,
         todos: [],
@@ -1270,7 +1273,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       };
 
       // Get scene code for folder creation
-      const currentScene = (project.scenes || []).find(s => s.id === project.currentSceneId);
+      const currentScene = (project.scenes || []).find(s => s.id === targetSceneId);
       if (currentScene) {
         const sceneSuffix = currentScene.name.replace(/^Scene\s+/i, '').trim();
         const sceneCode = `SC_${sceneSuffix.toUpperCase().replace(/\s+/g, '_')}`;
@@ -1280,9 +1283,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         try {
           await invoke('create_shot_folders', {
             input: {
-              projectPath: project.path,
-              sceneCode: sceneCode,
-              shotCode: shotCode
+              project_path: project.path,
+              scene_code: sceneCode,
+              shot_code: shotCode
             }
           });
         } catch (error) {
@@ -1314,12 +1317,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         return;
       }
 
+      // Find the scene for this shot to get scene number
+      const scene = (project.scenes || []).find(s => s.id === shotToRemove.sceneId);
+      if (!scene) {
+        console.error('Scene not found for shot');
+        return;
+      }
+
       // Delete all version files for this shot
       try {
         const { invoke } = await import('@tauri-apps/api/tauri');
         const deletedCount = await invoke<number>('delete_shot_files', {
           projectPath: project.path,
-          shotNumber: shotToRemove.number
+          shotNumber: shotToRemove.number,
+          sceneNumber: scene.number
         });
         console.log(`Deleted ${deletedCount} files for shot ${shotToRemove.number}`);
       } catch (error) {

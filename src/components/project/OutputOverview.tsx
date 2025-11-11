@@ -5,6 +5,7 @@ import type { SoftwareName } from '../../types/project';
 import { Film, Eye, FolderOpen, Copy, ChevronDown, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { outputsCache } from '../../utils/outputsCache';
+import { getScenePattern, getShotPattern } from '../../utils/fileNaming';
 
 interface OutputFile {
   name: string;
@@ -83,21 +84,16 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   // Get scene and shot filter for output scanning
   const getSceneFilter = (): string | null => {
     if (currentScene) {
-      // Extract scene code from scene name
-      // "Scene 001" → "SC_001", "Scene RIVER" → "SC_RIVER"
-      const sceneSuffix = currentScene.name.replace(/^Scene\s+/i, '').trim();
-      const sceneCode = sceneSuffix.toUpperCase().replace(/\s+/g, '_');
-      return `SC_${sceneCode}`;
+      // Use centralized naming: PROJECT_SCENE_
+      return getScenePattern(project.name, currentScene.name);
     }
     return null;
   };
 
   const getShotFilter = (): string | null => {
-    if (currentShot) {
-      if (currentShot.number === 0) {
-        return 'SH000';
-      }
-      return `SH${String(currentShot.number).padStart(3, '0')}`;
+    if (currentShot && currentScene) {
+      // Use centralized naming: PROJECT_SCENE_SHOT_
+      return getShotPattern(project.name, currentScene.name, currentShot.number);
     }
     return null;
   };

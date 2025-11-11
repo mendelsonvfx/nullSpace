@@ -5,7 +5,6 @@ import {
   IconLayoutList,
   IconSearch,
   IconChevronRight,
-  IconCamera,
   IconVersions,
   IconCircleCheck,
   IconClock,
@@ -25,6 +24,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { useThumbnail } from '../../hooks/useThumbnail';
+import { extractShotNumber } from '../../utils/fileNaming';
 
 interface ProjectVersion {
   name: string;
@@ -146,7 +146,10 @@ const ShotCard: React.FC<ShotCardProps> = ({
                 className="w-full h-full object-cover"
               />
             ) : (
-              <span className="text-xs text-text-muted">No preview</span>
+              <div className="flex flex-col items-center justify-center gap-0.5">
+                <span className="text-2xl font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
+                <span className="text-[10px] text-text-muted">No preview</span>
+              </div>
             )}
             {/* Versions badge in top right corner - only show if versions exist */}
             {shot.versions > 0 && (
@@ -230,7 +233,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
                 className="w-full h-full object-cover"
               />
             ) : (
-              <IconCamera size={16} className="text-text-muted" />
+              <span className="text-sm font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
             )}
           </div>
           <div
@@ -317,6 +320,7 @@ interface SceneCardProps {
   onSceneContextMenu: (e: React.MouseEvent, sceneId: string) => void;
   onSceneHover: (sceneId: string | null) => void;
   onShotHover: (shotId: string | null) => void;
+  onAddShot: (sceneId: string) => void;
   animatingShotId: string | null;
   editingItem: { type: 'shot' | 'scene' | 'description'; id: string; value: string } | null;
   onEditChange: (value: string) => void;
@@ -340,6 +344,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onSceneContextMenu,
   onSceneHover,
   onShotHover,
+  onAddShot,
   animatingShotId,
   editingItem,
   onEditChange,
@@ -347,6 +352,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onEditCancel,
 }) => {
   const scenePreviewSrc = useThumbnail(project.path, scene.preview);
+  const [isShotsAreaHovered, setIsShotsAreaHovered] = useState(false);
 
   // Grid view: large preview card
   if (viewMode === 'grid') {
@@ -377,8 +383,6 @@ const SceneCard: React.FC<SceneCardProps> = ({
             e.stopPropagation();
             onSceneContextMenu(e, scene.id);
           }}
-          onMouseEnter={() => onSceneHover(scene.id)}
-          onMouseLeave={() => onSceneHover(null)}
           className="relative w-full h-28 bg-gradient-to-br from-zinc-800 to-zinc-900 cursor-pointer overflow-hidden select-none"
         >
           {/* Expand indicator */}
@@ -521,6 +525,14 @@ const SceneCard: React.FC<SceneCardProps> = ({
 
         {/* Shots container */}
         <div
+          onMouseEnter={() => {
+            onSceneHover(scene.id);
+            setIsShotsAreaHovered(true);
+          }}
+          onMouseLeave={() => {
+            onSceneHover(null);
+            setIsShotsAreaHovered(false);
+          }}
           className={`transition-all duration-300 ease-in-out overflow-hidden bg-sidebar-bg/50 ${
             isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
           }`}
@@ -547,6 +559,24 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 />
               ))}
             </div>
+
+            {/* Add Shot button - appears on hover */}
+            <div
+              className={`transition-all duration-200 ease-in-out overflow-hidden ${
+                isShotsAreaHovered ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'
+              }`}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddShot(scene.id);
+                }}
+                className="w-full px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary bg-sidebar-bg hover:bg-hover-bg border border-border-primary hover:border-border-secondary rounded-med transition-colors flex items-center justify-center gap-1.5"
+              >
+                <span className="text-base leading-none">+</span>
+                <span>Add Shot</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -555,7 +585,9 @@ const SceneCard: React.FC<SceneCardProps> = ({
 
   // List view: compact plash
   return (
-    <div onContextMenu={(e) => e.stopPropagation()}>
+    <div
+      onContextMenu={(e) => e.stopPropagation()}
+    >
       {/* Compact header (list mode style) */}
       <div
         data-context-menu="scene"
@@ -599,8 +631,6 @@ const SceneCard: React.FC<SceneCardProps> = ({
           {/* Scene preview */}
           <div
             className="w-16 h-10 rounded-badge bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center flex-shrink-0 overflow-hidden"
-            onMouseEnter={() => onSceneHover(scene.id)}
-            onMouseLeave={() => onSceneHover(null)}
           >
             {scenePreviewSrc ? (
               <img
@@ -694,6 +724,14 @@ const SceneCard: React.FC<SceneCardProps> = ({
 
       {/* Shots container */}
       <div
+        onMouseEnter={() => {
+          onSceneHover(scene.id);
+          setIsShotsAreaHovered(true);
+        }}
+        onMouseLeave={() => {
+          onSceneHover(null);
+          setIsShotsAreaHovered(false);
+        }}
         className={`transition-all duration-300 ease-in-out overflow-hidden ${
           isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
         }`}
@@ -718,6 +756,24 @@ const SceneCard: React.FC<SceneCardProps> = ({
               onEditCancel={onEditCancel}
             />
           ))}
+
+          {/* Add Shot button - appears on hover */}
+          <div
+            className={`transition-all duration-200 ease-in-out overflow-hidden ${
+              isShotsAreaHovered ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'
+            }`}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddShot(scene.id);
+              }}
+              className="w-full px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary bg-sidebar-bg hover:bg-hover-bg border border-border-primary hover:border-border-secondary rounded-med transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span className="text-base leading-none">+</span>
+              <span>Add Shot</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1412,18 +1468,8 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     allVersions.forEach(version => {
       if (!version.is_versioned) return;
 
-      // Extract shot number from filename
-      // Pattern: _SH001_, _SH002_, etc. or _main_ for shot 0
-      const shotMatch = version.name.match(/_SH(\d{3})_/);
-      const mainMatch = version.name.includes('_main_');
-
-      let shotNumber: number | null = null;
-      if (mainMatch) {
-        shotNumber = 0;
-      } else if (shotMatch) {
-        shotNumber = parseInt(shotMatch[1], 10);
-      }
-
+      // Extract shot number using file naming utility
+      const shotNumber = extractShotNumber(version.name);
       if (shotNumber === null) return;
 
       // Extract version number
@@ -1647,7 +1693,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
         className="flex-1 custom-scrollbar"
         style={{ paddingBottom: '45px', minHeight: 0 }}
         onMouseEnter={() => setIsContainerHovered(true)}
-        onMouseLeave={() => setIsContainerHovered(false)}
+        onMouseLeave={() => {
+          setIsContainerHovered(false);
+          setHoveredSceneId(null);
+        }}
       >
         <div className="space-y-3">
           {filteredScenes.length > 0 ? (
@@ -1674,6 +1723,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                 onEditCancel={handleCancelRename}
                 onSceneHover={setHoveredSceneId}
                 onShotHover={setHoveredShotId}
+                onAddShot={(sceneId) => addShot(projectId, sceneId)}
               />
             ))
           ) : (
@@ -1682,11 +1732,11 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
             </div>
           )}
 
-          {/* Add Scene button */}
+          {/* Add Scene button - hide when hovering over a scene */}
           <button
             onClick={() => addScene(projectId)}
             className={`w-full mt-2 px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-button text-xs text-text-muted hover:border-accent hover:text-accent transition-all ${
-              isContainerHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              isContainerHovered && !hoveredSceneId ? 'opacity-100' : 'opacity-0 pointer-events-none'
             }`}
           >
             + Add Scene...

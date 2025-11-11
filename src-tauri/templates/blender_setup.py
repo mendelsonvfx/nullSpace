@@ -14,8 +14,8 @@ def setup_blender_project(blend_file_path, project_root, scene_code=None, shot_c
     Args:
         blend_file_path: Full path to the .blend file to create
         project_root: Root directory of the nullSpace project
-        scene_code: Scene code (e.g., "SC_001", "SC_RIVER")
-        shot_code: Shot code (e.g., "SH001", "SH000")
+        scene_code: Scene name (e.g., "RUNB", "INTRO") - no SC_ prefix
+        shot_code: Shot number (e.g., "001", "010") - 3-digit number, no SH prefix
     """
 
     print(f"Setting up Blender project: {blend_file_path}")
@@ -27,12 +27,13 @@ def setup_blender_project(blend_file_path, project_root, scene_code=None, shot_c
 
     # === RENDER OUTPUT PATH ONLY ===
     # Build render path with scene and shot hierarchy if provided
+    # New format: //Render/Preview/SCENE/SHOT/ (no prefixes)
     if scene_code and shot_code:
-        # Path: //Render/Preview/SC_XXX/SH###/
+        # Path: //Render/Preview/RUNB/010/
         render_path = f"//Render/Preview/{scene_code}/{shot_code}/"
         print(f"✓ Render output path set to: {render_path}")
     elif scene_code:
-        # Path: //Render/Preview/SC_XXX/
+        # Path: //Render/Preview/RUNB/
         render_path = f"//Render/Preview/{scene_code}/"
         print(f"✓ Render output path set to: {render_path}")
     else:

@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod time_tracking;
+mod file_naming;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -231,10 +232,10 @@ struct LaunchSoftwareInput {
     project_name: String,
     #[serde(rename = "sceneName")]
     scene_name: Option<String>,
-    #[serde(rename = "sceneNumber")]
-    scene_number: Option<u32>,
     #[serde(rename = "shotNumber")]
     shot_number: Option<u32>,
+    #[serde(rename = "specialContext")]
+    special_context: Option<String>,
 }
 
 fn get_software_folder_name(software: &str) -> &str {
@@ -862,54 +863,21 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
             .map_err(|e| format!("Failed to create software directory: {}", e))?;
     }
 
-    // Build base name with optional scene and shot numbers
-    let base_name = input.project_name.replace(" ", "");
+    // Build base name using file_naming module
     let base_name_with_scene_shot = if let (Some(scene_name), Some(shot_num)) = (&input.scene_name, input.shot_number) {
-        // Scene name provided: extract suffix after "Scene " and format as SC_NAME
-        let scene_suffix = scene_name
-            .replace("Scene ", "")
-            .replace("scene ", "")
-            .trim()
-            .to_string();
-
-        let scene_code = scene_suffix
-            .to_uppercase()
-            .replace(" ", "_")
-            .chars()
-            .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
-            .collect::<String>();
-
-        let scene_part = format!("SC_{}", scene_code);
-
-        let shot_part = if shot_num == 0 {
-            "SH000".to_string()
-        } else {
-            format!("SH{:03}", shot_num)
-        };
-        format!("{}_{}_{}",base_name, scene_part, shot_part)
-    } else if let (Some(scene_num), Some(shot_num)) = (input.scene_number, input.shot_number) {
-        // Fallback: use scene number if name not provided
-        let scene_part = if scene_num == 0 {
-            "SC_000".to_string()
-        } else {
-            format!("SC_{:03}", scene_num)
-        };
-        let shot_part = if shot_num == 0 {
-            "SH000".to_string()
-        } else {
-            format!("SH{:03}", shot_num)
-        };
-        format!("{}_{}_{}",base_name, scene_part, shot_part)
-    } else if let Some(shot_num) = input.shot_number {
-        // Legacy: only shot specified (for backward compatibility)
-        if shot_num == 0 {
-            format!("{}_main", base_name)
-        } else {
-            format!("{}_Shot{:03}", base_name, shot_num)
-        }
+        // Use new naming format: PROJECT_SCENE_SHOT
+        let components = file_naming::FileNameComponents::new(
+            input.project_name.clone(),
+            scene_name.clone(),
+            shot_num,
+            input.special_context.clone(),
+            0, // version doesn't matter for base name
+            String::new(),
+        );
+        components.get_base_name()
     } else {
-        // No scene/shot
-        base_name.clone()
+        // Fallback to simple project name if no scene/shot
+        input.project_name.replace(" ", "").to_uppercase()
     };
 
     let mut highest_version = 0;
@@ -919,17 +887,13 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
     if let Ok(entries) = fs::read_dir(&software_path) {
         for entry in entries.flatten() {
             if let Ok(file_name) = entry.file_name().into_string() {
-                // Check if file matches pattern: BaseName[_SC###_SH###]_v###.ext or legacy patterns
-                if file_name.starts_with(&base_name_with_scene_shot) && file_name.contains("_v") {
-                    // Extract version number
-                    if let Some(version_str) = file_name.strip_prefix(&format!("{}_v", base_name_with_scene_shot)) {
-                        if let Some(version_num_str) = version_str.get(0..3) {
-                            if let Ok(version_num) = version_num_str.parse::<u32>() {
-                                if version_num > highest_version {
-                                    highest_version = version_num;
-                                    latest_file = Some(entry.path());
-                                }
-                            }
+                // Check if file matches our base pattern and is versioned
+                if file_name.starts_with(&base_name_with_scene_shot) && file_naming::FileNameComponents::is_versioned(&file_name) {
+                    // Extract version number using file_naming module
+                    if let Some(version_num) = file_naming::FileNameComponents::extract_version(&file_name) {
+                        if version_num > highest_version {
+                            highest_version = version_num;
+                            latest_file = Some(entry.path());
                         }
                     }
                 }
@@ -945,8 +909,20 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
             .to_string();
         (existing_file, file_name)
     } else {
-        // Create new file with v001
-        let file_name = format!("{}_v001{}", base_name_with_scene_shot, file_extension);
+        // Create new file with v001 using file_naming module
+        let file_name = if let (Some(scene_name), Some(shot_num)) = (&input.scene_name, input.shot_number) {
+            let components = file_naming::FileNameComponents::new(
+                input.project_name.clone(),
+                scene_name.clone(),
+                shot_num,
+                input.special_context.clone(),
+                1, // v001
+                file_extension.to_string(),
+            );
+            components.build()
+        } else {
+            format!("{}_v001{}", base_name_with_scene_shot, file_extension)
+        };
         let file_path = software_path.join(&file_name);
         (file_path, file_name)
     };
@@ -992,34 +968,18 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
                     .arg(file_path.to_str().unwrap())
                     .arg(&project_path);
 
-                // Add scene and shot codes if available
+                // Add scene and shot codes if available (new format: just scene name and shot number)
                 if let (Some(scene_name), Some(shot_num)) = (&input.scene_name, input.shot_number) {
-                    // Extract scene code from scene name
-                    let scene_suffix = scene_name
-                        .replace("Scene ", "")
-                        .replace("scene ", "")
-                        .trim()
-                        .to_string();
+                    // Pass scene name directly (no SC_ prefix)
+                    let scene_normalized = scene_name.replace(" ", "").to_uppercase();
 
-                    let scene_code = scene_suffix
-                        .to_uppercase()
-                        .replace(" ", "_")
-                        .chars()
-                        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
-                        .collect::<String>();
+                    // Pass shot number as 3-digit string (no SH prefix)
+                    let shot_str = format!("{:03}", shot_num);
 
-                    let scene_part = format!("SC_{}", scene_code);
+                    cmd.arg(&scene_normalized);
+                    cmd.arg(&shot_str);
 
-                    let shot_part = if shot_num == 0 {
-                        "SH000".to_string()
-                    } else {
-                        format!("SH{:03}", shot_num)
-                    };
-
-                    cmd.arg(&scene_part);
-                    cmd.arg(&shot_part);
-
-                    println!("Setting Blender render path with scene: {}, shot: {}", scene_part, shot_part);
+                    println!("Setting Blender render path with scene: {}, shot: {}", scene_normalized, shot_str);
                 }
 
                 // Spawn Blender process
@@ -1432,13 +1392,13 @@ async fn set_scene_preview(project_path: String, scene_number: u32, image_path: 
         return Err("Source image does not exist".to_string());
     }
 
-    // Create previews directory if it doesn't exist
-    let previews_dir = project_dir.join("previews");
-    fs::create_dir_all(&previews_dir)
-        .map_err(|e| format!("Failed to create previews directory: {}", e))?;
+    // Create .thumbnails directory if it doesn't exist
+    let thumbnails_dir = project_dir.join(".thumbnails");
+    fs::create_dir_all(&thumbnails_dir)
+        .map_err(|e| format!("Failed to create .thumbnails directory: {}", e))?;
 
     // Create scene directory
-    let scene_dir = previews_dir.join(format!("scene{:03}", scene_number));
+    let scene_dir = thumbnails_dir.join(format!("scene{:03}", scene_number));
     fs::create_dir_all(&scene_dir)
         .map_err(|e| format!("Failed to create scene directory: {}", e))?;
 
@@ -1473,7 +1433,7 @@ async fn set_scene_preview(project_path: String, scene_number: u32, image_path: 
         .map_err(|e| format!("Failed to copy preview: {}", e))?;
 
     // Return relative path from project root
-    Ok(format!("previews/scene{:03}/{}", scene_number, preview_name))
+    Ok(format!(".thumbnails/scene{:03}/{}", scene_number, preview_name))
 }
 
 #[tauri::command]
@@ -1485,13 +1445,13 @@ async fn set_shot_preview(project_path: String, scene_number: u32, shot_number: 
         return Err("Source image does not exist".to_string());
     }
 
-    // Create previews directory if it doesn't exist
-    let previews_dir = project_dir.join("previews");
-    fs::create_dir_all(&previews_dir)
-        .map_err(|e| format!("Failed to create previews directory: {}", e))?;
+    // Create .thumbnails directory if it doesn't exist
+    let thumbnails_dir = project_dir.join(".thumbnails");
+    fs::create_dir_all(&thumbnails_dir)
+        .map_err(|e| format!("Failed to create .thumbnails directory: {}", e))?;
 
     // Create scene directory
-    let scene_dir = previews_dir.join(format!("scene{:03}", scene_number));
+    let scene_dir = thumbnails_dir.join(format!("scene{:03}", scene_number));
     fs::create_dir_all(&scene_dir)
         .map_err(|e| format!("Failed to create scene directory: {}", e))?;
 
@@ -1527,7 +1487,7 @@ async fn set_shot_preview(project_path: String, scene_number: u32, shot_number: 
         .map_err(|e| format!("Failed to copy preview: {}", e))?;
 
     // Return relative path from project root
-    Ok(format!("previews/scene{:03}/{}", scene_number, preview_name))
+    Ok(format!(".thumbnails/scene{:03}/{}", scene_number, preview_name))
 }
 
 #[derive(Debug, Serialize)]
@@ -1611,12 +1571,12 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                             continue;
                         }
 
-                        // Check if file has version pattern
-                        let has_version = file_name_str.contains("_v");
+                        // Check if file is versioned using file_naming module
+                        let is_versioned = file_naming::FileNameComponents::is_versioned(&file_name_str);
                         let starts_with_base = file_name_str.starts_with(&base_name);
 
-                        // Include file if: (1) has version pattern and starts with base name, OR (2) no version pattern
-                        if (has_version && starts_with_base) || !has_version {
+                        // Only include versioned files that start with project name
+                        if is_versioned && starts_with_base {
                             // Get file creation time
                             let created_at = if let Ok(metadata) = entry.metadata() {
                                 if let Ok(created) = metadata.created() {
@@ -1635,7 +1595,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                                 path: file_path.to_string_lossy().to_string(),
                                 software: vec![software_name.unwrap().to_string()],
                                 created_at,
-                                is_versioned: has_version && starts_with_base,
+                                is_versioned: true, // All files here are versioned
                             });
                         }
                     }
@@ -1695,15 +1655,32 @@ async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
 }
 
 #[tauri::command]
-async fn delete_shot_files(project_path: String, shot_number: u32) -> Result<u32, String> {
+async fn delete_shot_files(
+    project_path: String,
+    shot_number: u32,
+    scene_number: u32,
+) -> Result<u32, String> {
+    println!("=== delete_shot_files called ===");
+    println!("Project path: {}", project_path);
+    println!("Shot number: {}", shot_number);
+    println!("Scene number: {}", scene_number);
+
     let project_dir = PathBuf::from(&project_path);
     let mut deleted_count = 0u32;
 
-    // Get project name from metadata
+    // Get project name and scene name from metadata
     let metadata_path = project_dir.join(".project-metadata.json");
-    let project_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+    let (project_name, scene_name) = if let Ok(content) = fs::read_to_string(&metadata_path) {
         if let Ok(project) = serde_json::from_str::<Project>(&content) {
-            project.name
+            // Find scene by number
+            let scene = project.scenes
+                .and_then(|scenes| scenes.into_iter().find(|s| s.number == scene_number));
+
+            if let Some(scene) = scene {
+                (project.name, scene.name)
+            } else {
+                return Err("Scene not found".to_string());
+            }
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -1711,20 +1688,18 @@ async fn delete_shot_files(project_path: String, shot_number: u32) -> Result<u32
         return Err("Project metadata not found".to_string());
     };
 
-    let base_name = project_name.replace(" ", "");
+    // Build shot pattern using file_naming module: PROJECT_SCENE_SHOT_
+    let shot_pattern = file_naming::FileNameComponents::shot_pattern(
+        &project_name,
+        &scene_name,
+        shot_number
+    );
 
     // List of software folders to search
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
         "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
     ];
-
-    // Build shot pattern
-    let shot_pattern = if shot_number == 0 {
-        "_main_".to_string()
-    } else {
-        format!("_SH{:03}_", shot_number)
-    };
 
     // Search in each software folder
     for software_folder in software_folders {
@@ -1741,8 +1716,8 @@ async fn delete_shot_files(project_path: String, shot_number: u32) -> Result<u32
                         let file_name_str = file_name.to_string_lossy();
                         let file_path = entry.path();
 
-                        // Check if file matches shot pattern
-                        if file_name_str.starts_with(&base_name) && file_name_str.contains(&shot_pattern) {
+                        // Check if file matches shot pattern (PROJECT_SCENE_SHOT_)
+                        if file_name_str.contains(&shot_pattern) {
                             if fs::remove_file(&file_path).is_ok() {
                                 deleted_count += 1;
                                 println!("Deleted shot file: {:?}", file_path);
@@ -1754,6 +1729,31 @@ async fn delete_shot_files(project_path: String, shot_number: u32) -> Result<u32
         }
     }
 
+    // Delete all thumbnails for the shot (files matching shot{:03}_*.*)
+    let scene_thumbnails_dir = project_dir
+        .join(".thumbnails")
+        .join(format!("scene{:03}", scene_number));
+
+    if scene_thumbnails_dir.exists() {
+        let shot_pattern = format!("shot{:03}_", shot_number);
+        println!("Looking for thumbnails with pattern: {} in {:?}", shot_pattern, scene_thumbnails_dir);
+
+        if let Ok(entries) = fs::read_dir(&scene_thumbnails_dir) {
+            for entry in entries.flatten() {
+                let file_name = entry.file_name();
+                let name_str = file_name.to_string_lossy();
+                if name_str.starts_with(&shot_pattern) {
+                    match fs::remove_file(entry.path()) {
+                        Ok(_) => println!("✓ Deleted shot thumbnail: {:?}", entry.path()),
+                        Err(e) => println!("✗ Failed to delete thumbnail: {}", e),
+                    }
+                }
+            }
+        }
+    } else {
+        println!("✗ Scene thumbnails directory not found: {:?}", scene_thumbnails_dir);
+    }
+
     Ok(deleted_count)
 }
 
@@ -1762,7 +1762,7 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
     let project_dir = PathBuf::from(&project_path);
     let mut deleted_count = 0u32;
 
-    // Get project name and scenes from metadata
+    // Get project name and scene name from metadata
     let metadata_path = project_dir.join(".project-metadata.json");
     let (project_name, scene_name) = if let Ok(content) = fs::read_to_string(&metadata_path) {
         if let Ok(project) = serde_json::from_str::<Project>(&content) {
@@ -1771,10 +1771,7 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
                 .and_then(|scenes| scenes.into_iter().find(|s| s.number == scene_number));
 
             if let Some(scene) = scene {
-                // Extract scene code from scene name (e.g., "Scene 001" -> "001")
-                let scene_suffix = scene.name.replace("Scene ", "").trim().to_string();
-                let scene_code = scene_suffix.to_uppercase().replace(" ", "_");
-                (project.name, scene_code)
+                (project.name, scene.name)
             } else {
                 return Err("Scene not found".to_string());
             }
@@ -1785,8 +1782,8 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
         return Err("Project metadata not found".to_string());
     };
 
-    let base_name = project_name.replace(" ", "");
-    let scene_pattern = format!("_SC_{}_", scene_name);
+    // Build scene pattern using file_naming module: PROJECT_SCENE_
+    let scene_pattern = file_naming::FileNameComponents::scene_pattern(&project_name, &scene_name);
 
     // List of software folders to search
     let software_folders = vec![
@@ -1809,8 +1806,8 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
                         let file_name_str = file_name.to_string_lossy();
                         let file_path = entry.path();
 
-                        // Check if file matches scene pattern
-                        if file_name_str.starts_with(&base_name) && file_name_str.contains(&scene_pattern) {
+                        // Check if file matches scene pattern (PROJECT_SCENE_)
+                        if file_name_str.contains(&scene_pattern) {
                             if fs::remove_file(&file_path).is_ok() {
                                 deleted_count += 1;
                                 println!("Deleted scene file: {:?}", file_path);
@@ -1822,13 +1819,24 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
         }
     }
 
+    // Delete thumbnail directory for the scene (removes all shot thumbnails in this scene)
+    let scene_thumbnail_dir = project_dir
+        .join(".thumbnails")
+        .join(format!("scene{:03}", scene_number));
+
+    if scene_thumbnail_dir.exists() {
+        if fs::remove_dir_all(&scene_thumbnail_dir).is_ok() {
+            println!("Deleted scene thumbnail directory: {:?}", scene_thumbnail_dir);
+        }
+    }
+
     Ok(deleted_count)
 }
 
 #[tauri::command]
 async fn move_version_to_shot(
     version_path: String,
-    _project_path: String,
+    project_path: String,
     target_shot_number: u32,
 ) -> Result<String, String> {
     let version_file = PathBuf::from(&version_path);
@@ -1842,42 +1850,39 @@ async fn move_version_to_shot(
         .to_str()
         .ok_or("Invalid file name encoding")?;
 
-    // Parse current shot number from filename
-    let shot_pattern = regex::Regex::new(r"_Shot(\d{3})_").unwrap();
-    let main_pattern = regex::Regex::new(r"_main_").unwrap();
+    // Parse current file using file_naming module
+    let mut components = file_naming::FileNameComponents::parse(file_name)
+        .ok_or("Failed to parse file name")?;
 
-    // Generate new filename with target shot number
-    let new_file_name = if let Some(caps) = shot_pattern.captures(file_name) {
-        // Replace existing shot number
-        let current_shot = &caps[1];
-        let target_shot_str = if target_shot_number == 0 {
-            "main".to_string()
+    // Get target shot's scene from project metadata
+    let project_dir = PathBuf::from(&project_path);
+    let metadata_path = project_dir.join(".project-metadata.json");
+    let target_scene_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+        if let Ok(project) = serde_json::from_str::<Project>(&content) {
+            // Find the target shot to get its scene
+            let shot = project.shots
+                .and_then(|shots| shots.into_iter().find(|s| s.number == target_shot_number))
+                .ok_or("Target shot not found")?;
+
+            // Find the scene by ID
+            let scene = project.scenes
+                .and_then(|scenes| scenes.into_iter().find(|s| s.id == shot.scene_id))
+                .ok_or("Scene not found for target shot")?;
+
+            scene.name
         } else {
-            format!("Shot{:03}", target_shot_number)
-        };
-        file_name.replace(
-            &format!("_Shot{}_", current_shot),
-            &format!("_{}_", target_shot_str)
-        )
-    } else if main_pattern.is_match(file_name) {
-        // Replace main with shot number
-        let target_shot_str = if target_shot_number == 0 {
-            "main".to_string()
-        } else {
-            format!("Shot{:03}", target_shot_number)
-        };
-        file_name.replace("_main_", &format!("_{}_", target_shot_str))
+            return Err("Failed to parse project metadata".to_string());
+        }
     } else {
-        // Add shot number if not present
-        let name_without_ext = file_name.rsplit_once('.').map(|(n, _)| n).unwrap_or(file_name);
-        let ext = version_file.extension().and_then(|e| e.to_str()).unwrap_or("");
-        let target_shot_str = if target_shot_number == 0 {
-            "main".to_string()
-        } else {
-            format!("Shot{:03}", target_shot_number)
-        };
-        format!("{}_{}.{}", name_without_ext, target_shot_str, ext)
+        return Err("Project metadata not found".to_string());
     };
+
+    // Update components with new shot and scene
+    components.shot_number = target_shot_number;
+    components.scene_name = target_scene_name;
+
+    // Build new file name
+    let new_file_name = components.build();
 
     let parent_dir = version_file.parent().ok_or("No parent directory")?;
     let new_path = parent_dir.join(&new_file_name);
@@ -1892,7 +1897,7 @@ async fn move_version_to_shot(
 #[tauri::command]
 async fn copy_version_to_shot(
     version_path: String,
-    _project_path: String,
+    project_path: String,
     target_shot_number: u32,
 ) -> Result<String, String> {
     let version_file = PathBuf::from(&version_path);
@@ -1906,42 +1911,39 @@ async fn copy_version_to_shot(
         .to_str()
         .ok_or("Invalid file name encoding")?;
 
-    // Parse current shot number from filename
-    let shot_pattern = regex::Regex::new(r"_Shot(\d{3})_").unwrap();
-    let main_pattern = regex::Regex::new(r"_main_").unwrap();
+    // Parse current file using file_naming module
+    let mut components = file_naming::FileNameComponents::parse(file_name)
+        .ok_or("Failed to parse file name")?;
 
-    // Generate new filename with target shot number
-    let new_file_name = if let Some(caps) = shot_pattern.captures(file_name) {
-        // Replace existing shot number
-        let current_shot = &caps[1];
-        let target_shot_str = if target_shot_number == 0 {
-            "main".to_string()
+    // Get target shot's scene from project metadata
+    let project_dir = PathBuf::from(&project_path);
+    let metadata_path = project_dir.join(".project-metadata.json");
+    let target_scene_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+        if let Ok(project) = serde_json::from_str::<Project>(&content) {
+            // Find the target shot to get its scene
+            let shot = project.shots
+                .and_then(|shots| shots.into_iter().find(|s| s.number == target_shot_number))
+                .ok_or("Target shot not found")?;
+
+            // Find the scene by ID
+            let scene = project.scenes
+                .and_then(|scenes| scenes.into_iter().find(|s| s.id == shot.scene_id))
+                .ok_or("Scene not found for target shot")?;
+
+            scene.name
         } else {
-            format!("Shot{:03}", target_shot_number)
-        };
-        file_name.replace(
-            &format!("_Shot{}_", current_shot),
-            &format!("_{}_", target_shot_str)
-        )
-    } else if main_pattern.is_match(file_name) {
-        // Replace main with shot number
-        let target_shot_str = if target_shot_number == 0 {
-            "main".to_string()
-        } else {
-            format!("Shot{:03}", target_shot_number)
-        };
-        file_name.replace("_main_", &format!("_{}_", target_shot_str))
+            return Err("Failed to parse project metadata".to_string());
+        }
     } else {
-        // Add shot number if not present
-        let name_without_ext = file_name.rsplit_once('.').map(|(n, _)| n).unwrap_or(file_name);
-        let ext = version_file.extension().and_then(|e| e.to_str()).unwrap_or("");
-        let target_shot_str = if target_shot_number == 0 {
-            "main".to_string()
-        } else {
-            format!("Shot{:03}", target_shot_number)
-        };
-        format!("{}_{}.{}", name_without_ext, target_shot_str, ext)
+        return Err("Project metadata not found".to_string());
     };
+
+    // Update components with new shot and scene
+    components.shot_number = target_shot_number;
+    components.scene_name = target_scene_name;
+
+    // Build new file name
+    let new_file_name = components.build();
 
     let parent_dir = version_file.parent().ok_or("No parent directory")?;
     let new_path = parent_dir.join(&new_file_name);
@@ -2455,13 +2457,13 @@ fn read_feedback_full() -> Result<String, String> {
 }
 
 // Helper function to find shot files matching a pattern
-fn find_shot_files(project_path: &PathBuf, project_name: &str, shot_number: u32) -> Result<Vec<PathBuf>, String> {
-    let base_name = project_name.replace(" ", "");
-    let shot_pattern = if shot_number == 0 {
-        format!("{}_main", base_name)
-    } else {
-        format!("{}_Shot{:03}", base_name, shot_number)
-    };
+fn find_shot_files(project_path: &PathBuf, project_name: &str, scene_name: &str, shot_number: u32) -> Result<Vec<PathBuf>, String> {
+    // Build shot pattern using file_naming module: PROJECT_SCENE_SHOT_
+    let shot_pattern = file_naming::FileNameComponents::shot_pattern(
+        project_name,
+        scene_name,
+        shot_number
+    );
     let mut found_files = Vec::new();
 
     println!("🔍 Looking for files with pattern: {}", shot_pattern);
@@ -2484,8 +2486,8 @@ fn find_shot_files(project_path: &PathBuf, project_name: &str, shot_number: u32)
                         let file_name = entry.file_name();
                         let file_name_str = file_name.to_string_lossy();
 
-                        // Check if file matches shot pattern
-                        if file_name_str.starts_with(&shot_pattern) && file_name_str.contains("_v") {
+                        // Check if file matches shot pattern and is versioned
+                        if file_name_str.contains(&shot_pattern) && file_naming::FileNameComponents::is_versioned(&file_name_str) {
                             println!("✓ Found matching file: {}", file_name_str);
                             found_files.push(entry.path());
                         }
@@ -2503,11 +2505,21 @@ fn find_shot_files(project_path: &PathBuf, project_name: &str, shot_number: u32)
 async fn check_shot_files_accessible(project_path: String, shot_number: u32) -> Result<bool, String> {
     let project_dir = PathBuf::from(&project_path);
 
-    // Get project name from metadata
+    // Get project name and scene name from metadata
     let metadata_path = project_dir.join(".project-metadata.json");
-    let project_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+    let (project_name, scene_name) = if let Ok(content) = fs::read_to_string(&metadata_path) {
         if let Ok(project) = serde_json::from_str::<Project>(&content) {
-            project.name
+            // Find the shot to get its scene
+            let shot = project.shots
+                .and_then(|shots| shots.into_iter().find(|s| s.number == shot_number))
+                .ok_or("Shot not found")?;
+
+            // Find the scene by ID
+            let scene = project.scenes
+                .and_then(|scenes| scenes.into_iter().find(|s| s.id == shot.scene_id))
+                .ok_or("Scene not found for shot")?;
+
+            (project.name, scene.name)
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -2516,7 +2528,7 @@ async fn check_shot_files_accessible(project_path: String, shot_number: u32) -> 
     };
 
     // Find all files matching the shot number
-    let files = find_shot_files(&project_dir, &project_name, shot_number)?;
+    let files = find_shot_files(&project_dir, &project_name, &scene_name, shot_number)?;
 
     if files.is_empty() {
         return Ok(true); // No files to check, safe to rename
@@ -2550,11 +2562,21 @@ async fn rename_shot_files(
 ) -> Result<u32, String> {
     let project_dir = PathBuf::from(&project_path);
 
-    // Get project name from metadata
+    // Get project name and scene name from metadata
     let metadata_path = project_dir.join(".project-metadata.json");
-    let project_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+    let (project_name, scene_name) = if let Ok(content) = fs::read_to_string(&metadata_path) {
         if let Ok(project) = serde_json::from_str::<Project>(&content) {
-            project.name
+            // Find the shot to get its scene (using old shot number)
+            let shot = project.shots
+                .and_then(|shots| shots.into_iter().find(|s| s.number == old_shot_number))
+                .ok_or("Shot not found")?;
+
+            // Find the scene by ID
+            let scene = project.scenes
+                .and_then(|scenes| scenes.into_iter().find(|s| s.id == shot.scene_id))
+                .ok_or("Scene not found for shot")?;
+
+            (project.name, scene.name)
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -2563,43 +2585,39 @@ async fn rename_shot_files(
     };
 
     // Find all files with old shot number
-    let files = find_shot_files(&project_dir, &project_name, old_shot_number)?;
+    let files = find_shot_files(&project_dir, &project_name, &scene_name, old_shot_number)?;
 
     if files.is_empty() {
         return Ok(0); // No files to rename
     }
 
-    let base_name = project_name.replace(" ", "");
-    let old_pattern = if old_shot_number == 0 {
-        format!("{}_main", base_name)
-    } else {
-        format!("{}_Shot{:03}", base_name, old_shot_number)
-    };
-    let new_pattern = if new_shot_number == 0 {
-        format!("{}_main", base_name)
-    } else {
-        format!("{}_Shot{:03}", base_name, new_shot_number)
-    };
-
     let mut renamed_count = 0u32;
 
-    // Rename each file
+    // Rename each file using file_naming module
     for file_path in files {
         if let Some(file_name) = file_path.file_name() {
             let file_name_str = file_name.to_string_lossy();
-            let new_file_name = file_name_str.replace(&old_pattern, &new_pattern);
 
-            if let Some(parent) = file_path.parent() {
-                let new_file_path = parent.join(&new_file_name);
+            // Parse the file name
+            if let Some(mut components) = file_naming::FileNameComponents::parse(&file_name_str) {
+                // Update shot number
+                components.shot_number = new_shot_number;
 
-                // Rename the file
-                match fs::rename(&file_path, &new_file_path) {
-                    Ok(_) => {
-                        renamed_count += 1;
-                        println!("Renamed: {} -> {}", file_name_str, new_file_name);
-                    }
-                    Err(e) => {
-                        return Err(format!("Failed to rename file {}: {}", file_name_str, e));
+                // Build new file name
+                let new_file_name = components.build();
+
+                if let Some(parent) = file_path.parent() {
+                    let new_file_path = parent.join(&new_file_name);
+
+                    // Rename the file
+                    match fs::rename(&file_path, &new_file_path) {
+                        Ok(_) => {
+                            renamed_count += 1;
+                            println!("Renamed: {} -> {}", file_name_str, new_file_name);
+                        }
+                        Err(e) => {
+                            return Err(format!("Failed to rename file {}: {}", file_name_str, e));
+                        }
                     }
                 }
             }
@@ -3107,14 +3125,14 @@ async fn get_project_outputs(project_path: String, shot_filter: Option<String>) 
 #[derive(Debug, Deserialize)]
 struct CreateSceneFoldersInput {
     project_path: String,
-    scene_code: String, // e.g., "SC_001", "SC_RIVER"
+    scene_code: String, // e.g., "RUNB", "INTRO" (no SC_ prefix)
 }
 
 #[derive(Debug, Deserialize)]
 struct CreateShotFoldersInput {
     project_path: String,
-    scene_code: String, // e.g., "SC_001", "SC_RIVER"
-    shot_code: String,  // e.g., "SH001", "SH000"
+    scene_code: String, // e.g., "RUNB", "INTRO" (no SC_ prefix)
+    shot_code: String,  // e.g., "001", "010" (no SH prefix, just 3-digit number)
 }
 
 #[tauri::command]

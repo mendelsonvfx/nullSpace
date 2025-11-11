@@ -8,6 +8,7 @@ import { useContextMenuStore } from '../../store/contextMenuStore';
 import { FolderOpen, Copy, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import type { SoftwareName } from '../../types/project';
+import { getScenePattern, getShotPattern, extractShotNumber } from '../../utils/fileNaming';
 
 interface ProjectVersion {
   name: string;
@@ -220,25 +221,22 @@ export function VersionsOverview({ project, currentScene, currentShot }: Version
     // Filter by scene if selected
     if (currentScene) {
       filtered = filtered.filter(v => {
-        // Extract scene code from scene name
-        // "Scene 001" → "001", "Scene RIVER" → "RIVER"
-        const sceneSuffix = currentScene.name.replace(/^Scene\s+/i, '').trim();
-        const sceneCode = sceneSuffix.toUpperCase().replace(/\s+/g, '_');
-        const scenePrefix = `_SC_${sceneCode}_`;
+        // Use file naming utility to get scene pattern: PROJECT_SCENE_
+        const scenePrefix = getScenePattern(project.name, currentScene.name);
 
-        // Include file if: (1) it has the scene prefix, OR (2) it's unversioned (unversioned files show in all scenes)
-        return v.name.includes(scenePrefix) || !v.is_versioned;
+        // Include file if it has the scene prefix
+        return v.name.includes(scenePrefix);
       });
     }
 
     // Filter by shot if selected
     if (currentShot) {
       filtered = filtered.filter(v => {
-        const shotPrefix = currentShot.number === 0
-          ? '_SH000_'
-          : `_SH${currentShot.number.toString().padStart(3, '0')}_`;
-        // Include file if: (1) it has the shot prefix, OR (2) it's unversioned (unversioned files show in all shots)
-        return v.name.includes(shotPrefix) || !v.is_versioned;
+        // Use file naming utility to get shot pattern: PROJECT_SCENE_SHOT_
+        const shotPrefix = getShotPattern(project.name, currentScene?.name || '', currentShot.number);
+
+        // Include file if it has the shot prefix
+        return v.name.includes(shotPrefix);
       });
     }
 
@@ -682,10 +680,8 @@ export function VersionsOverview({ project, currentScene, currentShot }: Version
               onMouseLeave={() => setShowShotSubmenu(false)}
             >
               {(() => {
-                // Extract current shot number from version filename
-                const shotMatch = contextMenu.version.name.match(/_Shot(\d{3})_/);
-                const mainMatch = contextMenu.version.name.includes('_main_');
-                const currentShotNumber = mainMatch ? 0 : (shotMatch ? parseInt(shotMatch[1]) : null);
+                // Extract current shot number using file naming utility
+                const currentShotNumber = extractShotNumber(contextMenu.version.name);
 
                 // Filter out current shot
                 return project.shots
