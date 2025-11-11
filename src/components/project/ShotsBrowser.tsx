@@ -736,26 +736,68 @@ const SceneCard: React.FC<SceneCardProps> = ({
           isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
-        <div className="mt-2 ml-9 space-y-2">
-          {scene.shots.map(shot => (
-            <ShotCard
-              key={shot.id}
-              shot={shot}
-              isSelected={selectedShotId === shot.id}
-              viewMode={viewMode}
-              projectPath={project.path}
-              onClick={() => onShotSelect(shot.id)}
-              onStatusChange={onShotStatusChange}
-              onContextMenu={onShotContextMenu}
-              onHover={onShotHover}
-              isAnimating={animatingShotId === shot.id}
-              isEditing={editingItem?.type === 'shot' && editingItem.id === shot.id}
-              editValue={editingItem?.type === 'shot' && editingItem.id === shot.id ? editingItem.value : ''}
-              onEditChange={onEditChange}
-              onEditSave={onEditSave}
-              onEditCancel={onEditCancel}
-            />
-          ))}
+        <div className="mt-2 ml-9 relative">
+          {scene.shots.map((shot, index) => {
+            const isLastShot = index === scene.shots.length - 1;
+            const isFirstShot = index === 0;
+
+            return (
+              <div key={shot.id} className={`relative ${!isLastShot ? 'mb-2' : ''}`}>
+                {/* Connection line from scene to first shot */}
+                {isFirstShot && (
+                  <div className="absolute left-[-20px] bottom-full w-[2px] h-2 bg-border-primary" />
+                )}
+
+                {/* Vertical line from top - extends through margin to next element */}
+                {!isLastShot && (
+                  <div className="absolute left-[-20px] top-0 w-[2px] bg-border-primary" style={{ height: 'calc(100% + 0.5rem)' }} />
+                )}
+
+                {/* Last shot: vertical line with rounded corner at bottom */}
+                {isLastShot && (
+                  <>
+                    {/* Vertical line up to corner */}
+                    <div className="absolute left-[-20px] top-0 w-[2px] bg-border-primary"
+                         style={{ height: 'calc(50% - 8px)' }} />
+                    {/* Corner element with border to create rounded effect */}
+                    <div
+                      className="absolute left-[-20px] w-[10px] h-[10px] border-l-[2px] border-b-[2px] border-border-primary"
+                      style={{
+                        top: 'calc(50% - 8px)',
+                        borderBottomLeftRadius: '8px'
+                      }}
+                    />
+                    {/* Horizontal line from corner */}
+                    <div className="absolute left-[-12px] w-[12px] h-[2px] bg-border-primary"
+                         style={{ top: 'calc(50% + 0px)' }} />
+                  </>
+                )}
+
+                {/* Regular horizontal line for non-last shots */}
+                {!isLastShot && (
+                  <div className="absolute left-[-20px] top-1/2 w-5 h-[2px] bg-border-primary" />
+                )}
+
+                <ShotCard
+                key={shot.id}
+                shot={shot}
+                isSelected={selectedShotId === shot.id}
+                viewMode={viewMode}
+                projectPath={project.path}
+                onClick={() => onShotSelect(shot.id)}
+                onStatusChange={onShotStatusChange}
+                onContextMenu={onShotContextMenu}
+                onHover={onShotHover}
+                isAnimating={animatingShotId === shot.id}
+                isEditing={editingItem?.type === 'shot' && editingItem.id === shot.id}
+                editValue={editingItem?.type === 'shot' && editingItem.id === shot.id ? editingItem.value : ''}
+                onEditChange={onEditChange}
+                onEditSave={onEditSave}
+                onEditCancel={onEditCancel}
+              />
+            </div>
+            );
+          })}
 
           {/* Add Shot button - appears on hover */}
           <div
