@@ -58,29 +58,26 @@ export const BreakReminderNotification: React.FC<BreakReminderNotificationProps>
   if (reminder.type === 'break-over') {
     return (
       <div
-        className={`
-          bg-zinc-800 border border-green-700/50 rounded-lg p-4 shadow-xl w-80
-          transition-all duration-300 transform
-          ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
-        `}
+        className={`bg-green-600 rounded-2xl shadow-xl overflow-hidden transition-all duration-200 ${
+          isVisible ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'
+        }`}
+        style={{ minWidth: '300px', maxWidth: '400px' }}
       >
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
-            <Clock className="w-5 h-5 text-green-400" />
-          </div>
+        <div className="px-4 py-3 flex items-center gap-3">
+          <Clock className="w-5 h-5 text-white flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-white mb-1">
+            <div className="text-sm font-semibold text-white mb-0.5">
               Break over!
             </div>
-            <div className="text-sm text-zinc-400">
+            <div className="text-sm text-white opacity-90">
               {reminder.message || 'Time to get back to work!'}
             </div>
           </div>
           <button
             onClick={handleDismiss}
-            className="p-1 hover:bg-zinc-700 rounded transition-colors flex-shrink-0"
+            className="text-white hover:opacity-70 transition-opacity flex-shrink-0"
           >
-            <X className="w-4 h-4 text-zinc-400" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -89,39 +86,36 @@ export const BreakReminderNotification: React.FC<BreakReminderNotificationProps>
 
   return (
     <div
-      className={`
-        bg-zinc-800 border border-yellow-700/50 rounded-lg p-4 shadow-xl w-80
-        transition-all duration-300 transform
-        ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
-      `}
+      className={`bg-orange-600 rounded-2xl shadow-xl overflow-hidden transition-all duration-200 ${
+        isVisible ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'
+      }`}
+      style={{ minWidth: '300px', maxWidth: '400px' }}
     >
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center flex-shrink-0 animate-pulse">
-          <Coffee className="w-5 h-5 text-yellow-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-1">
-            <div className="font-semibold text-white">
+      <div className="px-4 py-3">
+        <div className="flex items-center gap-3 mb-3">
+          <Coffee className="w-5 h-5 text-white flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-white mb-0.5">
               Time for a break!
             </div>
-            <button
-              onClick={handleDismiss}
-              className="p-1 hover:bg-zinc-700 rounded transition-colors flex-shrink-0"
-            >
-              <X className="w-4 h-4 text-zinc-400" />
-            </button>
-          </div>
-          <div className="text-sm text-zinc-400 mb-3">
-            You've been working on <span className="font-medium text-white">{reminder.projectName}</span> for {formatTime(reminder.duration)}
+            <div className="text-sm text-white opacity-90">
+              You've been working on <span className="font-semibold">{reminder.projectName}</span> for {formatTime(reminder.duration)}
+            </div>
           </div>
           <button
-            onClick={handleTakeBreak}
-            className="w-full px-3 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-sm font-medium text-white transition-colors flex items-center justify-center gap-2"
+            onClick={handleDismiss}
+            className="text-white hover:opacity-70 transition-opacity flex-shrink-0"
           >
-            <Coffee className="w-4 h-4" />
-            Take {reminder.breakDuration} min break
+            <X className="w-4 h-4" />
           </button>
         </div>
+        <button
+          onClick={handleTakeBreak}
+          className="w-full px-3 py-2.5 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium text-white transition-colors flex items-center justify-center gap-2"
+        >
+          <Coffee className="w-4 h-4" />
+          Take {reminder.breakDuration} min break
+        </button>
       </div>
     </div>
   );

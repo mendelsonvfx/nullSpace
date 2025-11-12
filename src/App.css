@@ -55,6 +55,15 @@ body.animations-disabled * {
   animation: none !important;
 }
 
+/* Disable focus outline completely */
+*:focus {
+  outline: none !important;
+}
+
+*:focus-visible {
+  outline: none !important;
+}
+
 /* Borders disabled state - selective targeting */
 
 /* Versions Overview container */

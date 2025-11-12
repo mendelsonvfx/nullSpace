@@ -22,9 +22,10 @@ interface VersionsOverviewProps {
   project: any;
   currentScene: any;
   currentShot: any;
+  showNotification: (type: 'success' | 'error' | 'warning' | 'info', message: string, title?: string, duration?: number) => void;
 }
 
-export function VersionsOverview({ project, currentScene, currentShot }: VersionsOverviewProps) {
+export function VersionsOverview({ project, currentScene, currentShot, showNotification }: VersionsOverviewProps) {
   const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSoftware, setSelectedSoftware] = useState<string>('all');
@@ -288,7 +289,8 @@ export function VersionsOverview({ project, currentScene, currentShot }: Version
       }
 
       if (!executablePath) {
-        await invoke('open_file', { filePath: versionPath });
+        // Show notification that path is not set
+        showNotification('warning', `Path not set for ${softwareName}. Please configure it in Settings.`);
         return;
       }
 

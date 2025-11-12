@@ -10,6 +10,7 @@ import {
   IconPalette,
   IconFolder
 } from '@tabler/icons-react';
+import { RefreshCw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
 import { listen } from '@tauri-apps/api/event';
 import { useProjectStore } from '../../store/projectStore';
@@ -98,6 +99,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       return new Map();
     }
   });
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const loadingTimerRef = useRef<number | null>(null);
   const loadingSizeTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
@@ -457,6 +459,20 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
 
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+
+    setIsRefreshing(true);
+    try {
+      await Promise.all([loadTree(), loadDirectorySize()]);
+    } finally {
+      // Add a small delay to show the animation
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 300);
+    }
+  };
+
   const toggleDir = (path: string) => {
     const newExpanded = new Set(expandedDirs);
     if (newExpanded.has(path)) {
@@ -787,14 +803,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     );
   }
 
-  // Separate software folders from global folders
-  const softwareFolderNames = ['blender', 'aftereffects', 'photoshop', 'houdini', 'maya', 'cinema4d', 'substance', 'unreal', 'unity', 'zbrush', 'marmoset'];
-  const softwareFolders = tree.filter(node =>
-    node.is_dir && softwareFolderNames.includes(node.name.toLowerCase())
-  );
-  const globalFolders = tree.filter(node =>
-    !softwareFolderNames.includes(node.name.toLowerCase())
-  );
+  // Separate items: normal items (without underscore) and underscore items
+  const normalItems = tree.filter(node => !node.name.startsWith('_'));
+  const underscoreItems = tree.filter(node => node.name.startsWith('_'));
 
   return (
     <div className="flex flex-col h-full relative">
@@ -821,19 +832,19 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         <div className="flex flex-col">
         {tree.length > 0 ? (
           <>
-            {/* Software folders first */}
-            <div className="flex flex-col gap-1.5">
-              {softwareFolders.map(node => renderNode(node))}
+            {/* Normal items (without underscore) */}
+            <div className="flex flex-col gap-1">
+              {normalItems.map(node => renderNode(node))}
             </div>
 
-            {/* Separator between software and global folders */}
-            {softwareFolders.length > 0 && globalFolders.length > 0 && (
+            {/* Separator between normal and underscore items */}
+            {normalItems.length > 0 && underscoreItems.length > 0 && (
               <div className="my-2 mx-12 border-t border-border-secondary" />
             )}
 
-            {/* Global folders */}
+            {/* Underscore items (starting with _) */}
             <div className="flex flex-col gap-1">
-              {globalFolders.map(node => renderNode(node))}
+              {underscoreItems.map(node => renderNode(node))}
             </div>
           </>
         ) : (
@@ -845,15 +856,31 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       {/* Project Size Info Bar - Absolute positioned */}
       <div className="absolute -bottom-1 left-0 right-0 pt-2.5">
         <div className="bg-card-bg border border-border-primary rounded-button px-4 py-2">
-          <div className="text-xs">
-            <span className="text-text-muted">Project size:</span>{' '}
-            {loadingSize ? (
-              <span className="text-text-secondary">Calculating...</span>
-            ) : directorySize !== null ? (
-              <span className="text-text-primary font-medium">{formatSize(directorySize)}</span>
-            ) : (
-              <span className="text-text-secondary">Unknown</span>
-            )}
+          <div className="flex items-center justify-between">
+            <div className="text-xs">
+              <span className="text-text-muted">Project size:</span>{' '}
+              {loadingSize ? (
+                <span className="text-text-secondary">Calculating...</span>
+              ) : directorySize !== null ? (
+                <span className="text-text-primary font-medium">{formatSize(directorySize)}</span>
+              ) : (
+                <span className="text-text-secondary">Unknown</span>
+              )}
+            </div>
+            <button
+              onClick={handleRefresh}
+              className="p-1 hover:bg-hover-bg rounded transition-colors group"
+              title="Refresh tree and size"
+              disabled={isRefreshing}
+            >
+              <RefreshCw
+                className="w-3.5 h-3.5 text-text-secondary group-hover:text-white transition-colors"
+                style={{
+                  transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+                }}
+              />
+            </button>
           </div>
         </div>
       </div>

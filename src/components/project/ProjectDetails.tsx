@@ -25,9 +25,10 @@ interface ProjectDetailsProps {
   onOpenFolder: () => void;
   onLaunchSoftware: (software: any) => void;
   onDeleteProject: (project: any) => void;
+  showNotification: (type: 'success' | 'error' | 'warning' | 'info', message: string, title?: string, duration?: number) => void;
 }
 
-export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder, onLaunchSoftware, onDeleteProject }: ProjectDetailsProps) {
+export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder, onLaunchSoftware, onDeleteProject, showNotification }: ProjectDetailsProps) {
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showManualTimeEntry, setShowManualTimeEntry] = useState(false);
@@ -415,58 +416,71 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             }`}>
               {STATUS_LABELS[project.status as keyof typeof STATUS_LABELS]}
             </span>
-            {/* Existing Tags */}
-            {project.tags.map((tag: string) => (
-              <button
-                key={tag}
-                onClick={() => {
-                  const { removeTag } = useProjectStore.getState();
-                  removeTag(project.id, tag);
-                }}
-                className="px-2.5 py-1 bg-hover-bg rounded-badge text-xs text-text-muted border border-transparent hover:border-red-700/60 hover:bg-red-900/20 hover:line-through transition-all cursor-pointer"
-                title="Click to remove tag"
-              >
-                {tag}
-              </button>
-            ))}
-            {/* Add Tag Input or Button */}
-            {isAddingTag ? (
-              <input
-                type="text"
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newTag.trim()) {
-                    const { addTag } = useProjectStore.getState();
-                    addTag(project.id, newTag.trim());
+            {/* Tags Container with Hover Effect */}
+            <div className="flex items-center gap-2 group/tags">
+              {/* Existing Tags */}
+              {project.tags.map((tag: string) => (
+                <button
+                  key={tag}
+                  onClick={() => {
+                    const { removeTag } = useProjectStore.getState();
+                    removeTag(project.id, tag);
+                  }}
+                  className="px-2.5 py-1 bg-hover-bg rounded-full text-xs text-text-muted border border-transparent hover:border-red-700/60 hover:bg-red-900/20 hover:line-through transition-all cursor-pointer"
+                  title="Click to remove tag"
+                >
+                  {tag}
+                </button>
+              ))}
+              {/* Add Tag Input or Button */}
+              {isAddingTag ? (
+                <input
+                  type="text"
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newTag.trim()) {
+                      const { addTag } = useProjectStore.getState();
+                      addTag(project.id, newTag.trim());
+                      setNewTag('');
+                      setIsAddingTag(false);
+                    } else if (e.key === 'Escape') {
+                      setNewTag('');
+                      setIsAddingTag(false);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (newTag.trim()) {
+                      const { addTag } = useProjectStore.getState();
+                      addTag(project.id, newTag.trim());
+                    }
                     setNewTag('');
                     setIsAddingTag(false);
-                  } else if (e.key === 'Escape') {
-                    setNewTag('');
-                    setIsAddingTag(false);
-                  }
-                }}
-                onBlur={() => {
-                  if (newTag.trim()) {
-                    const { addTag } = useProjectStore.getState();
-                    addTag(project.id, newTag.trim());
-                  }
-                  setNewTag('');
-                  setIsAddingTag(false);
-                }}
-                autoFocus
-                placeholder="Tag name..."
-                className="px-2.5 py-1 bg-card-bg border border-accent rounded-badge text-xs text-text-primary focus:outline-none w-32"
-              />
-            ) : (
-              <button
-                onClick={() => setIsAddingTag(true)}
-                className="px-2.5 py-1 bg-transparent border border-border-secondary border-dashed rounded-badge text-xs text-text-muted hover:border-accent hover:text-accent transition-all cursor-pointer"
-                title="Add tag to project"
-              >
-                + Add tag...
-              </button>
-            )}
+                  }}
+                  autoFocus
+                  placeholder="Type tag name..."
+                  className="px-2.5 py-1 bg-hover-bg border border-accent rounded-full text-xs text-text-muted focus:outline-none focus:text-text-primary w-32 placeholder:text-text-muted/50"
+                />
+              ) : (
+                project.tags.length > 0 ? (
+                  <button
+                    onClick={() => setIsAddingTag(true)}
+                    className="px-2.5 py-1 bg-transparent border border-border-secondary border-dashed rounded-full text-xs text-text-muted hover:border-accent hover:text-accent transition-all cursor-pointer opacity-0 group-hover/tags:opacity-100"
+                    title="Add tag to project"
+                  >
+                    + Add tag...
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setIsAddingTag(true)}
+                    className="px-2.5 py-1 bg-transparent border border-border-secondary border-dashed rounded-full text-xs text-text-muted hover:border-accent hover:text-accent transition-all cursor-pointer"
+                    title="Add tag to project"
+                  >
+                    + Add tag...
+                  </button>
+                )
+              )}
+            </div>
             </div>
             <div className="flex items-center gap-3">
             <button
@@ -598,16 +612,6 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         </div>
         )}
 
-        {/* Shots Overview Table - shown only in scenes+shots mode when scene is selected */}
-        {context.isScene && !context.isShot && project.hasShots && project.hasScenes && (
-          <ShotsOverviewTable
-            projectId={project.id}
-            projectPath={project.path}
-            currentScene={project.scenes?.find((s: any) => s.id === context.sceneId)}
-            shots={project.shots?.filter((s: any) => s.sceneId === context.sceneId) || []}
-          />
-        )}
-
         {/* Software Launchers - hidden when only scene is selected in scenes+shots mode */}
         {!(context.isScene && !context.isShot && project.hasScenes && project.hasShots) && (
           <div className="mb-7">
@@ -685,7 +689,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       shotNumber: currentShot?.number
                     });
                   }}
-                  disabled={status === 'launching'}
+                  disabled={status === 'launching' || !executablePath}
                   data-launch-software
                   className="p-4 border border-zinc-800 rounded-xl flex items-center gap-3 transition-all duration-200 group select-none disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
                   onMouseDown={(e) => {
@@ -726,7 +730,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   <div className="text-left flex-1">
                     <div className="font-medium">{sw.name}</div>
                     <div className="text-xs text-zinc-500">
-                      {status === 'launching' ? 'Launching...' : status === 'success' ? 'Launched!' : activeEntry ? 'Running...' : executablePath ? 'Click to launch' : 'Path not configured'}
+                      {status === 'launching' ? 'Launching...' : status === 'success' ? 'Launched!' : activeEntry ? 'Running...' : executablePath ? 'Click to launch' : 'Path not set'}
                     </div>
                   </div>
 
@@ -753,6 +757,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           project={project}
           currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
           currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
+          showNotification={showNotification}
         />
         )}
 
@@ -893,6 +898,16 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             />
           </div>
         </div>
+
+        {/* Shots Overview Table - shown only in scenes+shots mode when scene is selected */}
+        {context.isScene && !context.isShot && project.hasShots && project.hasScenes && (
+          <ShotsOverviewTable
+            projectId={project.id}
+            projectPath={project.path}
+            currentScene={project.scenes?.find((s: any) => s.id === context.sceneId)}
+            shots={project.shots?.filter((s: any) => s.sceneId === context.sceneId) || []}
+          />
+        )}
 
         {/* Notes Section */}
         <NotesSection project={project} context={context} />

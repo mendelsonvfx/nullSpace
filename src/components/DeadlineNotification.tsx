@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, AlertCircle } from 'lucide-react';
+import { X, Clock } from 'lucide-react';
 
 interface DeadlineNotificationProps {
   projectName: string;
@@ -9,30 +9,41 @@ interface DeadlineNotificationProps {
 
 export function DeadlineNotification({ projectName, daysRemaining, onClose }: DeadlineNotificationProps) {
   const [isVisible, setIsVisible] = useState(false);
+  const [progress, setProgress] = useState(100);
+  const duration = 10000;
 
   useEffect(() => {
-    // Start animation after mount
-    requestAnimationFrame(() => {
-      setIsVisible(true);
-    });
+    setIsVisible(true);
 
-    // Auto-hide after 10 seconds
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => Math.max(0, prev - (100 / (duration / 100))));
+    }, 100);
+
     const timer = setTimeout(() => {
       handleClose();
-    }, 10000);
+    }, duration);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearInterval(progressInterval);
+      clearTimeout(timer);
+    };
   }, []);
 
   const handleClose = () => {
     setIsVisible(false);
-    setTimeout(onClose, 300); // Wait for animation to complete
+    setTimeout(onClose, 200);
   };
 
   const getBgColor = () => {
-    if (daysRemaining === 0) return 'bg-red-600/90';
-    if (daysRemaining === 1) return 'bg-orange-600/90';
-    return 'bg-orange-500/90';
+    if (daysRemaining === 0) return 'bg-red-600';
+    if (daysRemaining === 1) return 'bg-orange-600';
+    return 'bg-orange-500';
+  };
+
+  const getProgressColor = () => {
+    if (daysRemaining === 0) return 'bg-red-800/50';
+    if (daysRemaining === 1) return 'bg-orange-800/50';
+    return 'bg-orange-700/50';
   };
 
   const getMessage = () => {
@@ -43,58 +54,39 @@ export function DeadlineNotification({ projectName, daysRemaining, onClose }: De
 
   return (
     <div
-      className={`transition-all duration-300 ${
-        isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
+      className={`${getBgColor()} rounded-2xl shadow-xl transition-all duration-200 overflow-hidden ${
+        isVisible ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'
       }`}
+      style={{ minWidth: '300px', maxWidth: '400px' }}
     >
-      <div
-        className={`${getBgColor()} backdrop-blur-sm rounded-lg shadow-2xl p-4 min-w-[320px] max-w-[400px] border border-white/20`}
-      >
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-6 h-6 text-white flex-shrink-0 mt-0.5" />
+      {/* Content */}
+      <div className="px-4 py-3 flex items-center gap-3">
+        <Clock className="w-5 h-5 text-white flex-shrink-0" />
 
-          <div className="flex-1 min-w-0">
-            <h3 className="text-white font-semibold text-sm mb-1">
-              {getMessage()}
-            </h3>
-            <p className="text-white/90 text-sm break-words">
-              {projectName}
-            </p>
-          </div>
-
-          <button
-            onClick={handleClose}
-            className="text-white/80 hover:text-white transition-colors flex-shrink-0"
-            aria-label="Закрыть уведомление"
-          >
-            <X className="w-5 h-5" />
-          </button>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white mb-0.5">
+            {getMessage()}
+          </p>
+          <p className="text-sm text-white opacity-90 break-words">
+            {projectName}
+          </p>
         </div>
 
-        {/* Progress bar for auto-hide */}
-        <div className="mt-3 h-1 bg-white/20 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-white/60 rounded-full animate-shrink"
-            style={{
-              animation: 'shrink 10s linear forwards'
-            }}
-          />
-        </div>
+        <button
+          onClick={handleClose}
+          className="text-white hover:opacity-70 transition-opacity flex-shrink-0"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
-      <style>{`
-        @keyframes shrink {
-          from {
-            width: 100%;
-          }
-          to {
-            width: 0%;
-          }
-        }
-        .animate-shrink {
-          animation: shrink 10s linear forwards;
-        }
-      `}</style>
+      {/* Progress bar */}
+      <div className={`h-1 ${getProgressColor()}`}>
+        <div
+          className={`h-full ${getBgColor()} transition-all duration-100 ease-linear brightness-125`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
     </div>
   );
 }

@@ -56,12 +56,23 @@ fn read_dir_recursive(path: &str, max_depth: usize) -> Result<Vec<FileNode>, Str
         });
     }
 
-    // Sort: directories first, then files
+    // Sort: items without underscore first, then items with underscore
+    // Within each group: directories first, then files (alphabetically)
     nodes.sort_by(|a, b| {
-        match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        let a_starts_underscore = a.name.starts_with('_');
+        let b_starts_underscore = b.name.starts_with('_');
+
+        match (a_starts_underscore, b_starts_underscore) {
+            (false, true) => std::cmp::Ordering::Less,  // a without _ comes before b with _
+            (true, false) => std::cmp::Ordering::Greater, // a with _ comes after b without _
+            _ => {
+                // Both have same underscore status, sort by dir/file, then alphabetically
+                match (a.is_dir, b.is_dir) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                }
+            }
         }
     });
 

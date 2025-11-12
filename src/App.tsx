@@ -34,6 +34,8 @@ import { SoftwareIcon } from './components/SoftwareIcon';
 import { ProjectCard } from './components/ProjectCard';
 import { appWindow } from '@tauri-apps/api/window';
 import { DeadlineNotification } from './components/DeadlineNotification';
+import { GeneralNotification } from './components/notifications/GeneralNotification';
+import type { GeneralNotification as GeneralNotificationType } from './components/notifications/GeneralNotification';
 // useThumbnail moved to child components
 import { CategoryTabs } from './components/CategoryTabs';
 import { WelcomeSetup } from './components/modals/WelcomeSetup';
@@ -171,6 +173,7 @@ function App() {
   const [, setForceRenderKey] = useState(0); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [breakReminders, setBreakReminders] = useState<BreakReminder[]>([]);
   const [shownReminders, setShownReminders] = useState<Set<string>>(new Set());
+  const [generalNotifications, setGeneralNotifications] = useState<GeneralNotificationType[]>([]);
   const [showCategorySubmenu, setShowCategorySubmenu] = useState(false);
   const [accentColor, setAccentColor] = useState(() => {
     return localStorage.getItem('accentColor') || '#8B5CF6';
@@ -178,6 +181,23 @@ function App() {
   const [showBottomShadow, setShowBottomShadow] = useState(true);
   const [showTopShadow, setShowTopShadow] = useState(false);
   const projectListRef = useRef<HTMLDivElement>(null);
+
+  // Add general notification
+  const addGeneralNotification = (
+    type: 'success' | 'error' | 'warning' | 'info',
+    message: string,
+    title?: string,
+    duration?: number
+  ) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    const notification: GeneralNotificationType = { id, type, message, title, duration };
+    setGeneralNotifications(prev => [...prev, notification]);
+  };
+
+  // Remove general notification
+  const removeGeneralNotification = (id: string) => {
+    setGeneralNotifications(prev => prev.filter(n => n.id !== id));
+  };
 
   // Check if we should show welcome setup
   useEffect(() => {
@@ -1025,6 +1045,19 @@ function App() {
         ))}
       </div>
 
+      {/* General Notifications */}
+      <div className="fixed top-12 right-4 z-50 flex flex-col gap-3 pointer-events-none">
+        <div className="flex flex-col gap-3 pointer-events-auto">
+          {generalNotifications.map((notification) => (
+            <GeneralNotification
+              key={notification.id}
+              notification={notification}
+              onClose={() => removeGeneralNotification(notification.id)}
+            />
+          ))}
+        </div>
+      </div>
+
       {/* Custom Title Bar */}
       <div className="h-8 bg-sidebar-bg flex items-center justify-between select-none flex-shrink-0 rounded-t-lg relative z-[60]">
         <div
@@ -1618,6 +1651,7 @@ function App() {
                console.log('Opening folder:', selectedProject.path);
                openInExplorer(selectedProject.path);
                }}
+              showNotification={addGeneralNotification}
               onLaunchSoftware={(sw: any) => {
                 // Check if we're in a special context (Asset/Compose)
                 let projectNameOverride = selectedProject.name;
@@ -1763,7 +1797,7 @@ function App() {
           }}
         >
           <div
-            className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md w-full mx-4"
+            className="bg-zinc-900 border border-red-700 rounded-lg p-6 max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold mb-2">Confirm Delete</h3>

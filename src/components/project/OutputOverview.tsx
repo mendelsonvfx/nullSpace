@@ -74,12 +74,12 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   };
 
   // Save selected output type and persist to cache
-  const updateSelectedOutputType = (type: 'preview' | 'final') => {
-    setSelectedOutputType(type);
-    if (selectedSoftware) {
-      outputsCache.setOutputState(getCacheKey(), selectedSoftware, type);
-    }
-  };
+  // const updateSelectedOutputType = (type: 'preview' | 'final') => {
+  //   setSelectedOutputType(type);
+  //   if (selectedSoftware) {
+  //     outputsCache.setOutputState(getCacheKey(), selectedSoftware, type);
+  //   }
+  // };
 
   // Get scene and shot filter for output scanning
   const getSceneFilter = (): string | null => {
@@ -612,35 +612,6 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
           </div>
         )}
 
-        {/* Output Type Filter */}
-        <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
-          <button
-            onClick={() => updateSelectedOutputType('preview')}
-            className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 ${
-              !isRestoringStateRef.current ? 'transition-colors' : ''
-            } ${
-              selectedOutputType === 'preview'
-                ? 'bg-zinc-700 text-white'
-                : 'text-text-secondary hover:text-white'
-            }`}
-          >
-            <Eye className="w-3 h-3" />
-            Preview
-          </button>
-          <button
-            onClick={() => updateSelectedOutputType('final')}
-            className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 ${
-              !isRestoringStateRef.current ? 'transition-colors' : ''
-            } ${
-              selectedOutputType === 'final'
-                ? 'bg-zinc-700 text-white'
-                : 'text-text-secondary hover:text-white'
-            }`}
-          >
-            <Film className="w-3 h-3" />
-            Final
-          </button>
-        </div>
         <button
           onClick={handleRefreshAll}
           className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors ml-auto group self-center"
@@ -670,13 +641,21 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
               </span>
             </div>
 
-            {/* Output Types */}
-            <div className="p-3 space-y-3">
-              {/* Preview Outputs */}
-              {selectedOutputType === 'preview' && types.preview.length > 0 && (() => {
-                const { grouped, ungrouped } = groupOutputsByPath(types.preview);
+            {/* Two Column Layout with Divider (Headers + Content) */}
+            <div className="grid grid-cols-2 divide-x divide-border-secondary">
+              {/* Preview Column */}
+              <div className="flex flex-col">
+                {/* Preview Header */}
+                <div className="flex items-center gap-2 px-5 pt-3 pb-2">
+                  <Eye className="w-3.5 h-3.5 text-text-secondary" />
+                  <span className="text-xs font-medium text-text-secondary">Preview ({types.preview.length})</span>
+                </div>
+                {/* Preview Content - Scrollable */}
+                <div className="px-3 pb-3 space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar">
+                      {(() => {
+                        const { grouped, ungrouped } = groupOutputsByPath(types.preview);
 
-                const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
+                        const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
                   <button
                     key={output.path}
                     onDoubleClick={() => handleOutputClick(output)}
@@ -722,12 +701,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
                 );
 
                 return (
-                  <div>
-                    <div className="flex items-center gap-2 mb-2 px-2">
-                      <Eye className="w-3.5 h-3.5 text-text-secondary" />
-                      <span className="text-xs font-medium text-text-secondary">Preview ({types.preview.length})</span>
-                    </div>
-                    <div className="space-y-2">
+                  <div className="space-y-2">
                       {/* Grouped files */}
                       {grouped.map(group => {
                         const isExpanded = expandedGroups.has(group.path);
@@ -760,15 +734,27 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
                         );
                       })}
 
-                      {/* Ungrouped files */}
-                      {ungrouped.map(output => renderOutputButton(output))}
-                    </div>
-                  </div>
-                );
-              })()}
+                        {/* Ungrouped files */}
+                        {ungrouped.map(output => renderOutputButton(output))}
+                      </div>
+                      );
+                      })()}
+                  {types.preview.length === 0 && (
+                    <div className="p-4 text-center text-xs text-text-muted">No preview outputs</div>
+                  )}
+                </div>
+              </div>
 
-              {/* Final Outputs */}
-              {selectedOutputType === 'final' && types.final.length > 0 && (() => {
+              {/* Final Column */}
+              <div className="flex flex-col">
+                {/* Final Header */}
+                <div className="flex items-center gap-2 px-5 pt-3 pb-2">
+                  <Film className="w-3.5 h-3.5 text-text-secondary" />
+                  <span className="text-xs font-medium text-text-secondary">Final ({types.final.length})</span>
+                </div>
+                {/* Final Content - Scrollable */}
+                <div className="px-3 pb-3 space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar">
+                      {(() => {
                 const { grouped, ungrouped } = groupOutputsByPath(types.final);
 
                 const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
@@ -817,12 +803,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
                 );
 
                 return (
-                  <div>
-                    <div className="flex items-center gap-2 mb-2 px-2">
-                      <Film className="w-3.5 h-3.5 text-text-secondary" />
-                      <span className="text-xs font-medium text-text-secondary">Final ({types.final.length})</span>
-                    </div>
-                    <div className="space-y-2">
+                  <div className="space-y-2">
                       {/* Grouped files */}
                       {grouped.map(group => {
                         const isExpanded = expandedGroups.has(group.path);
@@ -855,12 +836,16 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
                         );
                       })}
 
-                      {/* Ungrouped files */}
-                      {ungrouped.map(output => renderOutputButton(output))}
-                    </div>
-                  </div>
-                );
-              })()}
+                        {/* Ungrouped files */}
+                        {ungrouped.map(output => renderOutputButton(output))}
+                      </div>
+                      );
+                      })()}
+                  {types.final.length === 0 && (
+                    <div className="p-4 text-center text-xs text-text-muted">No final outputs</div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         ))}

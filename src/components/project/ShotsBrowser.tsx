@@ -541,7 +541,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
             onSceneHover(null);
             setIsShotsAreaHovered(false);
           }}
-          className={`transition-all duration-300 ease-in-out overflow-hidden bg-sidebar-bg/50 ${
+          className={`transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden bg-sidebar-bg/50 ${
             isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
           }`}
         >
@@ -750,7 +750,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
           onSceneHover(null);
           setIsShotsAreaHovered(false);
         }}
-        className={`transition-all duration-300 ease-in-out overflow-hidden ${
+        className={`transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden ${
           isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >

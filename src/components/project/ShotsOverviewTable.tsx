@@ -36,7 +36,7 @@ interface ShotsOverviewTableProps {
   shots: Shot[];
 }
 
-export function ShotsOverviewTable({ projectId, projectPath, currentScene, shots }: ShotsOverviewTableProps) {
+export function ShotsOverviewTable({ projectId, projectPath, currentScene: _currentScene, shots }: ShotsOverviewTableProps) {
   const { setCurrentShot } = useProjectStore();
 
   // Sort shots by number
@@ -92,7 +92,7 @@ interface ShotRowProps {
   onClick: () => void;
 }
 
-function ShotRow({ shot, projectId, projectPath, onClick }: ShotRowProps) {
+function ShotRow({ shot, projectId: _projectId, projectPath, onClick }: ShotRowProps) {
   // Use useThumbnail hook with projectPath and preview
   const previewSrc = useThumbnail(projectPath, shot.preview);
 
@@ -179,8 +179,8 @@ function ShotRow({ shot, projectId, projectPath, onClick }: ShotRowProps) {
 
       {/* Notes - left aligned, full height and width */}
       <div className="flex items-start justify-start h-full">
-        {allNotesText ? (
-          <div className="w-full h-full px-3 py-2 bg-zinc-900/50 rounded-button border border-zinc-800 text-xs text-text-secondary overflow-auto">
+        <div className="w-full h-full px-3 py-2 bg-zinc-900/50 rounded-button border border-zinc-800 text-xs text-text-secondary overflow-auto cursor-default">
+          {allNotesText ? (
             <div className="prose prose-invert prose-xs max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
               <ReactMarkdown
                 components={{
@@ -198,10 +198,10 @@ function ShotRow({ shot, projectId, projectPath, onClick }: ShotRowProps) {
                 {allNotesText}
               </ReactMarkdown>
             </div>
-          </div>
-        ) : (
-          <span className="text-xs text-text-muted">No notes</span>
-        )}
+          ) : (
+            <span className="text-xs text-text-muted">No notes</span>
+          )}
+        </div>
       </div>
 
       {/* Status - centered */}
