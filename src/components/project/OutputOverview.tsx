@@ -5,7 +5,6 @@ import type { SoftwareName } from '../../types/project';
 import { Film, Eye, FolderOpen, Copy, ChevronDown, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { outputsCache } from '../../utils/outputsCache';
-import { getScenePattern, getShotPattern } from '../../utils/fileNaming';
 
 interface OutputFile {
   name: string;
@@ -81,27 +80,10 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   //   }
   // };
 
-  // Get scene and shot filter for output scanning
-  const getSceneFilter = (): string | null => {
-    if (currentScene) {
-      // Use centralized naming: PROJECT_SCENE_
-      return getScenePattern(project.name, currentScene.name);
-    }
-    return null;
-  };
-
-  const getShotFilter = (): string | null => {
-    if (currentShot && currentScene) {
-      // Use centralized naming: PROJECT_SCENE_SHOT_
-      return getShotPattern(project.name, currentScene.name, currentShot.number);
-    }
-    return null;
-  };
-
   const loadOutputs = async (forceReload = false) => {
     // Check cache first if not forcing reload
     if (!forceReload) {
-      const cachedOutputs = outputsCache.get(project.path);
+      const cachedOutputs = outputsCache.get(getCacheKey());
       if (cachedOutputs) {
         setOutputs(cachedOutputs);
         setLoading(false);
@@ -123,24 +105,30 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
         throw new Error('Project path is not defined');
       }
 
-      const sceneFilter = getSceneFilter();
-      const shotFilter = getShotFilter();
+      // Determine filter based on project settings and current selection
+      let sceneFilterValue: string | null = null;
+      let shotFilterValue: string | null = null;
 
-      // Use shot filter if available (it's more specific and already includes scene)
-      // Otherwise fall back to scene filter
-      // Backend now supports smart number matching for flexible folder naming
-      const combinedFilter = shotFilter || sceneFilter;
+      if (project.hasScenes && currentScene) {
+        sceneFilterValue = currentScene.name;
+      }
+
+      if (project.hasScenes && project.hasShots && currentShot) {
+        // Add "SH" prefix to shot filter to match folder naming convention
+        shotFilterValue = `SH${currentShot.number.toString().padStart(3, '0')}`;
+      }
 
       const result = await invoke<OutputFile[]>('get_project_outputs', {
         projectPath: project.path,
-        shotFilter: combinedFilter
+        sceneFilter: sceneFilterValue,
+        shotFilter: shotFilterValue
       });
 
       const outputsArray = Array.isArray(result) ? result : [];
       setOutputs(outputsArray);
 
       // Cache the results
-      outputsCache.set(project.path, outputsArray);
+      outputsCache.set(getCacheKey(), outputsArray);
     } catch (err) {
       console.error('Failed to load outputs:', err);
       setError(err instanceof Error ? err.message : 'Failed to load outputs');
@@ -166,7 +154,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
         console.log('Output changed detected by file watcher');
         // Invalidate cache and reload immediately
         // No additional debounce needed - backend already debounces at 500ms
-        outputsCache.invalidate(project.path);
+        outputsCache.invalidate(getCacheKey());
         loadOutputs(true);
       }).then((fn) => {
         unlisten = fn;
@@ -175,7 +163,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
 
     const handleRefreshAll = () => {
       console.log('Refresh all event received - reloading outputs');
-      outputsCache.invalidate(project.path);
+      outputsCache.invalidate(getCacheKey());
       loadOutputs(true);
     };
 
@@ -207,7 +195,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
       setSelectedOutputType(savedState.selectedOutputType);
     } else {
       // No saved state - try to get from cached outputs
-      const cachedOutputs = outputsCache.get(project.path);
+      const cachedOutputs = outputsCache.get(getCacheKey());
       if (cachedOutputs && cachedOutputs.length > 0) {
         const availableSoft = Array.from(new Set(cachedOutputs.map(o => o.software))).sort();
         if (availableSoft.length > 0) {
@@ -248,15 +236,14 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableSoftware, selectedSoftware, selectedOutputType]);
 
-  // Filter outputs based on selected software and output type
+  // Filter outputs based on selected software only (not output type, since UI shows both Preview and Final columns)
   const filteredOutputs = useMemo(() => {
     const filtered = outputs.filter(output => {
       const matchesSoftware = output.software === selectedSoftware;
-      const matchesType = output.render_type === selectedOutputType;
-      return matchesSoftware && matchesType;
+      return matchesSoftware;
     });
     return filtered;
-  }, [outputs, selectedSoftware, selectedOutputType]);
+  }, [outputs, selectedSoftware]);
 
   // Group outputs by software and output type
   const groupedOutputs = useMemo(() => {
@@ -533,6 +520,20 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
     }
   }, [contextMenu, groupContextMenu]);
 
+  const handleRefreshAll = async () => {
+    setIsRefreshing(true);
+
+    // Invalidate cache and trigger reload
+    outputsCache.invalidate(getCacheKey());
+    await loadOutputs(true);
+
+    // Trigger global refresh event for TreeView and VersionsOverview
+    window.dispatchEvent(new CustomEvent('refresh-all'));
+
+    // Stop animation after rotation completes (300ms)
+    setTimeout(() => setIsRefreshing(false), 300);
+  };
+
   if (loading) {
     return (
       <div className="mb-6">
@@ -560,36 +561,56 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   if (outputs.length === 0) {
     return (
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
+        {/* Header with title and refresh button */}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-text-secondary">Output Overview</h3>
+          <button
+            onClick={handleRefreshAll}
+            className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors group"
+            title="Refresh all (Tree, Versions, Outputs)"
+            disabled={isRefreshing}
+          >
+            <RefreshCw
+              className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
+              style={{
+                transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+              }}
+            />
+          </button>
+        </div>
         <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
-          <p className="text-xs text-text-muted text-center">No outputs found. Outputs should be in Render/Preview or Render/Final folders.</p>
+          <p className="text-xs text-text-muted text-center">No outputs found</p>
         </div>
       </div>
     );
   }
 
-  const handleRefreshAll = async () => {
-    setIsRefreshing(true);
-
-    // Invalidate cache and trigger reload
-    outputsCache.invalidate(project.path);
-    await loadOutputs(true);
-
-    // Trigger global refresh event for TreeView and VersionsOverview
-    window.dispatchEvent(new CustomEvent('refresh-all'));
-
-    // Stop animation after rotation completes (300ms)
-    setTimeout(() => setIsRefreshing(false), 300);
-  };
-
   return (
     <div className="mb-6">
-      <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
+      {/* Header with title and refresh button */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-text-secondary">Output Overview</h3>
+        <button
+          onClick={handleRefreshAll}
+          className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors group"
+          title="Refresh all (Tree, Versions, Outputs)"
+          disabled={isRefreshing}
+        >
+          <RefreshCw
+            className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
+            style={{
+              transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+            }}
+          />
+        </button>
+      </div>
 
       {/* Filters */}
-      <div className="flex gap-2 mb-3 items-stretch">
-        {/* Software Filter - only show if more than one software */}
-        {availableSoftware.length > 1 && (
+      {availableSoftware.length > 1 && (
+        <div className="flex gap-2 mb-3 items-stretch">
+          {/* Software Filter - only show if more than one software */}
           <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1 flex-shrink-0">
             {availableSoftware.map(software => (
               <button
@@ -608,23 +629,8 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
               </button>
             ))}
           </div>
-        )}
-
-        <button
-          onClick={handleRefreshAll}
-          className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors ml-auto group self-center"
-          title="Refresh all (Tree, Versions, Outputs)"
-          disabled={isRefreshing}
-        >
-          <RefreshCw
-            className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
-            style={{
-              transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
-            }}
-          />
-        </button>
-      </div>
+        </div>
+      )}
 
       {/* Outputs Grid */}
       <div className="space-y-4">

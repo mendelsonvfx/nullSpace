@@ -1526,7 +1526,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
         return Err("Project metadata not found".to_string());
     };
 
-    let base_name = project_name.replace(" ", "");
+    let base_name = project_name.replace(" ", "").to_uppercase();
     let mut versions = Vec::new();
 
     // List of software folders to search
@@ -2935,10 +2935,12 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
                 .unwrap_or((String::new(), 0, String::new()));
 
             // Create display name with frame range (only prefix + frame range + ext, no render_type)
-            let display_name = if prefix.is_empty() {
-                format!("{:04}-{:04}.{}", first_frame, last_frame, &ext)
-            } else {
+            // Ignore prefix if it's empty or consists only of digits (e.g., "0" from "0002.exr")
+            let use_prefix = !prefix.is_empty() && !prefix.chars().all(|c| c.is_ascii_digit());
+            let display_name = if use_prefix {
                 format!("{}.{:04}-{:04}.{}", &prefix, first_frame, last_frame, &ext)
+            } else {
+                format!("{:04}-{:04}.{}", first_frame, last_frame, &ext)
             };
 
             // Sum up total size
@@ -2987,89 +2989,23 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
     result
 }
 
-// Helper function to normalize shot names for comparison
-// Removes spaces, underscores, and converts to lowercase
-fn normalize_shot_name(name: &str) -> String {
+// Helper function to normalize names for comparison
+// Removes spaces, underscores, hyphens and converts to lowercase
+fn normalize_path_component(name: &str) -> String {
     name.to_lowercase()
         .replace(" ", "")
         .replace("_", "")
         .replace("-", "")
 }
 
-// Helper function to extract digits from a string
-fn extract_digits(s: &str) -> Vec<String> {
-    let mut result = Vec::new();
-    let mut current_number = String::new();
-
-    for c in s.chars() {
-        if c.is_ascii_digit() {
-            current_number.push(c);
-        } else if !current_number.is_empty() {
-            result.push(current_number.clone());
-            current_number.clear();
-        }
-    }
-
-    if !current_number.is_empty() {
-        result.push(current_number);
-    }
-
-    result
-}
-
-// Helper function to check if component matches filter (flexible matching)
-fn component_matches_filter(component: &str, filter: &str) -> bool {
-    let normalized_component = normalize_shot_name(component);
-    let normalized_filter = normalize_shot_name(filter);
-
-    // Direct contains check
-    if normalized_component.contains(&normalized_filter) ||
-       normalized_filter.contains(&normalized_component) {
-        return true;
-    }
-
-    // Extract numbers from ORIGINAL strings (before normalization) to keep them separate
-    let component_numbers = extract_digits(component);
-    let filter_numbers = extract_digits(filter);
-
-    // Match strategy: check if the LAST number in filter matches ANY number in component
-    // This way "33333_SCENE001_001_" -> last meaningful number is 001
-    // and "SH001" -> 001 matches!
-    // But "33333" (project ID) won't cause false matches
-    if !filter_numbers.is_empty() && !component_numbers.is_empty() {
-        println!("  Filter '{}' numbers: {:?}", filter, filter_numbers);
-        println!("  Component '{}' numbers: {:?}", component, component_numbers);
-
-        // Get the last number from filter (most specific - shot/scene number)
-        if let Some(last_filter_num) = filter_numbers.last() {
-            let filter_int = last_filter_num.parse::<i32>().unwrap_or(-1);
-            println!("  Last filter number: {} (parsed: {})", last_filter_num, filter_int);
-
-            if filter_int >= 0 {
-                // Check if any component number matches this last filter number
-                for comp_num in &component_numbers {
-                    let comp_int = comp_num.parse::<i32>().unwrap_or(-2);
-                    if comp_int == filter_int {
-                        println!("  ✓ MATCH: {} == {}", comp_int, filter_int);
-                        return true;
-                    }
-                }
-            }
-        }
-        println!("  ✗ NO MATCH");
-    }
-
-    false
-}
-
 // Helper function to recursively scan directory for output files
-// shot_filter: if Some, only include files in folders matching this shot name
 fn scan_output_dir_recursive(
     dir: &PathBuf,
     software: &str,
     render_type: &str,
     outputs: &mut Vec<OutputFile>,
     depth: usize,
+    scene_filter: &Option<String>,
     shot_filter: &Option<String>
 ) {
     // Prevent infinite recursion with depth limit
@@ -3082,20 +3018,9 @@ fn scan_output_dir_recursive(
             if let Ok(metadata) = entry.metadata() {
                 let path = entry.path();
 
-                // Recursively scan subdirectories
+                // Recursively scan all subdirectories (no filtering at directory level)
                 if metadata.is_dir() {
-                    // If we have a shot filter, check if this directory matches
-                    let should_scan = if let Some(filter) = shot_filter {
-                        let dir_name = entry.file_name().to_string_lossy().to_string();
-                        // Use smart matching function
-                        component_matches_filter(&dir_name, filter) || depth == 0
-                    } else {
-                        true // No filter, scan everything
-                    };
-
-                    if should_scan {
-                        scan_output_dir_recursive(&path, software, render_type, outputs, depth + 1, shot_filter);
-                    }
+                    scan_output_dir_recursive(&path, software, render_type, outputs, depth + 1, scene_filter, shot_filter);
                 } else if metadata.is_file() {
                     let file_name = entry.file_name().to_string_lossy().to_string();
 
@@ -3104,14 +3029,38 @@ fn scan_output_dir_recursive(
                         continue;
                     }
 
-                    // If we have a shot filter, check if we're inside a matching folder
-                    let should_include = if let Some(filter) = shot_filter {
-                        // Check if any folder in the path matches the shot filter using smart matching
-                        let path_str = path.to_string_lossy().to_string();
-                        path_str.split(['/', '\\'].as_ref())
-                            .any(|component| component_matches_filter(component, filter))
-                    } else {
-                        true // No filter, include all files
+                    // Filter by checking directory path (exclude filename to avoid false matches)
+                    let should_include = {
+                        // Get parent directory path (without filename)
+                        let dir_path = if let Some(parent) = path.parent() {
+                            parent.to_string_lossy().to_string()
+                        } else {
+                            String::new()
+                        };
+
+                        let normalized_path = normalize_path_component(&dir_path);
+
+                        let mut matches = true;
+
+                        // Check scene filter if present
+                        if let Some(scene) = scene_filter {
+                            let normalized_scene = normalize_path_component(scene);
+                            if !normalized_path.contains(&normalized_scene) {
+                                matches = false;
+                            }
+                        }
+
+                        // Check shot filter if present (AND condition with scene)
+                        if matches && shot_filter.is_some() {
+                            if let Some(shot) = shot_filter {
+                                let normalized_shot = normalize_path_component(shot);
+                                if !normalized_path.contains(&normalized_shot) {
+                                    matches = false;
+                                }
+                            }
+                        }
+
+                        matches
                     };
 
                     if should_include {
@@ -3140,7 +3089,11 @@ fn scan_output_dir_recursive(
 }
 
 #[tauri::command]
-async fn get_project_outputs(project_path: String, shot_filter: Option<String>) -> Result<Vec<OutputFile>, String> {
+async fn get_project_outputs(
+    project_path: String,
+    scene_filter: Option<String>,
+    shot_filter: Option<String>
+) -> Result<Vec<OutputFile>, String> {
     let project_dir = PathBuf::from(&project_path);
     let mut outputs = Vec::new();
 
@@ -3160,13 +3113,13 @@ async fn get_project_outputs(project_path: String, shot_filter: Option<String>) 
         // Check Render/Preview (recursively scan all subdirs)
         let preview_dir = software_dir.join("Render").join("Preview");
         if preview_dir.exists() {
-            scan_output_dir_recursive(&preview_dir, software, "preview", &mut outputs, 0, &shot_filter);
+            scan_output_dir_recursive(&preview_dir, software, "preview", &mut outputs, 0, &scene_filter, &shot_filter);
         }
 
         // Check Render/Final (recursively scan all subdirs)
         let final_dir = software_dir.join("Render").join("Final");
         if final_dir.exists() {
-            scan_output_dir_recursive(&final_dir, software, "final", &mut outputs, 0, &shot_filter);
+            scan_output_dir_recursive(&final_dir, software, "final", &mut outputs, 0, &scene_filter, &shot_filter);
         }
     }
 
@@ -3176,13 +3129,13 @@ async fn get_project_outputs(project_path: String, shot_filter: Option<String>) 
         // Preview
         let preview_dir = output_dir.join("Preview");
         if preview_dir.exists() {
-            scan_output_dir_recursive(&preview_dir, "AfterEffects", "preview", &mut outputs, 0, &shot_filter);
+            scan_output_dir_recursive(&preview_dir, "AfterEffects", "preview", &mut outputs, 0, &scene_filter, &shot_filter);
         }
 
         // Final
         let final_dir = output_dir.join("Final");
         if final_dir.exists() {
-            scan_output_dir_recursive(&final_dir, "AfterEffects", "final", &mut outputs, 0, &shot_filter);
+            scan_output_dir_recursive(&final_dir, "AfterEffects", "final", &mut outputs, 0, &scene_filter, &shot_filter);
         }
     }
 

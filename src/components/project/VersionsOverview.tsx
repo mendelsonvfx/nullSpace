@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { versionsCache } from '../../utils/versionsCache';
+import { versionMarksCache, type MarkColor } from '../../utils/versionMarksCache';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { FolderOpen, Copy, RefreshCw } from 'lucide-react';
@@ -34,6 +35,7 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
   const [showShotSubmenu, setShowShotSubmenu] = useState(false);
   const [submenuAction, setSubmenuAction] = useState<'move' | 'copy' | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [versionMarks, setVersionMarks] = useState<Record<string, MarkColor>>({});
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadingTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
@@ -132,6 +134,12 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
     };
   }, [project.path]);
 
+  // Load version marks when project changes
+  useEffect(() => {
+    const marks = versionMarksCache.getProjectMarks(project.path);
+    setVersionMarks(marks);
+  }, [project.path]);
+
   // Listen for version changes from file system watcher
   // ✅ RE-ENABLED: File watcher now works properly
   useEffect(() => {
@@ -219,27 +227,42 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
   const versions = useMemo(() => {
     let filtered = allVersions;
 
+    console.log('=== VersionsOverview Debug ===');
+    console.log('allVersions:', allVersions);
+    console.log('currentScene:', currentScene);
+    console.log('currentShot:', currentShot);
+
     // Filter by scene if selected
     if (currentScene) {
       filtered = filtered.filter(v => {
         // Use file naming utility to get scene pattern: PROJECT_SCENE_
         const scenePrefix = getScenePattern(project.name, currentScene.name);
+        const matches = v.name.includes(scenePrefix);
+
+        console.log(`Scene filter: "${v.name}" includes "${scenePrefix}"? ${matches}`);
 
         // Include file if it has the scene prefix
-        return v.name.includes(scenePrefix);
+        return matches;
       });
     }
+
+    console.log('After scene filter:', filtered);
 
     // Filter by shot if selected
     if (currentShot) {
       filtered = filtered.filter(v => {
         // Use file naming utility to get shot pattern: PROJECT_SCENE_SHOT_
         const shotPrefix = getShotPattern(project.name, currentScene?.name || '', currentShot.number);
+        const matches = v.name.includes(shotPrefix);
+
+        console.log(`Shot filter: "${v.name}" includes "${shotPrefix}"? ${matches}`);
 
         // Include file if it has the shot prefix
-        return v.name.includes(shotPrefix);
+        return matches;
       });
     }
+
+    console.log('After shot filter:', filtered);
 
     // Sort: versioned files first (by version number DESC - newest to oldest), then non-versioned files (by date desc)
     const sorted = [...filtered].sort((a, b) => {
@@ -424,6 +447,37 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
     }
   };
 
+  const handleRefreshAll = async () => {
+    setIsRefreshing(true);
+
+    // Invalidate all caches and trigger reload
+    versionsCache.invalidate(project.path);
+    await loadVersions(false, true);
+
+    // Trigger global refresh event for TreeView and OutputOverview
+    window.dispatchEvent(new CustomEvent('refresh-all'));
+
+    // Stop animation after rotation completes (300ms)
+    setTimeout(() => setIsRefreshing(false), 300);
+  };
+
+  const handleSetMark = (versionPath: string, color: MarkColor) => {
+    versionMarksCache.setMark(project.path, versionPath, color);
+    setVersionMarks(prev => {
+      const updated = { ...prev };
+      if (color === null) {
+        delete updated[versionPath];
+      } else {
+        updated[versionPath] = color;
+      }
+      return updated;
+    });
+    setContextMenu(null);
+    setShowShotSubmenu(false);
+    setSubmenuAction(null);
+    setActiveMenu(null);
+  };
+
   // Only show loading spinner if there's no data yet
   if (loading && versions.length === 0) {
     return (
@@ -442,9 +496,26 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
   if (!loading && versions.length === 0) {
     return (
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-text-secondary mb-3">Versions Overview</h3>
+        {/* Header with title and refresh button */}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-text-secondary">Versions Overview</h3>
+          <button
+            onClick={handleRefreshAll}
+            className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors group"
+            title="Refresh all (Tree, Versions, Outputs)"
+            disabled={isRefreshing}
+          >
+            <RefreshCw
+              className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
+              style={{
+                transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+              }}
+            />
+          </button>
+        </div>
         <div data-versions-overview className="bg-card-bg border border-border-primary rounded-med p-4">
-          <p className="text-xs text-text-muted text-center">No versions found (looking for folders like ProjectName_v001)</p>
+          <p className="text-xs text-text-muted text-center">No versions found</p>
         </div>
       </div>
     );
@@ -486,23 +557,28 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
       return true;
     });
 
-  const handleRefreshAll = async () => {
-    setIsRefreshing(true);
-
-    // Invalidate all caches and trigger reload
-    versionsCache.invalidate(project.path);
-    await loadVersions(false, true);
-
-    // Trigger global refresh event for TreeView and OutputOverview
-    window.dispatchEvent(new CustomEvent('refresh-all'));
-
-    // Stop animation after rotation completes (300ms)
-    setTimeout(() => setIsRefreshing(false), 300);
-  };
-
   return (
     <div className="mb-6 overflow-hidden">
-      <h3 className="text-sm font-medium text-text-secondary mb-3">Versions Overview</h3>
+      {/* Header with title and refresh button */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-text-secondary">Versions Overview</h3>
+        {uniqueSoftware.length > 0 && (
+          <button
+            onClick={handleRefreshAll}
+            className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors group"
+            title="Refresh all (Tree, Versions, Outputs)"
+            disabled={isRefreshing}
+          >
+            <RefreshCw
+              className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
+              style={{
+                transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+              }}
+            />
+          </button>
+        )}
+      </div>
 
       {/* Software Tabs */}
       {uniqueSoftware.length > 0 && (
@@ -557,20 +633,6 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
               Other
             </button>
           </div>
-          <button
-            onClick={handleRefreshAll}
-            className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors ml-auto group self-center"
-            title="Refresh all (Tree, Versions, Outputs)"
-            disabled={isRefreshing}
-          >
-            <RefreshCw
-              className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
-              style={{
-                transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
-              }}
-            />
-          </button>
         </div>
       )}
 
@@ -586,11 +648,24 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
             {filteredVersions.map((version) => (
               <div
                 key={version.path}
-                className="flex-shrink-0 w-32 cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none"
+                className="relative flex-shrink-0 w-32 cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none"
                 onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
                 onContextMenu={(e) => handleContextMenu(e, version)}
                 title="Double-click to open"
               >
+                {/* Color mark indicator */}
+                {versionMarks[version.path] && (
+                  <div
+                    className={`absolute top-1 w-1.5 h-1.5 rounded-full ${
+                      versionMarks[version.path] === 'red' ? 'bg-red-500' :
+                      versionMarks[version.path] === 'green' ? 'bg-green-500' :
+                      'bg-blue-500'
+                    }`}
+                    style={{ right: '40px' }}
+                    title={`Marked as ${versionMarks[version.path]}`}
+                  />
+                )}
+
                 {/* Header with software icons */}
                 <div className="flex gap-1 mb-2 justify-center flex-wrap">
                   {version.software.length > 0 ? (
@@ -647,6 +722,34 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
             <Copy className="w-4 h-4" />
             Copy Path
           </button>
+
+          {/* Mark Color Section */}
+          <div className="border-t border-zinc-700 my-1" />
+          <div className="px-4 py-2">
+            <div className="text-[10px] text-text-muted mb-2">Mark Color</div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleSetMark(contextMenu.version.path, 'red')}
+                className="w-6 h-6 rounded-full bg-red-500 hover:ring-2 ring-white/50 transition-all"
+                title="Mark as red"
+              />
+              <button
+                onClick={() => handleSetMark(contextMenu.version.path, 'green')}
+                className="w-6 h-6 rounded-full bg-green-500 hover:ring-2 ring-white/50 transition-all"
+                title="Mark as green"
+              />
+              <button
+                onClick={() => handleSetMark(contextMenu.version.path, 'blue')}
+                className="w-6 h-6 rounded-full bg-blue-500 hover:ring-2 ring-white/50 transition-all"
+                title="Mark as blue"
+              />
+              <button
+                onClick={() => handleSetMark(contextMenu.version.path, null)}
+                className="w-6 h-6 rounded-full border-2 border-zinc-600 hover:bg-zinc-700 transition-all"
+                title="Clear mark"
+              />
+            </div>
+          </div>
 
           {/* Show shot menu only for versioned files and if shots exist */}
           {contextMenu.version.is_versioned && project.shots && project.shots.length > 0 && (

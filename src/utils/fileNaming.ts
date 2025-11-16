@@ -52,7 +52,7 @@ export function buildFileName(components: FileNameComponents): string {
 export function getBaseName(components: FileNameComponents): string {
   const projectName = normalize(components.projectName);
   const sceneName = normalize(components.sceneName);
-  const shotStr = components.shotNumber.toString().padStart(SHOT_DIGITS, '0');
+  const shotStr = `SH${components.shotNumber.toString().padStart(SHOT_DIGITS, '0')}`;
 
   if (components.specialContext) {
     const context = normalize(components.specialContext);
@@ -88,10 +88,14 @@ export function parseFileName(filename: string): FileNameComponents | null {
     // Need at least PROJECT_SCENE_SHOT (3 parts)
     if (parts.length < 3) return null;
 
-    // Last part before optional context is shot number (3 digits)
+    // Last part before optional context is shot number (SH + 3 digits or just 3 digits for backward compatibility)
     const shotPartIndex = parts.length > 3 ? parts.length - 2 : parts.length - 1;
     const shotPart = parts[shotPartIndex];
-    const shotNumber = parseInt(shotPart, 10);
+
+    // Remove "SH" prefix if present (new format), otherwise parse directly (old format)
+    const shotNumber = shotPart.startsWith('SH')
+      ? parseInt(shotPart.substring(2), 10)
+      : parseInt(shotPart, 10);
 
     if (isNaN(shotNumber)) return null;
 
@@ -138,7 +142,7 @@ export function getShotPattern(
   sceneName: string,
   shotNumber: number
 ): string {
-  const shotStr = shotNumber.toString().padStart(SHOT_DIGITS, '0');
+  const shotStr = `SH${shotNumber.toString().padStart(SHOT_DIGITS, '0')}`;
   return `${normalize(projectName)}_${normalize(sceneName)}_${shotStr}_`;
 }
 

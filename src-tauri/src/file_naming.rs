@@ -54,9 +54,9 @@ impl FileNameComponents {
         }
     }
 
-    /// Get base name without version: PROJECT_SCENE_SHOT or PROJECT_SCENE_SHOT_CONTEXT
+    /// Get base name without version: PROJECT_SCENE_SHSHOT or PROJECT_SCENE_SHSHOT_CONTEXT
     pub fn get_base_name(&self) -> String {
-        let shot_str = format!("{:0width$}", self.shot_number, width = SHOT_DIGITS);
+        let shot_str = format!("SH{:0width$}", self.shot_number, width = SHOT_DIGITS);
 
         if let Some(ref context) = self.special_context {
             format!(
@@ -104,16 +104,21 @@ impl FileNameComponents {
             return None;
         }
 
-        // Last part before optional context is always shot number (3 digits)
+        // Last part before optional context is always shot number (SH + 3 digits)
         let shot_part = if parts.len() > 3 {
-            // Has context: PROJECT_SCENE_SHOT_CONTEXT
+            // Has context: PROJECT_SCENE_SHSHOT_CONTEXT
             parts[parts.len() - 2]
         } else {
-            // No context: PROJECT_SCENE_SHOT
+            // No context: PROJECT_SCENE_SHSHOT
             parts[parts.len() - 1]
         };
 
-        let shot_number = shot_part.parse::<u32>().ok()?;
+        // Remove "SH" prefix if present (new format), otherwise parse directly (old format)
+        let shot_number = if shot_part.starts_with("SH") {
+            shot_part[2..].parse::<u32>().ok()?
+        } else {
+            shot_part.parse::<u32>().ok()?
+        };
 
         // Special context is the last part if exists
         let special_context = if parts.len() > 3 {
@@ -157,14 +162,13 @@ impl FileNameComponents {
         )
     }
 
-    /// Get shot pattern for searching: PROJECT_SCENE_SHOT_
+    /// Get shot pattern for searching: PROJECT_SCENE_SHSHOT_
     pub fn shot_pattern(project_name: &str, scene_name: &str, shot_number: u32) -> String {
         format!(
-            "{}_{}_{:0width$}_",
+            "{}_{}_{}_",
             project_name.replace(" ", "").to_uppercase(),
             scene_name.replace(" ", "").to_uppercase(),
-            shot_number,
-            width = SHOT_DIGITS
+            format!("SH{:0width$}", shot_number, width = SHOT_DIGITS)
         )
     }
 
