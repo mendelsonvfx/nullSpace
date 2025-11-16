@@ -2996,6 +2996,72 @@ fn normalize_shot_name(name: &str) -> String {
         .replace("-", "")
 }
 
+// Helper function to extract digits from a string
+fn extract_digits(s: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut current_number = String::new();
+
+    for c in s.chars() {
+        if c.is_ascii_digit() {
+            current_number.push(c);
+        } else if !current_number.is_empty() {
+            result.push(current_number.clone());
+            current_number.clear();
+        }
+    }
+
+    if !current_number.is_empty() {
+        result.push(current_number);
+    }
+
+    result
+}
+
+// Helper function to check if component matches filter (flexible matching)
+fn component_matches_filter(component: &str, filter: &str) -> bool {
+    let normalized_component = normalize_shot_name(component);
+    let normalized_filter = normalize_shot_name(filter);
+
+    // Direct contains check
+    if normalized_component.contains(&normalized_filter) ||
+       normalized_filter.contains(&normalized_component) {
+        return true;
+    }
+
+    // Extract numbers from ORIGINAL strings (before normalization) to keep them separate
+    let component_numbers = extract_digits(component);
+    let filter_numbers = extract_digits(filter);
+
+    // Match strategy: check if the LAST number in filter matches ANY number in component
+    // This way "33333_SCENE001_001_" -> last meaningful number is 001
+    // and "SH001" -> 001 matches!
+    // But "33333" (project ID) won't cause false matches
+    if !filter_numbers.is_empty() && !component_numbers.is_empty() {
+        println!("  Filter '{}' numbers: {:?}", filter, filter_numbers);
+        println!("  Component '{}' numbers: {:?}", component, component_numbers);
+
+        // Get the last number from filter (most specific - shot/scene number)
+        if let Some(last_filter_num) = filter_numbers.last() {
+            let filter_int = last_filter_num.parse::<i32>().unwrap_or(-1);
+            println!("  Last filter number: {} (parsed: {})", last_filter_num, filter_int);
+
+            if filter_int >= 0 {
+                // Check if any component number matches this last filter number
+                for comp_num in &component_numbers {
+                    let comp_int = comp_num.parse::<i32>().unwrap_or(-2);
+                    if comp_int == filter_int {
+                        println!("  ✓ MATCH: {} == {}", comp_int, filter_int);
+                        return true;
+                    }
+                }
+            }
+        }
+        println!("  ✗ NO MATCH");
+    }
+
+    false
+}
+
 // Helper function to recursively scan directory for output files
 // shot_filter: if Some, only include files in folders matching this shot name
 fn scan_output_dir_recursive(
@@ -3021,12 +3087,8 @@ fn scan_output_dir_recursive(
                     // If we have a shot filter, check if this directory matches
                     let should_scan = if let Some(filter) = shot_filter {
                         let dir_name = entry.file_name().to_string_lossy().to_string();
-                        let normalized_dir = normalize_shot_name(&dir_name);
-                        let normalized_filter = normalize_shot_name(filter);
-
-                        // If directory name matches shot filter exactly, scan it
-                        // Otherwise, continue deeper to find matching subdirectories (depth == 0)
-                        normalized_dir == normalized_filter || depth == 0
+                        // Use smart matching function
+                        component_matches_filter(&dir_name, filter) || depth == 0
                     } else {
                         true // No filter, scan everything
                     };
@@ -3035,25 +3097,24 @@ fn scan_output_dir_recursive(
                         scan_output_dir_recursive(&path, software, render_type, outputs, depth + 1, shot_filter);
                     }
                 } else if metadata.is_file() {
+                    let file_name = entry.file_name().to_string_lossy().to_string();
+
+                    // Skip hidden files and system files
+                    if file_name.starts_with('.') || file_name.starts_with('~') {
+                        continue;
+                    }
+
                     // If we have a shot filter, check if we're inside a matching folder
                     let should_include = if let Some(filter) = shot_filter {
-                        // Check if any folder in the path matches the shot name
+                        // Check if any folder in the path matches the shot filter using smart matching
                         let path_str = path.to_string_lossy().to_string();
-                        let normalized_filter = normalize_shot_name(filter);
-
-                        // Split path and check each folder component
                         path_str.split(['/', '\\'].as_ref())
-                            .any(|component| normalize_shot_name(component) == normalized_filter)
+                            .any(|component| component_matches_filter(component, filter))
                     } else {
                         true // No filter, include all files
                     };
 
                     if should_include {
-                        let file_name = entry.file_name().to_string_lossy().to_string();
-                        // Skip hidden files and system files
-                        if file_name.starts_with('.') || file_name.starts_with('~') {
-                            continue;
-                        }
 
                         if let Ok(created) = metadata.created().or_else(|_| metadata.modified()) {
                             if let Ok(duration) = created.duration_since(std::time::UNIX_EPOCH) {
@@ -3099,14 +3160,12 @@ async fn get_project_outputs(project_path: String, shot_filter: Option<String>) 
         // Check Render/Preview (recursively scan all subdirs)
         let preview_dir = software_dir.join("Render").join("Preview");
         if preview_dir.exists() {
-            println!("Scanning Preview dir: {:?} with shot_filter: {:?}", preview_dir, shot_filter);
             scan_output_dir_recursive(&preview_dir, software, "preview", &mut outputs, 0, &shot_filter);
         }
 
         // Check Render/Final (recursively scan all subdirs)
         let final_dir = software_dir.join("Render").join("Final");
         if final_dir.exists() {
-            println!("Scanning Final dir: {:?} with shot_filter: {:?}", final_dir, shot_filter);
             scan_output_dir_recursive(&final_dir, software, "final", &mut outputs, 0, &shot_filter);
         }
     }
@@ -3198,6 +3257,118 @@ fn create_shot_folders(input: CreateShotFoldersInput) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn rename_scene_folders(
+    project_path: String,
+    old_folder_name: String,
+    new_folder_name: String,
+) -> Result<u32, String> {
+    let project_path = PathBuf::from(&project_path);
+    let mut renamed_count = 0;
+
+    // List of software and their render/output folders
+    let software_configs = vec![
+        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
+    ];
+
+    for (software, folders) in software_configs {
+        let software_path = project_path.join(software);
+        if software_path.exists() {
+            for folder in folders {
+                let old_scene_folder = software_path.join(folder).join(&old_folder_name);
+                let new_scene_folder = software_path.join(folder).join(&new_folder_name);
+
+                // Only rename if old folder exists and new folder doesn't exist
+                if old_scene_folder.exists() {
+                    if new_scene_folder.exists() {
+                        return Err(format!(
+                            "Cannot rename: destination folder already exists: {}",
+                            new_scene_folder.display()
+                        ));
+                    }
+
+                    fs::rename(&old_scene_folder, &new_scene_folder)
+                        .map_err(|e| {
+                            format!(
+                                "Failed to rename folder from {} to {}: {}",
+                                old_scene_folder.display(),
+                                new_scene_folder.display(),
+                                e
+                            )
+                        })?;
+
+                    println!(
+                        "Renamed scene folder: {:?} -> {:?}",
+                        old_scene_folder, new_scene_folder
+                    );
+                    renamed_count += 1;
+                }
+            }
+        }
+    }
+
+    Ok(renamed_count)
+}
+
+#[tauri::command]
+fn rename_shot_folders(
+    project_path: String,
+    scene_folder_name: String,
+    old_shot_folder_name: String,
+    new_shot_folder_name: String,
+) -> Result<u32, String> {
+    let project_path = PathBuf::from(&project_path);
+    let mut renamed_count = 0;
+
+    // List of software and their render/output folders
+    let software_configs = vec![
+        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
+    ];
+
+    for (software, folders) in software_configs {
+        let software_path = project_path.join(software);
+        if software_path.exists() {
+            for folder in folders {
+                let scene_folder = software_path.join(folder).join(&scene_folder_name);
+                let old_shot_folder = scene_folder.join(&old_shot_folder_name);
+                let new_shot_folder = scene_folder.join(&new_shot_folder_name);
+
+                // Only rename if old folder exists and new folder doesn't exist
+                if old_shot_folder.exists() {
+                    if new_shot_folder.exists() {
+                        return Err(format!(
+                            "Cannot rename: destination folder already exists: {}",
+                            new_shot_folder.display()
+                        ));
+                    }
+
+                    fs::rename(&old_shot_folder, &new_shot_folder)
+                        .map_err(|e| {
+                            format!(
+                                "Failed to rename shot folder from {} to {}: {}",
+                                old_shot_folder.display(),
+                                new_shot_folder.display(),
+                                e
+                            )
+                        })?;
+
+                    println!(
+                        "Renamed shot folder: {:?} -> {:?}",
+                        old_shot_folder, new_shot_folder
+                    );
+                    renamed_count += 1;
+                }
+            }
+        }
+    }
+
+    Ok(renamed_count)
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -3236,6 +3407,8 @@ fn main() {
             rename_shot_files,
             create_scene_folders,
             create_shot_folders,
+            rename_scene_folders,
+            rename_shot_folders,
             time_tracking::start_time_tracking,
             time_tracking::stop_time_tracking,
             time_tracking::pause_time_tracking,

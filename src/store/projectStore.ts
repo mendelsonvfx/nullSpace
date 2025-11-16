@@ -6,6 +6,11 @@ import { thumbnailCache } from '../utils/thumbnailCache';
 import { useTimeStatsStore, useTimeTrackingStore } from '../features/time-tracking';
 import { generateProjectColor, generateBrightColor } from '../utils/colorUtils';
 
+// Sanitize scene name for folder name (remove spaces and special characters)
+const sanitizeFolderName = (name: string): string => {
+  return name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '');
+};
+
 interface ProjectStore {
   // State
   projects: Project[];
@@ -60,7 +65,7 @@ interface ProjectStore {
   // Scene management
   addScene: (projectId: string, name?: string) => void;
   removeScene: (projectId: string, sceneId: string) => Promise<void>;
-  renameScene: (projectId: string, sceneId: string, newName: string) => void;
+  renameScene: (projectId: string, sceneId: string, newName: string) => Promise<void>;
   setSceneDescription: (projectId: string, sceneId: string, description: string) => void;
   setCurrentScene: (projectId: string, sceneId: string | null) => void;
   toggleSceneCompleted: (projectId: string, sceneId: string) => void;
@@ -78,7 +83,7 @@ interface ProjectStore {
   // Shot management
   addShot: (projectId: string, sceneId?: string, name?: string) => void;
   removeShot: (projectId: string, shotId: string) => Promise<void>;
-  renameShot: (projectId: string, shotId: string, newName: string) => void;
+  renameShot: (projectId: string, shotId: string, newName: string) => Promise<void>;
   setCurrentShot: (projectId: string, shotId: string | null) => void;
   toggleShotCompleted: (projectId: string, shotId: string) => void;
   setShotStatus: (projectId: string, shotId: string, status: 'none' | 'wip' | 'done') => void;
@@ -258,12 +263,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         project.scenes = [firstScene];
         project.currentSceneId = firstScene.id;
 
-        // Create SC_001 folders
+        // Create Scene001 folders
+        const firstSceneCode = sanitizeFolderName(firstScene.name);
         try {
           await invoke('create_scene_folders', {
             input: {
               projectPath: project.path,
-              sceneCode: 'SC_001'
+              sceneCode: firstSceneCode
             }
           });
         } catch (error) {
@@ -291,7 +297,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             await invoke('create_shot_folders', {
               input: {
                 project_path: project.path,
-                scene_code: 'SC_001',
+                scene_code: firstSceneCode,
                 shot_code: 'SH001'
               }
             });
@@ -851,9 +857,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         links: []
       };
 
-      // Create scene code for folder creation
-      const sceneSuffix = newScene.name.replace(/^Scene\s+/i, '').trim();
-      const sceneCode = `SC_${sceneSuffix.toUpperCase().replace(/\s+/g, '_')}`;
+      // Create scene code for folder creation (sanitize the name)
+      const sceneCode = sanitizeFolderName(newScene.name);
 
       // Create scene folders dynamically
       try {
@@ -945,9 +950,32 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  renameScene: (projectId: string, sceneId: string, newName: string) => {
+  renameScene: async (projectId: string, sceneId: string, newName: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasScenes) {
+      const scene = (project.scenes || []).find(s => s.id === sceneId);
+      if (!scene) return;
+
+      // Generate sanitized folder names for old and new scene names
+      const oldFolderName = sanitizeFolderName(scene.name);
+      const newFolderName = sanitizeFolderName(newName);
+
+      // Only rename folders if the sanitized names are different
+      if (oldFolderName !== newFolderName) {
+        try {
+          await invoke('rename_scene_folders', {
+            projectPath: project.path,
+            oldFolderName: oldFolderName,
+            newFolderName: newFolderName
+          });
+        } catch (error) {
+          console.error('Failed to rename scene folders:', error);
+          // Don't update metadata if folder rename failed
+          return;
+        }
+      }
+
+      // Update metadata only after successful folder rename (or if no rename was needed)
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s => {
@@ -1275,8 +1303,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Get scene code for folder creation
       const currentScene = (project.scenes || []).find(s => s.id === targetSceneId);
       if (currentScene) {
-        const sceneSuffix = currentScene.name.replace(/^Scene\s+/i, '').trim();
-        const sceneCode = `SC_${sceneSuffix.toUpperCase().replace(/\s+/g, '_')}`;
+        const sceneCode = sanitizeFolderName(currentScene.name);
         const shotCode = `SH${shotNumber.toString().padStart(3, '0')}`;
 
         // Create shot folders dynamically
@@ -1351,16 +1378,49 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  renameShot: (projectId: string, shotId: string, newName: string) => {
+  renameShot: async (projectId: string, shotId: string, newName: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
+      const shot = (project.shots || []).find(s => s.id === shotId);
+      if (!shot) return;
+
+      // Extract number from old and new names
+      const oldMatch = shot.name.match(/\d+/);
+      const newMatch = newName.match(/\d+/);
+      const oldNumber = oldMatch ? parseInt(oldMatch[0]) : shot.number;
+      const newNumber = newMatch ? parseInt(newMatch[0]) : shot.number;
+
+      // Only rename folders if the number changed
+      if (oldNumber !== newNumber) {
+        // Generate shot folder names (e.g., "SH001", "SH002")
+        const oldShotFolderName = `SH${oldNumber.toString().padStart(3, '0')}`;
+        const newShotFolderName = `SH${newNumber.toString().padStart(3, '0')}`;
+
+        // Get scene folder name
+        const scene = (project.scenes || []).find(s => s.id === shot.sceneId);
+        if (scene) {
+          const sceneFolderName = sanitizeFolderName(scene.name);
+
+          try {
+            await invoke('rename_shot_folders', {
+              projectPath: project.path,
+              sceneFolderName: sceneFolderName,
+              oldShotFolderName: oldShotFolderName,
+              newShotFolderName: newShotFolderName
+            });
+          } catch (error) {
+            console.error('Failed to rename shot folders:', error);
+            // Don't update metadata if folder rename failed
+            return;
+          }
+        }
+      }
+
+      // Update metadata only after successful folder rename (or if no rename was needed)
       const updated = {
         ...project,
         shots: (project.shots || []).map(s => {
           if (s.id === shotId) {
-            // Extract number from new name (e.g., "Shot 777" -> 777)
-            const match = newName.match(/\d+/);
-            const newNumber = match ? parseInt(match[0]) : s.number;
             return { ...s, name: newName, number: newNumber };
           }
           return s;

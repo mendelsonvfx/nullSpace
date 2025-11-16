@@ -126,13 +126,11 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
       const sceneFilter = getSceneFilter();
       const shotFilter = getShotFilter();
 
-      // Combine scene and shot filters for output scanning
-      const combinedFilter = sceneFilter && shotFilter
-        ? `${sceneFilter}_${shotFilter}`
-        : sceneFilter || shotFilter;
+      // Use shot filter if available (it's more specific and already includes scene)
+      // Otherwise fall back to scene filter
+      // Backend now supports smart number matching for flexible folder naming
+      const combinedFilter = shotFilter || sceneFilter;
 
-      // Scan for output files in Render/Preview and Render/Final folders
-      // Filter by scene/shot folder name if selected
       const result = await invoke<OutputFile[]>('get_project_outputs', {
         projectPath: project.path,
         shotFilter: combinedFilter

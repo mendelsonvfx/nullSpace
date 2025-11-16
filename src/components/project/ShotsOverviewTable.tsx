@@ -54,7 +54,7 @@ export function ShotsOverviewTable({ projectId, projectPath, currentScene: _curr
 
       <div className="bg-card-bg border border-border-primary rounded-med overflow-hidden">
         {/* Table Header */}
-        <div className="bg-zinc-800/50 px-4 py-2.5 border-b border-zinc-700/50 grid grid-cols-[140px_120px_200px_1fr_120px] gap-4 text-xs font-medium text-text-secondary">
+        <div className="bg-zinc-800/50 px-4 py-2.5 border-b border-zinc-700/50 grid grid-cols-[140px_120px_150px_1fr_120px] gap-4 text-xs font-medium text-text-secondary">
           <div className="text-center">Preview</div>
           <div className="text-left">Number</div>
           <div className="text-left">Tasks</div>
@@ -135,7 +135,7 @@ function ShotRow({ shot, projectId: _projectId, projectPath, onClick }: ShotRowP
     : '';
 
   return (
-    <div className="grid grid-cols-[140px_120px_200px_1fr_120px] gap-4 px-4 py-3 hover:bg-hover-bg transition-colors">
+    <div className="grid grid-cols-[140px_120px_150px_1fr_120px] gap-4 px-4 py-3 hover:bg-hover-bg transition-colors">
       {/* Preview - more horizontal, centered */}
       <div className="flex items-center justify-center">
         <div className="w-32 h-20 rounded-button overflow-hidden bg-zinc-900 flex items-center justify-center border border-zinc-800">

@@ -983,7 +983,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     closeContextMenu();
   };
 
-  const handleSaveRename = () => {
+  const handleSaveRename = async () => {
     if (!editingItem) return;
 
     if (editingItem.type === 'shot') {
@@ -1017,10 +1017,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
         }
 
         const newName = prefix + numberPart;
-        renameShot(projectId, editingItem.id, newName);
+        await renameShot(projectId, editingItem.id, newName);
       }
     } else if (editingItem.type === 'scene') {
-      renameScene(projectId, editingItem.id, editingItem.value);
+      await renameScene(projectId, editingItem.id, editingItem.value);
     } else if (editingItem.type === 'description') {
       setSceneDescription(projectId, editingItem.id, editingItem.value);
     }
