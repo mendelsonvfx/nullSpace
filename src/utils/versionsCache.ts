@@ -16,12 +16,15 @@ interface CacheEntry {
 
 class VersionsCache {
   private cache: Map<string, CacheEntry> = new Map();
+  private expandedStacksCache: Map<string, Set<string>> = new Map();
   private readonly STORAGE_PREFIX = 'versions_cache_';
+  private readonly EXPANDED_STACKS_PREFIX = 'versions_expanded_stacks_';
   private readonly TTL_MS = 5 * 60 * 1000; // 5 minutes cache lifetime
 
   constructor() {
     // Load cache from localStorage on initialization
     this.loadFromStorage();
+    this.loadExpandedStacks();
     // Clean expired entries on startup
     this.cleanExpiredEntries();
   }
@@ -160,6 +163,46 @@ class VersionsCache {
       size: this.cache.size,
       entries
     };
+  }
+
+  // Load expanded stacks from localStorage
+  private loadExpandedStacks(): void {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const keys = Object.keys(localStorage);
+      for (const key of keys) {
+        if (key.startsWith(this.EXPANDED_STACKS_PREFIX)) {
+          const projectPath = key.substring(this.EXPANDED_STACKS_PREFIX.length);
+          const value = localStorage.getItem(key);
+          if (value) {
+            const stacksArray: string[] = JSON.parse(value);
+            this.expandedStacksCache.set(projectPath, new Set(stacksArray));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load expanded stacks from storage:', error);
+    }
+  }
+
+  // Get expanded stacks for a project
+  getExpandedStacks(projectPath: string): Set<string> {
+    return this.expandedStacksCache.get(projectPath) || new Set();
+  }
+
+  // Set expanded stacks for a project
+  setExpandedStacks(projectPath: string, stacks: Set<string>): void {
+    this.expandedStacksCache.set(projectPath, stacks);
+
+    if (typeof window === 'undefined') return;
+
+    try {
+      const storageKey = this.EXPANDED_STACKS_PREFIX + projectPath;
+      localStorage.setItem(storageKey, JSON.stringify(Array.from(stacks)));
+    } catch (error) {
+      console.error('Failed to save expanded stacks to storage:', error);
+    }
   }
 }
 

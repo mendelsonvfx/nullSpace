@@ -20,6 +20,7 @@ import { writeText } from '@tauri-apps/api/clipboard';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
 import type { SoftwareName } from '../../types/project';
 import SimpleBar from 'simplebar-react';
+import { isVersioned, extractVersion } from '../../utils/fileNaming';
 
 // Import folder icons
 import blenderFolIcon from '/icons/folders/blender_fol.png';
@@ -55,6 +56,9 @@ interface FileNode {
   path: string;
   is_dir: boolean;
   children?: FileNode[];
+  isVersionGroup?: boolean;
+  versions?: FileNode[];
+  versionCount?: number;
 }
 
 interface TreeViewProps {
@@ -87,6 +91,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       return new Set();
     }
   });
+  const [expandedVersionGroups, setExpandedVersionGroups] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: FileNode } | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
@@ -141,6 +146,11 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     }
   }, [folderColors, project.path]);
 
+  // Reset expanded version groups when project changes (auto-collapse stacks)
+  useEffect(() => {
+    setExpandedVersionGroups(new Set());
+  }, [project.path]);
+
   // Load hidden paths when project changes
   useEffect(() => {
     try {
@@ -183,6 +193,60 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [contextMenu]);
+
+  // Group versioned files into stacks
+  const groupVersionsInTree = (nodes: FileNode[]): FileNode[] => {
+    return nodes.map(node => {
+      if (node.is_dir && node.children) {
+        // Recursively process directories
+        return {
+          ...node,
+          children: groupVersionsInTree(node.children)
+        };
+      }
+      return node;
+    }).reduce((acc: FileNode[], node) => {
+      // Only group files, not directories
+      if (!node.is_dir && isVersioned(node.name)) {
+        // Extract base name (without version and extension)
+        const baseName = node.name.replace(/_v\d+\.[^.]+$/, '');
+
+        // Find existing group for this base name
+        const existingGroupIndex = acc.findIndex(
+          n => n.isVersionGroup && n.name.startsWith(baseName)
+        );
+
+        if (existingGroupIndex !== -1) {
+          // Add to existing group
+          const group = acc[existingGroupIndex];
+          group.versions = [...(group.versions || []), node];
+          group.versionCount = group.versions.length;
+          // Update group name with new count
+          group.name = `${baseName} (${group.versionCount} versions)`;
+          // Sort versions by version number descending (newest first)
+          group.versions.sort((a, b) => {
+            const versionA = parseInt((extractVersion(a.name) || '0').toString(), 10);
+            const versionB = parseInt((extractVersion(b.name) || '0').toString(), 10);
+            return versionB - versionA;
+          });
+        } else {
+          // Create new group
+          acc.push({
+            name: `${baseName} (1 version)`,
+            path: node.path,
+            is_dir: false,
+            isVersionGroup: true,
+            versions: [node],
+            versionCount: 1
+          });
+        }
+      } else {
+        // Non-versioned file or directory
+        acc.push(node);
+      }
+      return acc;
+    }, []);
+  };
 
   const loadTree = async () => {
     // Clear any existing timer first
@@ -229,6 +293,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       };
       const filteredResult = filterSystemFiles(result);
 
+      // Group versioned files into stacks
+      const groupedResult = groupVersionsInTree(filteredResult);
+
       // Clear the loading timer if it hasn't fired yet
       if (loadingTimerRef.current !== null) {
         clearTimeout(loadingTimerRef.current);
@@ -236,8 +303,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       }
 
       // Update tree data
-      console.log('Setting tree with', filteredResult.length, 'items for project', projectPath);
-      setTree(filteredResult);
+      console.log('Setting tree with', groupedResult.length, 'items for project', projectPath);
+      setTree(groupedResult);
 
       // Auto-expand software folders on first load
       if (isFirstLoad) {
@@ -683,7 +750,159 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     return null;
   };
 
+  const toggleVersionGroup = (groupPath: string) => {
+    setExpandedVersionGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupPath)) {
+        newSet.delete(groupPath);
+      } else {
+        newSet.add(groupPath);
+      }
+      return newSet;
+    });
+  };
+
+  const renderVersionGroup = (node: FileNode, depth: number = 0) => {
+    const isExpanded = expandedVersionGroups.has(node.path);
+    const topThree = (node.versions || []).slice(0, 3);
+
+    if (isExpanded) {
+      // Expanded: Show all versions as separate cards
+      return (
+        <div
+          key={node.path}
+          style={{ marginLeft: depth > 0 ? '12px' : '0' }}
+          className="transition-all duration-300 ease-in-out"
+        >
+          {/* All versions as cards */}
+          <div className="space-y-1">
+            {node.versions?.map((version) => (
+              <div
+                key={version.path}
+                className="h-[36px] flex items-center gap-2 px-2.5 text-xs select-none bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary cursor-pointer"
+                onDoubleClick={(e) => handleDoubleClick(e, version)}
+                onContextMenu={(e) => handleContextMenu(e, version)}
+              >
+                <div className="w-[18px] flex items-center justify-center flex-shrink-0">
+                  {getFileIcon(version.name) ? (
+                    <SoftwareIcon name={getFileIcon(version.name)!} className="w-4 h-4 flex-shrink-0" />
+                  ) : (
+                    <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
+                  )}
+                </div>
+                <span className="text-text-primary font-medium flex-1">
+                  {version.name.substring(0, version.name.lastIndexOf('.'))}
+                </span>
+              </div>
+            ))}
+          </div>
+          {/* Collapse button */}
+          <div className="flex items-center gap-2 px-2.5 py-2 text-xs select-none">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleVersionGroup(node.path);
+              }}
+              className="flex items-center gap-1 text-text-muted hover:text-white transition-colors"
+            >
+              <IconChevronRight className="w-3 h-3 -rotate-90 transition-transform duration-200" stroke={1.5} />
+              <span>Collapse ({node.versionCount})</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Collapsed: Show stacked visual (3 separate cards)
+    const stackOffset = 5; // offset between cards in pixels
+    const maxOffset = topThree.length > 1 ? stackOffset * (topThree.length - 1) : 0;
+
+    return (
+      <div
+        key={node.path}
+        style={{
+          marginLeft: depth > 0 ? '12px' : '0',
+          paddingBottom: maxOffset > 0 ? `${maxOffset}px` : '0',
+          paddingRight: maxOffset > 0 ? `${maxOffset}px` : '0'
+        }}
+        className="relative cursor-pointer version-stack"
+        onClick={() => toggleVersionGroup(node.path)}
+        onContextMenu={(e) => handleContextMenu(e, topThree[0])}
+      >
+        {/* Card 3 (bottom - oldest of top 3) */}
+        {topThree[2] && (
+          <div
+            className="absolute left-0 h-[36px] bg-zinc-700/60 rounded border border-zinc-600 pointer-events-none flex items-center px-2.5 gap-2 transition-all duration-300 ease-in-out stack-ghost-card"
+            style={{
+              top: `${stackOffset * 2}px`,
+              marginLeft: `${stackOffset * 2}px`,
+              width: `calc(100% - ${maxOffset}px)`,
+              zIndex: 0
+            }}
+          >
+            <div className="w-[18px] flex items-center justify-center flex-shrink-0">
+              {getFileIcon(topThree[2].name) ? (
+                <SoftwareIcon name={getFileIcon(topThree[2].name)!} className="w-4 h-4 flex-shrink-0 opacity-60" />
+              ) : (
+                <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0 opacity-60" stroke={1.5} />
+              )}
+            </div>
+            <span className="text-xs text-text-secondary">
+              {topThree[2].name.substring(0, topThree[2].name.lastIndexOf('.'))}
+            </span>
+          </div>
+        )}
+
+        {/* Card 2 (middle) */}
+        {topThree[1] && (
+          <div
+            className="absolute left-0 h-[36px] bg-zinc-700/80 rounded border border-zinc-600 pointer-events-none flex items-center px-2.5 gap-2 shadow-md transition-all duration-300 ease-in-out stack-ghost-card"
+            style={{
+              top: `${stackOffset}px`,
+              marginLeft: `${stackOffset}px`,
+              width: `calc(100% - ${maxOffset}px)`,
+              zIndex: 1
+            }}
+          >
+            <div className="w-[18px] flex items-center justify-center flex-shrink-0">
+              {getFileIcon(topThree[1].name) ? (
+                <SoftwareIcon name={getFileIcon(topThree[1].name)!} className="w-4 h-4 flex-shrink-0" />
+              ) : (
+                <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
+              )}
+            </div>
+            <span className="text-xs text-text-secondary">
+              {topThree[1].name.substring(0, topThree[1].name.lastIndexOf('.'))}
+            </span>
+          </div>
+        )}
+
+        {/* Card 1 (top - newest) */}
+        <div className="relative h-[36px] flex items-center gap-2 px-2.5 text-xs select-none bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary transition-all duration-300 ease-in-out shadow-lg" style={{ zIndex: 10 }}>
+          <div className="w-[18px] flex items-center justify-center flex-shrink-0">
+            {topThree[0] && getFileIcon(topThree[0].name) ? (
+              <SoftwareIcon name={getFileIcon(topThree[0].name)!} className="w-4 h-4 flex-shrink-0" />
+            ) : (
+              <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
+            )}
+          </div>
+          <span className="text-text-primary font-medium flex-1">
+            {topThree[0] && topThree[0].name.substring(0, topThree[0].name.lastIndexOf('.'))}
+          </span>
+          <div className="bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
+            {node.versionCount}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderNode = (node: FileNode, depth: number = 0) => {
+    // Handle version groups
+    if (node.isVersionGroup) {
+      return renderVersionGroup(node, depth);
+    }
+
     const isExpanded = expandedDirs.has(node.path);
     const hasChildren = node.children && node.children.length > 0;
     const fileIcon = !node.is_dir ? getFileIcon(node.name) : null;
