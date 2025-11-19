@@ -92,8 +92,9 @@ export class TimerService {
             const isAlive = await processCheckCallback(entryId);
             if (!isAlive) {
               console.log(`[TimerService] ❌ Process died for ${software}, stopping timer`);
-              // Process died - callback will handle stopSession which will stop timers
-              // Don't call this.stop() here to avoid duplicate stop attempts
+              // Stop timer immediately to prevent zombie interval
+              // Callback will continue async to handle full cleanup (backend, disk, WorkSession)
+              this.stop(entryId);
               return;
             }
           } catch (error) {

@@ -82,48 +82,6 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
         return { sessions };
       });
 
-      // Save workSession to disk IMMEDIATELY so UI updates without delay
-      (async () => {
-        try {
-          const { useProjectStore } = await import('../../../store/projectStore');
-          const projectStore = useProjectStore.getState();
-          const project = projectStore.projects.find(p => p.id === session.projectId);
-
-          if (project) {
-            const updatedProject = {
-              ...project,
-              workSession: updatedSession,
-              updatedAt: new Date().toISOString()
-            };
-            await projectStore.updateProject(updatedProject);
-            console.log(`[WorkSession] ⏱️  Project +1min (total: ${updatedSession.elapsedMinutes}m)`);
-          }
-        } catch (error) {
-          console.error('[WorkSessionStore] ❌ Failed to save WorkSession:', error);
-        }
-      })();
-
-      // Update totalMinutesSpent IMMEDIATELY (same pattern as softwareMinutes)
-      (async () => {
-        try {
-          const { useProjectStore } = await import('../../../store/projectStore');
-          const projectStore = useProjectStore.getState();
-          const project = projectStore.projects.find(p => p.id === session.projectId);
-
-          if (project) {
-            const updatedProject = {
-              ...project,
-              totalMinutesSpent: (project.totalMinutesSpent || 0) + 1,
-              updatedAt: new Date().toISOString()
-            };
-            await projectStore.updateProject(updatedProject);
-            console.log(`[WorkSession] 📊 totalMinutesSpent +1min (total: ${updatedProject.totalMinutesSpent}m)`);
-          }
-        } catch (error) {
-          console.error('[WorkSessionStore] ❌ Failed to update totalMinutesSpent:', error);
-        }
-      })();
-
       // Count software statistics using focus history (last 60 seconds) - runs in parallel
       try {
         const { useTimeTrackingStore } = await import('./timeTrackingStore');
@@ -185,7 +143,7 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
         console.error('[WorkSessionStore] Failed to count software stats:', error);
       }
 
-      // Save to disk immediately
+      // Save to disk immediately - ATOMIC UPDATE to prevent race conditions
       try {
         const { useTimeTrackingStore } = await import('./timeTrackingStore');
         const { useProjectStore } = await import('../../../store/projectStore');
@@ -206,18 +164,21 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
             return entry;
           });
 
+          // ATOMIC UPDATE: Combine all three updates into ONE database write
+          // This prevents race conditions when multiple projects are active
           const updatedProject = {
             ...project,
-            timeEntries: updatedEntries,
-            workSession: updatedSession,
+            workSession: updatedSession,                          // Update 1: workSession
+            totalMinutesSpent: (project.totalMinutesSpent || 0) + 1,  // Update 2: totalMinutesSpent
+            timeEntries: updatedEntries,                          // Update 3: timeEntries with softwareMinutes
             updatedAt: new Date().toISOString()
           };
 
           await projectStore.updateProject(updatedProject);
-          console.log(`[WorkSession] 💾 Updated timeEntries with softwareMinutes`);
+          console.log(`[WorkSession] 💾 Atomic update: +1min (total: ${updatedProject.totalMinutesSpent}m), workSession, timeEntries`);
         }
       } catch (error) {
-        console.error('[WorkSessionStore] ❌ Failed to update timeEntries:', error);
+        console.error('[WorkSessionStore] ❌ Failed to update project:', error);
       }
     }
   },

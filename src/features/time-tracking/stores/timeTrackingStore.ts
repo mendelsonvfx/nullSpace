@@ -350,14 +350,13 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
               : e
           );
 
-          const completedMinutes = updatedEntries
-            .filter(e => !e.isActive)
-            .reduce((sum, e) => sum + e.durationMinutes, 0);
-
+          // DO NOT RECALCULATE totalMinutesSpent - it's incremented in real-time by WorkSession
+          // Recalculating from TimeEntries can overwrite correct values with stale data
+          // Only update the timeEntries array to save the stopped session
           const updatedProject = {
             ...project,
             timeEntries: updatedEntries,
-            totalMinutesSpent: completedMinutes,
+            // totalMinutesSpent: KEEP EXISTING VALUE, don't recalculate
             workSession: project.workSession,  // Keep WorkSession (updated by WorkSessionService)
             updatedAt: new Date().toISOString()
           };
