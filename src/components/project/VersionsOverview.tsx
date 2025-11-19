@@ -227,42 +227,27 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
   const versions = useMemo(() => {
     let filtered = allVersions;
 
-    console.log('=== VersionsOverview Debug ===');
-    console.log('allVersions:', allVersions);
-    console.log('currentScene:', currentScene);
-    console.log('currentShot:', currentShot);
-
     // Filter by scene if selected
     if (currentScene) {
       filtered = filtered.filter(v => {
         // Use file naming utility to get scene pattern: PROJECT_SCENE_
         const scenePrefix = getScenePattern(project.name, currentScene.name);
-        const matches = v.name.includes(scenePrefix);
-
-        console.log(`Scene filter: "${v.name}" includes "${scenePrefix}"? ${matches}`);
 
         // Include file if it has the scene prefix
-        return matches;
+        return v.name.includes(scenePrefix);
       });
     }
-
-    console.log('After scene filter:', filtered);
 
     // Filter by shot if selected
     if (currentShot) {
       filtered = filtered.filter(v => {
         // Use file naming utility to get shot pattern: PROJECT_SCENE_SHOT_
         const shotPrefix = getShotPattern(project.name, currentScene?.name || '', currentShot.number);
-        const matches = v.name.includes(shotPrefix);
-
-        console.log(`Shot filter: "${v.name}" includes "${shotPrefix}"? ${matches}`);
 
         // Include file if it has the shot prefix
-        return matches;
+        return v.name.includes(shotPrefix);
       });
     }
-
-    console.log('After shot filter:', filtered);
 
     // Sort: versioned files first (by version number DESC - newest to oldest), then non-versioned files (by date desc)
     const sorted = [...filtered].sort((a, b) => {

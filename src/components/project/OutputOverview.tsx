@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { SoftwareIcon } from '../SoftwareIcon';
 import type { SoftwareName } from '../../types/project';
@@ -217,24 +217,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
       isRestoringStateRef.current = false;
     }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.path, currentScene?.name, currentShot?.number, availableSoftware]);
-
-  // Validate selected software matches available outputs
-  useEffect(() => {
-    if (availableSoftware.length > 0) {
-      const isValid = selectedSoftware ? availableSoftware.includes(selectedSoftware) : false;
-      if (!selectedSoftware || !isValid) {
-        isRestoringStateRef.current = true; // Mark as programmatic change
-        const firstSoftware = availableSoftware[0];
-        setSelectedSoftware(firstSoftware);
-        outputsCache.setOutputState(getCacheKey(), firstSoftware, selectedOutputType);
-        setTimeout(() => {
-          isRestoringStateRef.current = false;
-        }, 0);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availableSoftware, selectedSoftware, selectedOutputType]);
+  }, [project.path, currentScene?.name, currentShot?.number]);
 
   // Filter outputs based on selected software only (not output type, since UI shows both Preview and Final columns)
   const filteredOutputs = useMemo(() => {
@@ -330,7 +313,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   };
 
   // Toggle group expanded/collapsed state
-  const toggleGroup = (groupPath: string) => {
+  const toggleGroup = useCallback((groupPath: string) => {
     setExpandedGroups(prev => {
       const newSet = new Set(prev);
       if (newSet.has(groupPath)) {
@@ -342,10 +325,10 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
       outputsCache.setExpandedGroups(project.path, newSet);
       return newSet;
     });
-  };
+  }, [project.path]);
 
-  // Smart grouping algorithm
-  const groupOutputsByPath = (outputs: OutputFile[]) => {
+  // Smart grouping algorithm (memoized for performance)
+  const groupOutputsByPath = useCallback((outputs: OutputFile[]) => {
     if (outputs.length === 0) return { grouped: [], ungrouped: [] };
 
     // Build a map of path prefixes to files
@@ -408,49 +391,64 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
     ungrouped.sort((a, b) => b.created_at - a.created_at);
 
     return { grouped, ungrouped };
-  };
+  }, []);
 
-  const handleOutputClick = async (output: OutputFile) => {
+  // Memoized grouped outputs by path for each software type (MAJOR PERFORMANCE OPTIMIZATION)
+  // This prevents re-grouping 380+ files on every render
+  const groupedByPath = useMemo(() => {
+    const result: Record<string, { preview: ReturnType<typeof groupOutputsByPath>; final: ReturnType<typeof groupOutputsByPath> }> = {};
+
+    Object.entries(groupedOutputs).forEach(([software, types]) => {
+      result[software] = {
+        preview: groupOutputsByPath(types.preview),
+        final: groupOutputsByPath(types.final)
+      };
+    });
+
+    return result;
+  }, [groupedOutputs, groupOutputsByPath]);
+
+  const handleOutputClick = useCallback(async (output: OutputFile) => {
     try {
       await invoke('open_file', { filePath: output.path });
     } catch (error) {
       console.error('Failed to open output:', error);
     }
-  };
+  }, []);
 
-  const handleRevealInExplorer = async (outputPath: string) => {
+  const handleRevealInExplorer = useCallback(async (outputPath: string) => {
     try {
       await invoke('reveal_in_explorer', { path: outputPath });
       setContextMenu(null);
     } catch (error) {
       console.error('Failed to reveal in explorer:', error);
     }
-  };
+  }, []);
 
-  const handleCopyPath = async (outputPath: string) => {
+  const handleCopyPath = useCallback(async (outputPath: string) => {
     try {
       await writeText(outputPath);
       setContextMenu(null);
     } catch (error) {
       console.error('Failed to copy path:', error);
     }
-  };
+  }, []);
 
-  const handleContextMenu = (e: React.MouseEvent, output: OutputFile) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, output: OutputFile) => {
     if (e.cancelable) {
       e.preventDefault();
     }
     e.stopPropagation();
     setContextMenu({ x: e.clientX, y: e.clientY, output });
-  };
+  }, []);
 
-  const handleGroupContextMenu = (e: React.MouseEvent, groupPath: string) => {
+  const handleGroupContextMenu = useCallback((e: React.MouseEvent, groupPath: string) => {
     if (e.cancelable) {
       e.preventDefault();
     }
     e.stopPropagation();
     setGroupContextMenu({ x: e.clientX, y: e.clientY, groupPath });
-  };
+  }, []);
 
   const getGroupFolderPath = (groupPath: string, renderType: 'preview' | 'final'): string => {
     const typeFolder = renderType === 'preview' ? 'Preview' : 'Final';
@@ -657,7 +655,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
                 {/* Preview Content - Scrollable */}
                 <div className="px-3 pb-3 space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar">
                       {(() => {
-                        const { grouped, ungrouped } = groupOutputsByPath(types.preview);
+                        const { grouped, ungrouped } = groupedByPath[software]?.preview || { grouped: [], ungrouped: [] };
 
                         const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
                   <button
@@ -759,7 +757,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
                 {/* Final Content - Scrollable */}
                 <div className="px-3 pb-3 space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar">
                       {(() => {
-                const { grouped, ungrouped } = groupOutputsByPath(types.final);
+                const { grouped, ungrouped } = groupedByPath[software]?.final || { grouped: [], ungrouped: [] };
 
                 const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
                   <button

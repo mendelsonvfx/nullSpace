@@ -766,6 +766,26 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     const isExpanded = expandedVersionGroups.has(node.path);
     const topThree = (node.versions || []).slice(0, 3);
 
+    // Calculate version range
+    const getVersionRange = () => {
+      if (!node.versions || node.versions.length === 0) return '';
+
+      const versions = node.versions
+        .map(v => extractVersion(v.name))
+        .filter((v): v is number => v !== null)
+        .sort((a, b) => a - b);
+
+      if (versions.length === 0) return '';
+
+      const minVersion = versions[0];
+      const maxVersion = versions[versions.length - 1];
+
+      // Get base name (without version)
+      const baseName = node.versions[0].name.replace(/_v\d+\.[^.]+$/, '');
+
+      return `${baseName} (v${String(minVersion).padStart(3, '0')}-v${String(maxVersion).padStart(3, '0')})`;
+    };
+
     if (isExpanded) {
       // Expanded: Show all versions as separate cards
       return (
@@ -887,7 +907,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             )}
           </div>
           <span className="text-text-primary font-medium flex-1">
-            {topThree[0] && topThree[0].name.substring(0, topThree[0].name.lastIndexOf('.'))}
+            {getVersionRange()}
           </span>
           <div className="bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
             {node.versionCount}
