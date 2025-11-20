@@ -6,9 +6,11 @@ import { useProjectStore } from '../../store/projectStore';
 interface LinkInputFormProps {
   projectId: string;
   shotId?: string | null;
+  sceneId?: string | null;
+  specialContextId?: string | null;
 }
 
-export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId }: LinkInputFormProps) {
+export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId, sceneId, specialContextId }: LinkInputFormProps) {
   const [url, setUrl] = useState('');
   const lastProcessedClipboard = useRef('');
   const [isHovered, setIsHovered] = useState(false);
@@ -29,6 +31,12 @@ export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId }: 
     if (shotId) {
       const { addShotLink } = useProjectStore.getState();
       linkId = addShotLink(projectId, shotId, finalUrl, tempTitle);
+    } else if (specialContextId) {
+      const { addSpecialContextLink } = useProjectStore.getState();
+      linkId = addSpecialContextLink(projectId, specialContextId, finalUrl, tempTitle);
+    } else if (sceneId) {
+      const { addSceneLink } = useProjectStore.getState();
+      linkId = addSceneLink(projectId, sceneId, finalUrl, tempTitle);
     } else {
       const { addLink } = useProjectStore.getState();
       linkId = addLink(projectId, finalUrl, tempTitle);
@@ -41,6 +49,12 @@ export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId }: 
       if (shotId) {
         const { updateShotLink } = useProjectStore.getState();
         updateShotLink(projectId, shotId, linkId, fetchedTitle);
+      } else if (specialContextId) {
+        const { updateSpecialContextLink } = useProjectStore.getState();
+        updateSpecialContextLink(projectId, specialContextId, linkId, fetchedTitle);
+      } else if (sceneId) {
+        const { updateSceneLink } = useProjectStore.getState();
+        updateSceneLink(projectId, sceneId, linkId, fetchedTitle);
       } else {
         const { updateLink } = useProjectStore.getState();
         updateLink(projectId, linkId, fetchedTitle);
@@ -50,7 +64,7 @@ export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId }: 
     }
 
     return linkId;
-  }, [extractDomainName, shotId, projectId]);
+  }, [extractDomainName, shotId, specialContextId, sceneId, projectId]);
 
   const handleUrlChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setUrl(e.target.value);

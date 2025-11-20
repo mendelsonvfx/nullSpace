@@ -9,7 +9,7 @@ import { useContextMenuStore } from '../../store/contextMenuStore';
 import { FolderOpen, Copy, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import type { SoftwareName } from '../../types/project';
-import { getScenePattern, getShotPattern, extractShotNumber } from '../../utils/fileNaming';
+import { getScenePattern, getShotPattern, extractShotNumber, parseFileName } from '../../utils/fileNaming';
 
 interface ProjectVersion {
   name: string;
@@ -23,10 +23,11 @@ interface VersionsOverviewProps {
   project: any;
   currentScene: any;
   currentShot: any;
+  specialContextType?: 'asset' | 'compose' | null;
   showNotification: (type: 'success' | 'error' | 'warning' | 'info', message: string, title?: string, duration?: number) => void;
 }
 
-export function VersionsOverview({ project, currentScene, currentShot, showNotification }: VersionsOverviewProps) {
+export function VersionsOverview({ project, currentScene, currentShot, specialContextType, showNotification }: VersionsOverviewProps) {
   const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSoftware, setSelectedSoftware] = useState<string>('all');
@@ -227,26 +228,57 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
   const versions = useMemo(() => {
     let filtered = allVersions;
 
-    // Filter by scene if selected
-    if (currentScene) {
+    // Check if we're in special context mode (mutually exclusive with regular scene/shot filtering)
+    if (specialContextType) {
+      // Map context type to file suffix: 'asset' -> 'ASSET', 'compose' -> 'COMP'
+      const contextSuffixMap = {
+        'asset': 'ASSET',
+        'compose': 'COMP'
+      } as const;
+      const expectedSuffix = contextSuffixMap[specialContextType];
+
       filtered = filtered.filter(v => {
-        // Use file naming utility to get scene pattern: PROJECT_SCENE_
-        const scenePrefix = getScenePattern(project.name, currentScene.name);
+        const parsed = parseFileName(v.name);
 
-        // Include file if it has the scene prefix
-        return v.name.includes(scenePrefix);
+        // Check if file has the special context suffix
+        if (parsed?.specialContext !== expectedSuffix) {
+          return false;
+        }
+
+        // If special context is tied to a scene, also filter by scene
+        if (currentScene) {
+          const scenePrefix = getScenePattern(project.name, currentScene.name);
+          if (!v.name.startsWith(scenePrefix)) {
+            return false;
+          }
+        }
+
+        return true;
       });
-    }
+    } else {
+      // Regular scene/shot filtering (only when NOT in special context)
 
-    // Filter by shot if selected
-    if (currentShot) {
-      filtered = filtered.filter(v => {
-        // Use file naming utility to get shot pattern: PROJECT_SCENE_SHOT_
-        const shotPrefix = getShotPattern(project.name, currentScene?.name || '', currentShot.number);
+      // Filter by scene if selected
+      if (currentScene) {
+        filtered = filtered.filter(v => {
+          // Use file naming utility to get scene pattern: PROJECT_SCENE_
+          const scenePrefix = getScenePattern(project.name, currentScene.name);
 
-        // Include file if it has the shot prefix
-        return v.name.includes(shotPrefix);
-      });
+          // Include file if it starts with the scene prefix (more precise than includes)
+          return v.name.startsWith(scenePrefix);
+        });
+      }
+
+      // Filter by shot if selected
+      if (currentShot) {
+        filtered = filtered.filter(v => {
+          // Use file naming utility to get shot pattern: PROJECT_SCENE_SHOT_
+          const shotPrefix = getShotPattern(project.name, currentScene?.name || '', currentShot.number);
+
+          // Include file if it starts with the shot prefix (more precise than includes)
+          return v.name.startsWith(shotPrefix);
+        });
+      }
     }
 
     // Sort: versioned files first (by version number DESC - newest to oldest), then non-versioned files (by date desc)
@@ -268,7 +300,7 @@ export function VersionsOverview({ project, currentScene, currentShot, showNotif
     });
 
     return sorted;
-  }, [allVersions, currentScene, currentShot]);
+  }, [allVersions, currentScene, currentShot, specialContextType, project.name]);
 
   const handleVersionDoubleClick = async (versionPath: string, softwareList: string[]) => {
     try {

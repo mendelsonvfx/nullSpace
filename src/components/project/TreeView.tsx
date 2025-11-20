@@ -230,7 +230,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             return versionB - versionA;
           });
         } else {
-          // Create new group
+          // Create new group (will be converted back to single file if only 1 version)
           acc.push({
             name: `${baseName} (1 version)`,
             path: node.path,
@@ -245,7 +245,13 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         acc.push(node);
       }
       return acc;
-    }, []);
+    }, []).flatMap(node => {
+      // Post-process: Convert single-version groups back to regular files
+      if (node.isVersionGroup && node.versionCount === 1 && node.versions) {
+        return node.versions[0]; // Return the single file instead of the group
+      }
+      return node;
+    });
   };
 
   const loadTree = async () => {
@@ -783,6 +789,12 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       // Get base name (without version)
       const baseName = node.versions[0].name.replace(/_v\d+\.[^.]+$/, '');
 
+      // If only one version, show single version number
+      if (minVersion === maxVersion) {
+        return `${baseName} (v${String(minVersion).padStart(3, '0')})`;
+      }
+
+      // Multiple versions: show range
       return `${baseName} (v${String(minVersion).padStart(3, '0')}-v${String(maxVersion).padStart(3, '0')})`;
     };
 
@@ -792,7 +804,6 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         <div
           key={node.path}
           style={{ marginLeft: depth > 0 ? '12px' : '0' }}
-          className="transition-all duration-300 ease-in-out"
         >
           {/* All versions as cards */}
           <div className="space-y-1">
@@ -834,40 +845,39 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     }
 
     // Collapsed: Show stacked visual (3 separate cards)
-    const stackOffset = 5; // offset between cards in pixels
-    const maxOffset = topThree.length > 1 ? stackOffset * (topThree.length - 1) : 0;
+    const stackOffset = 10; // offset between cards in pixels
+    // Use consistent padding for all groups: middle card offset + small buffer (2px for hover)
+    const maxOffset = (topThree[1] || topThree[2]) ? stackOffset * 1.15 + 2 : 0;
 
     return (
       <div
         key={node.path}
         style={{
           marginLeft: depth > 0 ? '12px' : '0',
-          paddingBottom: maxOffset > 0 ? `${maxOffset}px` : '0',
-          paddingRight: maxOffset > 0 ? `${maxOffset}px` : '0'
+          paddingBottom: maxOffset > 0 ? `${maxOffset}px` : '0'
         }}
-        className="relative cursor-pointer version-stack"
+        className="relative cursor-pointer version-stack group"
         onClick={() => toggleVersionGroup(node.path)}
         onContextMenu={(e) => handleContextMenu(e, topThree[0])}
       >
         {/* Card 3 (bottom - oldest of top 3) */}
         {topThree[2] && (
           <div
-            className="absolute left-0 h-[36px] bg-zinc-700/60 rounded border border-zinc-600 pointer-events-none flex items-center px-2.5 gap-2 transition-all duration-300 ease-in-out stack-ghost-card"
+            className="absolute left-1/2 -translate-x-1/2 h-[28px] bg-zinc-800/90 rounded border border-zinc-700 pointer-events-none flex items-center px-2.5 gap-2 stack-ghost-card transition-transform duration-200 group-hover:translate-y-2"
             style={{
-              top: `${stackOffset * 2}px`,
-              marginLeft: `${stackOffset * 2}px`,
-              width: `calc(100% - ${maxOffset}px)`,
+              top: `${stackOffset * 1.555}px`,
+              width: '96%',
               zIndex: 0
             }}
           >
             <div className="w-[18px] flex items-center justify-center flex-shrink-0">
               {getFileIcon(topThree[2].name) ? (
-                <SoftwareIcon name={getFileIcon(topThree[2].name)!} className="w-4 h-4 flex-shrink-0 opacity-60" />
+                <SoftwareIcon name={getFileIcon(topThree[2].name)!} className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
               ) : (
-                <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0 opacity-60" stroke={1.5} />
+                <IconFile className="w-3.5 h-3.5 text-text-secondary flex-shrink-0 opacity-50" stroke={1.5} />
               )}
             </div>
-            <span className="text-xs text-text-secondary">
+            <span className="text-[11px] text-text-secondary opacity-70">
               {topThree[2].name.substring(0, topThree[2].name.lastIndexOf('.'))}
             </span>
           </div>
@@ -876,29 +886,28 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         {/* Card 2 (middle) */}
         {topThree[1] && (
           <div
-            className="absolute left-0 h-[36px] bg-zinc-700/80 rounded border border-zinc-600 pointer-events-none flex items-center px-2.5 gap-2 shadow-md transition-all duration-300 ease-in-out stack-ghost-card"
+            className="absolute left-1/2 -translate-x-1/2 h-[28px] bg-zinc-800/95 rounded border border-zinc-600 pointer-events-none flex items-center px-2.5 gap-2 shadow-md stack-ghost-card transition-transform duration-200 group-hover:translate-y-0.5"
             style={{
-              top: `${stackOffset}px`,
-              marginLeft: `${stackOffset}px`,
-              width: `calc(100% - ${maxOffset}px)`,
+              top: `${stackOffset * 1.15}px`,
+              width: '98%',
               zIndex: 1
             }}
           >
             <div className="w-[18px] flex items-center justify-center flex-shrink-0">
               {getFileIcon(topThree[1].name) ? (
-                <SoftwareIcon name={getFileIcon(topThree[1].name)!} className="w-4 h-4 flex-shrink-0" />
+                <SoftwareIcon name={getFileIcon(topThree[1].name)!} className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
               ) : (
-                <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
+                <IconFile className="w-3.5 h-3.5 text-text-secondary flex-shrink-0 opacity-70" stroke={1.5} />
               )}
             </div>
-            <span className="text-xs text-text-secondary">
+            <span className="text-[11px] text-text-secondary opacity-80">
               {topThree[1].name.substring(0, topThree[1].name.lastIndexOf('.'))}
             </span>
           </div>
         )}
 
         {/* Card 1 (top - newest) */}
-        <div className="relative h-[36px] flex items-center gap-2 px-2.5 text-xs select-none bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary transition-all duration-300 ease-in-out shadow-lg" style={{ zIndex: 10 }}>
+        <div className="relative h-[36px] flex items-center gap-2 px-2.5 text-xs select-none bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary shadow-lg" style={{ zIndex: 10 }}>
           <div className="w-[18px] flex items-center justify-center flex-shrink-0">
             {topThree[0] && getFileIcon(topThree[0].name) ? (
               <SoftwareIcon name={getFileIcon(topThree[0].name)!} className="w-4 h-4 flex-shrink-0" />
@@ -909,7 +918,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           <span className="text-text-primary font-medium flex-1">
             {getVersionRange()}
           </span>
-          <div className="bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
+          <div className="bg-zinc-800 text-zinc-400 text-[9px] font-bold rounded-full w-[18px] h-[18px] flex items-center justify-center flex-shrink-0">
             {node.versionCount}
           </div>
         </div>

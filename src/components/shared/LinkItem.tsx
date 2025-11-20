@@ -11,9 +11,11 @@ interface LinkItemProps {
   };
   projectId: string;
   shotId?: string | null;
+  sceneId?: string | null;
+  specialContextId?: string | null;
 }
 
-export const LinkItem = memo(function LinkItem({ link, projectId, shotId }: LinkItemProps) {
+export const LinkItem = memo(function LinkItem({ link, projectId, shotId, sceneId, specialContextId }: LinkItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(link.title);
   const [faviconError, setFaviconError] = useState(false);
@@ -35,13 +37,19 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId }: Link
       if (shotId) {
         const { updateShotLink } = useProjectStore.getState();
         updateShotLink(projectId, shotId, link.id, editedTitle.trim());
+      } else if (specialContextId) {
+        const { updateSpecialContextLink } = useProjectStore.getState();
+        updateSpecialContextLink(projectId, specialContextId, link.id, editedTitle.trim());
+      } else if (sceneId) {
+        const { updateSceneLink } = useProjectStore.getState();
+        updateSceneLink(projectId, sceneId, link.id, editedTitle.trim());
       } else {
         const { updateLink } = useProjectStore.getState();
         updateLink(projectId, link.id, editedTitle.trim());
       }
       setIsEditing(false);
     }
-  }, [editedTitle, shotId, projectId, link.id]);
+  }, [editedTitle, shotId, specialContextId, sceneId, projectId, link.id]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -64,11 +72,17 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId }: Link
     if (shotId) {
       const { removeShotLink } = useProjectStore.getState();
       removeShotLink(projectId, shotId, link.id);
+    } else if (specialContextId) {
+      const { removeSpecialContextLink } = useProjectStore.getState();
+      removeSpecialContextLink(projectId, specialContextId, link.id);
+    } else if (sceneId) {
+      const { removeSceneLink } = useProjectStore.getState();
+      removeSceneLink(projectId, sceneId, link.id);
     } else {
       const { removeLink } = useProjectStore.getState();
       removeLink(projectId, link.id);
     }
-  }, [shotId, projectId, link.id]);
+  }, [shotId, specialContextId, sceneId, projectId, link.id]);
 
   if (isEditing) {
     return (

@@ -24,7 +24,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { useThumbnail } from '../../hooks/useThumbnail';
-import { extractShotNumber } from '../../utils/fileNaming';
+import { extractShotNumber, getScenePattern } from '../../utils/fileNaming';
 
 interface ProjectVersion {
   name: string;
@@ -1514,15 +1514,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     return () => scrollElement.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Helper function to extract version number from filename
-  const extractVersionNumber = (filename: string): number => {
-    const match = filename.match(/_v(\d+)/i);
-    return match ? parseInt(match[1], 10) : 0;
-  };
-
-  // Calculate highest version number for each shot
+  // Calculate highest version number for each shot (sceneId + shotNumber combination)
   const shotVersions = useMemo(() => {
-    const versionMap = new Map<number, number>();
+    // Map key: "sceneId_shotNumber" -> highest version number
+    const versionMap = new Map<string, number>();
 
     if (!project?.shots || !allVersions.length) return versionMap;
 
@@ -1534,19 +1529,41 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
       const shotNumber = extractShotNumber(version.name);
       if (shotNumber === null) return;
 
-      // Extract version number
-      const versionNum = extractVersionNumber(version.name);
-      if (versionNum === 0) return;
+      // Find all shots with this number (there may be multiple in different scenes)
+      const matchingShots = project.shots?.filter((s: any) => s.number === shotNumber) || [];
+      if (matchingShots.length === 0) return;
 
-      // Update highest version for this shot
-      const currentHighest = versionMap.get(shotNumber) || 0;
-      if (versionNum > currentHighest) {
-        versionMap.set(shotNumber, versionNum);
+      // Check which scene this version file belongs to
+      for (const matchingShot of matchingShots) {
+        const shotScene = project.scenes?.find((sc: any) => sc.id === matchingShot.sceneId);
+        if (!shotScene) continue;
+
+        // Check if version file matches the scene pattern
+        const scenePrefix = getScenePattern(project.name, shotScene.name);
+        if (!version.name.startsWith(scenePrefix)) continue;
+
+        // This version file belongs to this shot - extract version number
+        const match = version.name.match(/_v(\d+)/i);
+        if (!match) continue;
+
+        const versionNum = parseInt(match[1], 10);
+        if (versionNum === 0) continue;
+
+        // Create unique key for this scene+shot combination
+        const key = `${matchingShot.sceneId}_${shotNumber}`;
+
+        // Update highest version for this shot
+        const currentHighest = versionMap.get(key) || 0;
+        if (versionNum > currentHighest) {
+          versionMap.set(key, versionNum);
+        }
+
+        break; // Found matching shot, no need to check others
       }
     });
 
     return versionMap;
-  }, [allVersions, project?.shots]);
+  }, [allVersions, project?.shots, project?.scenes, project?.name]);
 
   // Get scenes and shots from project
   const scenes = useMemo(() => {
@@ -1562,7 +1579,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
               id: shot.id,
               name: shot.name,
               sceneId: shot.sceneId,
-              versions: shotVersions.get(shot.number) || 0,
+              versions: shotVersions.get(`${shot.sceneId}_${shot.number}`) || 0,
               wip: shot.wip,
               completed: shot.completed,
               preview: shot.preview,
@@ -1610,7 +1627,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
       id: shot.id,
       name: shot.name,
       sceneId: shot.sceneId,
-      versions: shotVersions.get(shot.number) || 0,
+      versions: shotVersions.get(`${shot.sceneId}_${shot.number}`) || 0,
       wip: shot.wip,
       completed: shot.completed,
       preview: shot.preview,

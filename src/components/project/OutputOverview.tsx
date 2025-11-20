@@ -29,19 +29,21 @@ interface OutputOverviewProps {
   project: any;
   currentScene: any;
   currentShot: any;
+  specialContextType?: 'asset' | 'compose' | null;
 }
 
-export function OutputOverview({ project, currentScene, currentShot }: OutputOverviewProps) {
+export function OutputOverview({ project, currentScene, currentShot, specialContextType }: OutputOverviewProps) {
   const [outputs, setOutputs] = useState<OutputFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Generate unique cache key for project + scene + shot combination
+  // Generate unique cache key for project + scene + shot + specialContext combination
   const getCacheKey = () => {
     const shotId = currentShot ? `_shot_${currentShot.number}` : '';
     const sceneId = currentScene ? `_scene_${currentScene.name}` : '';
-    return `${project.path}${sceneId}${shotId}`;
+    const specialContextId = specialContextType ? `_context_${specialContextType}` : '';
+    return `${project.path}${sceneId}${shotId}${specialContextId}`;
   };
 
   // Initialize with empty values - will be set in useLayoutEffect before paint
@@ -124,7 +126,19 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
         shotFilter: shotFilterValue
       });
 
-      const outputsArray = Array.isArray(result) ? result : [];
+      let outputsArray = Array.isArray(result) ? result : [];
+
+      // Apply client-side filtering for special contexts (ASSET/COMP)
+      if (specialContextType) {
+        const contextSuffix = specialContextType === 'asset' ? 'ASSET' : 'COMP';
+        outputsArray = outputsArray.filter(output => {
+          // Check if the output filename contains the special context suffix
+          // Format: PROJECT_SCENE_*_ASSET_* or PROJECT_SCENE_*_COMP_*
+          const nameUpper = output.name.toUpperCase();
+          return nameUpper.includes(`_${contextSuffix}_`);
+        });
+      }
+
       setOutputs(outputsArray);
 
       // Cache the results
@@ -141,7 +155,7 @@ export function OutputOverview({ project, currentScene, currentShot }: OutputOve
   useEffect(() => {
     loadOutputs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.path, currentShot]);
+  }, [project.path, currentShot, specialContextType]);
 
   // Listen for output changes from file system watcher
   useEffect(() => {

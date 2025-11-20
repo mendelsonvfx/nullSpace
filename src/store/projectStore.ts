@@ -101,6 +101,16 @@ interface ProjectStore {
   // Special context management (Assets/Compose)
   setSpecialContext: (projectId: string, contextType: 'asset' | 'compose', sceneId?: string) => void;
   clearSpecialContext: (projectId: string) => void;
+  // Special context data management
+  addSpecialContextLink: (projectId: string, contextId: string, url: string, title: string) => string;
+  updateSpecialContextLink: (projectId: string, contextId: string, linkId: string, newTitle: string) => void;
+  removeSpecialContextLink: (projectId: string, contextId: string, linkId: string) => void;
+  addSpecialContextTodo: (projectId: string, contextId: string, text: string) => void;
+  toggleSpecialContextTodo: (projectId: string, contextId: string, todoId: string) => void;
+  removeSpecialContextTodo: (projectId: string, contextId: string, todoId: string) => void;
+  addSpecialContextNote: (projectId: string, contextId: string, content: string) => void;
+  updateSpecialContextNote: (projectId: string, contextId: string, noteId: string, content: string) => void;
+  removeSpecialContextNote: (projectId: string, contextId: string, noteId: string) => void;
   // Preview management
   setScenePreview: (projectId: string, sceneId: string) => Promise<void>;
   setShotPreview: (projectId: string, shotId: string) => Promise<void>;
@@ -1951,6 +1961,173 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     };
 
     get().updateProject(updated);
+  },
+
+  // Special context data management
+  addSpecialContextLink: (projectId: string, contextId: string, url: string, title: string): string => {
+    const newLink = {
+      id: crypto.randomUUID(),
+      url,
+      title,
+    };
+
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.specialContexts) {
+      const updated = {
+        ...project,
+        specialContexts: project.specialContexts.map(ctx =>
+          ctx.id === contextId ? { ...ctx, links: [...(ctx.links || []), newLink] } : ctx
+        )
+      };
+      get().updateProject(updated);
+    }
+
+    return newLink.id;
+  },
+
+  updateSpecialContextLink: (projectId: string, contextId: string, linkId: string, newTitle: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.specialContexts) {
+      const updated = {
+        ...project,
+        specialContexts: project.specialContexts.map(ctx =>
+          ctx.id === contextId
+            ? {
+                ...ctx,
+                links: (ctx.links || []).map(link =>
+                  link.id === linkId ? { ...link, title: newTitle } : link
+                )
+              }
+            : ctx
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  removeSpecialContextLink: (projectId: string, contextId: string, linkId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.specialContexts) {
+      const updated = {
+        ...project,
+        specialContexts: project.specialContexts.map(ctx =>
+          ctx.id === contextId
+            ? { ...ctx, links: (ctx.links || []).filter(link => link.id !== linkId) }
+            : ctx
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  addSpecialContextTodo: (projectId: string, contextId: string, text: string) => {
+    const newTodo = {
+      id: crypto.randomUUID(),
+      text,
+      completed: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.specialContexts) {
+      const updated = {
+        ...project,
+        specialContexts: project.specialContexts.map(ctx =>
+          ctx.id === contextId ? { ...ctx, todos: [...(ctx.todos || []), newTodo] } : ctx
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  toggleSpecialContextTodo: (projectId: string, contextId: string, todoId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.specialContexts) {
+      const updated = {
+        ...project,
+        specialContexts: project.specialContexts.map(ctx =>
+          ctx.id === contextId
+            ? {
+                ...ctx,
+                todos: (ctx.todos || []).map(todo =>
+                  todo.id === todoId ? { ...todo, completed: !todo.completed } : todo
+                )
+              }
+            : ctx
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  removeSpecialContextTodo: (projectId: string, contextId: string, todoId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.specialContexts) {
+      const updated = {
+        ...project,
+        specialContexts: project.specialContexts.map(ctx =>
+          ctx.id === contextId
+            ? { ...ctx, todos: (ctx.todos || []).filter(todo => todo.id !== todoId) }
+            : ctx
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  addSpecialContextNote: (projectId: string, contextId: string, content: string) => {
+    const newNote = {
+      id: crypto.randomUUID(),
+      content,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.specialContexts) {
+      const updated = {
+        ...project,
+        specialContexts: project.specialContexts.map(ctx =>
+          ctx.id === contextId ? { ...ctx, notes: [...(ctx.notes || []), newNote] } : ctx
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  updateSpecialContextNote: (projectId: string, contextId: string, noteId: string, content: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.specialContexts) {
+      const updated = {
+        ...project,
+        specialContexts: project.specialContexts.map(ctx =>
+          ctx.id === contextId
+            ? {
+                ...ctx,
+                notes: (ctx.notes || []).map(note =>
+                  note.id === noteId ? { ...note, content, updatedAt: new Date().toISOString() } : note
+                )
+              }
+            : ctx
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  removeSpecialContextNote: (projectId: string, contextId: string, noteId: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.specialContexts) {
+      const updated = {
+        ...project,
+        specialContexts: project.specialContexts.map(ctx =>
+          ctx.id === contextId
+            ? { ...ctx, notes: (ctx.notes || []).filter(note => note.id !== noteId) }
+            : ctx
+        )
+      };
+      get().updateProject(updated);
+    }
   },
 
   // Preview management

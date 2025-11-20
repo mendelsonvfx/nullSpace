@@ -113,34 +113,37 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           specialContextType: specialContext.type,
           specialContextSceneId: specialContext.sceneId,
           shotId: undefined,
-          sceneId: specialContext.sceneId || undefined
+          sceneId: specialContext.sceneId || undefined,
+          specialContextId: specialContext.id
         };
       }
     }
 
+    // If shot is selected, return shot context (shot has its own sceneId)
+    if (project.hasShots && project.currentShotId) {
+      const currentShot = project.shots?.find((s: any) => s.id === project.currentShotId);
+      if (currentShot) {
+        return {
+          todos: currentShot.todos || [],
+          notes: currentShot.notes || [],
+          links: currentShot.links || [],
+          browserTabs: currentShot.browserTabs || [],
+          isShot: true,
+          isScene: false,
+          isSpecialContext: false,
+          shotId: currentShot.id,
+          sceneId: currentShot.sceneId, // Use sceneId from shot, not from project.currentSceneId
+          specialContextId: undefined
+        };
+      }
+    }
+
+    // If only scene is selected (no shot)
     if (project.hasShots && project.currentSceneId) {
       const currentScene = project.scenes?.find((s: any) => s.id === project.currentSceneId);
 
       if (currentScene) {
-        // If shot is selected, return shot context
-        if (project.currentShotId) {
-          const currentShot = project.shots?.find((s: any) => s.id === project.currentShotId);
-          if (currentShot) {
-            return {
-              todos: currentShot.todos || [],
-              notes: currentShot.notes || [],
-              links: currentShot.links || [],
-              browserTabs: currentShot.browserTabs || [],
-              isShot: true,
-              isScene: false,
-              isSpecialContext: false,
-              shotId: currentShot.id,
-              sceneId: currentScene.id
-            };
-          }
-        }
-
-        // Otherwise return scene context
+        // Return scene context
         return {
           todos: currentScene.todos || [],
           notes: currentScene.notes || [],
@@ -150,7 +153,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           isScene: true,
           isSpecialContext: false,
           shotId: undefined,
-          sceneId: currentScene.id
+          sceneId: currentScene.id,
+          specialContextId: undefined
         };
       }
     }
@@ -165,7 +169,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       isScene: false,
       isSpecialContext: false,
       shotId: undefined,
-      sceneId: undefined
+      sceneId: undefined,
+      specialContextId: undefined
     };
   };
 
@@ -757,6 +762,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           project={project}
           currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
           currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
+          specialContextType={context.isSpecialContext ? context.specialContextType : null}
           showNotification={showNotification}
         />
         )}
@@ -767,6 +773,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           project={project}
           currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
           currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
+          specialContextType={context.isSpecialContext ? context.specialContextType : null}
         />
         )}
 
@@ -775,9 +782,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           <h3 className="text-sm font-semibold text-text-primary mb-3.5">Links</h3>
           <div className="space-y-2">
             {context.links.map((link: any) => (
-              <LinkItem key={link.id} link={link} projectId={project.id} shotId={context.shotId} />
+              <LinkItem key={link.id} link={link} projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
             ))}
-            <LinkInputForm projectId={project.id} shotId={context.shotId} />
+            <LinkInputForm projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
           </div>
         </div>
 
@@ -818,6 +825,12 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           if (context.isShot && context.shotId) {
                             const { toggleShotTodo } = useProjectStore.getState();
                             toggleShotTodo(project.id, context.shotId, todo.id);
+                          } else if (context.isSpecialContext && context.specialContextId) {
+                            const { toggleSpecialContextTodo } = useProjectStore.getState();
+                            toggleSpecialContextTodo(project.id, context.specialContextId, todo.id);
+                          } else if (context.isScene && context.sceneId) {
+                            const { toggleSceneTodo } = useProjectStore.getState();
+                            toggleSceneTodo(project.id, context.sceneId, todo.id);
                           } else {
                             const { toggleTodo } = useProjectStore.getState();
                             toggleTodo(project.id, todo.id);
@@ -847,6 +860,12 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           if (context.isShot && context.shotId) {
                             const { removeShotTodo } = useProjectStore.getState();
                             removeShotTodo(project.id, context.shotId, todo.id);
+                          } else if (context.isSpecialContext && context.specialContextId) {
+                            const { removeSpecialContextTodo } = useProjectStore.getState();
+                            removeSpecialContextTodo(project.id, context.specialContextId, todo.id);
+                          } else if (context.isScene && context.sceneId) {
+                            const { removeSceneTodo } = useProjectStore.getState();
+                            removeSceneTodo(project.id, context.sceneId, todo.id);
                           } else {
                             const { removeTodo } = useProjectStore.getState();
                             removeTodo(project.id, todo.id);
@@ -869,6 +888,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   if (context.isShot && context.shotId) {
                     const { addShotTodo } = useProjectStore.getState();
                     addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
+                  } else if (context.isSpecialContext && context.specialContextId) {
+                    const { addSpecialContextTodo } = useProjectStore.getState();
+                    addSpecialContextTodo(project.id, context.specialContextId, e.currentTarget.value.trim());
                   } else if (context.isScene && context.sceneId) {
                     const { addSceneTodo } = useProjectStore.getState();
                     addSceneTodo(project.id, context.sceneId, e.currentTarget.value.trim());
@@ -884,6 +906,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   if (context.isShot && context.shotId) {
                     const { addShotTodo } = useProjectStore.getState();
                     addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
+                  } else if (context.isSpecialContext && context.specialContextId) {
+                    const { addSpecialContextTodo } = useProjectStore.getState();
+                    addSpecialContextTodo(project.id, context.specialContextId, e.currentTarget.value.trim());
                   } else if (context.isScene && context.sceneId) {
                     const { addSceneTodo } = useProjectStore.getState();
                     addSceneTodo(project.id, context.sceneId, e.currentTarget.value.trim());

@@ -9,8 +9,10 @@ interface NotesSectionProps {
     notes: Array<{ id: string; content: string }>;
     isShot?: boolean;
     isScene?: boolean;
+    isSpecialContext?: boolean;
     shotId?: string;
     sceneId?: string;
+    specialContextId?: string;
   };
 }
 
@@ -25,6 +27,13 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
         updateShotNote(project.id, context.shotId, context.notes[0].id, markdown);
       } else {
         addShotNote(project.id, context.shotId, markdown);
+      }
+    } else if (context.isSpecialContext && context.specialContextId) {
+      const { addSpecialContextNote, updateSpecialContextNote } = useProjectStore.getState();
+      if (context.notes && context.notes.length > 0) {
+        updateSpecialContextNote(project.id, context.specialContextId, context.notes[0].id, markdown);
+      } else {
+        addSpecialContextNote(project.id, context.specialContextId, markdown);
       }
     } else if (context.isScene && context.sceneId) {
       const { addSceneNote, updateSceneNote } = useProjectStore.getState();
@@ -41,7 +50,7 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
         addNote(project.id, markdown);
       }
     }
-  }, [project.id, context.isShot, context.isScene, context.shotId, context.sceneId, context.notes]);
+  }, [project.id, context.isShot, context.isScene, context.isSpecialContext, context.shotId, context.sceneId, context.specialContextId, context.notes]);
 
   const handleContainerClick = useCallback((e: React.MouseEvent) => {
     // Focus the editor when clicking anywhere in the container
@@ -80,9 +89,11 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
     })
   ], []); // Empty deps - plugins never change
 
-  // Create a unique key based on project, scene, and shot to reset editor on context change
+  // Create a unique key based on project, scene, shot, and special context to reset editor on context change
   const editorKey = context.isShot && context.shotId
     ? `${project.id}-shot-${context.shotId}`
+    : context.isSpecialContext && context.specialContextId
+    ? `${project.id}-specialcontext-${context.specialContextId}`
     : context.isScene && context.sceneId
     ? `${project.id}-scene-${context.sceneId}`
     : project.id;
