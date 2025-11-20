@@ -39,7 +39,7 @@ interface Shot {
   id: string;
   name: string;
   number: number;
-  sceneId: string;
+  sceneId?: string; // Optional for shots-only mode
   versions: number;
   thumbnail?: string;
   preview?: string;
@@ -1422,7 +1422,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
       if (currentShot?.sceneId) {
         setExpandedScenes(prev => {
           const newSet = new Set(prev);
-          newSet.add(currentShot.sceneId);
+          newSet.add(currentShot.sceneId!);
           return newSet;
         });
       }
@@ -1578,7 +1578,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
             .map(shot => ({
               id: shot.id,
               name: shot.name,
-              sceneId: shot.sceneId,
+              sceneId: shot.sceneId as string, // sceneId is guaranteed to be string here due to filter
               versions: shotVersions.get(`${shot.sceneId}_${shot.number}`) || 0,
               wip: shot.wip,
               completed: shot.completed,
@@ -1623,15 +1623,16 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
   const flatShots = useMemo(() => {
     if (!project?.hasShots || project.hasScenes || !project.shots) return [];
 
+    // Map shots to include versions count for shots-only mode
     return project.shots.map(shot => ({
       id: shot.id,
       name: shot.name,
       sceneId: shot.sceneId,
-      versions: shotVersions.get(`${shot.sceneId}_${shot.number}`) || 0,
+      number: shot.number,
+      versions: shotVersions.get(`${shot.sceneId || ''}_${shot.number}`) || 0,
       wip: shot.wip,
       completed: shot.completed,
       preview: shot.preview,
-      number: shot.number,
     }));
   }, [project, shotVersions]);
 

@@ -61,7 +61,7 @@ export interface Scene {
 
 export interface Shot {
   id: string;
-  sceneId: string; // Required: scene this shot belongs to
+  sceneId?: string; // Optional: scene this shot belongs to (undefined in shots-only mode)
   number: number;
   name: string;
   preview?: string; // Path to preview image

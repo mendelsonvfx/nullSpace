@@ -1671,11 +1671,6 @@ async fn delete_shot_files(
     shot_number: u32,
     scene_number: u32,
 ) -> Result<u32, String> {
-    println!("=== delete_shot_files called ===");
-    println!("Project path: {}", project_path);
-    println!("Shot number: {}", shot_number);
-    println!("Scene number: {}", scene_number);
-
     let project_dir = PathBuf::from(&project_path);
     let mut deleted_count = 0u32;
 
@@ -1731,7 +1726,6 @@ async fn delete_shot_files(
                         if file_name_str.contains(&shot_pattern) {
                             if fs::remove_file(&file_path).is_ok() {
                                 deleted_count += 1;
-                                println!("Deleted shot file: {:?}", file_path);
                             }
                         }
                     }
@@ -1747,22 +1741,53 @@ async fn delete_shot_files(
 
     if scene_thumbnails_dir.exists() {
         let shot_pattern = format!("shot{:03}_", shot_number);
-        println!("Looking for thumbnails with pattern: {} in {:?}", shot_pattern, scene_thumbnails_dir);
 
         if let Ok(entries) = fs::read_dir(&scene_thumbnails_dir) {
             for entry in entries.flatten() {
                 let file_name = entry.file_name();
                 let name_str = file_name.to_string_lossy();
                 if name_str.starts_with(&shot_pattern) {
-                    match fs::remove_file(entry.path()) {
-                        Ok(_) => println!("✓ Deleted shot thumbnail: {:?}", entry.path()),
-                        Err(e) => println!("✗ Failed to delete thumbnail: {}", e),
-                    }
+                    let _ = fs::remove_file(entry.path());
                 }
             }
         }
+    }
+
+    // Delete shot folders from software directories
+    let shot_code = format!("SH{:03}", shot_number);
+    // Use sanitized scene name instead of SC{number} to match folder creation
+    let scene_code = if scene_number > 0 {
+        Some(file_naming::sanitize_folder_name(&scene_name))
     } else {
-        println!("✗ Scene thumbnails directory not found: {:?}", scene_thumbnails_dir);
+        None // shots-only mode
+    };
+
+    let software_configs = vec![
+        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
+    ];
+
+    for (software, folders) in software_configs {
+        let software_path = project_dir.join(software);
+
+        if !software_path.exists() {
+            continue;
+        }
+
+        for folder in folders {
+            let shot_folder = if let Some(ref sc) = scene_code {
+                // Scene mode: {Software}/{Render|Output}/{Preview|Final}/{scene_code}/{shot_code}
+                software_path.join(folder).join(sc).join(&shot_code)
+            } else {
+                // Shots-only mode: {Software}/{Render|Output}/{Preview|Final}/{shot_code}
+                software_path.join(folder).join(&shot_code)
+            };
+
+            if shot_folder.exists() {
+                let _ = fs::remove_dir_all(&shot_folder);
+            }
+        }
     }
 
     Ok(deleted_count)
@@ -1821,7 +1846,6 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
                         if file_name_str.contains(&scene_pattern) {
                             if fs::remove_file(&file_path).is_ok() {
                                 deleted_count += 1;
-                                println!("Deleted scene file: {:?}", file_path);
                             }
                         }
                     }
@@ -1836,8 +1860,32 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
         .join(format!("scene{:03}", scene_number));
 
     if scene_thumbnail_dir.exists() {
-        if fs::remove_dir_all(&scene_thumbnail_dir).is_ok() {
-            println!("Deleted scene thumbnail directory: {:?}", scene_thumbnail_dir);
+        let _ = fs::remove_dir_all(&scene_thumbnail_dir);
+    }
+
+    // Delete scene folders from software directories
+    // Use sanitized scene name instead of SC{number} to match folder creation
+    let scene_code = file_naming::sanitize_folder_name(&scene_name);
+
+    let software_configs = vec![
+        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
+    ];
+
+    for (software, folders) in software_configs {
+        let software_path = project_dir.join(software);
+
+        if !software_path.exists() {
+            continue;
+        }
+
+        for folder in folders {
+            let scene_folder = software_path.join(folder).join(&scene_code);
+
+            if scene_folder.exists() {
+                let _ = fs::remove_dir_all(&scene_folder);
+            }
         }
     }
 
@@ -3171,13 +3219,17 @@ fn create_scene_folders(input: CreateSceneFoldersInput) -> Result<(), String> {
 
     for (software, folders) in software_configs {
         let software_path = project_path.join(software);
-        if software_path.exists() {
-            for folder in folders {
-                let scene_folder = software_path.join(folder).join(&input.scene_code);
-                fs::create_dir_all(&scene_folder)
-                    .map_err(|e| format!("Failed to create scene folder {}: {}", scene_folder.display(), e))?;
-                println!("Created scene folder: {:?}", scene_folder);
-            }
+
+        // Create software directory if it doesn't exist
+        if !software_path.exists() {
+            fs::create_dir_all(&software_path)
+                .map_err(|e| format!("Failed to create software folder {}: {}", software_path.display(), e))?;
+        }
+
+        for folder in folders {
+            let scene_folder = software_path.join(folder).join(&input.scene_code);
+            fs::create_dir_all(&scene_folder)
+                .map_err(|e| format!("Failed to create scene folder {}: {}", scene_folder.display(), e))?;
         }
     }
 
@@ -3197,13 +3249,22 @@ fn create_shot_folders(input: CreateShotFoldersInput) -> Result<(), String> {
 
     for (software, folders) in software_configs {
         let software_path = project_path.join(software);
-        if software_path.exists() {
-            for folder in folders {
-                let shot_folder = software_path.join(folder).join(&input.scene_code).join(&input.shot_code);
-                fs::create_dir_all(&shot_folder)
-                    .map_err(|e| format!("Failed to create shot folder {}: {}", shot_folder.display(), e))?;
-                println!("Created shot folder: {:?}", shot_folder);
-            }
+
+        // Create software directory if it doesn't exist
+        if !software_path.exists() {
+            fs::create_dir_all(&software_path)
+                .map_err(|e| format!("Failed to create software folder {}: {}", software_path.display(), e))?;
+        }
+
+        for folder in folders {
+            // If scene_code is empty (shots-only mode), create shot folder directly under render/preview
+            let shot_folder = if input.scene_code.is_empty() {
+                software_path.join(folder).join(&input.shot_code)
+            } else {
+                software_path.join(folder).join(&input.scene_code).join(&input.shot_code)
+            };
+            fs::create_dir_all(&shot_folder)
+                .map_err(|e| format!("Failed to create shot folder {}: {}", shot_folder.display(), e))?;
         }
     }
 
@@ -3252,10 +3313,6 @@ fn rename_scene_folders(
                             )
                         })?;
 
-                    println!(
-                        "Renamed scene folder: {:?} -> {:?}",
-                        old_scene_folder, new_scene_folder
-                    );
                     renamed_count += 1;
                 }
             }
@@ -3309,10 +3366,6 @@ fn rename_shot_folders(
                             )
                         })?;
 
-                    println!(
-                        "Renamed shot folder: {:?} -> {:?}",
-                        old_shot_folder, new_shot_folder
-                    );
                     renamed_count += 1;
                 }
             }

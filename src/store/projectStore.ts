@@ -1287,21 +1287,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Use provided sceneId or current scene
       const targetSceneId = sceneId || project.currentSceneId;
 
-      // Ensure we have a scene to add to
-      if (!targetSceneId) {
+      // In shots-only mode (hasScenes=false), allow empty sceneId
+      if (!targetSceneId && project.hasScenes) {
         console.warn('Cannot add shot: no scene specified or selected');
         return;
       }
 
-      // Per-scene shot numbering: count only numbered shots in target scene
+      // Per-scene shot numbering: count only numbered shots in target scene (or all shots if no scenes)
       const numberedShotsInScene = (project.shots || []).filter(
-        s => s.sceneId === targetSceneId && s.number > 0
+        s => (targetSceneId ? s.sceneId === targetSceneId : true) && s.number > 0
       );
       const shotNumber = numberedShotsInScene.length + 1;
 
       const newShot = {
         id: crypto.randomUUID(),
-        sceneId: targetSceneId, // Assign to target scene
+        sceneId: targetSceneId || undefined, // Assign to target scene or undefined in shots-only mode
         number: shotNumber,
         name: name || `Shot ${shotNumber.toString().padStart(3, '0')}`,
         todos: [],
@@ -1311,7 +1311,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       };
 
       // Get scene code for folder creation
-      const currentScene = (project.scenes || []).find(s => s.id === targetSceneId);
+      const currentScene = targetSceneId ? (project.scenes || []).find(s => s.id === targetSceneId) : null;
       if (currentScene) {
         const sceneCode = sanitizeFolderName(currentScene.name);
         const shotCode = `SH${shotNumber.toString().padStart(3, '0')}`;
@@ -1322,6 +1322,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             input: {
               project_path: project.path,
               scene_code: sceneCode,
+              shot_code: shotCode
+            }
+          });
+        } catch (error) {
+          console.error('Failed to create shot folders:', error);
+        }
+      } else if (!project.hasScenes) {
+        // Shots-only mode: create folders without scene hierarchy
+        const shotCode = `SH${shotNumber.toString().padStart(3, '0')}`;
+        try {
+          await invoke('create_shot_folders', {
+            input: {
+              project_path: project.path,
+              scene_code: '', // Empty scene code for shots-only mode
               shot_code: shotCode
             }
           });

@@ -198,6 +198,12 @@ impl FileNameComponents {
     }
 }
 
+/// Sanitize a name for use as a folder name
+/// Removes spaces and converts to uppercase to match file naming conventions
+pub fn sanitize_folder_name(name: &str) -> String {
+    name.replace(" ", "").to_uppercase()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
