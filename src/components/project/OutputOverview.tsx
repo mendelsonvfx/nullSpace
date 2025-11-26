@@ -103,20 +103,16 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     loadRequestIdRef.current += 1;
     const currentRequestId = loadRequestIdRef.current;
 
-    console.log(`[OutputOverview] loadOutputs called: forceReload=${forceReload}, requestId=${currentRequestId}, scene=${currentSceneFilter}, shot=${currentShotFilter}`);
-
     // Check cache first if not forcing reload
     if (!forceReload) {
       const cacheKey = getCacheKey();
       const cachedOutputs = outputsCache.get(cacheKey);
       if (cachedOutputs) {
-        console.log(`[OutputOverview] Using cached outputs (${cachedOutputs.length} files) for key: ${cacheKey}`);
         setOutputs(cachedOutputs);
         setLoading(false);
         isFirstLoadRef.current = false;
         return;
       }
-      console.log(`[OutputOverview] No cache found for key: ${cacheKey}`);
     }
 
     // Only show loading state for first load - keep old content visible during refresh
@@ -145,12 +141,10 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
       // Check if this request is stale (newer request was made)
       if (currentRequestId !== loadRequestIdRef.current) {
-        console.log(`[OutputOverview] Ignoring stale request: requestId=${currentRequestId}, current=${loadRequestIdRef.current}`);
         return;
       }
 
       let outputsArray = Array.isArray(result) ? result : [];
-      console.log(`[OutputOverview] Received ${outputsArray.length} outputs from backend for scene=${requestSceneFilter}, shot=${requestShotFilter}`);
 
       // Apply client-side filtering for special contexts (ASSET/COMP)
       if (requestSpecialContext) {
@@ -163,7 +157,6 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         });
       }
 
-      console.log(`[OutputOverview] Setting outputs: ${outputsArray.length} files`);
       setOutputs(outputsArray);
 
       // Cache the results
@@ -171,7 +164,6 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     } catch (err) {
       console.error('Failed to load outputs:', err);
       setError(err instanceof Error ? err.message : 'Failed to load outputs');
-      console.log(`[OutputOverview] Error - clearing outputs`);
       setOutputs([]);
     } finally {
       setLoading(false);
@@ -214,9 +206,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   // Get unique software from outputs and sort alphabetically
   const availableSoftware = useMemo(() => {
     const softwareSet = new Set(outputs.map(o => o.software));
-    const available = Array.from(softwareSet).sort();
-    console.log(`[OutputOverview] availableSoftware: ${available.join(', ')}`);
-    return available;
+    return Array.from(softwareSet).sort();
   }, [outputs]);
 
   // Restore filter state BEFORE paint (prevents visual flicker)
@@ -231,12 +221,10 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
     if (savedSoftwareExists) {
       // Restore saved state only if the software still exists in outputs
-      console.log(`[OutputOverview] Restoring saved software: ${savedState.selectedSoftware}`);
       setSelectedSoftware(savedState.selectedSoftware);
       setSelectedOutputType(savedState.selectedOutputType);
     } else {
       // No saved state OR saved software doesn't exist - pick from available outputs
-      console.log(`[OutputOverview] Saved software not found, picking first available: ${availableSoftware[0]}`);
       if (availableSoftware.length > 0) {
         setSelectedSoftware(availableSoftware[0]);
       } else {
@@ -254,9 +242,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
   // Filter outputs based on selected software only (not output type, since UI shows both Preview and Final columns)
   const filteredOutputs = useMemo(() => {
-    const filtered = outputs.filter(output => output.software === selectedSoftware);
-    console.log(`[OutputOverview] filteredOutputs: selectedSoftware=${selectedSoftware}, outputs.length=${outputs.length}, filtered.length=${filtered.length}`);
-    return filtered;
+    return outputs.filter(output => output.software === selectedSoftware);
   }, [outputs, selectedSoftware]);
 
   // Group outputs by software and output type
@@ -603,10 +589,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     setTimeout(() => setIsRefreshing(false), 300);
   };
 
-  console.log(`[OutputOverview] RENDER - loading=${loading}, error=${error}, outputs.length=${outputs.length}, filteredOutputs.length=${filteredOutputs.length}`);
-
   if (loading) {
-    console.log('[OutputOverview] RENDER - Showing loading state');
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
@@ -620,7 +603,6 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   }
 
   if (error) {
-    console.log(`[OutputOverview] RENDER - Showing error: ${error}`);
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
@@ -632,7 +614,6 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   }
 
   if (outputs.length === 0) {
-    console.log('[OutputOverview] RENDER - No outputs found');
     return (
       <div className="mb-6">
         {/* Header with title and refresh button */}

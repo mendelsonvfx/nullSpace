@@ -52,6 +52,10 @@ export class WorkSessionService {
 
     if (softwareSessions.length === 0) {
       // Последний софт закрылся - останавливаем WorkSession
+      // Backup: гарантируем остановку таймера (belt-and-suspenders)
+      const { TimerService } = await import('./TimerService');
+      TimerService.stopSessionTimer(session.id);
+
       await this.stopSession(session.id);
     } else {
       // Ещё есть софты - обновляем список
@@ -72,19 +76,19 @@ export class WorkSessionService {
    * - Удаляет workSession из проекта
    */
   static async stopSession(sessionId: string): Promise<void> {
+    // 1. ВСЕГДА останавливаем таймер первым делом (идемпотентная операция)
+    const { TimerService } = await import('./TimerService');
+    TimerService.stopSessionTimer(sessionId);
+
     const session = Array.from(useWorkSessionStore.getState().sessions.values())
       .find(s => s.id === sessionId);
 
     if (!session) {
-      console.warn(`[WorkSessionService] ⚠️  Session ${sessionId} not found`);
+      console.warn(`[WorkSessionService] ⚠️  Session ${sessionId} not found (timer already stopped)`);
       return;
     }
 
     console.log(`[WorkSessionService] ⏹️  Stopping session ${sessionId} (${session.elapsedMinutes}m elapsed)`);
-
-    // 1. Остановить таймер
-    const { TimerService } = await import('./TimerService');
-    TimerService.stopSessionTimer(sessionId);
 
     // 2. Очистить WorkSession из проекта (totalMinutesSpent уже записан в incrementMinute)
     const { useProjectStore } = await import('../../../store/projectStore');

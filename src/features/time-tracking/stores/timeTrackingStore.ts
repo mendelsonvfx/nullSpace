@@ -322,6 +322,10 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
         await WorkSessionService.removeSoftware(workSession, entryId);
       } else {
         console.warn(`[TimeTrackingStore] ⚠️  WorkSession ${entry.workSessionId} not found!`);
+
+        // Очищаем orphaned таймер напрямую (defense-in-depth)
+        const { TimerService } = await import('../services/TimerService');
+        TimerService.stopSessionTimer(entry.workSessionId);
       }
     } else {
       console.warn(`[TimeTrackingStore] ⚠️  Entry has no workSessionId!`);
