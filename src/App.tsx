@@ -1653,28 +1653,12 @@ function App() {
                }}
               showNotification={addGeneralNotification}
               onLaunchSoftware={(sw: any) => {
-                // Check if we're in a special context (Asset/Compose)
-                let projectNameOverride = selectedProject.name;
-
+                // Get special context if exists
+                let specialContext = null;
                 if (selectedProject.currentSpecialContextId) {
-                  const specialContext = selectedProject.specialContexts?.find(
+                  specialContext = selectedProject.specialContexts?.find(
                     (c: any) => c.id === selectedProject.currentSpecialContextId
                   );
-
-                  if (specialContext) {
-                    const contextSuffix = specialContext.type === 'asset' ? 'ASSET' : 'COMP';
-
-                    if (specialContext.sceneId) {
-                      // Scene-level special context: PROJECTNAME_SCENENAME_ASSET_v01
-                      const scene = selectedProject.scenes?.find((s: any) => s.id === specialContext.sceneId);
-                      if (scene) {
-                        projectNameOverride = `${selectedProject.name}_${scene.name}_${contextSuffix}_v01`;
-                      }
-                    } else {
-                      // Project-level special context: PROJECTNAME_ASSET_v01
-                      projectNameOverride = `${selectedProject.name}_${contextSuffix}_v01`;
-                    }
-                  }
                 }
 
                 const currentScene = selectedProject.hasScenes && selectedProject.currentSceneId
@@ -1706,10 +1690,11 @@ function App() {
                   projectPath: selectedProject.path,
                   executablePath: sw.executablePath,
                   software: softwareKey,
-                  projectName: projectNameOverride,
+                  projectName: selectedProject.name,
                   sceneName: currentScene?.name,
                   sceneNumber: currentScene?.number,
-                  shotNumber: currentShot?.number
+                  shotNumber: currentShot?.number,
+                  specialContext: specialContext ? (specialContext.type === 'asset' ? 'ASSET' : 'COMP') : undefined
                 });
               }}
               onDeleteProject={(project: any) => {

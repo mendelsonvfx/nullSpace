@@ -37,6 +37,22 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const loadRequestIdRef = useRef(0); // Track load requests to ignore stale ones
+
+  // Compute filter values from props (not state, to avoid race conditions)
+  const currentSceneFilter = useMemo(() => {
+    if (specialContextType) return 'MAIN';
+    if (project.hasScenes && currentScene) return currentScene.name;
+    return null;
+  }, [specialContextType, project.hasScenes, currentScene]);
+
+  const currentShotFilter = useMemo(() => {
+    if (specialContextType) return 'SH001';
+    if (project.hasScenes && project.hasShots && currentShot) {
+      return `SH${currentShot.number.toString().padStart(3, '0')}`;
+    }
+    return null;
+  }, [specialContextType, project.hasScenes, project.hasShots, currentShot]);
 
   // Generate unique cache key for project + scene + shot + specialContext combination
   const getCacheKey = () => {
@@ -83,20 +99,28 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   // };
 
   const loadOutputs = async (forceReload = false) => {
+    // Increment request ID to invalidate previous requests
+    loadRequestIdRef.current += 1;
+    const currentRequestId = loadRequestIdRef.current;
+
+    console.log(`[OutputOverview] loadOutputs called: forceReload=${forceReload}, requestId=${currentRequestId}, scene=${currentSceneFilter}, shot=${currentShotFilter}`);
+
     // Check cache first if not forcing reload
     if (!forceReload) {
-      const cachedOutputs = outputsCache.get(getCacheKey());
+      const cacheKey = getCacheKey();
+      const cachedOutputs = outputsCache.get(cacheKey);
       if (cachedOutputs) {
+        console.log(`[OutputOverview] Using cached outputs (${cachedOutputs.length} files) for key: ${cacheKey}`);
         setOutputs(cachedOutputs);
         setLoading(false);
         isFirstLoadRef.current = false;
         return;
       }
+      console.log(`[OutputOverview] No cache found for key: ${cacheKey}`);
     }
 
-    // Only show loading state for first load
-    const shouldShowLoading = isFirstLoadRef.current;
-    if (shouldShowLoading) {
+    // Only show loading state for first load - keep old content visible during refresh
+    if (isFirstLoadRef.current) {
       setLoading(true);
       isFirstLoadRef.current = false;
     }
@@ -107,30 +131,30 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         throw new Error('Project path is not defined');
       }
 
-      // Determine filter based on project settings and current selection
-      let sceneFilterValue: string | null = null;
-      let shotFilterValue: string | null = null;
+      // Capture filter values at the time of request
+      const requestSceneFilter = currentSceneFilter;
+      const requestShotFilter = currentShotFilter;
+      const requestSpecialContext = specialContextType;
 
-      if (project.hasScenes && currentScene) {
-        sceneFilterValue = currentScene.name;
-      }
-
-      if (project.hasScenes && project.hasShots && currentShot) {
-        // Add "SH" prefix to shot filter to match folder naming convention
-        shotFilterValue = `SH${currentShot.number.toString().padStart(3, '0')}`;
-      }
-
+      // Use computed filter values from useMemo
       const result = await invoke<OutputFile[]>('get_project_outputs', {
         projectPath: project.path,
-        sceneFilter: sceneFilterValue,
-        shotFilter: shotFilterValue
+        sceneFilter: requestSceneFilter,
+        shotFilter: requestShotFilter
       });
 
+      // Check if this request is stale (newer request was made)
+      if (currentRequestId !== loadRequestIdRef.current) {
+        console.log(`[OutputOverview] Ignoring stale request: requestId=${currentRequestId}, current=${loadRequestIdRef.current}`);
+        return;
+      }
+
       let outputsArray = Array.isArray(result) ? result : [];
+      console.log(`[OutputOverview] Received ${outputsArray.length} outputs from backend for scene=${requestSceneFilter}, shot=${requestShotFilter}`);
 
       // Apply client-side filtering for special contexts (ASSET/COMP)
-      if (specialContextType) {
-        const contextSuffix = specialContextType === 'asset' ? 'ASSET' : 'COMP';
+      if (requestSpecialContext) {
+        const contextSuffix = requestSpecialContext === 'asset' ? 'ASSET' : 'COMP';
         outputsArray = outputsArray.filter(output => {
           // Check if the output filename contains the special context suffix
           // Format: PROJECT_SCENE_*_ASSET_* or PROJECT_SCENE_*_COMP_*
@@ -139,6 +163,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         });
       }
 
+      console.log(`[OutputOverview] Setting outputs: ${outputsArray.length} files`);
       setOutputs(outputsArray);
 
       // Cache the results
@@ -146,6 +171,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     } catch (err) {
       console.error('Failed to load outputs:', err);
       setError(err instanceof Error ? err.message : 'Failed to load outputs');
+      console.log(`[OutputOverview] Error - clearing outputs`);
       setOutputs([]);
     } finally {
       setLoading(false);
@@ -155,7 +181,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   useEffect(() => {
     loadOutputs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.path, currentShot, specialContextType]);
+  }, [project.path, currentScene, currentShot, specialContextType]);
 
   // Listen for output changes from file system watcher
   useEffect(() => {
@@ -175,17 +201,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
       });
     });
 
-    const handleRefreshAll = () => {
-      console.log('Refresh all event received - reloading outputs');
-      outputsCache.invalidate(getCacheKey());
-      loadOutputs(true);
-    };
-
-    window.addEventListener('refresh-all', handleRefreshAll);
+    // Note: We don't listen to 'refresh-all' event here because OutputOverview
+    // triggers its own refresh when the button is clicked. Listening to the global
+    // event causes race conditions when switching contexts during refresh.
 
     return () => {
       if (unlisten) unlisten();
-      window.removeEventListener('refresh-all', handleRefreshAll);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.path]);
@@ -193,7 +214,9 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   // Get unique software from outputs and sort alphabetically
   const availableSoftware = useMemo(() => {
     const softwareSet = new Set(outputs.map(o => o.software));
-    return Array.from(softwareSet).sort();
+    const available = Array.from(softwareSet).sort();
+    console.log(`[OutputOverview] availableSoftware: ${available.join(', ')}`);
+    return available;
   }, [outputs]);
 
   // Restore filter state BEFORE paint (prevents visual flicker)
@@ -203,22 +226,18 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     const cacheKey = getCacheKey();
     const savedState = outputsCache.getOutputState(cacheKey);
 
-    if (savedState) {
-      // Restore saved state for this specific project/scene/shot
+    // Check if saved software exists in available outputs
+    const savedSoftwareExists = savedState && availableSoftware.includes(savedState.selectedSoftware as SoftwareName);
+
+    if (savedSoftwareExists) {
+      // Restore saved state only if the software still exists in outputs
+      console.log(`[OutputOverview] Restoring saved software: ${savedState.selectedSoftware}`);
       setSelectedSoftware(savedState.selectedSoftware);
       setSelectedOutputType(savedState.selectedOutputType);
     } else {
-      // No saved state - try to get from cached outputs
-      const cachedOutputs = outputsCache.get(getCacheKey());
-      if (cachedOutputs && cachedOutputs.length > 0) {
-        const availableSoft = Array.from(new Set(cachedOutputs.map(o => o.software))).sort();
-        if (availableSoft.length > 0) {
-          setSelectedSoftware(availableSoft[0]);
-        } else {
-          setSelectedSoftware('');
-        }
-      } else if (availableSoftware.length > 0) {
-        // Use currently loaded outputs
+      // No saved state OR saved software doesn't exist - pick from available outputs
+      console.log(`[OutputOverview] Saved software not found, picking first available: ${availableSoftware[0]}`);
+      if (availableSoftware.length > 0) {
         setSelectedSoftware(availableSoftware[0]);
       } else {
         setSelectedSoftware('');
@@ -231,14 +250,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
       isRestoringStateRef.current = false;
     }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.path, currentScene?.name, currentShot?.number]);
+  }, [project.path, currentScene?.name, currentShot?.number, outputs, availableSoftware]);
 
   // Filter outputs based on selected software only (not output type, since UI shows both Preview and Final columns)
   const filteredOutputs = useMemo(() => {
-    const filtered = outputs.filter(output => {
-      const matchesSoftware = output.software === selectedSoftware;
-      return matchesSoftware;
-    });
+    const filtered = outputs.filter(output => output.software === selectedSoftware);
+    console.log(`[OutputOverview] filteredOutputs: selectedSoftware=${selectedSoftware}, outputs.length=${outputs.length}, filtered.length=${filtered.length}`);
     return filtered;
   }, [outputs, selectedSoftware]);
 
@@ -261,6 +278,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
     return groups;
   }, [filteredOutputs]);
+
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -285,11 +303,34 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
     if (startIndex !== -1 && parts.length > startIndex + 1) {
       // Get all parts after Final/Preview
-      const pathParts = parts.slice(startIndex + 1);
+      let pathParts = parts.slice(startIndex + 1);
 
       // For sequences, include the folder name (last part)
       // For files, exclude the filename (last part)
-      const relevantParts = isSequence ? pathParts : pathParts.slice(0, -1);
+      let relevantParts = isSequence ? pathParts : pathParts.slice(0, -1);
+
+      // Remove scene and shot folders from display if they match current filters
+      // (since files are guaranteed to be in those folders when filtering is active)
+      // Only filter if we have both scenes and shots enabled in the project
+      if (project.hasScenes && project.hasShots && (currentSceneFilter || currentShotFilter)) {
+        relevantParts = relevantParts.filter(part => {
+          const partNormalized = part.toUpperCase().replace(/\s/g, '');
+
+          // Check if part matches scene filter
+          if (currentSceneFilter) {
+            const sceneNormalized = currentSceneFilter.toUpperCase().replace(/\s/g, '');
+            if (partNormalized === sceneNormalized) return false;
+          }
+
+          // Check if part matches shot filter
+          if (currentShotFilter) {
+            const shotNormalized = currentShotFilter.toUpperCase().replace(/\s/g, '');
+            if (partNormalized === shotNormalized) return false;
+          }
+
+          return true;
+        });
+      }
 
       return relevantParts.length > 0 ? relevantParts.join(' / ') : null;
     }
@@ -305,8 +346,32 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     const startIndex = finalIndex !== -1 ? finalIndex : previewIndex;
 
     if (startIndex !== -1 && parts.length > startIndex + 1) {
-      const pathParts = parts.slice(startIndex + 1);
-      return isSequence ? pathParts : pathParts.slice(0, -1);
+      let pathParts = parts.slice(startIndex + 1);
+      let relevantParts = isSequence ? pathParts : pathParts.slice(0, -1);
+
+      // Remove scene and shot folders from path parts for grouping
+      // Only filter if we have both scenes and shots enabled in the project
+      if (project.hasScenes && project.hasShots && (currentSceneFilter || currentShotFilter)) {
+        relevantParts = relevantParts.filter(part => {
+          const partNormalized = part.toUpperCase().replace(/\s/g, '');
+
+          // Check if part matches scene filter
+          if (currentSceneFilter) {
+            const sceneNormalized = currentSceneFilter.toUpperCase().replace(/\s/g, '');
+            if (partNormalized === sceneNormalized) return false;
+          }
+
+          // Check if part matches shot filter
+          if (currentShotFilter) {
+            const shotNormalized = currentShotFilter.toUpperCase().replace(/\s/g, '');
+            if (partNormalized === shotNormalized) return false;
+          }
+
+          return true;
+        });
+      }
+
+      return relevantParts;
     }
     return [];
   };
@@ -352,27 +417,19 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
       const pathParts = getPathParts(output.path, output.is_sequence);
 
       // Try different grouping levels (from 1 to 5)
-      if (pathParts.length === 0) {
-        // No path parts, add to ungrouped
+      if (pathParts.length === 0 || pathParts.length === 1) {
+        // No path parts or single level - don't group, add to ungrouped
         const key = '__ungrouped__';
         if (!pathMap.has(key)) pathMap.set(key, []);
         pathMap.get(key)!.push(output);
       } else {
-        // Try to find the optimal grouping level
-        let added = false;
+        // Multiple path levels - try to find the optimal grouping level
+        // Start from pathParts.length - 1 to avoid grouping by the deepest folder
         for (let depth = Math.min(pathParts.length - 1, 5); depth >= 1; depth--) {
           const prefix = pathParts.slice(0, depth).join(' / ');
           if (!pathMap.has(prefix)) pathMap.set(prefix, []);
           pathMap.get(prefix)!.push(output);
-          added = true;
           break;
-        }
-
-        if (!added) {
-          // Single level or no grouping needed
-          const key = '__ungrouped__';
-          if (!pathMap.has(key)) pathMap.set(key, []);
-          pathMap.get(key)!.push(output);
         }
       }
     });
@@ -405,7 +462,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     ungrouped.sort((a, b) => b.created_at - a.created_at);
 
     return { grouped, ungrouped };
-  }, []);
+  }, [currentSceneFilter, currentShotFilter, project.hasScenes, project.hasShots]);
 
   // Memoized grouped outputs by path for each software type (MAJOR PERFORMANCE OPTIMIZATION)
   // This prevents re-grouping 380+ files on every render
@@ -420,7 +477,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     });
 
     return result;
-  }, [groupedOutputs, groupOutputsByPath]);
+  }, [groupedOutputs, groupOutputsByPath, currentSceneFilter, currentShotFilter]);
 
   const handleOutputClick = useCallback(async (output: OutputFile) => {
     try {
@@ -546,7 +603,10 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     setTimeout(() => setIsRefreshing(false), 300);
   };
 
+  console.log(`[OutputOverview] RENDER - loading=${loading}, error=${error}, outputs.length=${outputs.length}, filteredOutputs.length=${filteredOutputs.length}`);
+
   if (loading) {
+    console.log('[OutputOverview] RENDER - Showing loading state');
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
@@ -560,6 +620,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   }
 
   if (error) {
+    console.log(`[OutputOverview] RENDER - Showing error: ${error}`);
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
@@ -571,6 +632,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   }
 
   if (outputs.length === 0) {
+    console.log('[OutputOverview] RENDER - No outputs found');
     return (
       <div className="mb-6">
         {/* Header with title and refresh button */}
@@ -867,7 +929,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         ))}
       </div>
 
-      {filteredOutputs.length === 0 && (
+      {!loading && !isRefreshing && filteredOutputs.length === 0 && (
         <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
           <p className="text-xs text-text-muted text-center">No outputs match the selected filters.</p>
         </div>

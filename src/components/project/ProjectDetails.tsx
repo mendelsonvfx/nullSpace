@@ -679,12 +679,16 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   onClick={() => {
                     if (status === 'launching' || activeEntry) return;
 
-                    const currentScene = project.hasShots && project.currentSceneId
-                      ? project.scenes?.find((s: any) => s.id === project.currentSceneId)
+                    // Read the latest project from store to avoid stale closure
+                    const latestProject = useProjectStore.getState().projects.find(p => p.id === project.id);
+                    if (!latestProject) return;
+
+                    const currentScene = latestProject.hasShots && latestProject.currentSceneId
+                      ? latestProject.scenes?.find((s: any) => s.id === latestProject.currentSceneId)
                       : null;
 
-                    const currentShot = project.hasShots && project.currentShotId
-                      ? project.shots?.find((s: any) => s.id === project.currentShotId)
+                    const currentShot = latestProject.hasShots && latestProject.currentShotId
+                      ? latestProject.shots?.find((s: any) => s.id === latestProject.currentShotId)
                       : null;
 
                     onLaunchSoftware({

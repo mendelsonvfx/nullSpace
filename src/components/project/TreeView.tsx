@@ -863,7 +863,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         {/* Card 3 (bottom - oldest of top 3) */}
         {topThree[2] && (
           <div
-            className="absolute left-1/2 -translate-x-1/2 h-[28px] bg-zinc-800/90 rounded border border-zinc-700 pointer-events-none flex items-center px-2.5 gap-2 stack-ghost-card transition-transform duration-200 group-hover:translate-y-2"
+            className="absolute left-1/2 -translate-x-1/2 h-[28px] bg-zinc-800/90 rounded border border-zinc-700 pointer-events-none flex items-center px-2.5 gap-2 stack-ghost-card transition-transform duration-200 group-hover:translate-y-1"
             style={{
               top: `${stackOffset * 1.555}px`,
               width: '96%',

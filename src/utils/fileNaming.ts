@@ -85,6 +85,23 @@ export function parseFileName(filename: string): FileNameComponents | null {
     // Split by underscore
     const parts = base.split('_');
 
+    // Special case: OLD format for special contexts (PROJECT_CONTEXT)
+    // Example: POND_COMP, POND_ASSET, PROJECT_RENDER, etc.
+    // Check if it's a 2-part name where second part is all uppercase (likely a context)
+    if (parts.length === 2 && parts[1] === parts[1].toUpperCase() && parts[1].length >= 2) {
+      // Check if second part is likely a context (not a number)
+      if (isNaN(parseInt(parts[1], 10))) {
+        return {
+          projectName: parts[0],
+          sceneName: 'MAIN', // Use MAIN as default scene for old format
+          shotNumber: 1, // Virtual shot number
+          specialContext: parts[1],
+          version,
+          extension,
+        };
+      }
+    }
+
     // Need at least PROJECT_SCENE_SHOT (3 parts)
     if (parts.length < 3) return null;
 

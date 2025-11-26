@@ -3037,15 +3037,6 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
     result
 }
 
-// Helper function to normalize names for comparison
-// Removes spaces, underscores, hyphens and converts to lowercase
-fn normalize_path_component(name: &str) -> String {
-    name.to_lowercase()
-        .replace(" ", "")
-        .replace("_", "")
-        .replace("-", "")
-}
-
 // Helper function to recursively scan directory for output files
 fn scan_output_dir_recursive(
     dir: &PathBuf,
@@ -3077,7 +3068,7 @@ fn scan_output_dir_recursive(
                         continue;
                     }
 
-                    // Filter by checking directory path (exclude filename to avoid false matches)
+                    // Filter by checking if file is inside the correct folder structure
                     let should_include = {
                         // Get parent directory path (without filename)
                         let dir_path = if let Some(parent) = path.parent() {
@@ -3086,24 +3077,67 @@ fn scan_output_dir_recursive(
                             String::new()
                         };
 
-                        let normalized_path = normalize_path_component(&dir_path);
+                        // Split path into components (folders)
+                        let path_components: Vec<&str> = dir_path
+                            .split(['/', '\\'])
+                            .filter(|s| !s.is_empty())
+                            .collect();
 
                         let mut matches = true;
 
-                        // Check scene filter if present
-                        if let Some(scene) = scene_filter {
-                            let normalized_scene = normalize_path_component(scene);
-                            if !normalized_path.contains(&normalized_scene) {
-                                matches = false;
-                            }
-                        }
+                        // If both scene and shot filters are present, check they appear in correct order
+                        if scene_filter.is_some() && shot_filter.is_some() {
+                            if let (Some(ref scene), Some(ref shot)) = (scene_filter, shot_filter) {
+                                let scene_normalized = scene.to_uppercase().replace(" ", "");
+                                let shot_normalized = shot.to_uppercase().replace(" ", "");
 
-                        // Check shot filter if present (AND condition with scene)
-                        if matches && shot_filter.is_some() {
-                            if let Some(shot) = shot_filter {
-                                let normalized_shot = normalize_path_component(shot);
-                                if !normalized_path.contains(&normalized_shot) {
+                                // Find indices of scene and shot folders
+                                let scene_index = path_components.iter().position(|&component| {
+                                    let comp_normalized = component.to_uppercase().replace(" ", "");
+                                    comp_normalized == scene_normalized
+                                });
+
+                                let shot_index = path_components.iter().position(|&component| {
+                                    let comp_normalized = component.to_uppercase().replace(" ", "");
+                                    comp_normalized == shot_normalized
+                                });
+
+                                // Both must exist AND shot must come after scene in the path
+                                matches = match (scene_index, shot_index) {
+                                    (Some(sc_idx), Some(sh_idx)) => sh_idx > sc_idx,
+                                    _ => false
+                                };
+                            }
+                        } else {
+                            // Only one filter present, check individually
+
+                            // Check scene filter if present
+                            if let Some(ref scene) = scene_filter {
+                                let scene_normalized = scene.to_uppercase().replace(" ", "");
+
+                                let has_scene_folder = path_components.iter().any(|&component| {
+                                    let comp_normalized = component.to_uppercase().replace(" ", "");
+                                    comp_normalized == scene_normalized
+                                });
+
+                                if !has_scene_folder {
                                     matches = false;
+                                }
+                            }
+
+                            // Check shot filter if present
+                            if matches && shot_filter.is_some() {
+                                if let Some(ref shot) = shot_filter {
+                                    let shot_normalized = shot.to_uppercase().replace(" ", "");
+
+                                    let has_shot_folder = path_components.iter().any(|&component| {
+                                        let comp_normalized = component.to_uppercase().replace(" ", "");
+                                        comp_normalized == shot_normalized
+                                    });
+
+                                    if !has_shot_folder {
+                                        matches = false;
+                                    }
                                 }
                             }
                         }
@@ -3187,8 +3221,13 @@ async fn get_project_outputs(
         }
     }
 
+    println!("[OUTPUT] Files before grouping: {}", outputs.len());
+
     // Group image sequences
     let grouped_outputs = group_sequences(outputs);
+
+    println!("[OUTPUT] Files after grouping: {}", grouped_outputs.len());
+    println!("[OUTPUT] Returning {} output files", grouped_outputs.len());
 
     Ok(grouped_outputs)
 }

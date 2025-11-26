@@ -328,6 +328,7 @@ export interface LaunchSoftwareCommand {
   sceneName?: string;
   sceneNumber?: number;
   shotNumber?: number;
+  specialContext?: string;
 }
 
 export interface StartTimeTrackingCommand {
