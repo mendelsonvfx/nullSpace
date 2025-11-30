@@ -2,10 +2,11 @@
 
 mod time_tracking;
 mod file_naming;
+mod blend_thumbnail;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 use chrono::Utc;
@@ -20,6 +21,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use tauri::Manager;
 use regex;
+use walkdir::WalkDir;
 
 // Global state for file watcher
 struct WatcherHandle {
@@ -181,8 +183,8 @@ struct Scene {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Shot {
     id: String,
-    #[serde(rename = "sceneId")]
-    scene_id: String, // Required: scene this shot belongs to
+    #[serde(rename = "sceneId", skip_serializing_if = "Option::is_none")]
+    scene_id: Option<String>, // Optional: scene this shot belongs to (None in shots-only mode)
     number: u32,
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -196,6 +198,35 @@ struct Shot {
     completed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     wip: Option<bool>,
+}
+
+// WAL (Write-Ahead Log) structures for crash recovery during rename operations
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct RenameWAL {
+    operation_type: String, // "rename_shot" | "rename_scene" | "rename_shot_thumbnails" | "rename_scene_thumbnails"
+    timestamp: String,
+    project_path: String,
+    operations: Vec<RenameOperation>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct RenameOperation {
+    old_path: String,
+    new_path: String,
+    completed: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SceneFileCount {
+    #[serde(rename = "versionFiles")]
+    version_files: u32,
+    thumbnails: u32,
+}
+
+#[derive(Clone, Serialize)]
+struct RenameProgress {
+    current: u32,
+    total: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -560,7 +591,7 @@ async fn remove_software_from_project(project_path: String, software_name: Strin
 #[tauri::command]
 async fn load_projects(projects_dir: String) -> Result<Vec<Project>, String> {
     let base_path = PathBuf::from(&projects_dir);
-    
+
     if !base_path.exists() {
         fs::create_dir_all(&base_path)
             .map_err(|e| format!("Failed to create projects directory: {}", e))?;
@@ -575,6 +606,10 @@ async fn load_projects(projects_dir: String) -> Result<Vec<Project>, String> {
         if let Ok(entry) = entry {
             let metadata_path = entry.path().join(".project-metadata.json");
             if metadata_path.exists() {
+                // Check for and recover from incomplete WAL operations
+                let project_path_str = entry.path().to_string_lossy().to_string();
+                let _ = check_and_recover_wal(&project_path_str);
+
                 if let Ok(content) = fs::read_to_string(&metadata_path) {
                     if let Ok(project) = serde_json::from_str::<Project>(&content) {
                         projects.push(project);
@@ -1102,6 +1137,78 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
 }
 
 #[tauri::command]
+async fn launch_software_without_project(executable_path: String, software: String) -> Result<(), String> {
+    println!("[LAUNCH_NO_PROJECT] Launching {} without project context", software);
+
+    #[cfg(target_os = "windows")]
+    {
+        let software_lower = software.to_lowercase();
+
+        // Special handling for Houdini - use Windows file association
+        if software_lower == "houdini" {
+            // Create temporary .hip file
+            let temp_dir = std::env::temp_dir();
+            let temp_file = temp_dir.join(format!("houdini_temp_{}.hip", Utc::now().timestamp()));
+
+            // Use hython to create empty hip file
+            let hython_path = find_hython_path(&executable_path)?;
+            let file_path_str = temp_file.to_str()
+                .ok_or("Invalid file path encoding")?
+                .replace("\\", "\\\\");
+
+            let python_script = format!("import hou; hou.hipFile.save(r'{}')", file_path_str);
+            let output = Command::new(&hython_path)
+                .arg("-c")
+                .arg(&python_script)
+                .output()
+                .map_err(|e| format!("Failed to execute hython: {}", e))?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(format!("hython failed to create temp project: {}", stderr));
+            }
+
+            // Launch using Windows file association
+            Command::new("explorer")
+                .arg(&temp_file)
+                .spawn()
+                .map_err(|e| format!("Failed to launch Houdini: {}", e))?;
+
+            println!("[LAUNCH_NO_PROJECT] Successfully launched Houdini via explorer");
+            Ok(())
+        } else {
+            // Default behavior for other software
+            Command::new(&executable_path)
+                .spawn()
+                .map_err(|e| format!("Failed to launch software: {}", e))?;
+
+            println!("[LAUNCH_NO_PROJECT] Successfully launched {}", software);
+            Ok(())
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("-a")
+            .arg(&executable_path)
+            .spawn()
+            .map_err(|e| format!("Failed to launch software: {}", e))?;
+
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new(&executable_path)
+            .spawn()
+            .map_err(|e| format!("Failed to launch software: {}", e))?;
+
+        Ok(())
+    }
+}
+
+#[tauri::command]
 async fn open_in_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -1622,6 +1729,11 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
 }
 
 #[tauri::command]
+async fn extract_blend_thumbnail(path: String) -> Result<Option<String>, String> {
+    blend_thumbnail::extract_blend_thumbnail(&path)
+}
+
+#[tauri::command]
 async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
     let project_dir = PathBuf::from(&project_path);
     let mut deleted_count = 0u32;
@@ -1923,12 +2035,16 @@ async fn move_version_to_shot(
                 .and_then(|shots| shots.into_iter().find(|s| s.number == target_shot_number))
                 .ok_or("Target shot not found")?;
 
-            // Find the scene by ID
-            let scene = project.scenes
-                .and_then(|scenes| scenes.into_iter().find(|s| s.id == shot.scene_id))
-                .ok_or("Scene not found for target shot")?;
-
-            scene.name
+            // Find the scene by ID (if shot has a scene)
+            if let Some(scene_id) = &shot.scene_id {
+                project.scenes
+                    .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id))
+                    .map(|scene| scene.name)
+                    .ok_or("Scene not found for target shot")?
+            } else {
+                // Shots-only mode: no scene
+                String::new()
+            }
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -1984,12 +2100,16 @@ async fn copy_version_to_shot(
                 .and_then(|shots| shots.into_iter().find(|s| s.number == target_shot_number))
                 .ok_or("Target shot not found")?;
 
-            // Find the scene by ID
-            let scene = project.scenes
-                .and_then(|scenes| scenes.into_iter().find(|s| s.id == shot.scene_id))
-                .ok_or("Scene not found for target shot")?;
-
-            scene.name
+            // Find the scene by ID (if shot has a scene)
+            if let Some(scene_id) = &shot.scene_id {
+                project.scenes
+                    .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id))
+                    .map(|scene| scene.name)
+                    .ok_or("Scene not found for target shot")?
+            } else {
+                // Shots-only mode: no scene
+                String::new()
+            }
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -2515,6 +2635,129 @@ fn read_feedback_full() -> Result<String, String> {
         .or_else(|_| Ok::<String, String>(String::new()))
 }
 
+// ==================== WAL (Write-Ahead Log) Utility Functions ====================
+
+/// Create a new WAL file for a rename operation
+fn create_wal(project_path: &str, operation_type: &str) -> Result<RenameWAL, String> {
+    let wal = RenameWAL {
+        operation_type: operation_type.to_string(),
+        timestamp: Utc::now().to_rfc3339(),
+        project_path: project_path.to_string(),
+        operations: Vec::new(),
+    };
+
+    let wal_path = Path::new(project_path).join(".rayhub").join("rename_wal.json");
+    fs::create_dir_all(wal_path.parent().unwrap())
+        .map_err(|e| format!("Failed to create WAL directory: {}", e))?;
+
+    let json = serde_json::to_string_pretty(&wal)
+        .map_err(|e| format!("Failed to serialize WAL: {}", e))?;
+    fs::write(&wal_path, json)
+        .map_err(|e| format!("Failed to write WAL: {}", e))?;
+
+    Ok(wal)
+}
+
+/// Save current WAL state to disk
+fn save_wal(wal: &RenameWAL) -> Result<(), String> {
+    let wal_path = Path::new(&wal.project_path).join(".rayhub").join("rename_wal.json");
+    let json = serde_json::to_string_pretty(wal)
+        .map_err(|e| format!("Failed to serialize WAL: {}", e))?;
+    fs::write(&wal_path, json)
+        .map_err(|e| format!("Failed to write WAL: {}", e))?;
+    Ok(())
+}
+
+/// Perform a file rename operation with WAL tracking
+fn rename_with_wal(wal: &mut RenameWAL, old_path: &Path, new_path: &Path) -> Result<(), String> {
+    // 1. Add operation to WAL (not completed yet)
+    wal.operations.push(RenameOperation {
+        old_path: old_path.to_string_lossy().to_string(),
+        new_path: new_path.to_string_lossy().to_string(),
+        completed: false,
+    });
+    save_wal(wal)?;
+
+    // 2. Perform the rename operation
+    fs::rename(old_path, new_path)
+        .map_err(|e| format!("Failed to rename {} -> {}: {}",
+            old_path.display(), new_path.display(), e))?;
+
+    // 3. Mark as completed in WAL
+    if let Some(last_op) = wal.operations.last_mut() {
+        last_op.completed = true;
+    }
+    save_wal(wal)?;
+
+    Ok(())
+}
+
+/// Rollback all completed operations from WAL (in reverse order)
+fn rollback_from_wal(wal: &RenameWAL) -> Result<(), String> {
+    println!("⚠️  Rolling back {} operations...", wal.operations.len());
+
+    // Rollback in reverse order, only completed operations
+    for op in wal.operations.iter().rev() {
+        if op.completed {
+            println!("  ↩️  Reverting: {} -> {}", op.new_path, op.old_path);
+            // Ignore errors during rollback - file might not exist or already reverted
+            let _ = fs::rename(&op.new_path, &op.old_path);
+        }
+    }
+
+    Ok(())
+}
+
+/// Delete WAL file after successful operation
+fn delete_wal(wal: &RenameWAL) -> Result<(), String> {
+    let wal_path = Path::new(&wal.project_path).join(".rayhub").join("rename_wal.json");
+    if wal_path.exists() {
+        fs::remove_file(&wal_path)
+            .map_err(|e| format!("Failed to delete WAL: {}", e))?;
+    }
+    Ok(())
+}
+
+/// Check for and recover from incomplete WAL operations on project open
+fn check_and_recover_wal(project_path: &str) -> Result<(), String> {
+    let wal_path = Path::new(project_path).join(".rayhub").join("rename_wal.json");
+
+    if wal_path.exists() {
+        println!("🔧 Found incomplete WAL operation, recovering...");
+
+        let json = fs::read_to_string(&wal_path)
+            .map_err(|e| format!("Failed to read WAL: {}", e))?;
+        let wal: RenameWAL = serde_json::from_str(&json)
+            .map_err(|e| format!("Failed to parse WAL: {}", e))?;
+
+        // Rollback incomplete operation
+        rollback_from_wal(&wal)?;
+
+        // Delete WAL after recovery
+        fs::remove_file(&wal_path)
+            .map_err(|e| format!("Failed to delete WAL after recovery: {}", e))?;
+
+        println!("✅ Successfully recovered from incomplete {} operation", wal.operation_type);
+    }
+
+    Ok(())
+}
+
+/// Emit progress event to frontend
+fn emit_progress(app_handle: &tauri::AppHandle, current: usize, total: usize) {
+    let _ = app_handle.emit_all("rename-progress", RenameProgress {
+        current: current as u32,
+        total: total as u32,
+    });
+}
+
+/// Format shot number with leading zeros (e.g., 1 -> "001")
+fn format_shot_number(number: u32) -> String {
+    format!("{:03}", number)
+}
+
+// ==================== End of WAL Utilities ====================
+
 // Helper function to find shot files matching a pattern
 fn find_shot_files(project_path: &PathBuf, project_name: &str, scene_name: &str, shot_number: u32) -> Result<Vec<PathBuf>, String> {
     // Build shot pattern using file_naming module: PROJECT_SCENE_SHOT_
@@ -2573,12 +2816,18 @@ async fn check_shot_files_accessible(project_path: String, shot_number: u32) -> 
                 .and_then(|shots| shots.into_iter().find(|s| s.number == shot_number))
                 .ok_or("Shot not found")?;
 
-            // Find the scene by ID
-            let scene = project.scenes
-                .and_then(|scenes| scenes.into_iter().find(|s| s.id == shot.scene_id))
-                .ok_or("Scene not found for shot")?;
+            // Find the scene by ID (if shot has a scene)
+            let scene_name = if let Some(scene_id) = &shot.scene_id {
+                project.scenes
+                    .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id))
+                    .map(|scene| scene.name)
+                    .ok_or("Scene not found for shot")?
+            } else {
+                // Shots-only mode: no scene
+                String::new()
+            };
 
-            (project.name, scene.name)
+            (project.name, scene_name)
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -2615,6 +2864,7 @@ async fn check_shot_files_accessible(project_path: String, shot_number: u32) -> 
 
 #[tauri::command]
 async fn rename_shot_files(
+    app_handle: tauri::AppHandle,
     project_path: String,
     old_shot_number: u32,
     new_shot_number: u32
@@ -2630,12 +2880,18 @@ async fn rename_shot_files(
                 .and_then(|shots| shots.into_iter().find(|s| s.number == old_shot_number))
                 .ok_or("Shot not found")?;
 
-            // Find the scene by ID
-            let scene = project.scenes
-                .and_then(|scenes| scenes.into_iter().find(|s| s.id == shot.scene_id))
-                .ok_or("Scene not found for shot")?;
+            // Find the scene by ID (if shot has a scene)
+            let scene_name = if let Some(scene_id) = &shot.scene_id {
+                project.scenes
+                    .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id))
+                    .map(|scene| scene.name)
+                    .ok_or("Scene not found for shot")?
+            } else {
+                // Shots-only mode: no scene
+                String::new()
+            };
 
-            (project.name, scene.name)
+            (project.name, scene_name)
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -2650,10 +2906,13 @@ async fn rename_shot_files(
         return Ok(0); // No files to rename
     }
 
+    // Create WAL for transaction safety
+    let mut wal = create_wal(&project_path, "rename_shot")?;
+    let total = files.len();
     let mut renamed_count = 0u32;
 
-    // Rename each file using file_naming module
-    for file_path in files {
+    // Rename each file using file_naming module with WAL tracking
+    for (index, file_path) in files.iter().enumerate() {
         if let Some(file_name) = file_path.file_name() {
             let file_name_str = file_name.to_string_lossy();
 
@@ -2668,20 +2927,381 @@ async fn rename_shot_files(
                 if let Some(parent) = file_path.parent() {
                     let new_file_path = parent.join(&new_file_name);
 
-                    // Rename the file
-                    match fs::rename(&file_path, &new_file_path) {
+                    // Rename the file with WAL tracking
+                    match rename_with_wal(&mut wal, &file_path, &new_file_path) {
                         Ok(_) => {
                             renamed_count += 1;
-                            println!("Renamed: {} -> {}", file_name_str, new_file_name);
+                            println!("✓ Renamed: {} -> {}", file_name_str, new_file_name);
+
+                            // Emit progress to frontend
+                            emit_progress(&app_handle, index + 1, total);
                         }
                         Err(e) => {
-                            return Err(format!("Failed to rename file {}: {}", file_name_str, e));
+                            // Rollback on error
+                            println!("❌ Error renaming file, rolling back...");
+                            rollback_from_wal(&wal)?;
+                            delete_wal(&wal)?;
+                            return Err(e);
                         }
                     }
                 }
             }
         }
     }
+
+    // Delete WAL after successful completion
+    delete_wal(&wal)?;
+    println!("✅ Successfully renamed {} files", renamed_count);
+
+    Ok(renamed_count)
+}
+
+#[tauri::command]
+async fn rename_shot_thumbnails(
+    app_handle: tauri::AppHandle,
+    project_path: String,
+    old_shot_number: u32,
+    new_shot_number: u32,
+) -> Result<u32, String> {
+    let thumbnails_dir = Path::new(&project_path).join(".thumbnails");
+    let mut found_thumbnails = Vec::new();
+
+    // Search for thumbnails in all software directories
+    let software_folders = vec!["blender", "houdini", "aftereffects", "nuke", "maya", "cinema4d"];
+
+    for software in software_folders {
+        let software_dir = thumbnails_dir.join(software);
+        if !software_dir.exists() {
+            continue;
+        }
+
+        if let Ok(entries) = fs::read_dir(&software_dir) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        let file_name = entry.file_name();
+                        let file_name_str = file_name.to_string_lossy().to_string();
+
+                        // Pattern: shot{old_number}_*.png
+                        let old_pattern = format!("shot{}_", format_shot_number(old_shot_number));
+                        if file_name_str.starts_with(&old_pattern) {
+                            found_thumbnails.push(entry.path());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if found_thumbnails.is_empty() {
+        return Ok(0); // No thumbnails to rename
+    }
+
+    // Create WAL for transaction safety
+    let mut wal = create_wal(&project_path, "rename_shot_thumbnails")?;
+    let total = found_thumbnails.len();
+    let mut renamed_count = 0u32;
+
+    // Rename each thumbnail with WAL tracking
+    for (index, thumb_path) in found_thumbnails.iter().enumerate() {
+        let file_name = thumb_path.file_name().unwrap().to_string_lossy();
+        let old_pattern = format!("shot{}_", format_shot_number(old_shot_number));
+        let new_pattern = format!("shot{}_", format_shot_number(new_shot_number));
+        let new_name = file_name.replace(&old_pattern, &new_pattern);
+        let new_path = thumb_path.with_file_name(new_name.as_str());
+
+        match rename_with_wal(&mut wal, thumb_path, &new_path) {
+            Ok(_) => {
+                renamed_count += 1;
+                println!("✓ Renamed thumbnail: {} -> {}", file_name, new_name);
+                emit_progress(&app_handle, index + 1, total);
+            }
+            Err(e) => {
+                println!("❌ Error renaming thumbnail, rolling back...");
+                rollback_from_wal(&wal)?;
+                delete_wal(&wal)?;
+                return Err(e);
+            }
+        }
+    }
+
+    delete_wal(&wal)?;
+    println!("✅ Successfully renamed {} thumbnails", renamed_count);
+
+    Ok(renamed_count)
+}
+
+#[tauri::command]
+async fn count_shot_files(
+    project_path: String,
+    shot_number: u32,
+) -> Result<SceneFileCount, String> {
+    let project_dir = Path::new(&project_path);
+    let mut version_files = 0u32;
+    let mut thumbnails = 0u32;
+
+    // Count version files
+    for entry in WalkDir::new(project_dir)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if entry.file_type().is_file() {
+            if let Some(file_name) = entry.file_name().to_str() {
+                // Check if filename contains the shot number pattern
+                let shot_pattern = format!("_SH{}_", format_shot_number(shot_number));
+                if file_name.contains(&shot_pattern) {
+                    version_files += 1;
+                }
+            }
+        }
+    }
+
+    // Count thumbnails
+    let thumbnails_dir = project_dir.join(".thumbnails");
+    let software_folders = vec!["blender", "houdini", "aftereffects", "nuke", "maya", "cinema4d"];
+
+    for software in software_folders {
+        let software_dir = thumbnails_dir.join(software);
+        if !software_dir.exists() {
+            continue;
+        }
+
+        if let Ok(entries) = fs::read_dir(&software_dir) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        let file_name = entry.file_name();
+                        let file_name_str = file_name.to_string_lossy().to_string();
+                        let shot_pattern = format!("shot{}_", format_shot_number(shot_number));
+                        if file_name_str.starts_with(&shot_pattern) {
+                            thumbnails += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(SceneFileCount {
+        version_files,
+        thumbnails,
+    })
+}
+
+#[tauri::command]
+async fn count_scene_files(
+    project_path: String,
+    scene_name: String,
+) -> Result<SceneFileCount, String> {
+    let project_dir = Path::new(&project_path);
+    let mut version_files = 0u32;
+    let mut thumbnails = 0u32;
+
+    // Get project name from metadata
+    let metadata_path = project_dir.join(".project-metadata.json");
+    let _project_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+        if let Ok(project) = serde_json::from_str::<Project>(&content) {
+            project.name
+        } else {
+            return Err("Failed to parse project metadata".to_string());
+        }
+    } else {
+        return Err("Project metadata not found".to_string());
+    };
+
+    // Count version files in software folders
+    let software_folders = vec![
+        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
+        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset", "Nuke"
+    ];
+
+    for software_folder in software_folders {
+        let software_path = project_dir.join(software_folder);
+        if !software_path.exists() {
+            continue;
+        }
+
+        // Use WalkDir to recursively search for files
+        for entry in WalkDir::new(&software_path).into_iter().flatten() {
+            if entry.file_type().is_file() {
+                if let Some(file_name) = entry.path().file_name() {
+                    let file_name_str = file_name.to_string_lossy();
+                    if let Some(components) = file_naming::FileNameComponents::parse(&file_name_str) {
+                        if components.scene_name == scene_name {
+                            version_files += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Count thumbnails
+    let thumbnails_dir = project_dir.join(".thumbnails");
+    if thumbnails_dir.exists() {
+        let scene_pattern = format!("_{}_", scene_name);
+
+        for software in vec!["blender", "houdini", "aftereffects", "nuke", "maya", "cinema4d"] {
+            let software_dir = thumbnails_dir.join(software);
+            if let Ok(entries) = fs::read_dir(&software_dir) {
+                for entry in entries.flatten() {
+                    let file_name = entry.file_name().to_string_lossy().to_string();
+                    if file_name.contains(&scene_pattern) {
+                        thumbnails += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(SceneFileCount {
+        version_files,
+        thumbnails,
+    })
+}
+
+#[tauri::command]
+async fn rename_scene_files(
+    app_handle: tauri::AppHandle,
+    project_path: String,
+    old_scene_name: String,
+    new_scene_name: String,
+) -> Result<u32, String> {
+    let project_dir = Path::new(&project_path);
+    let mut files_to_rename = Vec::new();
+
+    // Search for all files with old scene name
+    let software_folders = vec![
+        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
+        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset", "Nuke"
+    ];
+
+    for software_folder in software_folders {
+        let software_path = project_dir.join(software_folder);
+        if !software_path.exists() {
+            continue;
+        }
+
+        for entry in WalkDir::new(&software_path).into_iter().flatten() {
+            if entry.file_type().is_file() {
+                if let Some(file_name) = entry.path().file_name() {
+                    let file_name_str = file_name.to_string_lossy();
+                    if let Some(components) = file_naming::FileNameComponents::parse(&file_name_str) {
+                        if components.scene_name == old_scene_name {
+                            files_to_rename.push(entry.path().to_path_buf());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if files_to_rename.is_empty() {
+        return Ok(0); // No files to rename
+    }
+
+    // Create WAL for transaction safety
+    let mut wal = create_wal(&project_path, "rename_scene")?;
+    let total = files_to_rename.len();
+    let mut renamed_count = 0u32;
+
+    // Rename each file with WAL tracking
+    for (index, file_path) in files_to_rename.iter().enumerate() {
+        let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
+
+        if let Some(mut components) = file_naming::FileNameComponents::parse(&file_name) {
+            // Update scene name
+            components.scene_name = new_scene_name.clone();
+            let new_file_name = components.build();
+            let new_path = file_path.with_file_name(&new_file_name);
+
+            match rename_with_wal(&mut wal, file_path, &new_path) {
+                Ok(_) => {
+                    renamed_count += 1;
+                    println!("✓ Renamed: {} -> {}", file_name, new_file_name);
+                    emit_progress(&app_handle, index + 1, total);
+                }
+                Err(e) => {
+                    println!("❌ Error renaming file, rolling back...");
+                    rollback_from_wal(&wal)?;
+                    delete_wal(&wal)?;
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    delete_wal(&wal)?;
+    println!("✅ Successfully renamed {} scene files", renamed_count);
+
+    Ok(renamed_count)
+}
+
+#[tauri::command]
+async fn rename_scene_thumbnails(
+    app_handle: tauri::AppHandle,
+    project_path: String,
+    old_scene_name: String,
+    new_scene_name: String,
+) -> Result<u32, String> {
+    let thumbnails_dir = Path::new(&project_path).join(".thumbnails");
+    let mut found_thumbnails = Vec::new();
+
+    if !thumbnails_dir.exists() {
+        return Ok(0); // No thumbnails directory
+    }
+
+    // Search for thumbnails containing old scene name
+    let old_pattern = format!("_{}_", old_scene_name);
+    let software_folders = vec!["blender", "houdini", "aftereffects", "nuke", "maya", "cinema4d"];
+
+    for software in software_folders {
+        let software_dir = thumbnails_dir.join(software);
+        if let Ok(entries) = fs::read_dir(&software_dir) {
+            for entry in entries.flatten() {
+                let file_name = entry.file_name().to_string_lossy().to_string();
+                if file_name.contains(&old_pattern) {
+                    found_thumbnails.push(entry.path());
+                }
+            }
+        }
+    }
+
+    if found_thumbnails.is_empty() {
+        return Ok(0); // No thumbnails to rename
+    }
+
+    // Create WAL for transaction safety
+    let mut wal = create_wal(&project_path, "rename_scene_thumbnails")?;
+    let total = found_thumbnails.len();
+    let mut renamed_count = 0u32;
+
+    // Rename each thumbnail with WAL tracking
+    for (index, thumb_path) in found_thumbnails.iter().enumerate() {
+        let file_name = thumb_path.file_name().unwrap().to_string_lossy();
+        let old_pattern = format!("_{}_", old_scene_name);
+        let new_pattern = format!("_{}_", new_scene_name);
+        let new_name = file_name.replace(&old_pattern, &new_pattern);
+        let new_path = thumb_path.with_file_name(new_name.as_str());
+
+        match rename_with_wal(&mut wal, thumb_path, &new_path) {
+            Ok(_) => {
+                renamed_count += 1;
+                println!("✓ Renamed scene thumbnail: {} -> {}", file_name, new_name);
+                emit_progress(&app_handle, index + 1, total);
+            }
+            Err(e) => {
+                println!("❌ Error renaming thumbnail, rolling back...");
+                rollback_from_wal(&wal)?;
+                delete_wal(&wal)?;
+                return Err(e);
+            }
+        }
+    }
+
+    delete_wal(&wal)?;
+    println!("✅ Successfully renamed {} scene thumbnails", renamed_count);
 
     Ok(renamed_count)
 }
@@ -3221,13 +3841,8 @@ async fn get_project_outputs(
         }
     }
 
-    println!("[OUTPUT] Files before grouping: {}", outputs.len());
-
     // Group image sequences
     let grouped_outputs = group_sequences(outputs);
-
-    println!("[OUTPUT] Files after grouping: {}", grouped_outputs.len());
-    println!("[OUTPUT] Returning {} output files", grouped_outputs.len());
 
     Ok(grouped_outputs)
 }
@@ -3424,6 +4039,7 @@ fn main() {
             update_project,
             delete_project,
             launch_software,
+            launch_software_without_project,
             open_in_explorer,
             reveal_in_explorer,
             open_file,
@@ -3433,6 +4049,7 @@ fn main() {
             set_scene_preview,
             set_shot_preview,
             get_project_versions,
+            extract_blend_thumbnail,
             cleanup_backup_files,
             delete_shot_files,
             delete_scene_files,
@@ -3450,6 +4067,11 @@ fn main() {
             read_feedback_full,
             check_shot_files_accessible,
             rename_shot_files,
+            rename_shot_thumbnails,
+            count_shot_files,
+            count_scene_files,
+            rename_scene_files,
+            rename_scene_thumbnails,
             create_scene_folders,
             create_shot_folders,
             rename_scene_folders,

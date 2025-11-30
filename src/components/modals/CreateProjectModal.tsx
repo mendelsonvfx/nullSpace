@@ -133,11 +133,11 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
       if (!deadlineFieldsFilled.month || !deadlineFieldsFilled.year) {
         const parts = finalDeadline.split('-');
         const now = new Date();
-        const currentYear = String(now.getFullYear());
-        const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+        const year = parts[0] || String(now.getFullYear());
+        const month = parts[1] || String(now.getMonth() + 1).padStart(2, '0');
         const day = parts[2];
 
-        finalDeadline = `${currentYear}-${currentMonth}-${day.padStart(2, '0')}`;
+        finalDeadline = `${year}-${month}-${day.padStart(2, '0')}`;
       }
     }
 

@@ -1117,7 +1117,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             </div>
             <button
               onClick={handleRefresh}
-              className="p-1 hover:bg-hover-bg rounded transition-colors group"
+              className="hover:bg-hover-bg rounded transition-colors group"
               title="Refresh tree and size"
               disabled={isRefreshing}
             >

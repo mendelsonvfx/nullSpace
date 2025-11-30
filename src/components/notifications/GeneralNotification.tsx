@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { AlertCircle, CheckCircle, Info, X, Clock } from 'lucide-react';
 
 export interface GeneralNotification {
@@ -18,6 +18,12 @@ export function GeneralNotification({ notification, onClose }: GeneralNotificati
   const [isVisible, setIsVisible] = useState(false);
   const [progress, setProgress] = useState(100);
   const duration = notification.duration || 5000;
+  const onCloseRef = useRef(onClose);
+
+  // Update ref when onClose changes
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     setIsVisible(true);
@@ -28,14 +34,14 @@ export function GeneralNotification({ notification, onClose }: GeneralNotificati
 
     const timer = setTimeout(() => {
       setIsVisible(false);
-      setTimeout(onClose, 200);
+      setTimeout(() => onCloseRef.current(), 200);
     }, duration);
 
     return () => {
       clearInterval(progressInterval);
       clearTimeout(timer);
     };
-  }, [duration, onClose]);
+  }, [duration]);
 
   const handleClose = () => {
     setIsVisible(false);
@@ -66,6 +72,7 @@ export function GeneralNotification({ notification, onClose }: GeneralNotificati
           progressColor: 'bg-orange-800/50'
         };
       case 'info':
+      default:
         return {
           bgColor: 'bg-blue-600',
           textColor: 'text-white',

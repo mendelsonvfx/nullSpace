@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { SoftwareIcon } from '../SoftwareIcon';
@@ -10,6 +11,7 @@ import { FolderOpen, Copy, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import type { SoftwareName } from '../../types/project';
 import { getScenePattern, getShotPattern, extractShotNumber, parseFileName } from '../../utils/fileNaming';
+import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
 
 interface ProjectVersion {
   name: string;
@@ -35,12 +37,20 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; version: ProjectVersion } | null>(null);
   const [showShotSubmenu, setShowShotSubmenu] = useState(false);
   const [submenuAction, setSubmenuAction] = useState<'move' | 'copy' | null>(null);
+  const [activeSceneSubmenu, setActiveSceneSubmenu] = useState<string | null>(null);
+  const [shotSubmenuPosition, setShotSubmenuPosition] = useState({ horizontal: 'right' as 'right' | 'left', y: 0 });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [versionMarks, setVersionMarks] = useState<Record<string, MarkColor>>({});
+  const [blendPreviewsEnabled, setBlendPreviewsEnabled] = useState(() => {
+    const saved = localStorage.getItem('blendPreviewsEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadingTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const shotSubmenuRef = useRef<HTMLDivElement>(null);
+  const submenuCloseTimeoutRef = useRef<number | null>(null);
   const startSession = useTimeTrackingStore(state => state.startSession);
   const { activeMenu, setActiveMenu } = useContextMenuStore();
 
@@ -140,6 +150,19 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     const marks = versionMarksCache.getProjectMarks(project.path);
     setVersionMarks(marks);
   }, [project.path]);
+
+  // Listen for blend previews setting changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const saved = localStorage.getItem('blendPreviewsEnabled');
+      if (saved !== null) {
+        setBlendPreviewsEnabled(JSON.parse(saved));
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   // Listen for version changes from file system watcher
   // ✅ RE-ENABLED: File watcher now works properly
@@ -302,6 +325,73 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     return sorted;
   }, [allVersions, currentScene, currentShot, specialContextType, project.name]);
 
+  // Group shots by scenes for nested menu
+  const shotsByScene = useMemo(() => {
+    if (!project.shots || !project.scenes) return {};
+
+    const currentShotNumber = contextMenu
+      ? extractShotNumber(contextMenu.version.name)
+      : null;
+
+    // Group shots by scene_id
+    const grouped: Record<string, { scene: any; shots: any[] }> = {};
+
+    project.shots.forEach((shot: any) => {
+      // Exclude current shot
+      if (shot.number === currentShotNumber) return;
+
+      const sceneId = shot.sceneId;
+      if (!grouped[sceneId]) {
+        const scene = project.scenes.find((s: any) => s.id === sceneId);
+        if (scene) {
+          grouped[sceneId] = { scene, shots: [] };
+        }
+      }
+      if (grouped[sceneId]) {
+        grouped[sceneId].shots.push(shot);
+      }
+    });
+
+    // Sort scenes alphabetically
+    const sorted = Object.entries(grouped).sort(([, a], [, b]) =>
+      a.scene.name.localeCompare(b.scene.name)
+    );
+
+    // Sort shots within each scene by number
+    sorted.forEach(([, group]) => {
+      group.shots.sort((a, b) => a.number - b.number);
+    });
+
+    return Object.fromEntries(sorted);
+  }, [project.shots, project.scenes, contextMenu]);
+
+  // Calculate submenu position to prevent overflow
+  const calculateSubmenuPosition = useCallback((
+    triggerRect: DOMRect,
+    submenuWidth: number = 180,
+    submenuHeight: number = 300
+  ): { horizontal: 'right' | 'left'; y: number } => {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    // Determine horizontal direction
+    const spaceOnRight = windowWidth - triggerRect.right;
+    const spaceOnLeft = triggerRect.left;
+    const horizontal: 'right' | 'left' = spaceOnRight >= submenuWidth ? 'right' :
+                       spaceOnLeft >= submenuWidth ? 'left' : 'right';
+
+    // Vertical position with overflow protection
+    let y = 0; // Relative to parent
+    const spaceBelow = windowHeight - triggerRect.top;
+
+    if (spaceBelow < submenuHeight) {
+      // Shift up if not enough space below
+      y = Math.max(-triggerRect.top + 10, triggerRect.bottom - triggerRect.top - submenuHeight);
+    }
+
+    return { horizontal, y };
+  }, []);
+
   const handleVersionDoubleClick = async (versionPath: string, softwareList: string[]) => {
     try {
       // Determine which software to use (prefer first in list)
@@ -436,7 +526,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
       setActiveMenu(null);
     } catch (error) {
       console.error('Failed to move version to shot:', error);
-      alert(`Failed to move version: ${error}`);
+      showNotification('error', `Failed to move version: ${error}`);
     }
   };
 
@@ -460,7 +550,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
       setActiveMenu(null);
     } catch (error) {
       console.error('Failed to copy version to shot:', error);
-      alert(`Failed to copy version: ${error}`);
+      showNotification('error', `Failed to copy version: ${error}`);
     }
   };
 
@@ -574,6 +664,73 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
       return true;
     });
 
+  // Version Card Component with optional Blender thumbnail
+  const VersionCard = ({ version, isBlendFile, versionMark, onDoubleClick, onContextMenu }: {
+    version: ProjectVersion;
+    isBlendFile: boolean;
+    versionMark?: MarkColor;
+    onDoubleClick: () => void;
+    onContextMenu: (e: React.MouseEvent) => void;
+  }) => {
+    const blendThumbnail = useBlendThumbnail(isBlendFile && blendPreviewsEnabled ? version.path : undefined);
+    const hasThumbnail = isBlendFile && blendPreviewsEnabled && blendThumbnail;
+
+    return (
+      <div
+        className={`relative flex flex-col flex-shrink-0 ${hasThumbnail ? 'w-36' : 'w-32'} cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none`}
+        onDoubleClick={onDoubleClick}
+        onContextMenu={onContextMenu}
+        title="Double-click to open"
+      >
+        {/* Color mark indicator */}
+        {versionMark && (
+          <div
+            className={`absolute ${hasThumbnail ? 'top-1 right-1' : 'top-1'} w-1.5 h-1.5 rounded-full ${
+              versionMark === 'red' ? 'bg-red-500' :
+              versionMark === 'green' ? 'bg-green-500' :
+              'bg-blue-500'
+            }`}
+            style={hasThumbnail ? undefined : { right: '40px' }}
+            title={`Marked as ${versionMark}`}
+          />
+        )}
+
+        {/* Blender thumbnail preview or software icons */}
+        {hasThumbnail ? (
+          <div className="mb-2 rounded overflow-hidden bg-zinc-800 border border-border-primary relative">
+            <img
+              src={blendThumbnail}
+              alt="Blender preview"
+              className="w-full h-16 object-cover"
+            />
+            {/* Software icon overlay in bottom-right corner */}
+            <div className="absolute bottom-1 right-1 w-5 h-5">
+              <SoftwareIcon name="Blender" />
+            </div>
+          </div>
+        ) : (
+          /* Software icons (when no thumbnail) */
+          <div className="flex gap-1 mb-2 justify-center items-center flex-wrap flex-1">
+            {version.software.length > 0 ? (
+              version.software.map((sw) => (
+                <div key={sw} className="w-5 h-5">
+                  <SoftwareIcon name={sw} />
+                </div>
+              ))
+            ) : (
+              <div className="w-5 h-5 bg-zinc-700 rounded" />
+            )}
+          </div>
+        )}
+
+        {/* Version name without extension */}
+        <div className="text-xs text-center font-medium truncate" title={version.name}>
+          {getVersionDisplayName(version.name)}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="mb-6 overflow-hidden">
       {/* Header with title and refresh button */}
@@ -662,54 +819,28 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
           <p className="text-xs text-text-muted text-center">No versions found for {selectedSoftware}</p>
         ) : (
           <div className="flex gap-3 w-max">
-            {filteredVersions.map((version) => (
-              <div
-                key={version.path}
-                className="relative flex-shrink-0 w-32 cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none"
-                onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
-                onContextMenu={(e) => handleContextMenu(e, version)}
-                title="Double-click to open"
-              >
-                {/* Color mark indicator */}
-                {versionMarks[version.path] && (
-                  <div
-                    className={`absolute top-1 w-1.5 h-1.5 rounded-full ${
-                      versionMarks[version.path] === 'red' ? 'bg-red-500' :
-                      versionMarks[version.path] === 'green' ? 'bg-green-500' :
-                      'bg-blue-500'
-                    }`}
-                    style={{ right: '40px' }}
-                    title={`Marked as ${versionMarks[version.path]}`}
-                  />
-                )}
-
-                {/* Header with software icons */}
-                <div className="flex gap-1 mb-2 justify-center flex-wrap">
-                  {version.software.length > 0 ? (
-                    version.software.map((sw) => (
-                      <div key={sw} className="w-5 h-5">
-                        <SoftwareIcon name={sw} />
-                      </div>
-                    ))
-                  ) : (
-                    <div className="w-5 h-5 bg-zinc-700 rounded" />
-                  )}
-                </div>
-                {/* Version name without extension */}
-                <div className="text-xs text-center font-medium truncate" title={version.name}>
-                  {getVersionDisplayName(version.name)}
-                </div>
-              </div>
-            ))}
+            {filteredVersions.map((version) => {
+              const isBlendFile = version.software.includes('Blender');
+              return (
+                <VersionCard
+                  key={version.path}
+                  version={version}
+                  isBlendFile={isBlendFile}
+                  versionMark={versionMarks[version.path]}
+                  onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
+                  onContextMenu={(e) => handleContextMenu(e, version)}
+                />
+              );
+            })}
           </div>
         )}
       </div>
 
       {/* Context Menu */}
-      {contextMenu && (
+      {contextMenu && createPortal(
         <div
           ref={contextMenuRef}
-          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-50 py-1 min-w-[180px] animate-context-menu"
+          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-[100] py-1 min-w-[180px] animate-context-menu"
           style={{
             top: (() => {
               const menuHeight = contextMenuRef.current?.offsetHeight || 200;
@@ -773,20 +904,46 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
             <>
               <div className="border-t border-zinc-700 my-1" />
               <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between"
-                onMouseEnter={() => {
+                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between text-text-primary"
+                onMouseEnter={(e) => {
+                  if (submenuCloseTimeoutRef.current) {
+                    clearTimeout(submenuCloseTimeoutRef.current);
+                    submenuCloseTimeoutRef.current = null;
+                  }
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const position = calculateSubmenuPosition(rect, 180, 400);
+                  setShotSubmenuPosition(position);
                   setShowShotSubmenu(true);
                   setSubmenuAction('move');
+                }}
+                onMouseLeave={() => {
+                  submenuCloseTimeoutRef.current = window.setTimeout(() => {
+                    setShowShotSubmenu(false);
+                    setActiveSceneSubmenu(null);
+                  }, 150);
                 }}
               >
                 <span>Move to shot...</span>
                 <span className="text-zinc-500">›</span>
               </button>
               <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between"
-                onMouseEnter={() => {
+                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between text-text-primary"
+                onMouseEnter={(e) => {
+                  if (submenuCloseTimeoutRef.current) {
+                    clearTimeout(submenuCloseTimeoutRef.current);
+                    submenuCloseTimeoutRef.current = null;
+                  }
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const position = calculateSubmenuPosition(rect, 180, 400);
+                  setShotSubmenuPosition(position);
                   setShowShotSubmenu(true);
                   setSubmenuAction('copy');
+                }}
+                onMouseLeave={() => {
+                  submenuCloseTimeoutRef.current = window.setTimeout(() => {
+                    setShowShotSubmenu(false);
+                    setActiveSceneSubmenu(null);
+                  }, 150);
                 }}
               >
                 <span>Copy to shot...</span>
@@ -795,38 +952,130 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
             </>
           )}
 
-          {/* Shot Submenu */}
+          {/* Shot Submenu - Level 1: Scenes */}
           {showShotSubmenu && submenuAction && project.shots && contextMenu && (
             <div
-              className="absolute left-full top-0 ml-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[140px] animate-context-menu"
-              onMouseLeave={() => setShowShotSubmenu(false)}
+              ref={shotSubmenuRef}
+              className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[140px] max-w-[140px] animate-context-menu z-[100]"
+              style={{
+                left: shotSubmenuPosition.horizontal === 'right'
+                  ? `${(contextMenuRef.current?.getBoundingClientRect().right || 0) + 4}px`
+                  : 'auto',
+                right: shotSubmenuPosition.horizontal === 'left'
+                  ? `${window.innerWidth - (contextMenuRef.current?.getBoundingClientRect().left || 0) + 4}px`
+                  : 'auto',
+                bottom: `${window.innerHeight - (contextMenuRef.current?.getBoundingClientRect().bottom || 0)}px`,
+                maxHeight: (() => {
+                  const menuRect = contextMenuRef.current?.getBoundingClientRect();
+                  if (!menuRect) return '400px';
+                  // Максимальная высота = расстояние от нижнего края меню до верха экрана
+                  const availableHeight = menuRect.bottom - 10; // 10px отступ сверху
+                  return `${Math.min(400, availableHeight)}px`;
+                })(),
+                overflowY: 'auto'
+              }}
+              onMouseEnter={() => {
+                if (submenuCloseTimeoutRef.current) {
+                  clearTimeout(submenuCloseTimeoutRef.current);
+                  submenuCloseTimeoutRef.current = null;
+                }
+              }}
             >
-              {(() => {
-                // Extract current shot number using file naming utility
-                const currentShotNumber = extractShotNumber(contextMenu.version.name);
+              {Object.entries(shotsByScene).length === 0 ? (
+                <div className="px-4 py-2 text-xs text-text-muted">No shots available</div>
+              ) : (
+                Object.entries(shotsByScene).map(([sceneId, { scene, shots }]) => (
+                <div key={sceneId} className="relative">
+                  <button
+                    data-scene-id={sceneId}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between text-text-primary"
+                    onMouseEnter={() => {
+                      if (submenuCloseTimeoutRef.current) {
+                        clearTimeout(submenuCloseTimeoutRef.current);
+                        submenuCloseTimeoutRef.current = null;
+                      }
+                      setActiveSceneSubmenu(sceneId);
+                    }}
+                    onMouseLeave={() => {
+                      submenuCloseTimeoutRef.current = window.setTimeout(() => {
+                        setActiveSceneSubmenu(null);
+                      }, 150);
+                    }}
+                  >
+                    <span className="truncate">{scene.name}</span>
+                    <span className="text-zinc-500 ml-2">›</span>
+                  </button>
 
-                // Filter out current shot
-                return project.shots
-                  .filter((shot: any) => shot.number !== currentShotNumber)
-                  .map((shot: any) => (
-                    <button
-                      key={shot.id}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700"
-                      onClick={() => {
-                        if (submenuAction === 'move') {
-                          handleMoveToShot(shot.number);
-                        } else {
-                          handleCopyToShot(shot.number);
+                  {/* Shot Submenu - Level 2: Shots in Scene */}
+                  {activeSceneSubmenu === sceneId && (
+                    <div
+                      className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[140px] max-w-[140px] animate-context-menu z-[100]"
+                      style={{
+                        left: shotSubmenuPosition.horizontal === 'right'
+                          ? `${(shotSubmenuRef.current?.getBoundingClientRect().right || 0) + 4}px`
+                          : 'auto',
+                        right: shotSubmenuPosition.horizontal === 'left'
+                          ? `${window.innerWidth - (shotSubmenuRef.current?.getBoundingClientRect().left || 0) + 4}px`
+                          : 'auto',
+                        bottom: (() => {
+                          const scenesMenuRect = shotSubmenuRef.current?.getBoundingClientRect();
+                          if (!scenesMenuRect) return 'auto';
+                          // Выравниваем по нижнему краю меню со сценами
+                          return `${window.innerHeight - scenesMenuRect.bottom}px`;
+                        })(),
+                        maxHeight: (() => {
+                          const scenesMenuRect = shotSubmenuRef.current?.getBoundingClientRect();
+                          if (!scenesMenuRect) return '300px';
+                          // Максимальная высота = от верха экрана до нижнего края меню со сценами
+                          const availableHeight = scenesMenuRect.bottom - 10;
+                          return `${Math.min(300, availableHeight)}px`;
+                        })(),
+                        overflowY: 'auto'
+                      }}
+                      onMouseEnter={() => {
+                        if (submenuCloseTimeoutRef.current) {
+                          clearTimeout(submenuCloseTimeoutRef.current);
+                          submenuCloseTimeoutRef.current = null;
                         }
+                        setActiveSceneSubmenu(sceneId);
+                      }}
+                      onMouseLeave={() => {
+                        submenuCloseTimeoutRef.current = window.setTimeout(() => {
+                          setShowShotSubmenu(false);
+                          setActiveSceneSubmenu(null);
+                        }, 150);
                       }}
                     >
-                      {shot.number === 0 ? 'Main' : `Shot ${shot.number.toString().padStart(3, '0')}`}
-                    </button>
-                  ));
-              })()}
+                      {shots.map((shot: any) => (
+                        <button
+                          key={shot.id}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-700 text-text-primary"
+                          onMouseEnter={() => {
+                            if (submenuCloseTimeoutRef.current) {
+                              clearTimeout(submenuCloseTimeoutRef.current);
+                              submenuCloseTimeoutRef.current = null;
+                            }
+                          }}
+                          onClick={() => {
+                            if (submenuAction === 'move') {
+                              handleMoveToShot(shot.number);
+                            } else {
+                              handleCopyToShot(shot.number);
+                            }
+                          }}
+                        >
+                          Shot {shot.number.toString().padStart(3, '0')}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))
+              )}
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,14 +1,16 @@
 // src/store/projectStore.ts
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/tauri';
+import { listen } from '@tauri-apps/api/event';
 import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, TimeEntry, SoftwareName } from '../types/project';
 import { thumbnailCache } from '../utils/thumbnailCache';
 import { useTimeStatsStore, useTimeTrackingStore } from '../features/time-tracking';
 import { generateProjectColor, generateBrightColor } from '../utils/colorUtils';
+import { findNextAvailableShotNumber, isShotNumberAvailable } from '../utils/shotNumbering';
 
 // Sanitize scene name for folder name (remove spaces and special characters)
 const sanitizeFolderName = (name: string): string => {
-  return name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '');
+  return name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
 };
 
 interface ProjectStore {
@@ -23,6 +25,8 @@ interface ProjectStore {
   categories: string[];
   selectedCategory: string;
   launchingStatus: Record<string, 'idle' | 'launching' | 'success'>; // track launch status per software
+  isRenaming: boolean;
+  renameProgress: { current: number; total: number } | null;
 
   // Actions
   loadProjects: () => Promise<void>;
@@ -31,6 +35,7 @@ interface ProjectStore {
   deleteProject: (projectPath: string) => Promise<void>;
   selectProject: (project: Project | null) => void;
   launchSoftware: (input: LaunchSoftwareCommand) => Promise<void>;
+  launchSoftwareWithoutProject: (executablePath: string, software: string) => Promise<void>;
   openInExplorer: (path: string) => Promise<void>;
   setProjectsDirectory: (dir: string) => void;
   setDefaultProjectsPath: (path: string) => void;
@@ -136,6 +141,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   categories: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('categories') || '["Commercial", "Personal"]') : ['Commercial', 'Personal'],
   selectedCategory: typeof window !== 'undefined' ? (localStorage.getItem('selectedCategory') || 'Personal') : 'Personal',
   launchingStatus: {},
+  isRenaming: false,
+  renameProgress: null,
 
   // Load all projects
   loadProjects: async () => {
@@ -319,7 +326,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         // Only shots, no scenes - legacy mode
         const firstShot = {
           id: crypto.randomUUID(),
-          sceneId: '', // No scene
+          sceneId: undefined, // No scene in shots-only mode
           number: 1,
           name: 'Shot 001',
           notes: [],
@@ -505,6 +512,51 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Failed to launch software:', error);
+
+      // Reset status on error
+      set((state) => ({
+        error: String(error),
+        launchingStatus: { ...state.launchingStatus, [statusKey]: 'idle' }
+      }));
+
+      alert(`Failed to launch software: ${error}`);
+      throw error;
+    }
+  },
+
+  // Launch software without project context
+  launchSoftwareWithoutProject: async (executablePath: string, software: string) => {
+    const statusKey = `no-project-${software}`;
+
+    try {
+      // Set launching status
+      set((state) => ({
+        launchingStatus: { ...state.launchingStatus, [statusKey]: 'launching' }
+      }));
+
+      console.log('Launching software without project:', software, 'at', executablePath);
+
+      // Use Tauri command to launch software without project context
+      await invoke('launch_software_without_project', {
+        executablePath,
+        software
+      });
+
+      console.log('Software launched successfully without project');
+
+      // Set success status
+      set((state) => ({
+        launchingStatus: { ...state.launchingStatus, [statusKey]: 'success' }
+      }));
+
+      // Reset status after 2 seconds
+      setTimeout(() => {
+        set((state) => ({
+          launchingStatus: { ...state.launchingStatus, [statusKey]: 'idle' }
+        }));
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to launch software without project:', error);
 
       // Reset status on error
       set((state) => ({
@@ -970,22 +1022,120 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const oldFolderName = sanitizeFolderName(scene.name);
       const newFolderName = sanitizeFolderName(newName);
 
-      // Only rename folders if the sanitized names are different
+      // Only rename if the sanitized names are different
       if (oldFolderName !== newFolderName) {
+        // 1. Count files for confirmation dialog
+        let fileCount: { versionFiles: number; thumbnails: number };
         try {
-          await invoke('rename_scene_folders', {
+          fileCount = await invoke('count_scene_files', {
             projectPath: project.path,
-            oldFolderName: oldFolderName,
-            newFolderName: newFolderName
+            sceneName: oldFolderName
           });
         } catch (error) {
-          console.error('Failed to rename scene folders:', error);
-          // Don't update metadata if folder rename failed
+          console.error('Failed to count scene files:', error);
+          if (typeof (window as any).showNotification === 'function') {
+            (window as any).showNotification(
+              'error',
+              String(error),
+              'Failed to count scene files',
+              10000
+            );
+          }
           return;
+        }
+
+        // 2. Only proceed if there are files to rename
+        if (fileCount.versionFiles > 0 || fileCount.thumbnails > 0) {
+          // Show confirmation dialog
+          const confirmed = await new Promise<boolean>((resolve) => {
+            // Store confirmation callback in window for dialog to call
+            (window as any).confirmSceneRename = {
+              sceneName: scene.name,
+              fileCount,
+              onConfirm: () => resolve(true),
+              onCancel: () => resolve(false)
+            };
+            // Trigger dialog by setting a flag
+            (window as any).showSceneRenameConfirm = true;
+          });
+
+          if (!confirmed) {
+            return; // User cancelled
+          }
+
+          // 3. Set renaming state and listen for progress
+          set({ isRenaming: true, renameProgress: { current: 0, total: 0 } });
+          const unlisten = await listen<{ current: number; total: number }>('rename-progress', (event) => {
+            set({ renameProgress: event.payload });
+          });
+
+          try {
+            // 4. Rename folders
+            await invoke('rename_scene_folders', {
+              projectPath: project.path,
+              oldFolderName: oldFolderName,
+              newFolderName: newFolderName
+            });
+
+            // 5. Rename version files with WAL and progress
+            const filesRenamed = await invoke<number>('rename_scene_files', {
+              projectPath: project.path,
+              oldSceneName: oldFolderName,
+              newSceneName: newFolderName
+            });
+
+            // 6. Rename thumbnails
+            const thumbnailsRenamed = await invoke<number>('rename_scene_thumbnails', {
+              projectPath: project.path,
+              oldSceneName: oldFolderName,
+              newSceneName: newFolderName
+            });
+
+            console.log(`✅ Scene renamed: ${filesRenamed} files, ${thumbnailsRenamed} thumbnails`);
+
+            // Show success notification
+            if (typeof (window as any).showNotification === 'function') {
+              (window as any).showNotification(
+                'success',
+                `Renamed ${filesRenamed} files and ${thumbnailsRenamed} thumbnails`,
+                'Scene renamed successfully'
+              );
+            }
+
+          } catch (error) {
+            console.error('Failed to rename scene:', error);
+
+            // Show error notification
+            if (typeof (window as any).showNotification === 'function') {
+              (window as any).showNotification(
+                'error',
+                String(error),
+                'Failed to rename scene',
+                10000
+              );
+            }
+
+            return; // Don't update metadata if rename failed
+          } finally {
+            unlisten();
+            set({ isRenaming: false, renameProgress: null });
+          }
+        } else {
+          // No files to rename, just rename folders
+          try {
+            await invoke('rename_scene_folders', {
+              projectPath: project.path,
+              oldFolderName: oldFolderName,
+              newFolderName: newFolderName
+            });
+          } catch (error) {
+            console.error('Failed to rename scene folders:', error);
+            return;
+          }
         }
       }
 
-      // Update metadata only after successful folder rename (or if no rename was needed)
+      // Update metadata only after successful rename (or if no rename was needed)
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s => {
@@ -1293,11 +1443,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         return;
       }
 
-      // Per-scene shot numbering: count only numbered shots in target scene (or all shots if no scenes)
-      const numberedShotsInScene = (project.shots || []).filter(
-        s => (targetSceneId ? s.sceneId === targetSceneId : true) && s.number > 0
+      // Per-scene shot numbering: use utility to find next available number (fills gaps, prevents duplicates)
+      const shotNumber = findNextAvailableShotNumber(
+        targetSceneId,
+        project.shots || []
       );
-      const shotNumber = numberedShotsInScene.length + 1;
 
       const newShot = {
         id: crypto.randomUUID(),
@@ -1412,40 +1562,138 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const oldMatch = shot.name.match(/\d+/);
       const newMatch = newName.match(/\d+/);
       const oldNumber = oldMatch ? parseInt(oldMatch[0]) : shot.number;
-      const newNumber = newMatch ? parseInt(newMatch[0]) : shot.number;
+      const requestedNumber = newMatch ? parseInt(newMatch[0]) : shot.number;
 
-      // Only rename folders if the number changed
-      if (oldNumber !== newNumber) {
-        // Generate shot folder names (e.g., "SH001", "SH002")
-        const oldShotFolderName = `SH${oldNumber.toString().padStart(3, '0')}`;
-        const newShotFolderName = `SH${newNumber.toString().padStart(3, '0')}`;
+      // Check if requested number is available (excluding current shot)
+      const isAvailable = isShotNumberAvailable(
+        shot.sceneId,
+        project.shots || [],
+        requestedNumber,
+        shotId
+      );
 
-        // Get scene folder name
-        const scene = (project.scenes || []).find(s => s.id === shot.sceneId);
-        if (scene) {
-          const sceneFolderName = sanitizeFolderName(scene.name);
+      let finalNumber: number;
+      if (isAvailable) {
+        // Number is available - use it
+        finalNumber = requestedNumber;
+      } else {
+        // Conflict - find next available number
+        console.warn(
+          `[RayHub] Shot number ${requestedNumber} уже существует в ${shot.sceneId ? 'сцене' : 'проекте'}. ` +
+          `Автоматически выбран следующий доступный номер.`
+        );
 
-          try {
+        finalNumber = findNextAvailableShotNumber(
+          shot.sceneId,
+          project.shots || [],
+          requestedNumber + 1
+        );
+      }
+
+      // Only rename if the number changed
+      if (oldNumber !== finalNumber) {
+        // 1. Count files first
+        const fileCount = await invoke<{ versionFiles: number; thumbnails: number }>(
+          'count_shot_files',
+          {
+            projectPath: project.path,
+            shotNumber: oldNumber
+          }
+        );
+
+        // 2. Only proceed if there are files to rename
+        if (fileCount.versionFiles > 0 || fileCount.thumbnails > 0) {
+          // Show confirmation dialog
+          const confirmed = await new Promise<boolean>((resolve) => {
+            (window as any).confirmSceneRename = {
+              sceneName: `Shot ${oldNumber.toString().padStart(3, '0')}`,
+              fileCount,
+              onConfirm: () => resolve(true),
+              onCancel: () => resolve(false),
+              isShot: true
+            };
+            (window as any).showSceneRenameConfirm = true;
+          });
+
+          if (!confirmed) {
+            return; // User cancelled
+          }
+        }
+
+        // 3. Set renaming state and listen for progress
+        set({ isRenaming: true, renameProgress: { current: 0, total: 0 } });
+        const unlisten = await listen<{ current: number; total: number }>('rename-progress', (event) => {
+          set({ renameProgress: event.payload });
+        });
+
+        try {
+          // 1. Rename folders
+          const oldShotFolderName = `SH${oldNumber.toString().padStart(3, '0')}`;
+          const newShotFolderName = `SH${finalNumber.toString().padStart(3, '0')}`;
+
+          const scene = (project.scenes || []).find(s => s.id === shot.sceneId);
+          if (scene) {
+            const sceneFolderName = sanitizeFolderName(scene.name);
             await invoke('rename_shot_folders', {
               projectPath: project.path,
               sceneFolderName: sceneFolderName,
               oldShotFolderName: oldShotFolderName,
               newShotFolderName: newShotFolderName
             });
-          } catch (error) {
-            console.error('Failed to rename shot folders:', error);
-            // Don't update metadata if folder rename failed
-            return;
           }
+
+          // 2. Rename version files with WAL and progress
+          const filesRenamed = await invoke<number>('rename_shot_files', {
+            projectPath: project.path,
+            oldShotNumber: oldNumber,
+            newShotNumber: finalNumber
+          });
+
+          // 3. Rename thumbnails
+          const thumbnailsRenamed = await invoke<number>('rename_shot_thumbnails', {
+            projectPath: project.path,
+            oldShotNumber: oldNumber,
+            newShotNumber: finalNumber
+          });
+
+          console.log(`✅ Shot renamed: ${filesRenamed} files, ${thumbnailsRenamed} thumbnails`);
+
+          // Show success notification only if files were renamed
+          if ((filesRenamed > 0 || thumbnailsRenamed > 0) && typeof (window as any).showNotification === 'function') {
+            (window as any).showNotification(
+              'success',
+              `Renamed ${filesRenamed} files and ${thumbnailsRenamed} thumbnails`,
+              'Shot renamed successfully'
+            );
+          }
+
+        } catch (error) {
+          console.error('Failed to rename shot:', error);
+
+          // Show error notification
+          if (typeof (window as any).showNotification === 'function') {
+            (window as any).showNotification(
+              'error',
+              String(error),
+              'Failed to rename shot',
+              10000
+            );
+          }
+
+          return; // Don't update metadata if rename failed
+        } finally {
+          unlisten();
+          set({ isRenaming: false, renameProgress: null });
         }
       }
 
-      // Update metadata only after successful folder rename (or if no rename was needed)
+      // Update metadata with final number and name
+      const finalName = newName.replace(/\d+$/, '') + finalNumber.toString().padStart(3, '0');
       const updated = {
         ...project,
         shots: (project.shots || []).map(s => {
           if (s.id === shotId) {
-            return { ...s, name: newName, number: newNumber };
+            return { ...s, name: finalName, number: finalNumber };
           }
           return s;
         })

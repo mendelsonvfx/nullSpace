@@ -638,6 +638,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     const saved = localStorage.getItem('bordersEnabled');
     return saved !== null ? JSON.parse(saved) : false;
   });
+  const [blendPreviewsEnabled, setBlendPreviewsEnabled] = useState(() => {
+    const saved = localStorage.getItem('blendPreviewsEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
 
   const defaultAccentColors = [
     { name: 'Purple', value: '#9103c6' },
@@ -934,6 +938,31 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
         >
           <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
             showTagIcons ? 'translate-x-6' : 'translate-x-0.5'
+          }`} />
+        </button>
+      </div>
+
+      {/* Blender File Previews */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-medium mb-1">Blender File Previews</div>
+          <p className="text-sm text-zinc-400">
+            Show thumbnail previews for .blend files in Versions Overview
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !blendPreviewsEnabled;
+            setBlendPreviewsEnabled(newValue);
+            localStorage.setItem('blendPreviewsEnabled', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full relative transition-colors ${
+            blendPreviewsEnabled ? 'bg-accent' : 'bg-zinc-700'
+          }`}
+        >
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+            blendPreviewsEnabled ? 'translate-x-6' : 'translate-x-0.5'
           }`} />
         </button>
       </div>

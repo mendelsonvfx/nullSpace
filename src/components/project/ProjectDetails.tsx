@@ -24,11 +24,12 @@ interface ProjectDetailsProps {
   onClose: () => void;
   onOpenFolder: () => void;
   onLaunchSoftware: (software: any) => void;
+  onLaunchSoftwareWithoutProject?: (executablePath: string, software: string) => void;
   onDeleteProject: (project: any) => void;
   showNotification: (type: 'success' | 'error' | 'warning' | 'info', message: string, title?: string, duration?: number) => void;
 }
 
-export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder, onLaunchSoftware, onDeleteProject, showNotification }: ProjectDetailsProps) {
+export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder, onLaunchSoftware, onLaunchSoftwareWithoutProject, onDeleteProject, showNotification }: ProjectDetailsProps) {
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showManualTimeEntry, setShowManualTimeEntry] = useState(false);
@@ -42,6 +43,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState(project.description || '');
   const contentScrollRef = useRef<HTMLElement | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; software: any; executablePath: string } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Sync description value when project changes
   useEffect(() => {
@@ -75,6 +78,20 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       };
     }
   }, [handleContentScroll]);
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu]);
 
   // Track which date fields user has manually filled in Project Settings
   const [deadlineFieldsFilled, setDeadlineFieldsFilled] = useState({
@@ -579,220 +596,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       {/* Content */}
       <SimpleBar className="flex-1 custom-page-scrollbar" autoHide={false} scrollableNodeProps={{ ref: contentScrollRef }}>
         <div className="px-7 pb-16 pt-4">
-        {/* Quick Actions - hidden when only scene is selected (without shot) */}
-        {!(context.isScene && !context.isShot) && (
-        <div className="mb-7">
-          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Quick Actions</h3>
-          <div className="grid grid-cols-3 gap-3">
-            <button
-              onClick={onOpenFolder}
-              className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
-            >
-              <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-blue-500/20 via-blue-600/10 to-blue-700/10">
-                <IconFolderOpen stroke={1.5} className="w-5 h-5 text-blue-400 pointer-events-none" />
-              </div>
-              <span className="text-sm font-medium text-text-primary pointer-events-none">Open Folder</span>
-            </button>
-            <button
-              onClick={() => setShowPaymentModal(true)}
-              className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
-            >
-              <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-green-500/20 via-green-600/10 to-green-700/10">
-                <IconCreditCard stroke={1.5} className="w-5 h-5 text-green-400 pointer-events-none" />
-              </div>
-              <span className="text-sm font-medium text-text-primary pointer-events-none">Payment</span>
-            </button>
-            {timeTrackingEnabled && (
-              <button
-                onClick={() => setShowManualTimeEntry(true)}
-                className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
-              >
-                <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-yellow-500/20 via-yellow-600/10 to-yellow-700/10">
-                  <IconClock stroke={1.5} className="w-5 h-5 text-yellow-400 pointer-events-none" />
-                </div>
-                <span className="text-sm font-medium text-text-primary pointer-events-none">Add Time</span>
-              </button>
-            )}
-          </div>
-        </div>
-        )}
-
-        {/* Software Launchers - hidden when only scene is selected in scenes+shots mode */}
-        {!(context.isScene && !context.isShot && project.hasScenes && project.hasShots) && (
-          <div className="mb-7">
-            <h3 className="text-sm font-semibold text-text-primary mb-3.5">Launch Software</h3>
-            <div className="grid grid-cols-2 gap-2">
-            {project.software.map((sw: any) => {
-              // Get executable path from localStorage
-              const savedPaths = localStorage.getItem('softwarePaths');
-              const pathsMap: Record<string, string> = savedPaths ? JSON.parse(savedPaths) : {};
-
-              // Map display names to internal keys
-              const nameToKey: Record<string, string> = {
-                'Blender': 'blender',
-                'Houdini': 'houdini',
-                'Maya': 'maya',
-                'After Effects': 'after-effects',
-                'Cinema 4D': 'cinema4d',
-                'Substance': 'substance',
-                'Unreal': 'unreal',
-                'Unity': 'unity',
-                'ZBrush': 'zbrush',
-                'Marmoset': 'marmoset'
-              };
-
-              const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
-              const executablePath = pathsMap[softwareKey] || sw.executablePath;
-
-              // Get launch status for this software
-              const statusKey = `${project.path}-${sw.name}`;
-              const status = launchingStatus?.[statusKey] || 'idle';
-
-              // Find active session for this software (compare with softwareKey, not display name)
-              // Use live timeTrackingStore state to avoid showing frozen timers during async projectStore updates
-              const activeEntry = latestProject.timeEntries?.find((e: any) => {
-                const liveSession = timeTrackingSessions.get(e.id);
-                return e.software === softwareKey &&
-                       liveSession?.isActive === true &&
-                       liveSession?.widgetVisible === true;
-              });
-
-              // Get software color for gradient
-              const softwareColors: Record<string, string> = {
-                'blender': '#E87D0D',
-                'houdini': '#FF4713',
-                'after-effects': '#9999FF',
-                'photoshop': '#31A8FF',
-                'maya': '#0FADED',
-                'cinema4d': '#0099D8',
-                'substance': '#F37A3A',
-                'unreal': '#313131',
-                'unity': '#000000',
-                'zbrush': '#F37021',
-                'marmoset': '#FF6B00'
-              };
-              const softwareColor = softwareColors[softwareKey] || '#6366f1';
-
-              return (
-                <button
-                  key={sw.name}
-                  onClick={() => {
-                    if (status === 'launching' || activeEntry) return;
-
-                    // Read the latest project from store to avoid stale closure
-                    const latestProject = useProjectStore.getState().projects.find(p => p.id === project.id);
-                    if (!latestProject) return;
-
-                    const currentScene = latestProject.hasShots && latestProject.currentSceneId
-                      ? latestProject.scenes?.find((s: any) => s.id === latestProject.currentSceneId)
-                      : null;
-
-                    const currentShot = latestProject.hasShots && latestProject.currentShotId
-                      ? latestProject.shots?.find((s: any) => s.id === latestProject.currentShotId)
-                      : null;
-
-                    onLaunchSoftware({
-                      ...sw,
-                      executablePath,
-                      sceneNumber: currentScene?.number,
-                      shotNumber: currentShot?.number
-                    });
-                  }}
-                  disabled={status === 'launching' || !executablePath}
-                  data-launch-software
-                  className="p-4 border border-zinc-800 rounded-xl flex items-center gap-3 transition-all duration-200 group select-none disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
-                  onMouseDown={(e) => {
-                    // Применяем эффект прожатия только для ЛКМ (левая кнопка мыши)
-                    if (e.button === 0) {
-                      e.currentTarget.style.transform = 'scale(0.98)';
-                      e.currentTarget.style.filter = 'brightness(0.95)';
-                    }
-                  }}
-                  onMouseUp={(e) => {
-                    e.currentTarget.style.transform = '';
-                    e.currentTarget.style.filter = '';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = '';
-                    e.currentTarget.style.filter = '';
-                    e.currentTarget.style.background = `
-                      radial-gradient(circle at 00% 120%, ${softwareColor}15 0%, transparent 80%),
-                      rgb(24, 24, 27)
-                    `;
-                  }}
-                  style={{
-                    background: `
-                      radial-gradient(circle at 00% 120%, ${softwareColor}15 0%, transparent 80%),
-                      rgb(24, 24, 27)
-                    `
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = `
-                      radial-gradient(circle at 00% 120%, ${softwareColor}40 0%, transparent 100%),
-                      rgb(28, 28, 31)
-                    `;
-                  }}
-                >
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center">
-                    <SoftwareIcon name={sw.name} />
-                  </div>
-                  <div className="text-left flex-1">
-                    <div className="font-medium">{sw.name}</div>
-                    <div className="text-xs text-zinc-500">
-                      {status === 'launching' ? 'Launching...' : status === 'success' ? 'Launched!' : activeEntry ? 'Running...' : executablePath ? 'Click to launch' : 'Path not set'}
-                    </div>
-                  </div>
-
-                  {/* Inline Timer */}
-                  {timeTrackingEnabled && activeEntry && <InlineTimer activeEntry={activeEntry} />}
-
-                  {/* Status indicator */}
-                  {!activeEntry && status === 'launching' && (
-                    <IconRefresh stroke={1.5} className="w-5 h-5 text-accent animate-spin" />
-                  )}
-                  {!activeEntry && status === 'success' && (
-                    <IconCheck stroke={1.5} className="w-5 h-5 text-green-500 animate-in fade-in zoom-in duration-300" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        )}
-
-        {/* Versions Overview - hidden when only scene is selected (without shot) */}
-        {!(context.isScene && !context.isShot) && (
-        <VersionsOverview
-          project={project}
-          currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
-          currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
-          specialContextType={context.isSpecialContext ? context.specialContextType : null}
-          showNotification={showNotification}
-        />
-        )}
-
-        {/* Output Overview - hidden when only scene is selected (without shot) */}
-        {!(context.isScene && !context.isShot) && (
-        <OutputOverview
-          project={project}
-          currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
-          currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
-          specialContextType={context.isSpecialContext ? context.specialContextType : null}
-        />
-        )}
-
-        {/* Links Section */}
-        <div className="mb-7">
-          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Links</h3>
-          <div className="space-y-2">
-            {context.links.map((link: any) => (
-              <LinkItem key={link.id} link={link} projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
-            ))}
-            <LinkInputForm projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
-          </div>
-        </div>
-
-        {/* Todo Section */}
+        {/* Tasks Section - shown first when only scene is selected */}
+        {(context.isScene && !context.isShot) && (
         <div className="mb-7">
           <h3 className="text-sm font-semibold text-text-primary mb-3.5">Tasks</h3>
           <div className="space-y-2">
@@ -925,6 +730,369 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               }}
               className="w-full px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-card text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:border-solid"
             />
+          </div>
+        </div>
+        )}
+
+        {/* Quick Actions - hidden when only scene is selected (without shot) */}
+        {!(context.isScene && !context.isShot) && (
+        <div className="mb-7">
+          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Quick Actions</h3>
+          <div className="grid grid-cols-3 gap-3">
+            <button
+              onClick={onOpenFolder}
+              className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
+            >
+              <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-blue-500/20 via-blue-600/10 to-blue-700/10">
+                <IconFolderOpen stroke={1.5} className="w-5 h-5 text-blue-400 pointer-events-none" />
+              </div>
+              <span className="text-sm font-medium text-text-primary pointer-events-none">Open Folder</span>
+            </button>
+            <button
+              onClick={() => setShowPaymentModal(true)}
+              className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
+            >
+              <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-green-500/20 via-green-600/10 to-green-700/10">
+                <IconCreditCard stroke={1.5} className="w-5 h-5 text-green-400 pointer-events-none" />
+              </div>
+              <span className="text-sm font-medium text-text-primary pointer-events-none">Payment</span>
+            </button>
+            {timeTrackingEnabled && (
+              <button
+                onClick={() => setShowManualTimeEntry(true)}
+                className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
+              >
+                <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-yellow-500/20 via-yellow-600/10 to-yellow-700/10">
+                  <IconClock stroke={1.5} className="w-5 h-5 text-yellow-400 pointer-events-none" />
+                </div>
+                <span className="text-sm font-medium text-text-primary pointer-events-none">Add Time</span>
+              </button>
+            )}
+          </div>
+        </div>
+        )}
+
+        {/* Software Launchers - hidden when only scene is selected in scenes+shots mode */}
+        {!(context.isScene && !context.isShot && project.hasScenes && project.hasShots) && (
+          <div className="mb-7">
+            <h3 className="text-sm font-semibold text-text-primary mb-3.5">Launch Software</h3>
+            <div className="grid grid-cols-2 gap-2">
+            {project.software.map((sw: any) => {
+              // Get executable path from localStorage
+              const savedPaths = localStorage.getItem('softwarePaths');
+              const pathsMap: Record<string, string> = savedPaths ? JSON.parse(savedPaths) : {};
+
+              // Map display names to internal keys
+              const nameToKey: Record<string, string> = {
+                'Blender': 'blender',
+                'Houdini': 'houdini',
+                'Maya': 'maya',
+                'After Effects': 'after-effects',
+                'Cinema 4D': 'cinema4d',
+                'Substance': 'substance',
+                'Unreal': 'unreal',
+                'Unity': 'unity',
+                'ZBrush': 'zbrush',
+                'Marmoset': 'marmoset'
+              };
+
+              const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+              const executablePath = pathsMap[softwareKey] || sw.executablePath;
+
+              // Get launch status for this software
+              const statusKey = `${project.path}-${sw.name}`;
+              const status = launchingStatus?.[statusKey] || 'idle';
+
+              // Find active session for this software (compare with softwareKey, not display name)
+              // Use live timeTrackingStore state to avoid showing frozen timers during async projectStore updates
+              const activeEntry = latestProject.timeEntries?.find((e: any) => {
+                const liveSession = timeTrackingSessions.get(e.id);
+                return e.software === softwareKey &&
+                       liveSession?.isActive === true &&
+                       liveSession?.widgetVisible === true;
+              });
+
+              // Get software color for gradient
+              const softwareColors: Record<string, string> = {
+                'blender': '#E87D0D',
+                'houdini': '#FF4713',
+                'after-effects': '#9999FF',
+                'photoshop': '#31A8FF',
+                'maya': '#0FADED',
+                'cinema4d': '#0099D8',
+                'substance': '#F37A3A',
+                'unreal': '#313131',
+                'unity': '#000000',
+                'zbrush': '#F37021',
+                'marmoset': '#FF6B00'
+              };
+              const softwareColor = softwareColors[softwareKey] || '#6366f1';
+
+              return (
+                <button
+                  key={sw.name}
+                  onClick={() => {
+                    if (status === 'launching' || activeEntry) return;
+
+                    // Read the latest project from store to avoid stale closure
+                    const latestProject = useProjectStore.getState().projects.find(p => p.id === project.id);
+                    if (!latestProject) return;
+
+                    const currentScene = latestProject.hasShots && latestProject.currentSceneId
+                      ? latestProject.scenes?.find((s: any) => s.id === latestProject.currentSceneId)
+                      : null;
+
+                    const currentShot = latestProject.hasShots && latestProject.currentShotId
+                      ? latestProject.shots?.find((s: any) => s.id === latestProject.currentShotId)
+                      : null;
+
+                    onLaunchSoftware({
+                      ...sw,
+                      executablePath,
+                      sceneNumber: currentScene?.number,
+                      shotNumber: currentShot?.number
+                    });
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    if (status === 'launching' || !executablePath) return;
+
+                    setContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      software: sw,
+                      executablePath
+                    });
+                  }}
+                  disabled={status === 'launching' || !executablePath}
+                  data-launch-software
+                  className="p-4 border border-zinc-800 rounded-xl flex items-center gap-3 transition-all duration-200 group select-none disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
+                  onMouseDown={(e) => {
+                    // Применяем эффект прожатия только для ЛКМ (левая кнопка мыши)
+                    if (e.button === 0) {
+                      e.currentTarget.style.transform = 'scale(0.98)';
+                      e.currentTarget.style.filter = 'brightness(0.95)';
+                    }
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.transform = '';
+                    e.currentTarget.style.filter = '';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = '';
+                    e.currentTarget.style.filter = '';
+                    e.currentTarget.style.background = `
+                      radial-gradient(circle at 00% 120%, ${softwareColor}15 0%, transparent 80%),
+                      rgb(24, 24, 27)
+                    `;
+                  }}
+                  style={{
+                    background: `
+                      radial-gradient(circle at 00% 120%, ${softwareColor}15 0%, transparent 80%),
+                      rgb(24, 24, 27)
+                    `
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = `
+                      radial-gradient(circle at 00% 120%, ${softwareColor}40 0%, transparent 100%),
+                      rgb(28, 28, 31)
+                    `;
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center">
+                    <SoftwareIcon name={sw.name} />
+                  </div>
+                  <div className="text-left flex-1">
+                    <div className="font-medium">{sw.name}</div>
+                    <div className="text-xs text-zinc-500">
+                      {status === 'launching' ? 'Launching...' : status === 'success' ? 'Launched!' : activeEntry ? 'Running...' : executablePath ? 'Click to launch' : 'Path not set'}
+                    </div>
+                  </div>
+
+                  {/* Inline Timer */}
+                  {timeTrackingEnabled && activeEntry && <InlineTimer activeEntry={activeEntry} />}
+
+                  {/* Status indicator */}
+                  {!activeEntry && status === 'launching' && (
+                    <IconRefresh stroke={1.5} className="w-5 h-5 text-accent animate-spin" />
+                  )}
+                  {!activeEntry && status === 'success' && (
+                    <IconCheck stroke={1.5} className="w-5 h-5 text-green-500 animate-in fade-in zoom-in duration-300" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        )}
+
+        {/* Versions Overview - hidden when only scene is selected (without shot) */}
+        {!(context.isScene && !context.isShot) && (
+        <VersionsOverview
+          project={project}
+          currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
+          currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
+          specialContextType={context.isSpecialContext ? context.specialContextType : null}
+          showNotification={showNotification}
+        />
+        )}
+
+        {/* Output Overview - hidden when only scene is selected (without shot) */}
+        {!(context.isScene && !context.isShot) && (
+        <OutputOverview
+          project={project}
+          currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
+          currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
+          specialContextType={context.isSpecialContext ? context.specialContextType : null}
+        />
+        )}
+
+        {/* Todo Section - hidden when only scene is selected (shown at top instead) */}
+        {!(context.isScene && !context.isShot) && (
+        <div className="mb-7">
+          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Tasks</h3>
+          <div className="space-y-2">
+            {(() => {
+              // Group todos by date
+              const todosByDate: { [key: string]: any[] } = {};
+              context.todos.forEach((todo: any) => {
+                const dateKey = todo.createdAt
+                  ? new Date(todo.createdAt).toLocaleDateString('en-US', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric'
+                    })
+                  : 'No Date';
+                if (!todosByDate[dateKey]) {
+                  todosByDate[dateKey] = [];
+                }
+                todosByDate[dateKey].push(todo);
+              });
+
+              return Object.entries(todosByDate).map(([date, todos]) => (
+                <div key={date} className="space-y-2">
+                  {/* Date separator */}
+                  <div className="flex items-center gap-2 mt-4 mb-2">
+                    <div className="h-px bg-border-secondary flex-1" />
+                    <span className="text-xs text-text-dim font-medium">{date}</span>
+                    <div className="h-px bg-border-secondary flex-1" />
+                  </div>
+                  {/* Tasks for this date */}
+                  {todos.map((todo: any) => (
+                    <div key={todo.id} className="flex items-center group">
+                      <button
+                        onClick={() => {
+                          if (context.isShot && context.shotId) {
+                            const { toggleShotTodo } = useProjectStore.getState();
+                            toggleShotTodo(project.id, context.shotId, todo.id);
+                          } else if (context.isSpecialContext && context.specialContextId) {
+                            const { toggleSpecialContextTodo } = useProjectStore.getState();
+                            toggleSpecialContextTodo(project.id, context.specialContextId, todo.id);
+                          } else if (context.isScene && context.sceneId) {
+                            const { toggleSceneTodo } = useProjectStore.getState();
+                            toggleSceneTodo(project.id, context.sceneId, todo.id);
+                          } else {
+                            const { toggleTodo } = useProjectStore.getState();
+                            toggleTodo(project.id, todo.id);
+                          }
+                        }}
+                        className={`flex items-center justify-center transition-all duration-200 ${
+                          todo.completed
+                            ? 'w-5 opacity-100'
+                            : 'w-0 opacity-0 group-hover:w-5 group-hover:opacity-100'
+                        } overflow-hidden`}
+                      >
+                        <IconCheck stroke={1.5} className={`w-3 h-3 flex-shrink-0 ${
+                          todo.completed ? 'text-zinc-400' : 'text-zinc-600'
+                        }`} />
+                      </button>
+                      <span
+                        className={`flex-1 text-sm transition-all duration-200 ${
+                          todo.completed
+                            ? 'text-text-muted ml-1'
+                            : 'text-text-primary ml-0 group-hover:ml-1'
+                        }`}
+                      >
+                        {todo.text}
+                      </span>
+                      <button
+                        onClick={() => {
+                          if (context.isShot && context.shotId) {
+                            const { removeShotTodo } = useProjectStore.getState();
+                            removeShotTodo(project.id, context.shotId, todo.id);
+                          } else if (context.isSpecialContext && context.specialContextId) {
+                            const { removeSpecialContextTodo } = useProjectStore.getState();
+                            removeSpecialContextTodo(project.id, context.specialContextId, todo.id);
+                          } else if (context.isScene && context.sceneId) {
+                            const { removeSceneTodo } = useProjectStore.getState();
+                            removeSceneTodo(project.id, context.sceneId, todo.id);
+                          } else {
+                            const { removeTodo } = useProjectStore.getState();
+                            removeTodo(project.id, todo.id);
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded-lg transition-opacity"
+                      >
+                        <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ));
+            })()}
+            <input
+              type="text"
+              placeholder="+ Add task..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                  if (context.isShot && context.shotId) {
+                    const { addShotTodo } = useProjectStore.getState();
+                    addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
+                  } else if (context.isSpecialContext && context.specialContextId) {
+                    const { addSpecialContextTodo } = useProjectStore.getState();
+                    addSpecialContextTodo(project.id, context.specialContextId, e.currentTarget.value.trim());
+                  } else if (context.isScene && context.sceneId) {
+                    const { addSceneTodo } = useProjectStore.getState();
+                    addSceneTodo(project.id, context.sceneId, e.currentTarget.value.trim());
+                  } else {
+                    const { addTodo } = useProjectStore.getState();
+                    addTodo(project.id, e.currentTarget.value.trim());
+                  }
+                  e.currentTarget.value = '';
+                }
+              }}
+              onBlur={(e) => {
+                if (e.currentTarget.value.trim()) {
+                  if (context.isShot && context.shotId) {
+                    const { addShotTodo } = useProjectStore.getState();
+                    addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
+                  } else if (context.isSpecialContext && context.specialContextId) {
+                    const { addSpecialContextTodo } = useProjectStore.getState();
+                    addSpecialContextTodo(project.id, context.specialContextId, e.currentTarget.value.trim());
+                  } else if (context.isScene && context.sceneId) {
+                    const { addSceneTodo } = useProjectStore.getState();
+                    addSceneTodo(project.id, context.sceneId, e.currentTarget.value.trim());
+                  } else {
+                    const { addTodo } = useProjectStore.getState();
+                    addTodo(project.id, e.currentTarget.value.trim());
+                  }
+                  e.currentTarget.value = '';
+                }
+              }}
+              className="w-full px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-card text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:border-solid"
+            />
+          </div>
+        </div>
+        )}
+
+        {/* Links Section */}
+        <div className="mb-7">
+          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Links</h3>
+          <div className="space-y-2">
+            {context.links.map((link: any) => (
+              <LinkItem key={link.id} link={link} projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
+            ))}
+            <LinkInputForm projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
           </div>
         </div>
 
@@ -1103,30 +1271,6 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
                   />
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer h-[38px] px-3 mt-6">
-                  <span className="text-sm whitespace-nowrap">Has scenes</span>
-                  <input
-                    type="checkbox"
-                    checked={project.hasScenes || false}
-                    onChange={(e) => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, hasScenes: e.target.checked });
-                    }}
-                    className="w-4 h-4"
-                  />
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer h-[38px] px-3 mt-6">
-                  <span className="text-sm whitespace-nowrap">Has shots</span>
-                  <input
-                    type="checkbox"
-                    checked={project.hasShots || false}
-                    onChange={(e) => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, hasShots: e.target.checked });
-                    }}
-                    className="w-4 h-4"
-                  />
-                </label>
               </div>
 
               <div className="flex gap-3 items-start">
@@ -1743,6 +1887,67 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           <div className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none z-0" style={{
             background: 'linear-gradient(to bottom, transparent 0%, rgba(10, 10, 10, 0.15) 20%, rgba(10, 10, 10, 0.4) 40%, rgba(10, 10, 10, 0.7) 60%, rgba(10, 10, 10, 0.9) 80%, #0a0a0a 100%)'
           }}></div>
+        </div>
+      )}
+
+      {/* Context Menu for Software Launch */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed bg-zinc-800 border border-zinc-700 rounded-button shadow-lg py-1 z-50 min-w-[180px] animate-slideDown"
+          style={{
+            top: `${(() => {
+              const menuHeight = 100;
+              const windowHeight = window.innerHeight;
+              const wouldOverflow = contextMenu.y + menuHeight > windowHeight;
+              return wouldOverflow ? Math.max(10, windowHeight - menuHeight - 10) : contextMenu.y;
+            })()}px`,
+            left: `${(() => {
+              const menuWidth = 180;
+              const windowWidth = window.innerWidth;
+              const wouldOverflow = contextMenu.x + menuWidth > windowWidth;
+              return wouldOverflow ? windowWidth - menuWidth - 10 : contextMenu.x;
+            })()}px`
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              const latestProject = useProjectStore.getState().projects.find(p => p.id === project.id);
+              if (!latestProject) return;
+
+              const currentScene = latestProject.hasShots && latestProject.currentSceneId
+                ? latestProject.scenes?.find((s: any) => s.id === latestProject.currentSceneId)
+                : null;
+
+              const currentShot = latestProject.hasShots && latestProject.currentShotId
+                ? latestProject.shots?.find((s: any) => s.id === latestProject.currentShotId)
+                : null;
+
+              onLaunchSoftware({
+                ...contextMenu.software,
+                executablePath: contextMenu.executablePath,
+                sceneNumber: currentScene?.number,
+                shotNumber: currentShot?.number
+              });
+              setContextMenu(null);
+            }}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+          >
+            Launch
+          </button>
+          <button
+            onClick={() => {
+              if (onLaunchSoftwareWithoutProject) {
+                const softwareKey = nameToKey[contextMenu.software.name] || contextMenu.software.name.toLowerCase().replace(/\s+/g, '-');
+                onLaunchSoftwareWithoutProject(contextMenu.executablePath, softwareKey);
+              }
+              setContextMenu(null);
+            }}
+            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
+          >
+            Launch Without Project
+          </button>
         </div>
       )}
     </div>

@@ -25,6 +25,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { extractShotNumber, getScenePattern } from '../../utils/fileNaming';
+import { findNextAvailableShotNumber } from '../../utils/shotNumbering';
 
 interface ProjectVersion {
   name: string;
@@ -541,11 +542,12 @@ const SceneCard: React.FC<SceneCardProps> = ({
             onSceneHover(null);
             setIsShotsAreaHovered(false);
           }}
-          className={`transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden bg-sidebar-bg/50 ${
-            isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
+          className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out bg-sidebar-bg/50 ${
+            isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
           }`}
         >
-          <div className="px-3 pb-3 pt-3">
+          <div className="overflow-hidden">
+            <div className="px-3 pb-3 pt-3">
             <div className="grid grid-cols-2 gap-2">
               {scene.shots.map(shot => (
                 <ShotCard
@@ -587,6 +589,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 </button>
               </div>
             )}
+          </div>
           </div>
         </div>
       </div>
@@ -750,11 +753,12 @@ const SceneCard: React.FC<SceneCardProps> = ({
           onSceneHover(null);
           setIsShotsAreaHovered(false);
         }}
-        className={`transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden ${
-          isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
+          isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         }`}
       >
-        <div className="mt-2 ml-9 relative">
+        <div className="overflow-hidden">
+          <div className="mt-2 ml-9 relative">
           {scene.shots.map((shot, index) => {
             const isLastShot = index === scene.shots.length - 1;
             const isFirstShot = index === 0;
@@ -836,6 +840,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
               </button>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>
@@ -874,7 +879,14 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     }
   });
 
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    try {
+      const saved = localStorage.getItem(`shotsbrowser_viewmode_${projectId}`);
+      return (saved as 'grid' | 'list') || 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [animatingShotId, setAnimatingShotId] = useState<string | null>(null);
   const [isContainerHovered, setIsContainerHovered] = useState(false);
@@ -882,6 +894,8 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
   const [hoveredSceneId, setHoveredSceneId] = useState<string | null>(null);
   const [hoveredShotId, setHoveredShotId] = useState<string | null>(null);
   const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
+  const previousProjectPath = useRef<string | undefined>(undefined);
+  const cachedVersionsForPath = useRef<Map<string, ProjectVersion[]>>(new Map());
   const scrollRef = useRef<any>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -995,24 +1009,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
 
         // If empty, find the next available number
         if (!numberPart || numberPart.trim() === '') {
-          const shotsInScene = project?.shots?.filter(s => s.sceneId === shot.sceneId) || [];
-          const existingNumbers = shotsInScene
-            .map(s => {
-              const match = s.name.match(/\d+$/);
-              return match ? parseInt(match[0], 10) : 0;
-            })
-            .sort((a, b) => a - b);
-
-          // Find the first available number starting from 1
-          let nextNumber = 1;
-          for (const num of existingNumbers) {
-            if (num === nextNumber) {
-              nextNumber++;
-            } else {
-              break;
-            }
-          }
-
+          const nextNumber = findNextAvailableShotNumber(
+            shot.sceneId,
+            project?.shots || []
+          );
           numberPart = String(nextNumber).padStart(3, '0');
         }
 
@@ -1415,6 +1415,23 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     localStorage.setItem(`shotsbrowser_expanded_${projectId}`, JSON.stringify(Array.from(expandedScenes)));
   }, [expandedScenes, projectId]);
 
+  // Load view mode from localStorage when project changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`shotsbrowser_viewmode_${projectId}`);
+      if (saved) {
+        setViewMode(saved as 'grid' | 'list');
+      }
+    } catch {
+      // Ignore errors
+    }
+  }, [projectId]);
+
+  // Save view mode to localStorage
+  useEffect(() => {
+    localStorage.setItem(`shotsbrowser_viewmode_${projectId}`, viewMode);
+  }, [viewMode, projectId]);
+
   // Auto-expand scene with current shot on load
   useEffect(() => {
     if (project?.currentShotId && project?.shots) {
@@ -1433,15 +1450,29 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
   useEffect(() => {
     if (!project?.path) return;
 
+    // При смене проекта мгновенно восстанавливаем кэш если есть
+    if (previousProjectPath.current !== project.path) {
+      const cached = cachedVersionsForPath.current.get(project.path);
+      if (cached) {
+        setAllVersions(cached);
+      }
+      previousProjectPath.current = project.path;
+    }
+
     const loadVersions = async () => {
       try {
         const result = await invoke<ProjectVersion[]>('get_project_versions', {
           projectPath: project.path
         });
+
         setAllVersions(result);
+        cachedVersionsForPath.current.set(project.path, result);
       } catch (error) {
         console.error('Failed to load versions:', error);
-        setAllVersions([]);
+        const cached = cachedVersionsForPath.current.get(project.path);
+        if (!cached) {
+          setAllVersions([]);
+        }
       }
     };
 
@@ -1563,7 +1594,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     });
 
     return versionMap;
-  }, [allVersions, project?.shots, project?.scenes, project?.name]);
+  }, [allVersions, project?.shots, project?.scenes, project?.name, project?.path]);
 
   // Get scenes and shots from project
   const scenes = useMemo(() => {

@@ -36,6 +36,7 @@ import { appWindow } from '@tauri-apps/api/window';
 import { DeadlineNotification } from './components/DeadlineNotification';
 import { GeneralNotification } from './components/notifications/GeneralNotification';
 import type { GeneralNotification as GeneralNotificationType } from './components/notifications/GeneralNotification';
+import { RenameSceneConfirmModal } from './components/modals/RenameSceneConfirmModal';
 // useThumbnail moved to child components
 import { CategoryTabs } from './components/CategoryTabs';
 import { WelcomeSetup } from './components/modals/WelcomeSetup';
@@ -94,6 +95,7 @@ function App() {
     selectProject,
     openInExplorer,
     launchSoftware,
+    launchSoftwareWithoutProject,
     createProject,
     updateStatus,
     deleteProject,
@@ -106,7 +108,9 @@ function App() {
     selectedCategory,
     setSelectedCategory,
     addCategory,
-    launchingStatus
+    launchingStatus,
+    isRenaming,
+    renameProgress
   } = useProjectStore(
     useShallow((state) => ({
       isLoading: state.isLoading,
@@ -114,6 +118,7 @@ function App() {
       selectProject: state.selectProject,
       openInExplorer: state.openInExplorer,
       launchSoftware: state.launchSoftware,
+      launchSoftwareWithoutProject: state.launchSoftwareWithoutProject,
       createProject: state.createProject,
       updateStatus: state.updateStatus,
       deleteProject: state.deleteProject,
@@ -127,6 +132,8 @@ function App() {
       setSelectedCategory: state.setSelectedCategory,
       addCategory: state.addCategory,
       launchingStatus: state.launchingStatus,
+      isRenaming: state.isRenaming,
+      renameProgress: state.renameProgress,
     }))
   );
 
@@ -182,6 +189,16 @@ function App() {
   const [showTopShadow, setShowTopShadow] = useState(false);
   const projectListRef = useRef<HTMLDivElement>(null);
 
+  // Scene rename confirmation state
+  const [sceneRenameConfirm, setSceneRenameConfirm] = useState<{
+    isOpen: boolean;
+    sceneName: string;
+    fileCount: { versionFiles: number; thumbnails: number };
+    onConfirm: () => void;
+    onCancel: () => void;
+    isShot?: boolean;
+  } | null>(null);
+
   // Add general notification
   const addGeneralNotification = (
     type: 'success' | 'error' | 'warning' | 'info',
@@ -198,6 +215,43 @@ function App() {
   const removeGeneralNotification = (id: string) => {
     setGeneralNotifications(prev => prev.filter(n => n.id !== id));
   };
+
+  // Expose notification function to window for projectStore
+  useEffect(() => {
+    (window as any).showNotification = addGeneralNotification;
+
+    // Watch for scene rename confirmation requests
+    const checkInterval = setInterval(() => {
+      if ((window as any).showSceneRenameConfirm && (window as any).confirmSceneRename) {
+        const data = (window as any).confirmSceneRename;
+
+        // Clear flags immediately to prevent double-trigger
+        delete (window as any).showSceneRenameConfirm;
+        delete (window as any).confirmSceneRename;
+
+        setSceneRenameConfirm({
+          isOpen: true,
+          sceneName: data.sceneName,
+          fileCount: data.fileCount,
+          onConfirm: () => {
+            data.onConfirm();
+            setSceneRenameConfirm(null);
+          },
+          onCancel: () => {
+            data.onCancel();
+            setSceneRenameConfirm(null);
+          }
+        });
+      }
+    }, 100);
+
+    return () => {
+      clearInterval(checkInterval);
+      delete (window as any).showNotification;
+      delete (window as any).showSceneRenameConfirm;
+      delete (window as any).confirmSceneRename;
+    };
+  }, [addGeneralNotification]);
 
   // Check if we should show welcome setup
   useEffect(() => {
@@ -1058,6 +1112,25 @@ function App() {
         </div>
       </div>
 
+      {/* Scene Rename Confirmation Modal */}
+      {sceneRenameConfirm && (
+        <RenameSceneConfirmModal
+          isOpen={sceneRenameConfirm.isOpen}
+          onClose={() => {
+            if (!isRenaming) {
+              sceneRenameConfirm.onCancel();
+              setSceneRenameConfirm(null);
+            }
+          }}
+          onConfirm={sceneRenameConfirm.onConfirm}
+          sceneName={sceneRenameConfirm.sceneName}
+          fileCount={sceneRenameConfirm.fileCount}
+          isRenaming={isRenaming}
+          progress={renameProgress}
+          isShot={sceneRenameConfirm.isShot || false}
+        />
+      )}
+
       {/* Custom Title Bar */}
       <div className="h-8 bg-sidebar-bg flex items-center justify-between select-none flex-shrink-0 rounded-t-lg relative z-[60]">
         <div
@@ -1652,6 +1725,7 @@ function App() {
                openInExplorer(selectedProject.path);
                }}
               showNotification={addGeneralNotification}
+              onLaunchSoftwareWithoutProject={launchSoftwareWithoutProject}
               onLaunchSoftware={(sw: any) => {
                 // Get special context if exists
                 let specialContext = null;
