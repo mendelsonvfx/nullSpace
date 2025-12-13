@@ -1658,6 +1658,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
           console.log(`✅ Shot renamed: ${filesRenamed} files, ${thumbnailsRenamed} thumbnails`);
 
+          // Clear blend thumbnail cache after rename
+          if (typeof (window as any).clearAllBlendThumbnailCache === 'function') {
+            (window as any).clearAllBlendThumbnailCache();
+          }
+
           // Show success notification only if files were renamed
           if ((filesRenamed > 0 || thumbnailsRenamed > 0) && typeof (window as any).showNotification === 'function') {
             (window as any).showNotification(

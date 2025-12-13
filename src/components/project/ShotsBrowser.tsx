@@ -326,6 +326,7 @@ interface SceneCardProps {
   onSceneHover: (sceneId: string | null) => void;
   onShotHover: (shotId: string | null) => void;
   onAddShot?: (sceneId: string) => void;
+  onShotsAreaHoverChange?: (isHovered: boolean) => void;
   animatingShotId: string | null;
   editingItem: { type: 'shot' | 'scene' | 'description'; id: string; value: string } | null;
   onEditChange: (value: string) => void;
@@ -350,6 +351,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onSceneHover,
   onShotHover,
   onAddShot,
+  onShotsAreaHoverChange,
   animatingShotId,
   editingItem,
   onEditChange,
@@ -542,10 +544,12 @@ const SceneCard: React.FC<SceneCardProps> = ({
           onMouseEnter={() => {
             onSceneHover(scene.id);
             setIsShotsAreaHovered(true);
+            onShotsAreaHoverChange?.(true);
           }}
           onMouseLeave={() => {
             onSceneHover(null);
             setIsShotsAreaHovered(false);
+            onShotsAreaHoverChange?.(false);
           }}
           className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out bg-sidebar-bg/50 ${
             isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
@@ -753,10 +757,12 @@ const SceneCard: React.FC<SceneCardProps> = ({
         onMouseEnter={() => {
           onSceneHover(scene.id);
           setIsShotsAreaHovered(true);
+          onShotsAreaHoverChange?.(true);
         }}
         onMouseLeave={() => {
           onSceneHover(null);
           setIsShotsAreaHovered(false);
+          onShotsAreaHoverChange?.(false);
         }}
         className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
           isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
@@ -895,6 +901,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
   const [searchTerm, setSearchTerm] = useState('');
   const [animatingShotId, setAnimatingShotId] = useState<string | null>(null);
   const [isContainerHovered, setIsContainerHovered] = useState(false);
+  const [isShotsAreaHovered, setIsShotsAreaHovered] = useState(false);
   const [showTopShadow, setShowTopShadow] = useState(false);
   const [hoveredSceneId, setHoveredSceneId] = useState<string | null>(null);
   const [hoveredShotId, setHoveredShotId] = useState<string | null>(null);
@@ -1848,7 +1855,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
       <SimpleBar
         ref={scrollRef}
         className="flex-1 custom-scrollbar"
-        style={{ paddingBottom: '45px', minHeight: 0 }}
+        style={{ paddingBottom: isShotsAreaHovered ? '85px' : '45px', minHeight: 0, transition: 'padding-bottom 0.2s ease-in-out' }}
         onMouseEnter={() => setIsContainerHovered(true)}
         onMouseLeave={() => {
           setIsContainerHovered(false);
@@ -1884,6 +1891,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                     onSceneHover={setHoveredSceneId}
                     onShotHover={setHoveredShotId}
                     onAddShot={project.hasShots ? (sceneId) => addShot(projectId, sceneId) : undefined}
+                    onShotsAreaHoverChange={setIsShotsAreaHovered}
                   />
                 ))
               ) : (

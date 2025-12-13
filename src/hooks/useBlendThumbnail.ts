@@ -99,3 +99,13 @@ export function clearBlendThumbnailCache(blendFilePath: string) {
   memoryCache.delete(blendFilePath);
   indexedDBThumbnailCache.clear(blendFilePath, 'blend_thumb');
 }
+
+// Clear all blend thumbnail cache (call after shot rename)
+export function clearAllBlendThumbnailCache() {
+  memoryCache.clear();
+}
+
+// Expose globally for projectStore access
+if (typeof window !== 'undefined') {
+  (window as any).clearAllBlendThumbnailCache = clearAllBlendThumbnailCache;
+}
