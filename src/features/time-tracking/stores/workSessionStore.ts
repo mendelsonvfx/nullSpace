@@ -5,7 +5,7 @@ import type { WorkSession } from '../types/workSession';
 import type { TimeEntry } from '../../../types/project';
 
 interface WorkSessionStore {
-  /** Map<projectId, WorkSession> - активные сессии по проектам */
+  /** Map<sessionId, WorkSession> - активные сессии по ID */
   sessions: Map<string, WorkSession>;
 
   /** Получить сессию для проекта */
@@ -17,8 +17,11 @@ interface WorkSessionStore {
   /** Обновить сессию */
   updateSession: (session: WorkSession) => void;
 
-  /** Остановить сессию */
+  /** Остановить сессию по sessionId */
   stopSession: (sessionId: string) => void;
+
+  /** Остановить сессию по projectId (PRIMARY - более надежный метод) */
+  stopSessionByProjectId: (projectId: string) => void;
 
   /** Инкремент времени сессии (вызывается таймером каждую минуту) */
   incrementMinute: (sessionId: string) => Promise<void>;
@@ -26,6 +29,9 @@ interface WorkSessionStore {
   /** Очистить все сессии (для тестирования) */
   clearAll: () => void;
 }
+
+// Track active incrementMinute operations for cancellation
+const activeIncrements = new Map<string, boolean>();
 
 export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
   sessions: new Map(),
@@ -38,13 +44,13 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
 
   createSession: (session: WorkSession) => {
     set(state => ({
-      sessions: new Map(state.sessions).set(session.projectId, session)
+      sessions: new Map(state.sessions).set(session.id, session)
     }));
   },
 
   updateSession: (session: WorkSession) => {
     set(state => ({
-      sessions: new Map(state.sessions).set(session.projectId, {
+      sessions: new Map(state.sessions).set(session.id, {
         ...session,
         updatedAt: new Date().toISOString()
       })
@@ -52,11 +58,20 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
   },
 
   stopSession: (sessionId: string) => {
+    // CRITICAL: Cancel any in-flight incrementMinute operations
+    activeIncrements.set(sessionId, true);
+    setTimeout(() => activeIncrements.delete(sessionId), 5000);
+
     const session = Array.from(get().sessions.values()).find(s => s.id === sessionId);
+
     if (session) {
+      // Also cancel by projectId (belt-and-suspenders)
+      activeIncrements.set(session.projectId, true);
+      setTimeout(() => activeIncrements.delete(session.projectId), 5000);
+
       set(state => {
         const sessions = new Map(state.sessions);
-        sessions.set(session.projectId, {
+        sessions.set(session.id, {
           ...session,
           isActive: false,
           updatedAt: new Date().toISOString()
@@ -64,26 +79,78 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
         return { sessions };
       });
       console.log(`[WorkSessionStore] ⏹️ Stopped session ${sessionId}`);
+    } else {
+      console.warn(`[WorkSessionStore] ⚠️  Session ${sessionId} not found`);
+    }
+  },
+
+  stopSessionByProjectId: (projectId: string) => {
+    // CRITICAL: Cancel by projectId (stable, never changes)
+    activeIncrements.set(projectId, true);
+    setTimeout(() => activeIncrements.delete(projectId), 5000);
+
+    const session = get().getSessionForProject(projectId);
+
+    if (session) {
+      // Also cancel by sessionId
+      activeIncrements.set(session.id, true);
+      setTimeout(() => activeIncrements.delete(session.id), 5000);
+
+      set(state => {
+        const sessions = new Map(state.sessions);
+        sessions.set(session.id, {
+          ...session,
+          isActive: false,
+          updatedAt: new Date().toISOString()
+        });
+        return { sessions };
+      });
+      console.log(`[WorkSessionStore] ⏹️ Stopped session for project ${projectId} (session: ${session.id})`);
+    } else {
+      console.warn(`[WorkSessionStore] ⚠️  No active session for project ${projectId}`);
     }
   },
 
   incrementMinute: async (sessionId: string) => {
+    console.log(`[WorkSession] 📥 incrementMinute called for session: ${sessionId}`);
     const session = Array.from(get().sessions.values()).find(s => s.id === sessionId);
-    if (session && session.isActive) {
-      const updatedSession = {
-        ...session,
-        elapsedMinutes: session.elapsedMinutes + 1,
-        updatedAt: new Date().toISOString()
-      };
+    console.log(`[WorkSession] 📥 session found: ${!!session}, isActive: ${session?.isActive}`);
 
-      set(state => {
-        const sessions = new Map(state.sessions);
-        sessions.set(session.projectId, updatedSession);
-        return { sessions };
-      });
+    // Check cancellation by sessionId
+    if (activeIncrements.get(sessionId) === true) {
+      console.log(`[WorkSession] ⚠️  incrementMinute cancelled for ${sessionId} (sessionId token)`);
+      activeIncrements.delete(sessionId);
+      return;
+    }
 
-      // Count software statistics using focus history (last 60 seconds) - runs in parallel
-      try {
+    // Check cancellation by projectId (more reliable - projectId never changes)
+    if (session && activeIncrements.get(session.projectId) === true) {
+      console.log(`[WorkSession] ⚠️  incrementMinute cancelled for ${sessionId} (projectId token)`);
+      activeIncrements.delete(session.projectId);
+      return;
+    }
+
+    // CHECK: Early exit if session not found or inactive
+    if (!session || !session.isActive) {
+      activeIncrements.delete(sessionId);
+      return;
+    }
+
+    // Direct update - no redundant check needed since we already validated above
+    const updatedSession = {
+      ...session,
+      elapsedMinutes: session.elapsedMinutes + 1,
+      updatedAt: new Date().toISOString()
+    };
+
+    set(state => {
+      const sessions = new Map(state.sessions);
+      sessions.set(session.id, updatedSession);
+      return { sessions };
+    });
+
+    // Count software statistics using focus history (last 60 seconds) - runs in parallel
+    try {
         const { useTimeTrackingStore } = await import('./timeTrackingStore');
         const { SessionService } = await import('../services/SessionService');
         const { StatsService } = await import('../services/StatsService');
@@ -164,6 +231,21 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
             return entry;
           });
 
+          // CHECK #2: Cancellation check before disk write
+          if (activeIncrements.get(sessionId) === true) {
+            console.log(`[WorkSession] ⚠️  incrementMinute cancelled for ${sessionId} (cancellation token)`);
+            activeIncrements.delete(sessionId);
+            return;
+          }
+
+          // CHECK #3: Double-check isActive RIGHT BEFORE disk write (race protection)
+          const freshSession = Array.from(get().sessions.values()).find(s => s.id === sessionId);
+          if (!freshSession || !freshSession.isActive) {
+            console.log(`[WorkSession] ⚠️  Session became inactive during increment, aborting disk write`);
+            activeIncrements.delete(sessionId);
+            return;
+          }
+
           // ATOMIC UPDATE: Combine all three updates into ONE database write
           // This prevents race conditions when multiple projects are active
           const updatedProject = {
@@ -176,11 +258,17 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
 
           await projectStore.updateProject(updatedProject);
           console.log(`[WorkSession] 💾 Atomic update: +1min (total: ${updatedProject.totalMinutesSpent}m), workSession, timeEntries`);
+
+          // Cleanup: Remove from active operations
+          activeIncrements.delete(sessionId);
         }
-      } catch (error) {
-        console.error('[WorkSessionStore] ❌ Failed to update project:', error);
-      }
+    } catch (error) {
+      console.error('[WorkSessionStore] ❌ Failed to update project:', error);
+      // Cleanup on error
+      activeIncrements.delete(sessionId);
     }
+    // Final cleanup (in case no disk write happened)
+    activeIncrements.delete(sessionId);
   },
 
   clearAll: () => {

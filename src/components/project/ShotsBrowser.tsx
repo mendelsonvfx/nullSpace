@@ -24,6 +24,8 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { useThumbnail } from '../../hooks/useThumbnail';
+import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
+import { useContextMenu } from '../../hooks/useContextMenu';
 import { extractShotNumber, getScenePattern } from '../../utils/fileNaming';
 import { findNextAvailableShotNumber } from '../../utils/shotNumbering';
 
@@ -145,6 +147,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
                 src={shotPreviewSrc}
                 alt={shot.name}
                 className="w-full h-full object-cover"
+                draggable={false}
               />
             ) : (
               <div className="flex flex-col items-center justify-center gap-0.5">
@@ -232,6 +235,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
                 src={shotPreviewSrc}
                 alt={shot.name}
                 className="w-full h-full object-cover"
+                draggable={false}
               />
             ) : (
               <span className="text-sm font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
@@ -438,6 +442,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
               src={scenePreviewSrc}
               alt={scene.name}
               className="w-full h-full object-cover"
+              draggable={false}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center flex-col gap-2 scene-preview-content">
@@ -897,12 +902,9 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
   const previousProjectPath = useRef<string | undefined>(undefined);
   const cachedVersionsForPath = useRef<Map<string, ProjectVersion[]>>(new Map());
   const scrollRef = useRef<any>(null);
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    type: 'shot' | 'scene' | 'container';
-    id?: string;
-  } | null>(null);
+  // Context menu data type
+  type ContextMenuData = { type: 'shot' | 'scene' | 'container'; id?: string };
+  const { isOpen: isContextMenuOpen, position: contextMenuPosition, data: contextMenuData, openMenu: openContextMenu, closeMenu: closeContextMenuHook } = useContextMenu<ContextMenuData>();
   const [editingItem, setEditingItem] = useState<{
     type: 'shot' | 'scene' | 'description';
     id: string;
@@ -964,18 +966,18 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
   // Handle shot context menu
   const handleShotContextMenu = (e: React.MouseEvent, shotId: string, _type: 'preview' | 'name') => {
     setActiveMenu('shots');
-    setContextMenu({ x: e.clientX, y: e.clientY, type: 'shot', id: shotId });
+    openContextMenu(e, { type: 'shot', id: shotId });
   };
 
   // Handle scene context menu
   const handleSceneContextMenu = (e: React.MouseEvent, sceneId: string) => {
     setActiveMenu('scenes');
-    setContextMenu({ x: e.clientX, y: e.clientY, type: 'scene', id: sceneId });
+    openContextMenu(e, { type: 'scene', id: sceneId });
   };
 
   // Close context menu
   const closeContextMenu = () => {
-    setContextMenu(null);
+    closeContextMenuHook();
     setActiveMenu(null);
   };
 
@@ -1000,32 +1002,38 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
   const handleSaveRename = async () => {
     if (!editingItem) return;
 
-    if (editingItem.type === 'shot') {
-      const shot = project?.shots?.find(s => s.id === editingItem.id);
-      if (shot) {
-        // For shots, only update the number part
-        const prefix = shot.name.replace(/\d+$/, '');
-        let numberPart = editingItem.value;
+    const currentEditingItem = editingItem;
+    setEditingItem(null); // Clear immediately to prevent UI issues during confirmation
 
-        // If empty, find the next available number
-        if (!numberPart || numberPart.trim() === '') {
-          const nextNumber = findNextAvailableShotNumber(
-            shot.sceneId,
-            project?.shots || []
-          );
-          numberPart = String(nextNumber).padStart(3, '0');
+    try {
+      if (currentEditingItem.type === 'shot') {
+        const shot = project?.shots?.find(s => s.id === currentEditingItem.id);
+        if (shot) {
+          // For shots, only update the number part
+          const prefix = shot.name.replace(/\d+$/, '');
+          let numberPart = currentEditingItem.value;
+
+          // If empty, find the next available number
+          if (!numberPart || numberPart.trim() === '') {
+            const nextNumber = findNextAvailableShotNumber(
+              shot.sceneId,
+              project?.shots || []
+            );
+            numberPart = String(nextNumber).padStart(3, '0');
+          }
+
+          const newName = prefix + numberPart;
+          await renameShot(projectId, currentEditingItem.id, newName);
         }
-
-        const newName = prefix + numberPart;
-        await renameShot(projectId, editingItem.id, newName);
+      } else if (currentEditingItem.type === 'scene') {
+        await renameScene(projectId, currentEditingItem.id, currentEditingItem.value);
+      } else if (currentEditingItem.type === 'description') {
+        setSceneDescription(projectId, currentEditingItem.id, currentEditingItem.value);
       }
-    } else if (editingItem.type === 'scene') {
-      await renameScene(projectId, editingItem.id, editingItem.value);
-    } else if (editingItem.type === 'description') {
-      setSceneDescription(projectId, editingItem.id, editingItem.value);
+    } catch (error) {
+      console.error('Failed to save rename:', error);
+      // Error notification is already handled in projectStore
     }
-
-    setEditingItem(null);
   };
 
   const handleCancelRename = () => {
@@ -1500,11 +1508,11 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
       }
     };
 
-    if (contextMenu) {
+    if (isContextMenuOpen) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [contextMenu]);
+  }, [isContextMenuOpen]);
 
   // Handle keyboard shortcuts for delete confirmation
   useEffect(() => {
@@ -1960,32 +1968,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
       </div>
 
       {/* Context Menu */}
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="fixed bg-zinc-800 border border-zinc-700 rounded-button shadow-lg py-1 z-50 min-w-[180px] animate-slideDown"
-          style={{
-            top: `${(() => {
-              const menuHeight = contextMenu.type === 'shot' ? 320 : contextMenu.type === 'scene' ? 320 : 200;
-              const windowHeight = window.innerHeight;
-              const wouldOverflow = contextMenu.y + menuHeight > windowHeight;
-              return wouldOverflow ? Math.max(10, windowHeight - menuHeight - 10) : contextMenu.y;
-            })()}px`,
-            left: `${(() => {
-              const menuWidth = 180;
-              const windowWidth = window.innerWidth;
-              const wouldOverflow = contextMenu.x + menuWidth > windowWidth;
-              return wouldOverflow ? windowWidth - menuWidth - 10 : contextMenu.x;
-            })()}px`
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {contextMenu.type === 'shot' && contextMenu.id ? (
+      <ContextMenu
+        isOpen={isContextMenuOpen}
+        position={contextMenuPosition}
+        onClose={closeContextMenu}
+        menuId={contextMenuData?.type === 'shot' ? 'shots' : contextMenuData?.type === 'scene' ? 'scenes' : 'container'}
+      >
+        <div ref={contextMenuRef}>
+          {contextMenuData?.type === 'shot' && contextMenuData?.id ? (
             <>
               {/* Shot Context Menu */}
-              <button
+              <ContextMenuItem
+                icon={<IconPhoto stroke={1.5} className="w-4 h-4" />}
                 onClick={async () => {
-                  const shot = project?.shots?.find(s => s.id === contextMenu.id);
+                  const shot = project?.shots?.find(s => s.id === contextMenuData.id);
                   if (!shot || !project) return;
 
                   try {
@@ -2003,21 +1999,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                       const fileData = await readBinaryFile(selected);
                       const arrayBuffer = fileData.buffer as ArrayBuffer;
                       const blob = new Blob([arrayBuffer]);
-                      await processImageBlobForShot(contextMenu.id!, blob);
+                      await processImageBlobForShot(contextMenuData.id!, blob);
                     }
                   } catch (error) {
                     console.error('Failed to set shot preview:', error);
                   }
                   closeContextMenu();
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconPhoto stroke={1.5} className="w-4 h-4" />
                 Set Preview
-              </button>
-              <button
+              </ContextMenuItem>
+              <ContextMenuItem
+                icon={<IconPhoto stroke={1.5} className="w-4 h-4" />}
                 onClick={async () => {
-                  const shot = project?.shots?.find(s => s.id === contextMenu.id);
+                  const shot = project?.shots?.find(s => s.id === contextMenuData.id);
                   if (shot) {
                     try {
                       const clipboardItems = await navigator.clipboard.read();
@@ -2025,7 +2020,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                         const imageTypes = item.types.filter(type => type.startsWith('image/'));
                         if (imageTypes.length > 0) {
                           const blob = await item.getType(imageTypes[0]);
-                          await processImageBlobForShot(contextMenu.id!, blob);
+                          await processImageBlobForShot(contextMenuData.id!, blob);
                           break;
                         }
                       }
@@ -2035,68 +2030,60 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                   }
                   closeContextMenu();
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconPhoto stroke={1.5} className="w-4 h-4" />
                 Paste Preview
-              </button>
-              <button
+              </ContextMenuItem>
+              <ContextMenuItem
+                icon={<IconX stroke={1.5} className="w-4 h-4" />}
                 onClick={async () => {
-                  if (contextMenu.id) {
-                    await removeShotPreview(contextMenu.id);
+                  if (contextMenuData.id) {
+                    await removeShotPreview(contextMenuData.id);
                   }
                   closeContextMenu();
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconX stroke={1.5} className="w-4 h-4" />
                 Remove Preview
-              </button>
-              <div className="border-t border-zinc-700 my-1" />
-              <div className="px-2 py-1 text-xs text-zinc-500 font-medium">Status</div>
-              <button
+              </ContextMenuItem>
+              <ContextMenuDivider />
+              <div className="px-3 py-1 text-[11px] text-text-muted opacity-70 font-medium">Status</div>
+              <ContextMenuItem
+                icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-yellow-500 text-yellow-500" />}
                 onClick={() => {
-                  handleShotStatusChangeFromMenu(contextMenu.id!, 'wip');
+                  handleShotStatusChangeFromMenu(contextMenuData.id!, 'wip');
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconCircleFilled stroke={1.5} className="w-4 h-4 fill-yellow-500 text-yellow-500" />
                 WIP
-              </button>
-              <button
+              </ContextMenuItem>
+              <ContextMenuItem
+                icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-green-500 text-green-500" />}
                 onClick={() => {
-                  handleShotStatusChangeFromMenu(contextMenu.id!, 'done');
+                  handleShotStatusChangeFromMenu(contextMenuData.id!, 'done');
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconCircleFilled stroke={1.5} className="w-4 h-4 fill-green-500 text-green-500" />
                 Done
-              </button>
-              <button
+              </ContextMenuItem>
+              <ContextMenuItem
+                icon={<IconX stroke={1.5} className="w-4 h-4" />}
                 onClick={() => {
-                  handleShotStatusChangeFromMenu(contextMenu.id!, 'none');
+                  handleShotStatusChangeFromMenu(contextMenuData.id!, 'none');
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconX stroke={1.5} className="w-4 h-4" />
                 Clear Status
-              </button>
-              <div className="border-t border-zinc-700 my-1" />
-              <button
+              </ContextMenuItem>
+              <ContextMenuDivider />
+              <ContextMenuItem
+                icon={<IconPencil stroke={1.5} className="w-4 h-4" />}
                 onClick={() => {
-                  handleStartRename('shot', contextMenu.id!);
+                  handleStartRename('shot', contextMenuData.id!);
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconPencil stroke={1.5} className="w-4 h-4" />
                 Renumber
-              </button>
-              <button
-                onClick={() => {
-                  handleDeleteShot(contextMenu.id!);
-                }}
+              </ContextMenuItem>
+              <ContextMenuItem
+                icon={<IconTrash stroke={1.5} className="w-4 h-4" />}
+                danger
                 disabled={(() => {
-                  const shot = project?.shots?.find(s => s.id === contextMenu.id);
+                  const shot = project?.shots?.find(s => s.id === contextMenuData.id);
                   if (!shot) return true;
                   // In scenes mode, prevent deleting last shot in a scene
                   if (project?.hasScenes) {
@@ -2106,32 +2093,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                   // In shots-only mode, allow deleting any shot
                   return false;
                 })()}
-                className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${
-                  (() => {
-                    const shot = project?.shots?.find(s => s.id === contextMenu.id);
-                    if (!shot) return 'text-zinc-600 cursor-not-allowed';
-                    // In scenes mode, prevent deleting last shot in a scene
-                    if (project?.hasScenes) {
-                      const shotsInScene = project?.shots?.filter(s => s.sceneId === shot.sceneId) || [];
-                      return shotsInScene.length <= 1
-                        ? 'text-zinc-600 cursor-not-allowed'
-                        : 'hover:bg-red-900/50 text-red-400';
-                    }
-                    // In shots-only mode, always allow
-                    return 'hover:bg-red-900/50 text-red-400';
-                  })()
-                }`}
+                onClick={() => {
+                  handleDeleteShot(contextMenuData.id!);
+                }}
               >
-                <IconTrash stroke={1.5} className="w-4 h-4" />
                 Delete
-              </button>
+              </ContextMenuItem>
             </>
-          ) : contextMenu.type === 'scene' && contextMenu.id ? (
+          ) : contextMenuData?.type === 'scene' && contextMenuData?.id ? (
             <>
               {/* Scene Context Menu */}
-              <button
+              <ContextMenuItem
+                icon={<IconPhoto stroke={1.5} className="w-4 h-4" />}
                 onClick={async () => {
-                  const scene = project?.scenes?.find(s => s.id === contextMenu.id);
+                  const scene = project?.scenes?.find(s => s.id === contextMenuData.id);
                   if (!scene || !project) return;
 
                   try {
@@ -2149,21 +2124,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                       const fileData = await readBinaryFile(selected);
                       const arrayBuffer = fileData.buffer as ArrayBuffer;
                       const blob = new Blob([arrayBuffer]);
-                      await processImageBlobForScene(contextMenu.id!, blob);
+                      await processImageBlobForScene(contextMenuData.id!, blob);
                     }
                   } catch (error) {
                     console.error('Failed to set scene preview:', error);
                   }
                   closeContextMenu();
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconPhoto stroke={1.5} className="w-4 h-4" />
                 Set Preview
-              </button>
-              <button
+              </ContextMenuItem>
+              <ContextMenuItem
+                icon={<IconPhoto stroke={1.5} className="w-4 h-4" />}
                 onClick={async () => {
-                  const scene = project?.scenes?.find(s => s.id === contextMenu.id);
+                  const scene = project?.scenes?.find(s => s.id === contextMenuData.id);
                   if (scene) {
                     try {
                       const clipboardItems = await navigator.clipboard.read();
@@ -2171,7 +2145,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                         const imageTypes = item.types.filter(type => type.startsWith('image/'));
                         if (imageTypes.length > 0) {
                           const blob = await item.getType(imageTypes[0]);
-                          await processImageBlobForScene(contextMenu.id!, blob);
+                          await processImageBlobForScene(contextMenuData.id!, blob);
                           break;
                         }
                       }
@@ -2181,107 +2155,94 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
                   }
                   closeContextMenu();
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconPhoto stroke={1.5} className="w-4 h-4" />
                 Paste Preview
-              </button>
-              <button
+              </ContextMenuItem>
+              <ContextMenuItem
+                icon={<IconX stroke={1.5} className="w-4 h-4" />}
                 onClick={async () => {
-                  if (contextMenu.id) {
-                    await removeScenePreview(contextMenu.id);
+                  if (contextMenuData.id) {
+                    await removeScenePreview(contextMenuData.id);
                   }
                   closeContextMenu();
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconX stroke={1.5} className="w-4 h-4" />
                 Remove Preview
-              </button>
-              <div className="border-t border-zinc-700 my-1" />
+              </ContextMenuItem>
+              <ContextMenuDivider />
               {project?.hasShots && (
-                <button
+                <ContextMenuItem
+                  icon={<IconPlus stroke={1.5} className="w-4 h-4" />}
                   onClick={() => {
-                    handleAddShot(contextMenu.id!);
+                    handleAddShot(contextMenuData.id!);
                   }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
                 >
-                  <IconPlus stroke={1.5} className="w-4 h-4" />
                   Add Shot
-                </button>
+                </ContextMenuItem>
               )}
-              <button
+              <ContextMenuItem
+                icon={<IconFileText stroke={1.5} className="w-4 h-4" />}
                 onClick={() => {
-                  handleSetDescription(contextMenu.id!);
+                  handleSetDescription(contextMenuData.id!);
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconFileText stroke={1.5} className="w-4 h-4" />
                 Set Description
-              </button>
-              <button
+              </ContextMenuItem>
+              <ContextMenuItem
+                icon={<IconPencil stroke={1.5} className="w-4 h-4" />}
                 onClick={() => {
-                  handleStartRename('scene', contextMenu.id!);
+                  handleStartRename('scene', contextMenuData.id!);
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconPencil stroke={1.5} className="w-4 h-4" />
                 Rename
-              </button>
-              <button
-                onClick={() => {
-                  handleDeleteScene(contextMenu.id!);
-                }}
+              </ContextMenuItem>
+              <ContextMenuItem
+                icon={<IconTrash stroke={1.5} className="w-4 h-4" />}
+                danger
                 disabled={(project?.scenes || []).length <= 1}
-                className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${
-                  (project?.scenes || []).length <= 1
-                    ? 'text-zinc-600 cursor-not-allowed'
-                    : 'hover:bg-red-900/50 text-red-400'
-                }`}
+                onClick={() => {
+                  handleDeleteScene(contextMenuData.id!);
+                }}
               >
-                <IconTrash stroke={1.5} className="w-4 h-4" />
                 Delete
-              </button>
+              </ContextMenuItem>
             </>
           ) : (
             <>
               {/* Container Context Menu */}
-              <button
+              <ContextMenuItem
+                icon={<IconPlus stroke={1.5} className="w-4 h-4" />}
                 onClick={() => {
                   addScene(projectId);
                   closeContextMenu();
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconPlus stroke={1.5} className="w-4 h-4" />
                 Add Scene
-              </button>
-              <div className="border-t border-zinc-700 my-1" />
-              <div className="px-2 py-1 text-xs text-zinc-500 font-medium">View Mode</div>
-              <button
+              </ContextMenuItem>
+              <ContextMenuDivider />
+              <div className="px-3 py-1 text-[11px] text-text-muted opacity-70 font-medium">View Mode</div>
+              <ContextMenuItem
+                icon={<IconLayoutGrid stroke={1.5} className="w-4 h-4" />}
                 onClick={() => {
                   setViewMode('grid');
                   closeContextMenu();
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconLayoutGrid stroke={1.5} className="w-4 h-4" />
                 Grid View
-              </button>
-              <button
+              </ContextMenuItem>
+              <ContextMenuItem
+                icon={<IconLayoutList stroke={1.5} className="w-4 h-4" />}
                 onClick={() => {
                   setViewMode('list');
                   closeContextMenu();
                 }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
               >
-                <IconLayoutList stroke={1.5} className="w-4 h-4" />
                 List View
-              </button>
+              </ContextMenuItem>
             </>
           )}
         </div>
-      )}
+      </ContextMenu>
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
@@ -2290,7 +2251,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
           onClick={() => setDeleteConfirm(null)}
         >
           <div
-            className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md w-full mx-4"
+            className="bg-zinc-900 border border-red-700 rounded-lg p-6 max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold mb-2">Confirm Delete</h3>

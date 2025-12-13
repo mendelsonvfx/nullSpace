@@ -759,7 +759,7 @@ impl SoftwareLaunchConfig {
     /// Get launch configuration based on file extension
     fn from_extension(ext: &str) -> Self {
         match ext {
-            "hip" => SoftwareLaunchConfig {
+            "hip" | "hiplc" | "hipnc" => SoftwareLaunchConfig {
                 use_explorer: true,
                 needs_pid_lookup: true,
                 process_name: "houdin", // Matches "houdini.exe" or "houdinifx.exe"
@@ -1671,7 +1671,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                         // Check if file matches known software extensions
                         let software_name = match extension.as_str() {
                             "blend" => Some("Blender"),
-                            "hip" => Some("Houdini"),
+                            "hip" | "hiplc" | "hipnc" => Some("Houdini"),
                             "ma" | "mb" => Some("Maya"),
                             "aep" => Some("After Effects"),
                             "psd" | "psb" => Some("Photoshop"),
@@ -2008,7 +2008,7 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
 async fn move_version_to_shot(
     version_path: String,
     project_path: String,
-    target_shot_number: u32,
+    target_shot_id: String,
 ) -> Result<String, String> {
     let version_file = PathBuf::from(&version_path);
 
@@ -2028,15 +2028,17 @@ async fn move_version_to_shot(
     // Get target shot's scene from project metadata
     let project_dir = PathBuf::from(&project_path);
     let metadata_path = project_dir.join(".project-metadata.json");
-    let target_scene_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+    let (target_shot_number, target_scene_name) = if let Ok(content) = fs::read_to_string(&metadata_path) {
         if let Ok(project) = serde_json::from_str::<Project>(&content) {
-            // Find the target shot to get its scene
+            // Find the target shot by ID
             let shot = project.shots
-                .and_then(|shots| shots.into_iter().find(|s| s.number == target_shot_number))
+                .and_then(|shots| shots.into_iter().find(|s| s.id == target_shot_id))
                 .ok_or("Target shot not found")?;
 
+            let shot_number = shot.number;
+
             // Find the scene by ID (if shot has a scene)
-            if let Some(scene_id) = &shot.scene_id {
+            let scene_name = if let Some(scene_id) = &shot.scene_id {
                 project.scenes
                     .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id))
                     .map(|scene| scene.name)
@@ -2044,7 +2046,9 @@ async fn move_version_to_shot(
             } else {
                 // Shots-only mode: no scene
                 String::new()
-            }
+            };
+
+            (shot_number, scene_name)
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -2073,7 +2077,7 @@ async fn move_version_to_shot(
 async fn copy_version_to_shot(
     version_path: String,
     project_path: String,
-    target_shot_number: u32,
+    target_shot_id: String,
 ) -> Result<String, String> {
     let version_file = PathBuf::from(&version_path);
 
@@ -2093,15 +2097,17 @@ async fn copy_version_to_shot(
     // Get target shot's scene from project metadata
     let project_dir = PathBuf::from(&project_path);
     let metadata_path = project_dir.join(".project-metadata.json");
-    let target_scene_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
+    let (target_shot_number, target_scene_name) = if let Ok(content) = fs::read_to_string(&metadata_path) {
         if let Ok(project) = serde_json::from_str::<Project>(&content) {
-            // Find the target shot to get its scene
+            // Find the target shot by ID
             let shot = project.shots
-                .and_then(|shots| shots.into_iter().find(|s| s.number == target_shot_number))
+                .and_then(|shots| shots.into_iter().find(|s| s.id == target_shot_id))
                 .ok_or("Target shot not found")?;
 
+            let shot_number = shot.number;
+
             // Find the scene by ID (if shot has a scene)
-            if let Some(scene_id) = &shot.scene_id {
+            let scene_name = if let Some(scene_id) = &shot.scene_id {
                 project.scenes
                     .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id))
                     .map(|scene| scene.name)
@@ -2109,7 +2115,9 @@ async fn copy_version_to_shot(
             } else {
                 // Shots-only mode: no scene
                 String::new()
-            }
+            };
+
+            (shot_number, scene_name)
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -2866,18 +2874,18 @@ async fn check_shot_files_accessible(project_path: String, shot_number: u32) -> 
 async fn rename_shot_files(
     app_handle: tauri::AppHandle,
     project_path: String,
-    old_shot_number: u32,
+    shot_id: String,
     new_shot_number: u32
 ) -> Result<u32, String> {
     let project_dir = PathBuf::from(&project_path);
 
-    // Get project name and scene name from metadata
+    // Get project name, scene name and old shot number from metadata
     let metadata_path = project_dir.join(".project-metadata.json");
-    let (project_name, scene_name) = if let Ok(content) = fs::read_to_string(&metadata_path) {
+    let (project_name, scene_name, old_shot_number) = if let Ok(content) = fs::read_to_string(&metadata_path) {
         if let Ok(project) = serde_json::from_str::<Project>(&content) {
-            // Find the shot to get its scene (using old shot number)
+            // Find the shot by ID (not by number!)
             let shot = project.shots
-                .and_then(|shots| shots.into_iter().find(|s| s.number == old_shot_number))
+                .and_then(|shots| shots.into_iter().find(|s| s.id == shot_id))
                 .ok_or("Shot not found")?;
 
             // Find the scene by ID (if shot has a scene)
@@ -2891,7 +2899,7 @@ async fn rename_shot_files(
                 String::new()
             };
 
-            (project.name, scene_name)
+            (project.name, scene_name, shot.number)
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -2960,11 +2968,39 @@ async fn rename_shot_files(
 async fn rename_shot_thumbnails(
     app_handle: tauri::AppHandle,
     project_path: String,
-    old_shot_number: u32,
+    shot_id: String,
     new_shot_number: u32,
 ) -> Result<u32, String> {
-    let thumbnails_dir = Path::new(&project_path).join(".thumbnails");
+    let project_dir = Path::new(&project_path);
+    let thumbnails_dir = project_dir.join(".thumbnails");
     let mut found_thumbnails = Vec::new();
+
+    // Get scene name and old shot number from metadata
+    let metadata_path = project_dir.join(".project-metadata.json");
+    let (scene_name, old_shot_number) = if let Ok(content) = fs::read_to_string(&metadata_path) {
+        if let Ok(project) = serde_json::from_str::<Project>(&content) {
+            // Find the shot by ID (not by number!)
+            let shot = project.shots
+                .and_then(|shots| shots.into_iter().find(|s| s.id == shot_id))
+                .ok_or("Shot not found")?;
+
+            // Find the scene by ID (if shot has a scene)
+            let scene_name = if let Some(scene_id) = &shot.scene_id {
+                project.scenes
+                    .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id))
+                    .map(|scene| scene.name)
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
+
+            (scene_name, shot.number)
+        } else {
+            return Err("Failed to parse project metadata".to_string());
+        }
+    } else {
+        return Err("Project metadata not found".to_string());
+    };
 
     // Search for thumbnails in all software directories
     let software_folders = vec!["blender", "houdini", "aftereffects", "nuke", "maya", "cinema4d"];
@@ -2982,9 +3018,17 @@ async fn rename_shot_thumbnails(
                         let file_name = entry.file_name();
                         let file_name_str = file_name.to_string_lossy().to_string();
 
-                        // Pattern: shot{old_number}_*.png
+                        // Pattern: shot{old_number}_*.png or sceneName_shot{old_number}_*.png
                         let old_pattern = format!("shot{}_", format_shot_number(old_shot_number));
-                        if file_name_str.starts_with(&old_pattern) {
+                        let matches_shot = file_name_str.contains(&old_pattern);
+                        let matches_scene = if !scene_name.is_empty() {
+                            file_name_str.starts_with(&format!("{}_", file_naming::sanitize_folder_name(&scene_name)))
+                        } else {
+                            // Shots-only mode - match all thumbnails with this shot number
+                            true
+                        };
+
+                        if matches_shot && matches_scene {
                             found_thumbnails.push(entry.path());
                         }
                     }
@@ -3034,13 +3078,48 @@ async fn rename_shot_thumbnails(
 #[tauri::command]
 async fn count_shot_files(
     project_path: String,
-    shot_number: u32,
+    shot_id: String,
 ) -> Result<SceneFileCount, String> {
     let project_dir = Path::new(&project_path);
     let mut version_files = 0u32;
     let mut thumbnails = 0u32;
 
-    // Count version files
+    // Read metadata to find the shot by ID
+    let metadata_path = project_dir.join(".project-metadata.json");
+    let (_project_name, scene_name, shot_number) = if let Ok(content) = fs::read_to_string(&metadata_path) {
+        if let Ok(project) = serde_json::from_str::<Project>(&content) {
+            // Find the shot by ID
+            let shot = project.shots
+                .and_then(|shots| shots.into_iter().find(|s| s.id == shot_id))
+                .ok_or("Shot not found")?;
+
+            // Find the scene by ID (if shot has a scene)
+            let scene_name = if let Some(scene_id) = &shot.scene_id {
+                project.scenes
+                    .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id))
+                    .map(|scene| scene.name)
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
+
+            (project.name, scene_name, shot.number)
+        } else {
+            return Err("Failed to parse project metadata".to_string());
+        }
+    } else {
+        return Err("Project metadata not found".to_string());
+    };
+
+    // Build pattern that includes scene context for accurate counting
+    let shot_pattern = format!("_SH{}_", format_shot_number(shot_number));
+    let scene_pattern = if !scene_name.is_empty() {
+        format!("_{}_", file_naming::sanitize_folder_name(&scene_name))
+    } else {
+        String::new()
+    };
+
+    // Count version files - only count files that match both scene and shot patterns
     for entry in WalkDir::new(project_dir)
         .follow_links(false)
         .into_iter()
@@ -3048,9 +3127,17 @@ async fn count_shot_files(
     {
         if entry.file_type().is_file() {
             if let Some(file_name) = entry.file_name().to_str() {
-                // Check if filename contains the shot number pattern
-                let shot_pattern = format!("_SH{}_", format_shot_number(shot_number));
-                if file_name.contains(&shot_pattern) {
+                // For scenes mode: file must contain both scene and shot patterns
+                // For shots-only mode: file must contain shot pattern and NOT contain any scene pattern
+                let matches_shot = file_name.contains(&shot_pattern);
+                let matches_scene = if !scene_pattern.is_empty() {
+                    file_name.contains(&scene_pattern)
+                } else {
+                    // Shots-only mode: file should NOT contain any _SC pattern
+                    !file_name.contains("_SC")
+                };
+
+                if matches_shot && matches_scene {
                     version_files += 1;
                 }
             }
@@ -3060,6 +3147,7 @@ async fn count_shot_files(
     // Count thumbnails
     let thumbnails_dir = project_dir.join(".thumbnails");
     let software_folders = vec!["blender", "houdini", "aftereffects", "nuke", "maya", "cinema4d"];
+    let thumbnail_pattern = format!("shot{}_", format_shot_number(shot_number));
 
     for software in software_folders {
         let software_dir = thumbnails_dir.join(software);
@@ -3073,8 +3161,16 @@ async fn count_shot_files(
                     if file_type.is_file() {
                         let file_name = entry.file_name();
                         let file_name_str = file_name.to_string_lossy().to_string();
-                        let shot_pattern = format!("shot{}_", format_shot_number(shot_number));
-                        if file_name_str.starts_with(&shot_pattern) {
+                        // Thumbnails use scene prefix: sceneName_shot001_...
+                        let matches_thumbnail = file_name_str.contains(&thumbnail_pattern);
+                        let matches_scene = if !scene_name.is_empty() {
+                            file_name_str.starts_with(&format!("{}_", file_naming::sanitize_folder_name(&scene_name)))
+                        } else {
+                            // Shots-only mode
+                            true
+                        };
+
+                        if matches_thumbnail && matches_scene {
                             thumbnails += 1;
                         }
                     }
@@ -4029,6 +4125,164 @@ fn rename_shot_folders(
     Ok(renamed_count)
 }
 
+// Window state management structures
+#[derive(Debug, Serialize, Deserialize)]
+struct MonitorInfo {
+    index: usize,
+    name: String,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    is_primary: bool,
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn get_available_monitors() -> Result<Vec<MonitorInfo>, String> {
+    use windows::Win32::Graphics::Gdi::{
+        EnumDisplayMonitors, GetMonitorInfoW, HMONITOR, HDC, MONITORINFOEXW,
+    };
+    use windows::Win32::Foundation::{BOOL, LPARAM, RECT};
+    use std::sync::Mutex;
+
+    lazy_static! {
+        static ref MONITORS: Mutex<Vec<MonitorInfo>> = Mutex::new(Vec::new());
+    }
+
+    unsafe extern "system" fn monitor_enum_proc(
+        hmonitor: HMONITOR,
+        _hdc: HDC,
+        _rect: *mut RECT,
+        lparam: LPARAM,
+    ) -> BOOL {
+        let monitors = &mut *(lparam.0 as *mut Vec<MonitorInfo>);
+
+        let mut info: MONITORINFOEXW = std::mem::zeroed();
+        info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+
+        if GetMonitorInfoW(hmonitor, &mut info.monitorInfo as *mut _ as *mut _).as_bool() {
+            let rect = info.monitorInfo.rcMonitor;
+            let device_name = String::from_utf16_lossy(
+                &info.szDevice.iter()
+                    .take_while(|&&c| c != 0)
+                    .map(|&c| c)
+                    .collect::<Vec<u16>>()
+            );
+
+            let is_primary = info.monitorInfo.dwFlags & 1 == 1; // MONITORINFOF_PRIMARY
+
+            monitors.push(MonitorInfo {
+                index: monitors.len(),
+                name: device_name,
+                x: rect.left,
+                y: rect.top,
+                width: (rect.right - rect.left) as u32,
+                height: (rect.bottom - rect.top) as u32,
+                is_primary,
+            });
+        }
+
+        BOOL::from(true)
+    }
+
+    let mut monitors = Vec::new();
+
+    unsafe {
+        EnumDisplayMonitors(
+            HDC::default(),
+            None,
+            Some(monitor_enum_proc),
+            LPARAM(&mut monitors as *mut _ as isize),
+        );
+    }
+
+    Ok(monitors)
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn get_available_monitors() -> Result<Vec<MonitorInfo>, String> {
+    Ok(vec![MonitorInfo {
+        index: 0,
+        name: "Primary Monitor".to_string(),
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+        is_primary: true,
+    }])
+}
+
+#[tauri::command]
+fn set_window_to_monitor(
+    window: tauri::Window,
+    monitor_index: usize,
+) -> Result<(), String> {
+    let monitors = get_available_monitors()?;
+
+    let monitor = monitors.get(monitor_index)
+        .ok_or_else(|| format!("Monitor index {} not found", monitor_index))?;
+
+    // Move window to monitor's position
+    window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+        x: monitor.x,
+        y: monitor.y,
+    })).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn is_position_valid(x: i32, y: i32) -> Result<bool, String> {
+    let monitors = get_available_monitors()?;
+
+    // Check if position is within any monitor bounds (with some tolerance)
+    // We check if the point is within 100px of any monitor bounds to allow
+    // for windows that might be partially off-screen
+    for monitor in monitors {
+        let tolerance = 100;
+        let in_bounds = x >= monitor.x - tolerance
+            && x < monitor.x + monitor.width as i32 + tolerance
+            && y >= monitor.y - tolerance
+            && y < monitor.y + monitor.height as i32 + tolerance;
+
+        if in_bounds {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+#[tauri::command]
+fn reset_window_position(window: tauri::Window) -> Result<(), String> {
+    // Center window on primary monitor
+    let monitors = get_available_monitors()?;
+    let primary = monitors.iter()
+        .find(|m| m.is_primary)
+        .or_else(|| monitors.first())
+        .ok_or_else(|| "No monitors found".to_string())?;
+
+    let window_width = 1920;
+    let window_height = 900;
+
+    let center_x = primary.x + (primary.width as i32 - window_width) / 2;
+    let center_y = primary.y + (primary.height as i32 - window_height) / 2;
+
+    window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+        x: center_x,
+        y: center_y,
+    })).map_err(|e| e.to_string())?;
+
+    window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+        width: window_width as u32,
+        height: window_height as u32,
+    })).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -4090,6 +4344,10 @@ fn main() {
             time_tracking::get_focus_summary,
             detect_software_paths,
             get_project_outputs,
+            get_available_monitors,
+            set_window_to_monitor,
+            is_position_valid,
+            reset_window_position,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

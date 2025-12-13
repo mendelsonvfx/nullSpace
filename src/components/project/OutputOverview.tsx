@@ -5,6 +5,8 @@ import type { SoftwareName } from '../../types/project';
 import { Film, Eye, FolderOpen, Copy, ChevronDown, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { outputsCache } from '../../utils/outputsCache';
+import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
+import { useContextMenu } from '../../hooks/useContextMenu';
 
 interface OutputFile {
   name: string;
@@ -65,12 +67,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   // Initialize with empty values - will be set in useLayoutEffect before paint
   const [selectedSoftware, setSelectedSoftware] = useState<SoftwareName | ''>('');
   const [selectedOutputType, setSelectedOutputType] = useState<'preview' | 'final'>('preview');
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; output: OutputFile } | null>(null);
-  const [groupContextMenu, setGroupContextMenu] = useState<{ x: number; y: number; groupPath: string } | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => outputsCache.getExpandedGroups(project.path));
-  const contextMenuRef = useRef<HTMLDivElement>(null);
-  const groupContextMenuRef = useRef<HTMLDivElement>(null);
   const isFirstLoadRef = useRef(true);
+
+  // Context menus using centralized hook
+  const { isOpen: isFileMenuOpen, position: fileMenuPosition, data: fileMenuData, openMenu: openFileMenu, closeMenu: closeFileMenu } = useContextMenu<OutputFile>();
+  const { isOpen: isGroupMenuOpen, position: groupMenuPosition, data: groupMenuData, openMenu: openGroupMenu, closeMenu: closeGroupMenu } = useContextMenu<{ groupPath: string; renderType: 'preview' | 'final' }>();
   const isRestoringStateRef = useRef(false); // Track if we're restoring state programmatically
 
   // Format software name for display
@@ -476,36 +478,28 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   const handleRevealInExplorer = useCallback(async (outputPath: string) => {
     try {
       await invoke('reveal_in_explorer', { path: outputPath });
-      setContextMenu(null);
+      closeFileMenu();
     } catch (error) {
       console.error('Failed to reveal in explorer:', error);
     }
-  }, []);
+  }, [closeFileMenu]);
 
   const handleCopyPath = useCallback(async (outputPath: string) => {
     try {
       await writeText(outputPath);
-      setContextMenu(null);
+      closeFileMenu();
     } catch (error) {
       console.error('Failed to copy path:', error);
     }
-  }, []);
+  }, [closeFileMenu]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, output: OutputFile) => {
-    if (e.cancelable) {
-      e.preventDefault();
-    }
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, output });
-  }, []);
+    openFileMenu(e, output);
+  }, [openFileMenu]);
 
-  const handleGroupContextMenu = useCallback((e: React.MouseEvent, groupPath: string) => {
-    if (e.cancelable) {
-      e.preventDefault();
-    }
-    e.stopPropagation();
-    setGroupContextMenu({ x: e.clientX, y: e.clientY, groupPath });
-  }, []);
+  const handleGroupContextMenu = useCallback((e: React.MouseEvent, groupPath: string, renderType: 'preview' | 'final') => {
+    openGroupMenu(e, { groupPath, renderType });
+  }, [openGroupMenu]);
 
   const getGroupFolderPath = (groupPath: string, renderType: 'preview' | 'final'): string => {
     const typeFolder = renderType === 'preview' ? 'Preview' : 'Final';
@@ -542,7 +536,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     try {
       const folderPath = getGroupFolderPath(groupPath, renderType);
       await invoke('reveal_in_explorer', { path: folderPath });
-      setGroupContextMenu(null);
+      closeGroupMenu();
     } catch (error) {
       console.error('Failed to reveal group in explorer:', error);
     }
@@ -552,28 +546,11 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     try {
       const folderPath = getGroupFolderPath(groupPath, renderType);
       await writeText(folderPath);
-      setGroupContextMenu(null);
+      closeGroupMenu();
     } catch (error) {
       console.error('Failed to copy group path:', error);
     }
   };
-
-  // Close context menu on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-      }
-      if (groupContextMenuRef.current && !groupContextMenuRef.current.contains(e.target as Node)) {
-        setGroupContextMenu(null);
-      }
-    };
-
-    if (contextMenu || groupContextMenu) {
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
-    }
-  }, [contextMenu, groupContextMenu]);
 
   const handleRefreshAll = async () => {
     setIsRefreshing(true);
@@ -769,7 +746,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                             {/* Group header */}
                             <button
                               onClick={() => toggleGroup(group.path)}
-                              onContextMenu={(e) => handleGroupContextMenu(e, group.path)}
+                              onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'preview')}
                               className="w-full text-left px-3 py-2 rounded bg-zinc-700/30 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
                             >
                               <ChevronDown
@@ -871,7 +848,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                             {/* Group header */}
                             <button
                               onClick={() => toggleGroup(group.path)}
-                              onContextMenu={(e) => handleGroupContextMenu(e, group.path)}
+                              onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'final')}
                               className="w-full text-left px-3 py-2 rounded bg-zinc-700/30 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
                             >
                               <ChevronDown
@@ -916,81 +893,47 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         </div>
       )}
 
-      {/* Context Menu */}
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
-          style={{
-            top: (() => {
-              const menuHeight = contextMenuRef.current?.offsetHeight || 100;
-              const windowHeight = window.innerHeight;
-              const wouldOverflow = contextMenu.y + menuHeight > windowHeight;
-              return wouldOverflow ? windowHeight - menuHeight - 10 : contextMenu.y;
-            })(),
-            left: (() => {
-              const menuWidth = contextMenuRef.current?.offsetWidth || 180;
-              const windowWidth = window.innerWidth;
-              const wouldOverflow = contextMenu.x + menuWidth > windowWidth;
-              return wouldOverflow ? windowWidth - menuWidth - 10 : contextMenu.x;
-            })()
-          }}
-          onClick={(e) => e.stopPropagation()}
+      {/* File Context Menu */}
+      <ContextMenu
+        isOpen={isFileMenuOpen}
+        position={fileMenuPosition}
+        onClose={closeFileMenu}
+        menuId="output-file"
+      >
+        <ContextMenuItem
+          icon={<FolderOpen className="w-4 h-4" />}
+          onClick={() => fileMenuData && handleRevealInExplorer(fileMenuData.path)}
         >
-          <button
-            onClick={() => handleRevealInExplorer(contextMenu.output.path)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-text-primary"
-          >
-            <FolderOpen className="w-4 h-4" />
-            Reveal in Explorer
-          </button>
-          <button
-            onClick={() => handleCopyPath(contextMenu.output.path)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-text-primary"
-          >
-            <Copy className="w-4 h-4" />
-            Copy Path
-          </button>
-        </div>
-      )}
+          Reveal in Explorer
+        </ContextMenuItem>
+        <ContextMenuItem
+          icon={<Copy className="w-4 h-4" />}
+          onClick={() => fileMenuData && handleCopyPath(fileMenuData.path)}
+        >
+          Copy Path
+        </ContextMenuItem>
+      </ContextMenu>
 
       {/* Group Context Menu */}
-      {groupContextMenu && (
-        <div
-          ref={groupContextMenuRef}
-          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
-          style={{
-            top: (() => {
-              const menuHeight = groupContextMenuRef.current?.offsetHeight || 100;
-              const windowHeight = window.innerHeight;
-              const wouldOverflow = groupContextMenu.y + menuHeight > windowHeight;
-              return wouldOverflow ? windowHeight - menuHeight - 10 : groupContextMenu.y;
-            })(),
-            left: (() => {
-              const menuWidth = groupContextMenuRef.current?.offsetWidth || 180;
-              const windowWidth = window.innerWidth;
-              const wouldOverflow = groupContextMenu.x + menuWidth > windowWidth;
-              return wouldOverflow ? windowWidth - menuWidth - 10 : groupContextMenu.x;
-            })()
-          }}
-          onClick={(e) => e.stopPropagation()}
+      <ContextMenu
+        isOpen={isGroupMenuOpen}
+        position={groupMenuPosition}
+        onClose={closeGroupMenu}
+        menuId="output-group"
+      >
+        <ContextMenuItem
+          icon={<FolderOpen className="w-4 h-4" />}
+          onClick={() => groupMenuData && handleRevealGroupInExplorer(groupMenuData.groupPath, groupMenuData.renderType)}
         >
-          <button
-            onClick={() => handleRevealGroupInExplorer(groupContextMenu.groupPath, selectedOutputType)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-text-primary"
-          >
-            <FolderOpen className="w-4 h-4" />
-            Reveal in Explorer
-          </button>
-          <button
-            onClick={() => handleCopyGroupPath(groupContextMenu.groupPath, selectedOutputType)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-text-primary"
-          >
-            <Copy className="w-4 h-4" />
-            Copy Path
-          </button>
-        </div>
-      )}
+          Reveal in Explorer
+        </ContextMenuItem>
+        <ContextMenuItem
+          icon={<Copy className="w-4 h-4" />}
+          onClick={() => groupMenuData && handleCopyGroupPath(groupMenuData.groupPath, groupMenuData.renderType)}
+        >
+          Copy Path
+        </ContextMenuItem>
+      </ContextMenu>
     </div>
   );
 }

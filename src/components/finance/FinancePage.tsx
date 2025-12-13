@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as React from 'react';
-import { Filter, Plus, ChevronDown, ChevronUp, TrendingUp, Check } from 'lucide-react';
+import { Filter, Plus, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { ProjectBreakdownCard } from './ProjectBreakdownCard';
@@ -14,6 +14,8 @@ import { Currency } from '../../types/project';
 import { getProjectColor, createSoftGradient } from '../../utils/colorUtils';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
 import SimpleBar from 'simplebar-react';
+import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
+import { useContextMenu } from '../../hooks/useContextMenu';
 
 interface FinancePageProps {
   projects: any[];
@@ -27,8 +29,10 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   renderCountRef.current += 1;
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const timelineContainerRef = React.useRef<HTMLDivElement>(null);
-  const timelineContextMenuRef = React.useRef<HTMLDivElement>(null);
   const [timelineContainerWidth, setTimelineContainerWidth] = useState(1000);
+
+  // Context menu using centralized hook
+  const { isOpen: isTimelineMenuOpen, position: timelineMenuPosition, openMenu: openTimelineMenu, closeMenu: closeTimelineMenu } = useContextMenu();
 
   console.log('[FinancePage] RENDER START', {
     renderCount: renderCountRef.current,
@@ -90,12 +94,11 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   });
   const [showScrollGradient, setShowScrollGradient] = useState(true);
   const [showMinMaxTooltips, setShowMinMaxTooltips] = useState(false);
-  const [timelineContextMenu, setTimelineContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [hoveredMonthIndex, setHoveredMonthIndex] = useState<number | null>(null);
 
   const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
   const { updateProject } = useProjectStore();
-  const { activeMenu, setActiveMenu } = useContextMenuStore();
+  const { setActiveMenu } = useContextMenuStore();
   const timeTrackingEnabled = useTimeTrackingFeature();
 
   // Handle adding manual transaction
@@ -307,28 +310,6 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     window.addEventListener('resize', updateWidth);
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
-
-  // Close timeline context menu on click outside
-  useEffect(() => {
-    const handleClickOutside = () => {
-      if (timelineContextMenu) {
-        setTimelineContextMenu(null);
-        setActiveMenu(null);
-      }
-    };
-
-    if (timelineContextMenu) {
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
-    }
-  }, [timelineContextMenu, setActiveMenu]);
-
-  // Close timeline context menu when other menus open
-  useEffect(() => {
-    if (activeMenu && activeMenu !== 'timeline' && timelineContextMenu) {
-      setTimelineContextMenu(null);
-    }
-  }, [activeMenu, timelineContextMenu]);
 
   const currencySymbols: Record<string, string> = {
     'USD': '$',
@@ -1099,9 +1080,8 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                 ref={timelineContainerRef}
                 className="w-full relative"
                 onContextMenu={(e) => {
-                  e.preventDefault();
                   setActiveMenu('timeline');
-                  setTimelineContextMenu({ x: e.clientX, y: e.clientY });
+                  openTimelineMenu(e, null);
                 }}
               >
                 {/* Min/Max value tooltips */}
@@ -1250,54 +1230,27 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             </div>
 
             {/* Timeline Context Menu */}
-            {timelineContextMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setTimelineContextMenu(null)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setTimelineContextMenu(null);
-                  }}
-                />
-                <div
-                  ref={timelineContextMenuRef}
-                  className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
-                  style={{
-                    top: (() => {
-                      const menuHeight = timelineContextMenuRef.current?.offsetHeight || 100;
-                      const windowHeight = window.innerHeight;
-                      const wouldOverflow = timelineContextMenu.y + menuHeight > windowHeight;
-                      return wouldOverflow ? windowHeight - menuHeight - 10 : timelineContextMenu.y;
-                    })(),
-                    left: (() => {
-                      const menuWidth = timelineContextMenuRef.current?.offsetWidth || 180;
-                      const windowWidth = window.innerWidth;
-                      const wouldOverflow = timelineContextMenu.x + menuWidth > windowWidth;
-                      return wouldOverflow ? windowWidth - menuWidth - 10 : timelineContextMenu.x;
-                    })()
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    onClick={() => {
-                      setShowMinMaxTooltips(!showMinMaxTooltips);
-                      setTimelineContextMenu(null);
-                      setActiveMenu(null);
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4" />
-                      <span>Show Min/Max Values</span>
-                    </div>
-                    {showMinMaxTooltips && (
-                      <Check className="w-3.5 h-3.5 text-zinc-200 flex-shrink-0" />
-                    )}
-                  </button>
-                </div>
-              </>
-            )}
+            <ContextMenu
+              isOpen={isTimelineMenuOpen}
+              position={timelineMenuPosition}
+              onClose={() => {
+                closeTimelineMenu();
+                setActiveMenu(null);
+              }}
+              menuId="timeline"
+            >
+              <ContextMenuItem
+                icon={<TrendingUp className="w-4 h-4" />}
+                checked={showMinMaxTooltips}
+                onClick={() => {
+                  setShowMinMaxTooltips(!showMinMaxTooltips);
+                  closeTimelineMenu();
+                  setActiveMenu(null);
+                }}
+              >
+                Show Min/Max Values
+              </ContextMenuItem>
+            </ContextMenu>
 
             {/* Monthly Revenue Breakdown - Last 12 months */}
             {paidProjects.length > 0 && (

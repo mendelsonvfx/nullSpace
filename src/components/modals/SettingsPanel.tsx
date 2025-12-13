@@ -6,6 +6,7 @@ import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } fro
 import type { SoftwareName } from '../../types/project';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
 import { getVersion } from '@tauri-apps/api/app';
+import { invoke } from '@tauri-apps/api/tauri';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import { clearAllTimeTrackingData } from '../../utils/clearAllData';
 import { hslStringToHex } from '../../utils/colorUtils';
@@ -643,6 +644,19 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     return saved !== null ? JSON.parse(saved) : true;
   });
 
+  // Window settings
+  const [autoMaximizeOnLaunch, setAutoMaximizeOnLaunch] = useState(false);
+  const [preferredMonitor, setPreferredMonitor] = useState(0);
+  const [monitors, setMonitors] = useState<Array<{
+    index: number;
+    name: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    is_primary: boolean;
+  }>>([]);
+
   const defaultAccentColors = [
     { name: 'Purple', value: '#9103c6' },
     { name: 'Blue', value: '#3b82f6' },
@@ -707,6 +721,35 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     }
   };
 
+  // Load monitors and window settings
+  useEffect(() => {
+    const loadMonitorsAndSettings = async () => {
+      try {
+        const monitorsData = await invoke<Array<{
+          index: number;
+          name: string;
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+          is_primary: boolean;
+        }>>('get_available_monitors');
+        setMonitors(monitorsData);
+
+        const settings = localStorage.getItem('windowSettings');
+        if (settings) {
+          const parsed = JSON.parse(settings);
+          setAutoMaximizeOnLaunch(parsed.autoMaximizeOnLaunch || false);
+          setPreferredMonitor(parsed.preferredMonitor || 0);
+        }
+      } catch (error) {
+        console.error('Failed to load monitors:', error);
+      }
+    };
+
+    loadMonitorsAndSettings();
+  }, []);
+
   useEffect(() => {
     // Apply saved accent color on mount
     const savedColor = localStorage.getItem('accentColor');
@@ -725,6 +768,28 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       document.body.classList.remove('borders-disabled');
     }
   }, [bordersEnabled]);
+
+  // Helper to update window settings
+  const updateWindowSettings = (updates: Partial<{
+    autoMaximizeOnLaunch: boolean;
+    preferredMonitor: number;
+    preferredMonitorName: string;
+  }>) => {
+    const current = localStorage.getItem('windowSettings');
+    const settings = current ? JSON.parse(current) : {};
+    const updated = { ...settings, ...updates };
+    localStorage.setItem('windowSettings', JSON.stringify(updated));
+  };
+
+  const handleResetWindowPosition = async () => {
+    try {
+      await invoke('reset_window_position');
+      localStorage.removeItem('windowState');
+      console.log('Window position reset');
+    } catch (error) {
+      console.error('Failed to reset window position:', error);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -997,6 +1062,121 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
             }`}
           />
         </button>
+      </div>
+
+      {/* Window Settings */}
+      <div className="border-t border-zinc-800 pt-6">
+        <label className="block text-sm font-medium mb-3">Window Settings</label>
+
+        {/* Auto-Maximize on Launch */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="font-medium mb-1">Auto-Maximize on Launch</div>
+            <p className="text-sm text-zinc-400">
+              Automatically maximize nullSpace window on startup
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              const newValue = !autoMaximizeOnLaunch;
+              setAutoMaximizeOnLaunch(newValue);
+              updateWindowSettings({ autoMaximizeOnLaunch: newValue });
+            }}
+            className={`w-12 h-6 rounded-full transition-colors relative ${
+              autoMaximizeOnLaunch ? 'bg-accent' : 'bg-zinc-700'
+            }`}
+          >
+            <div
+              className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+                autoMaximizeOnLaunch ? 'translate-x-6' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Monitor Selection (only shown if auto-maximize is enabled) */}
+        {autoMaximizeOnLaunch && monitors.length > 0 && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">Preferred Monitor</label>
+            <p className="text-sm text-zinc-400 mb-3">
+              Select monitor for auto-maximized window
+            </p>
+            <select
+              value={preferredMonitor}
+              onChange={(e) => {
+                const index = parseInt(e.target.value);
+                setPreferredMonitor(index);
+                const monitor = monitors[index];
+                updateWindowSettings({
+                  preferredMonitor: index,
+                  preferredMonitorName: monitor?.name || '',
+                });
+              }}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+            >
+              {monitors.map((monitor) => {
+                // Extract display number from name like "\\.\DISPLAY3" -> "Display 3"
+                const displayNum = monitor.name.match(/DISPLAY(\d+)/)?.[1] || (monitor.index + 1);
+                const displayName = `Display ${displayNum}`;
+
+                return (
+                  <option key={monitor.index} value={monitor.index}>
+                    {monitor.index + 1}. {displayName} {monitor.is_primary ? '(Primary)' : ''} - {monitor.width}x{monitor.height}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        )}
+
+        {/* Monitor Preview (only shown if multiple monitors and auto-maximize enabled) */}
+        {autoMaximizeOnLaunch && monitors.length > 1 && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">Monitor Layout</label>
+            <div className="bg-zinc-800 rounded-lg p-4 flex items-center justify-center gap-2" style={{ minHeight: '100px' }}>
+              {monitors.map((monitor) => {
+                const isSelected = monitor.index === preferredMonitor;
+                const scale = 60 / Math.max(...monitors.map(m => m.height));
+                const width = monitor.width * scale;
+                const height = monitor.height * scale;
+
+                return (
+                  <div
+                    key={monitor.index}
+                    className={`relative rounded border-2 transition-all ${
+                      isSelected ? 'border-accent bg-accent/20' : 'border-zinc-600 bg-zinc-700'
+                    }`}
+                    style={{ width: `${width}px`, height: `${height}px` }}
+                  >
+                    {monitor.is_primary && (
+                      <div className="absolute -top-2 left-1/2 -translate-x-1/2">
+                        <span className="text-[10px] bg-zinc-900 px-1 rounded text-zinc-400">
+                          Primary
+                        </span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center text-xs text-zinc-400">
+                      {monitor.index + 1}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Reset Window Position Button */}
+        <div className="mt-6">
+          <button
+            onClick={handleResetWindowPosition}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm font-medium"
+          >
+            Reset Window Position
+          </button>
+          <p className="text-xs text-zinc-500 mt-2">
+            Center window on primary monitor and restore default size (1920x900)
+          </p>
+        </div>
       </div>
     </div>
   );

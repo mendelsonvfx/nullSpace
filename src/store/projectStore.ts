@@ -1597,7 +1597,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           'count_shot_files',
           {
             projectPath: project.path,
-            shotNumber: oldNumber
+            shotId: shotId
           }
         );
 
@@ -1645,14 +1645,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           // 2. Rename version files with WAL and progress
           const filesRenamed = await invoke<number>('rename_shot_files', {
             projectPath: project.path,
-            oldShotNumber: oldNumber,
+            shotId: shotId,
             newShotNumber: finalNumber
           });
 
           // 3. Rename thumbnails
           const thumbnailsRenamed = await invoke<number>('rename_shot_thumbnails', {
             projectPath: project.path,
-            oldShotNumber: oldNumber,
+            shotId: shotId,
             newShotNumber: finalNumber
           });
 
@@ -1705,19 +1705,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   setCurrentShot: (projectId: string, shotId: string | null) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasShots) {
-      // Save shot preference for current scene
       let updatedPreferences = { ...(project.sceneShotPreferences || {}) };
+      let newSceneId = project.currentSceneId;
 
-      if (shotId && project.currentSceneId) {
-        // Find the shot to verify it belongs to current scene
+      if (shotId) {
         const shot = (project.shots || []).find(s => s.id === shotId);
-        if (shot && shot.sceneId === project.currentSceneId) {
-          updatedPreferences[project.currentSceneId] = shotId;
+        if (shot && shot.sceneId) {
+          // Switch to the scene that contains this shot
+          newSceneId = shot.sceneId;
+          updatedPreferences[shot.sceneId] = shotId;
         }
       }
 
       const updated = {
         ...project,
+        currentSceneId: newSceneId,
         currentShotId: shotId || undefined,
         sceneShotPreferences: updatedPreferences,
         currentSpecialContextId: undefined // Clear special context when selecting a shot

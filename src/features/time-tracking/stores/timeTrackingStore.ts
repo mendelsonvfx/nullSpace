@@ -4,6 +4,7 @@ import { SessionService } from '../services/SessionService';
 import { TimerService } from '../services/TimerService';
 import { WorkSessionService } from '../services/WorkSessionService';
 import type { TimeEntry } from '../types/timeEntry';
+import type { WorkSession } from '../types/workSession';
 import type { SoftwareName } from '../../../types/project';
 import type { StartSessionParams } from '../types/session';
 
@@ -307,9 +308,6 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
       return { sessions };
     });
 
-    // Stop backend tracking
-    await SessionService.stop(entryId);
-
     // Remove from WorkSession and handle session closure
     if (entry.workSessionId) {
       console.log(`[TimeTrackingStore] 🔗 Entry has workSessionId: ${entry.workSessionId}`);
@@ -318,17 +316,35 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
         .find(s => s.id === entry.workSessionId);
 
       if (workSession) {
-        console.log(`[TimeTrackingStore] ✅ Found WorkSession, removing software. Remaining software count: ${workSession.softwareSessions.length}`);
-        await WorkSessionService.removeSoftware(workSession, entryId);
+        console.log(`[TimeTrackingStore] ✅ Found WorkSession, removing software. Remaining: ${workSession.softwareSessions.length}`);
+        // PERF: Run backend stop and removeSoftware in parallel
+        await Promise.all([
+          SessionService.stop(entryId),
+          WorkSessionService.removeSoftware(workSession, entryId)
+        ]);
       } else {
-        console.warn(`[TimeTrackingStore] ⚠️  WorkSession ${entry.workSessionId} not found!`);
+        // WorkSession not found - use projectId (stable) to stop timer
+        await SessionService.stop(entryId);
+        console.warn(`[TimeTrackingStore] ⚠️  WorkSession ${entry.workSessionId} not found, using projectId cleanup`);
 
-        // Очищаем orphaned таймер напрямую (defense-in-depth)
-        const { TimerService } = await import('../services/TimerService');
-        TimerService.stopSessionTimer(entry.workSessionId);
+        // RELIABLE: Stop by projectId (never changes, guaranteed to work)
+        if (entry.projectId) {
+          const { TimerService } = await import('../services/TimerService');
+          useWorkSessionStore.getState().stopSessionByProjectId(entry.projectId);
+          TimerService.stopSessionTimerByProjectId(entry.projectId);
+        }
       }
     } else {
       console.warn(`[TimeTrackingStore] ⚠️  Entry has no workSessionId!`);
+      await SessionService.stop(entryId);
+
+      // Still try to stop timer by projectId as safety measure
+      if (entry.projectId) {
+        const { useWorkSessionStore } = await import('./workSessionStore');
+        const { TimerService } = await import('../services/TimerService');
+        useWorkSessionStore.getState().stopSessionByProjectId(entry.projectId);
+        TimerService.stopSessionTimerByProjectId(entry.projectId);
+      }
     }
 
     // Save to projectStore and disk (non-blocking to avoid UI freeze)
@@ -588,8 +604,38 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
               const { createWorkSession } = await import('../utils/workSessionUtils');
               const { useWorkSessionStore } = await import('./workSessionStore');
 
-              const newSession = createWorkSession(project.id);
-              newSession.elapsedMinutes = savedElapsedMinutes; // Restore from WorkSession, NOT sum
+              const savedSession = project.workSession;
+
+              // Validate saved session before reusing (CRITICAL!)
+              const isValidSession = savedSession
+                && savedSession.id
+                && savedSession.projectId === project.id
+                && savedSession.isActive !== false  // Accept true or undefined
+                && typeof savedSession.elapsedMinutes === 'number'
+                && savedSession.elapsedMinutes >= 0;
+
+              let newSession: WorkSession;
+
+              if (isValidSession) {
+                // REUSE existing ID and elapsedMinutes, but REFRESH timestamps
+                const now = new Date().toISOString();
+                newSession = {
+                  id: savedSession.id,                         // ✅ PRESERVE ID
+                  projectId: savedSession.projectId,           // Keep projectId
+                  startTime: now,                              // ✅ NEW: Use current time
+                  elapsedMinutes: savedSession.elapsedMinutes, // ✅ PRESERVE elapsed time
+                  isActive: true,                              // Ensure active
+                  softwareSessions: [],                        // ✅ RESET (correct)
+                  createdAt: savedSession.createdAt || now,    // Keep original creation
+                  updatedAt: now                               // ✅ NEW: Update timestamp
+                };
+                console.log(`[TimeTrackingStore] ♻️  Reusing WorkSession ID: ${newSession.id} (${newSession.elapsedMinutes}m elapsed)`);
+              } else {
+                // Fallback: Create fresh session (but preserve elapsedMinutes if available)
+                newSession = createWorkSession(project.id);
+                newSession.elapsedMinutes = savedElapsedMinutes;
+                console.log(`[TimeTrackingStore] 🆕 Created new WorkSession ID: ${newSession.id} (restored ${savedElapsedMinutes}m)`);
+              }
 
               useWorkSessionStore.getState().createSession(newSession);
 

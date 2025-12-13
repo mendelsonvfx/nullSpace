@@ -2,6 +2,7 @@
 
 import { useWorkSessionStore } from '../stores/workSessionStore';
 import { createWorkSession } from '../utils/workSessionUtils';
+import { TimerService } from './TimerService';
 import type { WorkSession } from '../types/workSession';
 import type { TimeEntry } from '../types/timeEntry';
 
@@ -52,11 +53,10 @@ export class WorkSessionService {
 
     if (softwareSessions.length === 0) {
       // Последний софт закрылся - останавливаем WorkSession
-      // Backup: гарантируем остановку таймера (belt-and-suspenders)
-      const { TimerService } = await import('./TimerService');
-      TimerService.stopSessionTimer(session.id);
+      // Use projectId (stable) to stop timer - guaranteed to work
+      TimerService.stopSessionTimerByProjectId(session.projectId);
 
-      await this.stopSession(session.id);
+      await this.stopSessionByProjectId(session.projectId);
     } else {
       // Ещё есть софты - обновляем список
       const updated: WorkSession = {
@@ -69,45 +69,61 @@ export class WorkSessionService {
   }
 
   /**
-   * Остановить WorkSession
-   * - Останавливает таймер
-   * - Записывает elapsedMinutes в project.totalMinutesSpent
-   * - Помечает session.isActive = false
-   * - Удаляет workSession из проекта
+   * Остановить WorkSession по projectId (PRIMARY - более надежный метод)
+   * projectId никогда не меняется, поэтому таймер гарантированно остановится
    */
-  static async stopSession(sessionId: string): Promise<void> {
-    // 1. ВСЕГДА останавливаем таймер первым делом (идемпотентная операция)
-    const { TimerService } = await import('./TimerService');
-    TimerService.stopSessionTimer(sessionId);
+  static async stopSessionByProjectId(projectId: string): Promise<void> {
+    // 1. Set cancellation token FIRST (by projectId - stable)
+    useWorkSessionStore.getState().stopSessionByProjectId(projectId);
 
-    const session = Array.from(useWorkSessionStore.getState().sessions.values())
-      .find(s => s.id === sessionId);
+    // 2. Stop timer by projectId (guaranteed to work)
+    TimerService.stopSessionTimerByProjectId(projectId);
+
+    // 3. Get session info for logging and cleanup
+    const session = useWorkSessionStore.getState().getSessionForProject(projectId);
 
     if (!session) {
-      console.warn(`[WorkSessionService] ⚠️  Session ${sessionId} not found (timer already stopped)`);
+      console.log(`[WorkSessionService] ⏹️  Session for project ${projectId} already stopped`);
       return;
     }
 
-    console.log(`[WorkSessionService] ⏹️  Stopping session ${sessionId} (${session.elapsedMinutes}m elapsed)`);
+    console.log(`[WorkSessionService] ⏹️  Stopping session for project ${projectId} (${session.elapsedMinutes}m elapsed)`);
 
-    // 2. Очистить WorkSession из проекта (totalMinutesSpent уже записан в incrementMinute)
+    // 4. Clear WorkSession from project (fire-and-forget)
     const { useProjectStore } = await import('../../../store/projectStore');
-    const project = useProjectStore.getState().projects.find(p => p.id === session.projectId);
+    const project = useProjectStore.getState().projects.find(p => p.id === projectId);
 
     if (project) {
       const updatedProject = {
         ...project,
-        // НЕ добавляем elapsedMinutes - они уже записаны пошагово в incrementMinute()
-        workSession: null, // Просто очищаем WorkSession
+        workSession: null,
         updatedAt: new Date().toISOString()
       };
 
-      await useProjectStore.getState().updateProject(updatedProject);
-      console.log(`[WorkSessionService] 💾 Cleared WorkSession (totalMinutesSpent already up-to-date: ${project.totalMinutesSpent}m)`);
+      useProjectStore.getState().updateProject(updatedProject)
+        .then(() => console.log(`[WorkSessionService] 💾 Cleared WorkSession (totalMinutesSpent: ${project.totalMinutesSpent}m)`))
+        .catch(err => console.error('[WorkSessionService] Failed to clear WorkSession:', err));
     }
+  }
 
-    // 3. Помечаем сессию как неактивную
-    useWorkSessionStore.getState().stopSession(sessionId);
+  /**
+   * Остановить WorkSession по sessionId (backwards compatibility)
+   * Предпочитайте stopSessionByProjectId когда есть доступ к projectId
+   */
+  static async stopSession(sessionId: string): Promise<void> {
+    // Find session to get projectId
+    const session = Array.from(useWorkSessionStore.getState().sessions.values())
+      .find(s => s.id === sessionId);
+
+    if (session) {
+      // Delegate to projectId-based method (more reliable)
+      await this.stopSessionByProjectId(session.projectId);
+    } else {
+      // Fallback: try to stop by sessionId
+      useWorkSessionStore.getState().stopSession(sessionId);
+      TimerService.stopSessionTimer(sessionId);
+      console.warn(`[WorkSessionService] ⚠️  Session ${sessionId} not found, attempted cleanup`);
+    }
   }
 
   /**
@@ -204,7 +220,6 @@ export class WorkSessionService {
       }
 
       // Запускаем таймер для WorkSession
-      const { TimerService } = await import('./TimerService');
       TimerService.startSessionTimer(updatedSession);
 
       console.log(`[WorkSessionService] ✅ Session restored (${aliveSessions.length} alive, ${deadSessions.length} dead)`);

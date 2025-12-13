@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   IconFile,
   IconChevronRight,
@@ -21,6 +21,8 @@ import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTr
 import type { SoftwareName } from '../../types/project';
 import SimpleBar from 'simplebar-react';
 import { isVersioned, extractVersion } from '../../utils/fileNaming';
+import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuColorPicker } from '../ui/ContextMenu';
+import { useContextMenu } from '../../hooks/useContextMenu';
 
 // Import folder icons
 import blenderFolIcon from '/icons/folders/blender_fol.png';
@@ -92,9 +94,11 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     }
   });
   const [expandedVersionGroups, setExpandedVersionGroups] = useState<Set<string>>(new Set());
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: FileNode } | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
+
+  // Context menu using centralized hook
+  const { isOpen: isContextMenuOpen, position: contextMenuPosition, data: contextMenuNode, openMenu: openContextMenu, closeMenu: closeContextMenu } = useContextMenu<FileNode>();
   const [folderColors, setFolderColors] = useState<Map<string, string>>(() => {
     try {
       const stored = localStorage.getItem(`folderColors_${project.path}`);
@@ -113,7 +117,6 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   const maxWaitTimerRef = useRef<number | null>(null);
   const isPendingReloadRef = useRef(false);
   const currentProjectPathRef = useRef(project.path);
-  const contextMenuRef = useRef<HTMLDivElement>(null);
   const startSession = useTimeTrackingStore(state => state.startSession);
 
   // Save expanded dirs to localStorage whenever they change
@@ -171,28 +174,13 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     currentProjectPathRef.current = project.path;
   }, [project.path]);
 
-  // Close context menu when clicking outside or when another menu opens
+  // Close context menu when another menu opens
   useEffect(() => {
-    if (activeMenu !== 'tree' && contextMenu) {
-      setContextMenu(null);
+    if (activeMenu !== 'tree' && isContextMenuOpen) {
+      closeContextMenu();
       setShowColorPicker(false);
     }
-  }, [activeMenu]);
-
-  // Close context menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-        setShowColorPicker(false);
-        setActiveMenu(null);
-      }
-    };
-    if (contextMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [contextMenu]);
+  }, [activeMenu, isContextMenuOpen, closeContextMenu]);
 
   // Group versioned files into stacks
   const groupVersionsInTree = (nodes: FileNode[]): FileNode[] => {
@@ -654,10 +642,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     });
   };
 
-  const handleContextMenu = async (e: React.MouseEvent, node: FileNode) => {
-    e.preventDefault();
-    e.stopPropagation();
-
+  const handleContextMenu = useCallback(async (e: React.MouseEvent, node: FileNode) => {
     // Auto-copy path on right-click
     try {
       await writeText(node.path);
@@ -669,47 +654,47 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     }
 
     setActiveMenu('tree');
-    setContextMenu({ x: e.clientX, y: e.clientY, node });
+    openContextMenu(e, node);
     setShowColorPicker(false);
-  };
+  }, [setActiveMenu, openContextMenu]);
 
-  const copyPath = async (path: string) => {
+  const copyPath = useCallback(async (path: string) => {
     try {
       await writeText(path);
       setCopiedPath(path);
       // Reset after 2 seconds
       setTimeout(() => setCopiedPath(null), 2000);
-      setContextMenu(null);
+      closeContextMenu();
     } catch (error) {
       console.error('Failed to copy path:', error);
     }
-  };
+  }, [closeContextMenu]);
 
-  const openInExplorer = (path: string) => {
+  const openInExplorerHandler = useCallback((path: string) => {
     const { openInExplorer } = useProjectStore.getState();
     openInExplorer(path);
-    setContextMenu(null);
-  };
+    closeContextMenu();
+  }, [closeContextMenu]);
 
-  const setFolderColor = (path: string, color: string) => {
+  const handleSetFolderColor = useCallback((path: string, color: string) => {
     setFolderColors(prev => {
       const newMap = new Map(prev);
       newMap.set(path, color);
       return newMap;
     });
-    setContextMenu(null);
+    closeContextMenu();
     setShowColorPicker(false);
-  };
+  }, [closeContextMenu]);
 
-  const removeFolderColor = (path: string) => {
+  const handleRemoveFolderColor = useCallback((path: string) => {
     setFolderColors(prev => {
       const newMap = new Map(prev);
       newMap.delete(path);
       return newMap;
     });
-    setContextMenu(null);
+    closeContextMenu();
     setShowColorPicker(false);
-  };
+  }, [closeContextMenu]);
 
   const getFileIcon = (fileName: string) => {
     const extension = fileName.split('.').pop()?.toLowerCase();
@@ -723,6 +708,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       case 'psb':
         return 'Photoshop';
       case 'hip':
+      case 'hiplc':
+      case 'hipnc':
         return 'Houdini';
       case 'ma':
       case 'mb':
@@ -977,6 +964,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
                 src={softwareFolderIcon}
                 alt={node.name}
                 className="w-6 h-6 flex-shrink-0 object-contain"
+                draggable={false}
               />
             ) : (
               <div className="w-[18px] flex items-center justify-center flex-shrink-0">
@@ -1134,79 +1122,59 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       </div>
 
       {/* Context Menu */}
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="fixed bg-card-bg border border-border-secondary rounded-button shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
-          style={{
-            top: Math.min(contextMenu.y, window.innerHeight - 300),
-            left: Math.min(contextMenu.x, window.innerWidth - 200)
-          }}
+      <ContextMenu
+        isOpen={isContextMenuOpen}
+        position={contextMenuPosition}
+        onClose={() => {
+          closeContextMenu();
+          setShowColorPicker(false);
+          setActiveMenu(null);
+        }}
+        menuId="tree"
+      >
+        <ContextMenuItem
+          icon={copiedPath === contextMenuNode?.path
+            ? <IconCircleCheck className="w-4 h-4 text-status-active" stroke={1.5} />
+            : <IconCopy className="w-4 h-4" stroke={1.5} />
+          }
+          onClick={() => contextMenuNode && copyPath(contextMenuNode.path)}
         >
-          <button
-            onClick={() => copyPath(contextMenu.node.path)}
-            className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg flex items-center gap-2"
-          >
-            {copiedPath === contextMenu.node.path ? (
+          {copiedPath === contextMenuNode?.path ? (
+            <span className="text-status-active">Path Copied</span>
+          ) : (
+            'Copy Path'
+          )}
+        </ContextMenuItem>
+        {contextMenuNode?.is_dir && (
+          <>
+            <ContextMenuItem
+              icon={<IconFolderOpen className="w-4 h-4" stroke={1.5} />}
+              onClick={() => contextMenuNode && openInExplorerHandler(contextMenuNode.path)}
+            >
+              Open in Explorer
+            </ContextMenuItem>
+            {contextMenuNode && !getSoftwareFolderIcon(contextMenuNode.name) && (
               <>
-                <IconCircleCheck className="w-4 h-4 text-status-active" stroke={1.5} />
-                <span className="text-status-active">Path Copied</span>
-              </>
-            ) : (
-              <>
-                <IconCopy className="w-4 h-4" stroke={1.5} />
-                Copy Path
+                <ContextMenuDivider />
+                <ContextMenuItem
+                  icon={<IconPalette className="w-4 h-4" stroke={1.5} />}
+                  onClick={() => setShowColorPicker(!showColorPicker)}
+                >
+                  Set Color
+                </ContextMenuItem>
               </>
             )}
-          </button>
-          {contextMenu.node.is_dir && (
-            <>
-              <button
-                onClick={() => openInExplorer(contextMenu.node.path)}
-                className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg flex items-center gap-2"
-              >
-                <IconFolderOpen className="w-4 h-4" stroke={1.5} />
-                Open in Explorer
-              </button>
-              {!getSoftwareFolderIcon(contextMenu.node.name) && (
-                <>
-                  <div className="border-t border-border-primary my-1" />
-                  <button
-                    onClick={() => setShowColorPicker(!showColorPicker)}
-                    className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg flex items-center gap-2"
-                  >
-                    <IconPalette className="w-4 h-4" stroke={1.5} />
-                    Set Color
-                  </button>
-                </>
-              )}
-              {showColorPicker && (
-                <div className="px-2 py-2 space-y-1">
-                  <div className="grid grid-cols-3 gap-2">
-                    {FOLDER_COLORS.map(color => (
-                      <button
-                        key={color.value}
-                        onClick={() => setFolderColor(contextMenu.node.path, color.value)}
-                        className="w-8 h-8 rounded border-2 border-border-secondary hover:border-text-primary transition-colors"
-                        style={{ backgroundColor: color.value }}
-                        title={color.name}
-                      />
-                    ))}
-                  </div>
-                  {folderColors.has(contextMenu.node.path) && (
-                    <button
-                      onClick={() => removeFolderColor(contextMenu.node.path)}
-                      className="w-full px-2 py-1 text-xs bg-hover-bg hover:bg-border-hover rounded transition-colors text-text-primary"
-                    >
-                      Remove Color
-                    </button>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+            {showColorPicker && contextMenuNode && (
+              <ContextMenuColorPicker
+                colors={FOLDER_COLORS}
+                label="Set Color"
+                onSelect={(color: string) => handleSetFolderColor(contextMenuNode.path, color)}
+                onClear={folderColors.has(contextMenuNode.path) ? () => handleRemoveFolderColor(contextMenuNode.path) : undefined}
+              />
+            )}
+          </>
+        )}
+      </ContextMenu>
     </div>
   );
 }

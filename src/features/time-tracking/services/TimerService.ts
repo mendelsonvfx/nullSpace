@@ -35,8 +35,11 @@ export class TimerService {
   private static processCheckCallbacks = new Map<string, ProcessCheckCallback>();
   private static readonly PROCESS_CHECK_INTERVAL = 5000; // Check process every 5 seconds
 
-  // New: WorkSession timers (tick every minute)
-  private static sessionTimers = new Map<string, NodeJSTimeout>();
+  // WorkSession timers - keyed by projectId (stable, never changes)
+  private static projectTimers = new Map<string, NodeJSTimeout>();
+
+  // Metadata for backwards compatibility (projectId → sessionId for logging)
+  private static projectTimerMeta = new Map<string, { sessionId: string }>();
 
   // New: Widget timers (tick every second)
   private static widgetTimers = new Map<string, NodeJSTimeout>();
@@ -190,7 +193,8 @@ export class TimerService {
     this.timers.clear();
     this.timerData.clear();
     this.callbacks.clear();
-    this.sessionTimers.clear();
+    this.projectTimers.clear();
+    this.projectTimerMeta.clear();
     this.widgetTimers.clear();
 
     console.log('[TimerService] ✅ All timers stopped');
@@ -216,34 +220,80 @@ export class TimerService {
 
   /**
    * Start WorkSession timer (ticks every minute)
-   * Updates WorkSession.elapsedMinutes
+   * Uses projectId as primary key (stable, never changes)
    */
   static startSessionTimer(session: WorkSession): void {
-    if (this.sessionTimers.has(session.id)) {
-      console.log(`[TimerService] ⚠️  Session timer already running for ${session.id}`);
+    // VALIDATION: Don't start timer for inactive session
+    if (!session.isActive) {
+      console.error(`[TimerService] 🚨 Attempted to start timer for INACTIVE session ${session.id}`);
       return;
     }
 
+    const { projectId } = session;
+
+    // Stop existing timer for this project first (idempotent)
+    if (this.projectTimers.has(projectId)) {
+      console.log(`[TimerService] 🔄 Replacing existing timer for project ${projectId}`);
+      this.stopSessionTimerByProjectId(projectId);
+    }
+
+    // CRITICAL: Capture projectId (stable) not sessionId (can change)
     const timer = setInterval(async () => {
+      console.log(`[TimerService] ⏰ setInterval tick for project ${projectId}`);
       const { useWorkSessionStore } = await import('../stores/workSessionStore');
-      useWorkSessionStore.getState().incrementMinute(session.id);
+      // Find CURRENT session for this project (not stale sessionId from closure)
+      const currentSession = useWorkSessionStore.getState().getSessionForProject(projectId);
+      console.log(`[TimerService] ⏰ currentSession: ${currentSession?.id}, isActive: ${currentSession?.isActive}`);
+      if (currentSession && currentSession.isActive) {
+        useWorkSessionStore.getState().incrementMinute(currentSession.id);
+      } else {
+        // Session no longer active - stop timer to prevent orphan
+        console.log(`[TimerService] ⚠️  No active session for project ${projectId}, stopping timer`);
+        this.stopSessionTimerByProjectId(projectId);
+      }
     }, 60000); // 1 minute
 
-    this.sessionTimers.set(session.id, timer);
+    this.projectTimers.set(projectId, timer);
+    this.projectTimerMeta.set(projectId, { sessionId: session.id });
+    console.log(`[TimerService] ▶️  Started timer for project ${projectId} (session: ${session.id})`);
   }
 
   /**
-   * Stop WorkSession timer
+   * Stop WorkSession timer by sessionId (backwards compatibility)
+   * Finds projectId by sessionId and stops the timer
    */
   static stopSessionTimer(sessionId: string): void {
-    const timer = this.sessionTimers.get(sessionId);
+    // Find projectId by sessionId in metadata
+    for (const [projectId, meta] of this.projectTimerMeta.entries()) {
+      if (meta.sessionId === sessionId) {
+        this.stopSessionTimerByProjectId(projectId);
+        return;
+      }
+    }
+    console.warn(`[TimerService] ⚠️  Timer not found for sessionId: ${sessionId}`);
+  }
+
+  /**
+   * Stop session timer by projectId (PRIMARY method)
+   * This is the reliable way to stop timers since projectId never changes
+   */
+  static stopSessionTimerByProjectId(projectId: string): boolean {
+    if (!projectId || projectId.trim() === '') {
+      console.error('[TimerService] Invalid projectId');
+      return false;
+    }
+
+    const timer = this.projectTimers.get(projectId);
     if (timer) {
       clearInterval(timer);
-      this.sessionTimers.delete(sessionId);
-      console.log(`[TimerService] ⏹️  Stopped WorkSession timer for ${sessionId}`);
-    } else {
-      console.warn(`[TimerService] ⚠️  Tried to stop WorkSession timer ${sessionId} but it wasn't running`);
+      this.projectTimers.delete(projectId);
+      const meta = this.projectTimerMeta.get(projectId);
+      this.projectTimerMeta.delete(projectId);
+      console.log(`[TimerService] ⏹️  Stopped timer for project ${projectId}${meta ? ` (session: ${meta.sessionId})` : ''}`);
+      return true;
     }
+    console.log(`[TimerService] ⚠️  No timer found for projectId: ${projectId}`);
+    return false;
   }
 
   // ============================================================================

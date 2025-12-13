@@ -37,6 +37,7 @@ import { DeadlineNotification } from './components/DeadlineNotification';
 import { GeneralNotification } from './components/notifications/GeneralNotification';
 import type { GeneralNotification as GeneralNotificationType } from './components/notifications/GeneralNotification';
 import { RenameSceneConfirmModal } from './components/modals/RenameSceneConfirmModal';
+import { useWindowState } from './hooks/useWindowState';
 // useThumbnail moved to child components
 import { CategoryTabs } from './components/CategoryTabs';
 import { WelcomeSetup } from './components/modals/WelcomeSetup';
@@ -53,6 +54,8 @@ import { ProjectDetails, RightSidebar } from './components/project';
 import ShotsBrowser from './components/project/ShotsBrowser';
 import { CreateProjectModal } from './components/modals';
 import { darkenColor, STATUS_COLORS, STATUS_LABELS, hslStringToHex } from './utils';
+import { ContextMenu, ContextMenuItem, ContextMenuDivider, GlobalTextContextMenu } from './components/ui/ContextMenu';
+import { useContextMenu } from './hooks/useContextMenu';
 
 // darkenColor now imported from utils
 
@@ -77,9 +80,12 @@ const STATUS_CYCLE: ProjectStatus[] = ['active', 'paused', 'completed'];
 // ✅ ProjectBreakdownCard now imported from './components/finance/ProjectBreakdownCard'
 
 function App() {
-    const renderCountRef = useRef(0);
+  const renderCountRef = useRef(0);
   renderCountRef.current += 1;
   console.log('[App] RENDER', { renderCount: renderCountRef.current, timestamp: performance.now() });
+
+  // Window state management
+  const { saveWindowState, loadWindowState, autoMaximizeOnMonitor } = useWindowState();
 
   // ✅ OPTIMIZATION APPROACH:
   // Problem: state.projects array is recreated every second when timer updates timeEntries
@@ -138,7 +144,9 @@ function App() {
   );
 
   const { activeMenu, setActiveMenu } = useContextMenuStore();
-  const { getActiveSessionsForProject } = useTimeTrackingStore();
+
+  // Subscribe to sessions changes for proper reactivity
+  const timeTrackingSessions = useTimeTrackingStore(state => state.sessions);
 
   //const [view, setView] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -148,7 +156,8 @@ function App() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [filterView, setFilterView] = useState<'all' | 'favorites' | 'archive'>('all');
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
+  // Context menu for project cards using centralized hook
+  const { isOpen: isProjectMenuOpen, position: projectMenuPosition, data: projectMenuData, openMenu: openProjectMenu, closeMenu: closeProjectMenu } = useContextMenu<string>();
   const [contextMenuMounted, setContextMenuMounted] = useState(false);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showClientSubmenu, setShowClientSubmenu] = useState(false);
@@ -233,6 +242,7 @@ function App() {
           isOpen: true,
           sceneName: data.sceneName,
           fileCount: data.fileCount,
+          isShot: data.isShot || false,
           onConfirm: () => {
             data.onConfirm();
             setSceneRenameConfirm(null);
@@ -266,6 +276,8 @@ function App() {
 
   // Handle window maximize/unmaximize to cover rounded corners
   useEffect(() => {
+    let saveTimeout: ReturnType<typeof setTimeout>;
+
     const updateFullscreenClass = async () => {
       const isMaximized = await appWindow.isMaximized();
       const isFullscreen = await appWindow.isFullscreen();
@@ -277,6 +289,12 @@ function App() {
         document.documentElement.classList.remove('fullscreen');
         document.body.classList.remove('fullscreen');
       }
+
+      // Save window state after resize (debounced)
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+        saveWindowState();
+      }, 300);
     };
 
     updateFullscreenClass();
@@ -286,9 +304,10 @@ function App() {
     });
 
     return () => {
+      clearTimeout(saveTimeout);
       unlisten.then(f => f());
     };
-  }, []);
+  }, [saveWindowState]);
 
   // Handle window focus and visibility to fix blank screen on restore
   useEffect(() => {
@@ -344,6 +363,58 @@ function App() {
       unlistenPromise.then(unlisten => unlisten());
     };
   }, []);
+
+  // Restore window state on app launch (only once!)
+  useEffect(() => {
+    let didRun = false;
+
+    const restoreWindow = async () => {
+      if (didRun) return;
+      didRun = true;
+
+      // Wait for window initialization
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Try auto-maximize first (only on first launch)
+      const didAutoMaximize = await autoMaximizeOnMonitor();
+
+      // If auto-maximize is disabled, restore saved state
+      if (!didAutoMaximize) {
+        await loadWindowState();
+      }
+    };
+
+    restoreWindow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - run only once on mount
+
+  // Save window state on move
+  useEffect(() => {
+    let saveTimeout: ReturnType<typeof setTimeout>;
+
+    const unlisten = appWindow.onMoved(() => {
+      // Debounce saves to avoid excessive writes
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+        saveWindowState();
+      }, 300);
+    });
+
+    return () => {
+      clearTimeout(saveTimeout);
+      unlisten.then(f => f());
+    };
+  }, [saveWindowState]);
+
+  // Save window state before closing
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      saveWindowState();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [saveWindowState]);
 
   // Temporary keybind to show welcome setup (numpad decimal/dot)
   useEffect(() => {
@@ -745,8 +816,25 @@ function App() {
 
     // Disable default Windows context menu globally
     const disableContextMenu = (e: MouseEvent) => {
-      // Allow context menu only on project cards (for custom menu)
       const target = e.target as HTMLElement;
+
+      // Allow context menu on input/textarea for copy/paste
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Allow context menu on contenteditable elements (Notes/MDXEditor)
+      if (target.isContentEditable || target.closest('[contenteditable="true"]')) {
+        return;
+      }
+
+      // Allow context menu when text is selected
+      const selection = window.getSelection();
+      if (selection && selection.toString().length > 0) {
+        return;
+      }
+
+      // Allow context menu only on project cards (for custom menu)
       if (!target.closest('[data-project-card]')) {
         e.preventDefault();
       }
@@ -848,17 +936,17 @@ function App() {
 
   // Helper function to close context menu
   const closeContextMenu = useCallback(() => {
-    setContextMenu(null);
+    closeProjectMenu();
     setContextMenuMounted(false);
-  }, []);
+  }, [closeProjectMenu]);
 
   // Close context menu when another menu opens
   useEffect(() => {
-    if (activeMenu !== 'projects' && contextMenu) {
+    if (activeMenu !== 'projects' && isProjectMenuOpen) {
       closeContextMenu();
       setShowCategorySubmenu(false);
     }
-  }, [activeMenu, contextMenu, closeContextMenu]);
+  }, [activeMenu, isProjectMenuOpen, closeContextMenu]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -869,21 +957,21 @@ function App() {
       setShowCategorySubmenu(false);
       setActiveMenu(null);
     };
-    if (contextMenu) {
+    if (isProjectMenuOpen) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [contextMenu, closeContextMenu]);
+  }, [isProjectMenuOpen, closeContextMenu]);
 
   // Force re-render context menu after mount to get correct dimensions
   useEffect(() => {
-    if (contextMenu && !contextMenuMounted) {
+    if (isProjectMenuOpen && !contextMenuMounted) {
       // Use RAF to ensure the menu is fully rendered
       requestAnimationFrame(() => {
         setContextMenuMounted(true);
       });
     }
-  }, [contextMenu, contextMenuMounted]);
+  }, [isProjectMenuOpen, contextMenuMounted]);
 
   // Close filter menu when another menu opens
   useEffect(() => {
@@ -1018,17 +1106,17 @@ function App() {
     return map;
   }, [clients]);
 
-  // Memoize active sessions lookup to avoid O(n*m) complexity in render loop
+  // Memoize active sessions lookup - uses timeTrackingSessions for proper reactivity
   const activeSessionsByProject = useMemo(() => {
     const map = new Map();
-    filteredProjects.forEach(project => {
-      const activeSessions = getActiveSessionsForProject(project.id);
-      if (activeSessions.length > 0) {
-        map.set(project.id, true);
+    // Check sessions directly from the subscribed state
+    Array.from(timeTrackingSessions.values()).forEach(session => {
+      if (session.isActive) {
+        map.set(session.projectId, true);
       }
     });
     return map;
-  }, [filteredProjects, getActiveSessionsForProject]);
+  }, [timeTrackingSessions]);
 
   const getDaysRemaining = useCallback((deadline?: string): number | null => {
     if (!deadline) return null;
@@ -1168,7 +1256,7 @@ function App() {
             className="w-8 h-6 hover:bg-zinc-800 flex items-center justify-center transition-colors rounded"
             title="Toggle Category Bar"
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className={showCategoryBar ? "text-zinc-400" : "text-zinc-600"}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className={showCategoryBar ? "text-zinc-400 opacity-80" : "text-zinc-600 opacity-80"}>
               <rect x="0.5" y="0.5" width="13" height="13" stroke="currentColor" strokeWidth="1" fill="none" />
               <rect x="0.5" y="0.5" width="3.25" height="13" fill="currentColor" opacity={showCategoryBar ? "1" : "0.3"} />
             </svg>
@@ -1194,6 +1282,11 @@ function App() {
                 // Normal maximize toggle
                 appWindow.toggleMaximize();
               }
+
+              // Save window state after animation completes
+              setTimeout(() => {
+                saveWindowState();
+              }, 200);
             }}
             className="w-8 h-6 hover:bg-zinc-800 flex items-center justify-center transition-colors rounded"
             title="Maximize"
@@ -1380,7 +1473,7 @@ function App() {
                     </button>
                     {showClientSubmenu && (
                       <div
-                        className="absolute left-full top-0 ml-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[160px] animate-modal"
+                        className="absolute left-full top-0 ml-3 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[160px] animate-modal"
                         onMouseEnter={() => {
                           if (clientSubmenuTimeoutRef.current) {
                             clearTimeout(clientSubmenuTimeoutRef.current);
@@ -1467,7 +1560,7 @@ function App() {
                       onContextMenu={(e) => {
                         e.preventDefault();
                         setActiveMenu('projects');
-                        setContextMenu({ x: e.clientX, y: e.clientY, projectId: project.id });
+                        openProjectMenu(e, project.id);
                       }}
                     >
                       {/* Header with title, pin, favorite, status */}
@@ -1895,49 +1988,40 @@ function App() {
       )}
 
       {/* Context Menu */}
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px] animate-context-menu"
-          style={{
-            top: (() => {
-              const menuHeight = contextMenuRef.current?.offsetHeight || 450;
-              const windowHeight = window.innerHeight;
-              const wouldOverflow = contextMenu.y + menuHeight > windowHeight;
-              return wouldOverflow ? windowHeight - menuHeight - 10 : contextMenu.y;
-            })(),
-            left: (() => {
-              const menuWidth = contextMenuRef.current?.offsetWidth || 180;
-              const windowWidth = window.innerWidth;
-              const wouldOverflow = contextMenu.x + menuWidth > windowWidth;
-              return wouldOverflow ? windowWidth - menuWidth - 10 : contextMenu.x;
-            })()
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
+      <ContextMenu
+        ref={contextMenuRef}
+        isOpen={isProjectMenuOpen}
+        position={projectMenuPosition}
+        onClose={closeContextMenu}
+        menuId="projects"
+      >
+        <div>
+          <ContextMenuItem
+            icon={<IconPin stroke={1.5} className="w-4 h-4" />}
             onClick={() => {
-              togglePin(contextMenu.projectId);
-              closeContextMenu();
+              if (projectMenuData) {
+                togglePin(projectMenuData);
+                closeContextMenu();
+              }
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconPin stroke={1.5} className="w-4 h-4" />
-            {projects.find(p => p.id === contextMenu.projectId)?.isPinned ? 'Unpin' : 'Pin to top'}
-          </button>
-          <button
+            {projects.find(p => p.id === projectMenuData)?.isPinned ? 'Unpin' : 'Pin to top'}
+          </ContextMenuItem>
+          <ContextMenuItem
+            icon={<IconStar stroke={1.5} className="w-4 h-4" />}
             onClick={() => {
-              toggleFavorite(contextMenu.projectId);
-              closeContextMenu();
+              if (projectMenuData) {
+                toggleFavorite(projectMenuData);
+                closeContextMenu();
+              }
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconStar stroke={1.5} className="w-4 h-4" />
-            {projects.find(p => p.id === contextMenu.projectId)?.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          </button>
-          <button
+            {projects.find(p => p.id === projectMenuData)?.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          </ContextMenuItem>
+          <ContextMenuItem
+            icon={<IconPhoto stroke={1.5} className="w-4 h-4" />}
             onClick={async () => {
-              const project = projects.find(p => p.id === contextMenu.projectId);
+              const project = projects.find(p => p.id === projectMenuData);
               if (project) {
                 try {
                   const clipboardItems = await navigator.clipboard.read();
@@ -1955,90 +2039,91 @@ function App() {
               }
               closeContextMenu();
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconPhoto stroke={1.5} className="w-4 h-4" />
             Paste Thumbnail
-          </button>
-          <button
+          </ContextMenuItem>
+          <ContextMenuItem
+            icon={<IconX stroke={1.5} className="w-4 h-4" />}
             onClick={() => {
-              const project = projects.find(p => p.id === contextMenu.projectId);
+              const project = projects.find(p => p.id === projectMenuData);
               if (project) {
                 updateProject({ ...project, thumbnail: undefined });
               }
               closeContextMenu();
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconX stroke={1.5} className="w-4 h-4" />
             Remove Thumbnail
-          </button>
-          <div className="border-t border-zinc-700 my-1" />
+          </ContextMenuItem>
+          <ContextMenuDivider />
 
           {/* Status submenu */}
-          <div className="px-2 py-1 text-xs text-zinc-500 font-medium">Status</div>
-          <button
+          <div className="px-3 py-1 text-[11px] text-text-muted opacity-70 font-medium">Status</div>
+          <ContextMenuItem
+            icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-green-500 text-green-500" />}
             onClick={() => {
-              updateStatus(contextMenu.projectId, 'active');
-              closeContextMenu();
+              if (projectMenuData) {
+                updateStatus(projectMenuData, 'active');
+                closeContextMenu();
+              }
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconCircleFilled stroke={1.5} className="w-4 h-4 fill-green-500 text-green-500" />
             Active
-          </button>
-          <button
+          </ContextMenuItem>
+          <ContextMenuItem
+            icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-yellow-500 text-yellow-500" />}
             onClick={() => {
-              updateStatus(contextMenu.projectId, 'paused');
-              closeContextMenu();
+              if (projectMenuData) {
+                updateStatus(projectMenuData, 'paused');
+                closeContextMenu();
+              }
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconCircleFilled stroke={1.5} className="w-4 h-4 fill-yellow-500 text-yellow-500" />
             Paused
-          </button>
-          <button
+          </ContextMenuItem>
+          <ContextMenuItem
+            icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-blue-500 text-blue-500" />}
             onClick={() => {
-              updateStatus(contextMenu.projectId, 'completed');
-              closeContextMenu();
+              if (projectMenuData) {
+                updateStatus(projectMenuData, 'completed');
+                closeContextMenu();
+              }
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconCircleFilled stroke={1.5} className="w-4 h-4 fill-blue-500 text-blue-500" />
             Completed
-          </button>
-          <button
+          </ContextMenuItem>
+          <ContextMenuItem
+            icon={<IconArchive stroke={1.5} className="w-4 h-4" />}
             onClick={() => {
-              updateStatus(contextMenu.projectId, 'archived');
-              closeContextMenu();
+              if (projectMenuData) {
+                updateStatus(projectMenuData, 'archived');
+                closeContextMenu();
+              }
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconArchive stroke={1.5} className="w-4 h-4" />
             Archived
-          </button>
+          </ContextMenuItem>
 
-          <div className="border-t border-zinc-700 my-1" />
+          <ContextMenuDivider />
 
           {/* Payment Status submenu */}
-          <div className="px-2 py-1 text-xs text-zinc-500 font-medium">Payment Status</div>
-          <button
+          <div className="px-3 py-1 text-[11px] text-text-muted opacity-70 font-medium">Payment Status</div>
+          <ContextMenuItem
+            icon={<IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-zinc-500" />}
             onClick={() => {
-              const project = projects.find(p => p.id === contextMenu.projectId);
+              const project = projects.find(p => p.id === projectMenuData);
               if (project) {
                 // Clear completedAt when changing to unpaid
                 updateProject({ ...project, paymentStatus: 'unpaid', completedAt: undefined });
               }
               closeContextMenu();
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-zinc-500" />
             Unpaid
-          </button>
-          <button
+          </ContextMenuItem>
+          <ContextMenuItem
+            icon={<IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-yellow-500" />}
             onClick={() => {
-              const project = projects.find(p => p.id === contextMenu.projectId);
+              const project = projects.find(p => p.id === projectMenuData);
               if (project) {
                 // Set completedAt only if changing TO "prepaid" and it's not already set
                 const completedAt = project.paymentStatus === 'prepaid'
@@ -2048,14 +2133,13 @@ function App() {
               }
               closeContextMenu();
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-yellow-500" />
             Prepaid
-          </button>
-          <button
+          </ContextMenuItem>
+          <ContextMenuItem
+            icon={<IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-green-500" />}
             onClick={() => {
-              const project = projects.find(p => p.id === contextMenu.projectId);
+              const project = projects.find(p => p.id === projectMenuData);
               if (project) {
                 // Set completedAt only if changing TO "paid" and it's not already set
                 const completedAt = project.paymentStatus === 'paid'
@@ -2065,13 +2149,11 @@ function App() {
               }
               closeContextMenu();
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
           >
-            <IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-green-500" />
             Paid
-          </button>
+          </ContextMenuItem>
 
-          <div className="border-t border-zinc-700 my-1" />
+          <ContextMenuDivider />
 
           {/* Move to Category submenu */}
           <div
@@ -2090,20 +2172,22 @@ function App() {
           >
             <button
               ref={categoryButtonRef}
-              className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between gap-2"
+              className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-white/10 rounded-md flex items-center justify-between gap-2 transition-colors"
             >
-              <div className="flex items-center gap-2">
-                <IconFolder stroke={1.5} className="w-4 h-4" />
+              <div className="flex items-center gap-2.5">
+                <span className="w-4 h-4 flex items-center justify-center opacity-80">
+                  <IconFolder stroke={1.5} className="w-4 h-4" />
+                </span>
                 Move to...
               </div>
-              <IconChevronRight stroke={1.5} className="w-4 h-4" />
+              <IconChevronRight stroke={1.5} className="w-4 h-4 opacity-50" />
             </button>
 
             {/* Category submenu */}
             {showCategorySubmenu && (
               <div
                 ref={categorySubmenuRef}
-                className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 w-auto animate-context-menu"
+                className="absolute left-full top-0 ml-3 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 z-[101] w-auto animate-context-menu"
                 onMouseEnter={() => {
                   if (categorySubmenuTimeoutRef.current) {
                     clearTimeout(categorySubmenuTimeoutRef.current);
@@ -2114,30 +2198,9 @@ function App() {
                     setShowCategorySubmenu(false);
                   }, 100);
                 }}
-                style={{
-                  bottom: (() => {
-                    const buttonRect = categoryButtonRef.current?.getBoundingClientRect();
-                    if (!buttonRect) return 'auto';
-                    const windowHeight = window.innerHeight;
-                    // Distance from bottom of window to bottom of button
-                    const bottomSpace = windowHeight - buttonRect.bottom;
-                    return bottomSpace;
-                  })(),
-                  left: (() => {
-                    const menuRect = contextMenuRef.current?.getBoundingClientRect();
-                    if (!menuRect) return 0;
-                    const submenuWidth = categorySubmenuRef.current?.offsetWidth || 120;
-                    const windowWidth = window.innerWidth;
-                    // Try to position to the right of the main menu
-                    const rightPosition = menuRect.right + 4;
-                    const wouldOverflow = rightPosition + submenuWidth > windowWidth;
-                    // If would overflow, position to the left of the main menu
-                    return wouldOverflow ? menuRect.left - submenuWidth - 4 : rightPosition;
-                  })()
-                }}
               >
                 {categories.map((category) => {
-                  const project = projects.find(p => p.id === contextMenu.projectId);
+                  const project = projects.find(p => p.id === projectMenuData);
                   const isCurrentCategory = project?.category === category;
 
                   return (
@@ -2150,7 +2213,7 @@ function App() {
                         closeContextMenu();
                         setShowCategorySubmenu(false);
                       }}
-                      className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 whitespace-nowrap ${
+                      className={`block w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-white/10 rounded-md whitespace-nowrap transition-colors ${
                         isCurrentCategory ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                       disabled={isCurrentCategory}
@@ -2163,14 +2226,12 @@ function App() {
             )}
           </div>
 
-          <div className="border-t border-zinc-700 my-1" />
-          <button
-            data-delete-button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-
-              const projectId = contextMenu?.projectId;
+          <ContextMenuDivider />
+          <ContextMenuItem
+            icon={<IconTrash stroke={1.5} className="w-4 h-4" />}
+            danger
+            onClick={() => {
+              const projectId = projectMenuData;
               const project = projects.find(p => p.id === projectId);
 
               if (!project) {
@@ -2187,13 +2248,11 @@ function App() {
                 path: project.path
               });
             }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-red-900/50 text-red-400 flex items-center gap-2"
           >
-            <IconTrash stroke={1.5} className="w-4 h-4" />
             Delete project
-          </button>
+          </ContextMenuItem>
         </div>
-      )}
+      </ContextMenu>
 
       {/* Break Reminders */}
       <BreakReminderContainer
@@ -2201,6 +2260,8 @@ function App() {
         onDismiss={(id) => setBreakReminders(prev => prev.filter(r => r.id !== id))}
       />
       </div>
+      {/* Global Text Context Menu for all inputs/textareas */}
+      <GlobalTextContextMenu />
     </div>
   );
 }

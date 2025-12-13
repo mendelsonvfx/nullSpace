@@ -48,7 +48,7 @@ export function ShotsOverviewTable({ projectId, projectPath, currentScene: _curr
 
   return (
     <div className="mb-7">
-      <h3 className="text-sm font-semibold text-text-primary mb-3.5">
+      <h3 className="text-sm font-medium text-text-secondary mb-3.5">
         Shots overview
       </h3>
 
@@ -144,6 +144,7 @@ function ShotRow({ shot, projectId: _projectId, projectPath, onClick }: ShotRowP
               src={previewSrc}
               alt={shot.name}
               className="w-full h-full object-cover"
+              draggable={false}
             />
           ) : (
             <span className="text-[10px] text-zinc-600">No preview</span>

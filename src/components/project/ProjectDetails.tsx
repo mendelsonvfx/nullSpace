@@ -15,6 +15,8 @@ import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTr
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import SimpleBar from 'simplebar-react';
+import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
+import { useContextMenu } from '../../hooks/useContextMenu';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
@@ -43,8 +45,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState(project.description || '');
   const contentScrollRef = useRef<HTMLElement | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; software: any; executablePath: string } | null>(null);
-  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Context menu using centralized hook
+  const { isOpen: isContextMenuOpen, position: contextMenuPosition, data: contextMenuData, openMenu: openContextMenu, closeMenu: closeContextMenu } = useContextMenu<{ software: any; executablePath: string }>();
 
   // Sync description value when project changes
   useEffect(() => {
@@ -79,19 +82,6 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
     }
   }, [handleContentScroll]);
 
-  // Close context menu on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-      }
-    };
-
-    if (contextMenu) {
-      document.addEventListener('click', handleClickOutside);
-      return () => document.removeEventListener('click', handleClickOutside);
-    }
-  }, [contextMenu]);
 
   // Track which date fields user has manually filled in Project Settings
   const [deadlineFieldsFilled, setDeadlineFieldsFilled] = useState({
@@ -599,7 +589,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         {/* Tasks Section - shown first when only scene is selected */}
         {(context.isScene && !context.isShot) && (
         <div className="mb-7">
-          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Tasks</h3>
+          <h3 className="text-sm font-medium text-text-secondary mb-3.5">Tasks</h3>
           <div className="space-y-2">
             {(() => {
               // Group todos by date
@@ -737,7 +727,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         {/* Quick Actions - hidden when only scene is selected (without shot) */}
         {!(context.isScene && !context.isShot) && (
         <div className="mb-7">
-          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Quick Actions</h3>
+          <h3 className="text-sm font-medium text-text-secondary mb-3.5">Quick Actions</h3>
           <div className="grid grid-cols-3 gap-3">
             <button
               onClick={onOpenFolder}
@@ -775,7 +765,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         {/* Software Launchers - hidden when only scene is selected in scenes+shots mode */}
         {!(context.isScene && !context.isShot && project.hasScenes && project.hasShots) && (
           <div className="mb-7">
-            <h3 className="text-sm font-semibold text-text-primary mb-3.5">Launch Software</h3>
+            <h3 className="text-sm font-medium text-text-secondary mb-3.5">Launch Software</h3>
             <div className="grid grid-cols-2 gap-2">
             {project.software.map((sw: any) => {
               // Get executable path from localStorage
@@ -854,15 +844,11 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     });
                   }}
                   onContextMenu={(e) => {
-                    e.preventDefault();
-                    if (status === 'launching' || !executablePath) return;
-
-                    setContextMenu({
-                      x: e.clientX,
-                      y: e.clientY,
-                      software: sw,
-                      executablePath
-                    });
+                    if (status === 'launching' || !executablePath) {
+                      e.preventDefault();
+                      return;
+                    }
+                    openContextMenu(e, { software: sw, executablePath });
                   }}
                   disabled={status === 'launching' || !executablePath}
                   data-launch-software
@@ -950,7 +936,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         {/* Todo Section - hidden when only scene is selected (shown at top instead) */}
         {!(context.isScene && !context.isShot) && (
         <div className="mb-7">
-          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Tasks</h3>
+          <h3 className="text-sm font-medium text-text-secondary mb-3.5">Tasks</h3>
           <div className="space-y-2">
             {(() => {
               // Group todos by date
@@ -1087,7 +1073,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
         {/* Links Section */}
         <div className="mb-7">
-          <h3 className="text-sm font-semibold text-text-primary mb-3.5">Links</h3>
+          <h3 className="text-sm font-medium text-text-secondary mb-3.5">Links</h3>
           <div className="space-y-2">
             {context.links.map((link: any) => (
               <LinkItem key={link.id} link={link} projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
@@ -1295,6 +1281,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           src={thumbnailSrc}
                           alt="Project thumbnail"
                           className="w-full h-full object-cover"
+                          draggable={false}
                         />
                       )}
                       <button
@@ -1891,65 +1878,50 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       )}
 
       {/* Context Menu for Software Launch */}
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="fixed bg-zinc-800 border border-zinc-700 rounded-button shadow-lg py-1 z-50 min-w-[180px] animate-slideDown"
-          style={{
-            top: `${(() => {
-              const menuHeight = 100;
-              const windowHeight = window.innerHeight;
-              const wouldOverflow = contextMenu.y + menuHeight > windowHeight;
-              return wouldOverflow ? Math.max(10, windowHeight - menuHeight - 10) : contextMenu.y;
-            })()}px`,
-            left: `${(() => {
-              const menuWidth = 180;
-              const windowWidth = window.innerWidth;
-              const wouldOverflow = contextMenu.x + menuWidth > windowWidth;
-              return wouldOverflow ? windowWidth - menuWidth - 10 : contextMenu.x;
-            })()}px`
+      <ContextMenu
+        isOpen={isContextMenuOpen}
+        position={contextMenuPosition}
+        onClose={closeContextMenu}
+        menuId="software-launcher"
+      >
+        <ContextMenuItem
+          onClick={() => {
+            if (!contextMenuData) return;
+            const latestProject = useProjectStore.getState().projects.find(p => p.id === project.id);
+            if (!latestProject) return;
+
+            const currentScene = latestProject.hasShots && latestProject.currentSceneId
+              ? latestProject.scenes?.find((s: any) => s.id === latestProject.currentSceneId)
+              : null;
+
+            const currentShot = latestProject.hasShots && latestProject.currentShotId
+              ? latestProject.shots?.find((s: any) => s.id === latestProject.currentShotId)
+              : null;
+
+            onLaunchSoftware({
+              ...contextMenuData.software,
+              executablePath: contextMenuData.executablePath,
+              sceneNumber: currentScene?.number,
+              shotNumber: currentShot?.number
+            });
+            closeContextMenu();
           }}
-          onClick={(e) => e.stopPropagation()}
         >
-          <button
-            onClick={() => {
-              const latestProject = useProjectStore.getState().projects.find(p => p.id === project.id);
-              if (!latestProject) return;
-
-              const currentScene = latestProject.hasShots && latestProject.currentSceneId
-                ? latestProject.scenes?.find((s: any) => s.id === latestProject.currentSceneId)
-                : null;
-
-              const currentShot = latestProject.hasShots && latestProject.currentShotId
-                ? latestProject.shots?.find((s: any) => s.id === latestProject.currentShotId)
-                : null;
-
-              onLaunchSoftware({
-                ...contextMenu.software,
-                executablePath: contextMenu.executablePath,
-                sceneNumber: currentScene?.number,
-                shotNumber: currentShot?.number
-              });
-              setContextMenu(null);
-            }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
-          >
-            Launch
-          </button>
-          <button
-            onClick={() => {
-              if (onLaunchSoftwareWithoutProject) {
-                const softwareKey = nameToKey[contextMenu.software.name] || contextMenu.software.name.toLowerCase().replace(/\s+/g, '-');
-                onLaunchSoftwareWithoutProject(contextMenu.executablePath, softwareKey);
-              }
-              setContextMenu(null);
-            }}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2"
-          >
-            Launch Without Project
-          </button>
-        </div>
-      )}
+          Launch
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => {
+            if (!contextMenuData) return;
+            if (onLaunchSoftwareWithoutProject) {
+              const softwareKey = nameToKey[contextMenuData.software.name] || contextMenuData.software.name.toLowerCase().replace(/\s+/g, '-');
+              onLaunchSoftwareWithoutProject(contextMenuData.executablePath, softwareKey);
+            }
+            closeContextMenu();
+          }}
+        >
+          Launch Without Project
+        </ContextMenuItem>
+      </ContextMenu>
     </div>
   );
 }

@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { SoftwareIcon } from '../SoftwareIcon';
@@ -12,6 +11,8 @@ import { writeText } from '@tauri-apps/api/clipboard';
 import type { SoftwareName } from '../../types/project';
 import { getScenePattern, getShotPattern, extractShotNumber, parseFileName } from '../../utils/fileNaming';
 import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
+import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuColorPicker, VERSION_MARK_COLORS } from '../ui/ContextMenu';
+import { useContextMenu } from '../../hooks/useContextMenu';
 
 interface ProjectVersion {
   name: string;
@@ -34,11 +35,9 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   const [loading, setLoading] = useState(true);
   const [selectedSoftware, setSelectedSoftware] = useState<string>('all');
   const [showOnlyUnversioned, setShowOnlyUnversioned] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; version: ProjectVersion } | null>(null);
   const [showShotSubmenu, setShowShotSubmenu] = useState(false);
   const [submenuAction, setSubmenuAction] = useState<'move' | 'copy' | null>(null);
   const [activeSceneSubmenu, setActiveSceneSubmenu] = useState<string | null>(null);
-  const [shotSubmenuPosition, setShotSubmenuPosition] = useState({ horizontal: 'right' as 'right' | 'left', y: 0 });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [versionMarks, setVersionMarks] = useState<Record<string, MarkColor>>({});
   const [blendPreviewsEnabled, setBlendPreviewsEnabled] = useState(() => {
@@ -53,6 +52,9 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   const submenuCloseTimeoutRef = useRef<number | null>(null);
   const startSession = useTimeTrackingStore(state => state.startSession);
   const { activeMenu, setActiveMenu } = useContextMenuStore();
+
+  // Context menu using centralized hook
+  const { isOpen: isContextMenuOpen, position: contextMenuPosition, data: contextMenuVersion, openMenu: openContextMenu, closeMenu: closeContextMenuHook } = useContextMenu<ProjectVersion>();
 
   const loadVersions = async (skipCleanup = false, forceReload = false) => {
     // Clear any existing timer first
@@ -123,7 +125,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   // Load all versions and start watcher when project changes
   useEffect(() => {
     // Reset context menu when project changes
-    setContextMenu(null);
+    closeContextMenuHook();
     setShowShotSubmenu(false);
     setSubmenuAction(null);
 
@@ -213,33 +215,14 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     };
   }, [project.path]);
 
-  // Close context menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-        setShowShotSubmenu(false);
-        setSubmenuAction(null);
-        if (activeMenu === 'version-context-menu') {
-          setActiveMenu(null);
-        }
-      }
-    };
-
-    if (contextMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [contextMenu, activeMenu, setActiveMenu]);
-
   // Close menu when another menu opens
   useEffect(() => {
-    if (activeMenu && activeMenu !== 'version-context-menu') {
-      setContextMenu(null);
+    if (activeMenu && activeMenu !== 'version-context-menu' && isContextMenuOpen) {
+      closeContextMenuHook();
       setShowShotSubmenu(false);
       setSubmenuAction(null);
     }
-  }, [activeMenu]);
+  }, [activeMenu, isContextMenuOpen, closeContextMenuHook]);
 
   // Extract version number from filename (e.g., "file_v001.blend" → 1)
   const extractVersionNumber = (filename: string): number => {
@@ -329,8 +312,8 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   const shotsByScene = useMemo(() => {
     if (!project.shots || !project.scenes) return {};
 
-    const currentShotNumber = contextMenu
-      ? extractShotNumber(contextMenu.version.name)
+    const currentShotNumber = contextMenuVersion
+      ? extractShotNumber(contextMenuVersion.name)
       : null;
 
     // Group shots by scene_id
@@ -363,34 +346,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     });
 
     return Object.fromEntries(sorted);
-  }, [project.shots, project.scenes, contextMenu]);
-
-  // Calculate submenu position to prevent overflow
-  const calculateSubmenuPosition = useCallback((
-    triggerRect: DOMRect,
-    submenuWidth: number = 180,
-    submenuHeight: number = 300
-  ): { horizontal: 'right' | 'left'; y: number } => {
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-
-    // Determine horizontal direction
-    const spaceOnRight = windowWidth - triggerRect.right;
-    const spaceOnLeft = triggerRect.left;
-    const horizontal: 'right' | 'left' = spaceOnRight >= submenuWidth ? 'right' :
-                       spaceOnLeft >= submenuWidth ? 'left' : 'right';
-
-    // Vertical position with overflow protection
-    let y = 0; // Relative to parent
-    const spaceBelow = windowHeight - triggerRect.top;
-
-    if (spaceBelow < submenuHeight) {
-      // Shift up if not enough space below
-      y = Math.max(-triggerRect.top + 10, triggerRect.bottom - triggerRect.top - submenuHeight);
-    }
-
-    return { horizontal, y };
-  }, []);
+  }, [project.shots, project.scenes, contextMenuVersion]);
 
   const handleVersionDoubleClick = async (versionPath: string, softwareList: string[]) => {
     try {
@@ -476,7 +432,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     }
     e.stopPropagation();
 
-    setContextMenu({ x: e.clientX, y: e.clientY, version });
+    openContextMenu(e, version);
     setShowShotSubmenu(false);
     setSubmenuAction(null);
     setActiveMenu('version-context-menu');
@@ -485,7 +441,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   const handleRevealInExplorer = async (versionPath: string) => {
     try {
       await invoke('reveal_in_explorer', { path: versionPath });
-      setContextMenu(null);
+      closeContextMenuHook();
       setShowShotSubmenu(false);
       setSubmenuAction(null);
       setActiveMenu(null);
@@ -497,7 +453,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   const handleCopyPath = async (versionPath: string) => {
     try {
       await writeText(versionPath);
-      setContextMenu(null);
+      closeContextMenuHook();
       setShowShotSubmenu(false);
       setSubmenuAction(null);
       setActiveMenu(null);
@@ -506,21 +462,21 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     }
   };
 
-  const handleMoveToShot = async (shotNumber: number) => {
-    if (!contextMenu) return;
+  const handleMoveToShot = async (shotId: string) => {
+    if (!contextMenuVersion) return;
 
     try {
       await invoke('move_version_to_shot', {
-        versionPath: contextMenu.version.path,
+        versionPath: contextMenuVersion.path,
         projectPath: project.path,
-        targetShotNumber: shotNumber
+        targetShotId: shotId
       });
 
       // Reload versions after moving
       versionsCache.invalidate(project.path);
       await loadVersions(false, true);
 
-      setContextMenu(null);
+      closeContextMenuHook();
       setShowShotSubmenu(false);
       setSubmenuAction(null);
       setActiveMenu(null);
@@ -530,21 +486,21 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     }
   };
 
-  const handleCopyToShot = async (shotNumber: number) => {
-    if (!contextMenu) return;
+  const handleCopyToShot = async (shotId: string) => {
+    if (!contextMenuVersion) return;
 
     try {
       await invoke('copy_version_to_shot', {
-        versionPath: contextMenu.version.path,
+        versionPath: contextMenuVersion.path,
         projectPath: project.path,
-        targetShotNumber: shotNumber
+        targetShotId: shotId
       });
 
       // Reload versions after copying
       versionsCache.invalidate(project.path);
       await loadVersions(false, true);
 
-      setContextMenu(null);
+      closeContextMenuHook();
       setShowShotSubmenu(false);
       setSubmenuAction(null);
       setActiveMenu(null);
@@ -579,7 +535,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
       }
       return updated;
     });
-    setContextMenu(null);
+    closeContextMenuHook();
     setShowShotSubmenu(false);
     setSubmenuAction(null);
     setActiveMenu(null);
@@ -702,6 +658,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
               src={blendThumbnail}
               alt="Blender preview"
               className="w-full h-16 object-cover"
+              draggable={false}
             />
             {/* Software icon overlay in bottom-right corner */}
             <div className="absolute bottom-1 right-1 w-5 h-5">
@@ -837,82 +794,52 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
       </div>
 
       {/* Context Menu */}
-      {contextMenu && createPortal(
-        <div
-          ref={contextMenuRef}
-          className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-[100] py-1 min-w-[180px] animate-context-menu"
-          style={{
-            top: (() => {
-              const menuHeight = contextMenuRef.current?.offsetHeight || 200;
-              const windowHeight = window.innerHeight;
-              const wouldOverflow = contextMenu.y + menuHeight > windowHeight;
-              return wouldOverflow ? windowHeight - menuHeight - 10 : contextMenu.y;
-            })(),
-            left: (() => {
-              const menuWidth = contextMenuRef.current?.offsetWidth || 180;
-              const windowWidth = window.innerWidth;
-              const wouldOverflow = contextMenu.x + menuWidth > windowWidth;
-              return wouldOverflow ? windowWidth - menuWidth - 10 : contextMenu.x;
-            })(),
-          }}
-        >
-          <button
-            onClick={() => handleRevealInExplorer(contextMenu.version.path)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-text-primary"
+      <ContextMenu
+        ref={contextMenuRef}
+        isOpen={isContextMenuOpen}
+        position={contextMenuPosition}
+        onClose={() => {
+          closeContextMenuHook();
+          setShowShotSubmenu(false);
+          setSubmenuAction(null);
+          setActiveMenu(null);
+        }}
+        menuId="version-context-menu"
+      >
+        <div>
+          <ContextMenuItem
+            icon={<FolderOpen className="w-4 h-4" />}
+            onClick={() => contextMenuVersion && handleRevealInExplorer(contextMenuVersion.path)}
           >
-            <FolderOpen className="w-4 h-4" />
             Reveal in Explorer
-          </button>
-          <button
-            onClick={() => handleCopyPath(contextMenu.version.path)}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 text-text-primary"
+          </ContextMenuItem>
+          <ContextMenuItem
+            icon={<Copy className="w-4 h-4" />}
+            onClick={() => contextMenuVersion && handleCopyPath(contextMenuVersion.path)}
           >
-            <Copy className="w-4 h-4" />
             Copy Path
-          </button>
+          </ContextMenuItem>
 
           {/* Mark Color Section */}
-          <div className="border-t border-zinc-700 my-1" />
-          <div className="px-4 py-2">
-            <div className="text-[10px] text-text-muted mb-2">Mark Color</div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleSetMark(contextMenu.version.path, 'red')}
-                className="w-6 h-6 rounded-full bg-red-500 hover:ring-2 ring-white/50 transition-all"
-                title="Mark as red"
-              />
-              <button
-                onClick={() => handleSetMark(contextMenu.version.path, 'green')}
-                className="w-6 h-6 rounded-full bg-green-500 hover:ring-2 ring-white/50 transition-all"
-                title="Mark as green"
-              />
-              <button
-                onClick={() => handleSetMark(contextMenu.version.path, 'blue')}
-                className="w-6 h-6 rounded-full bg-blue-500 hover:ring-2 ring-white/50 transition-all"
-                title="Mark as blue"
-              />
-              <button
-                onClick={() => handleSetMark(contextMenu.version.path, null)}
-                className="w-6 h-6 rounded-full border-2 border-zinc-600 hover:bg-zinc-700 transition-all"
-                title="Clear mark"
-              />
-            </div>
-          </div>
+          <ContextMenuDivider />
+          <ContextMenuColorPicker
+            colors={VERSION_MARK_COLORS}
+            selectedColor={contextMenuVersion ? versionMarks[contextMenuVersion.path] : null}
+            onSelect={(color) => contextMenuVersion && handleSetMark(contextMenuVersion.path, color as MarkColor)}
+            onClear={() => contextMenuVersion && handleSetMark(contextMenuVersion.path, null)}
+          />
 
           {/* Show shot menu only for versioned files and if shots exist */}
-          {contextMenu.version.is_versioned && project.shots && project.shots.length > 0 && (
+          {contextMenuVersion?.is_versioned && project.shots && project.shots.length > 0 && (
             <>
-              <div className="border-t border-zinc-700 my-1" />
-              <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between text-text-primary"
-                onMouseEnter={(e) => {
+              <ContextMenuDivider />
+              <div
+                className="relative"
+                onMouseEnter={() => {
                   if (submenuCloseTimeoutRef.current) {
                     clearTimeout(submenuCloseTimeoutRef.current);
                     submenuCloseTimeoutRef.current = null;
                   }
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const position = calculateSubmenuPosition(rect, 180, 400);
-                  setShotSubmenuPosition(position);
                   setShowShotSubmenu(true);
                   setSubmenuAction('move');
                 }}
@@ -920,22 +847,103 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                   submenuCloseTimeoutRef.current = window.setTimeout(() => {
                     setShowShotSubmenu(false);
                     setActiveSceneSubmenu(null);
-                  }, 150);
+                  }, 300);
                 }}
               >
-                <span>Move to shot...</span>
-                <span className="text-zinc-500">›</span>
-              </button>
-              <button
-                className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between text-text-primary"
-                onMouseEnter={(e) => {
+                <button className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md flex items-center justify-between text-text-primary transition-colors">
+                  <span>Move to shot...</span>
+                  <span className="text-zinc-500">›</span>
+                </button>
+                {/* Shot Submenu - Level 1: Scenes (for Move) */}
+                {showShotSubmenu && submenuAction === 'move' && (
+                  <div
+                    ref={shotSubmenuRef}
+                    className="absolute left-full top-0 ml-3 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] animate-context-menu z-[101]"
+                    onMouseEnter={() => {
+                      if (submenuCloseTimeoutRef.current) {
+                        clearTimeout(submenuCloseTimeoutRef.current);
+                        submenuCloseTimeoutRef.current = null;
+                      }
+                    }}
+                  >
+                    <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                      {Object.entries(shotsByScene).length === 0 ? (
+                        <div className="px-4 py-2 text-xs text-text-muted">No shots available</div>
+                      ) : (
+                        Object.entries(shotsByScene).map(([sceneId, { scene }]) => (
+                          <div key={sceneId} className="relative">
+                            <button
+                              data-scene-id={sceneId}
+                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md flex items-center justify-between text-text-primary transition-colors"
+                              onMouseEnter={() => {
+                                if (submenuCloseTimeoutRef.current) {
+                                  clearTimeout(submenuCloseTimeoutRef.current);
+                                  submenuCloseTimeoutRef.current = null;
+                                }
+                                setActiveSceneSubmenu(sceneId);
+                              }}
+                              onMouseLeave={() => {
+                                submenuCloseTimeoutRef.current = window.setTimeout(() => {
+                                  setActiveSceneSubmenu(null);
+                                }, 300);
+                              }}
+                            >
+                              <span className="truncate">{scene.name}</span>
+                              <span className="text-zinc-500 ml-2">›</span>
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {/* Shot Submenu - Level 2: Shots in Scene (rendered outside scroll container) */}
+                    {activeSceneSubmenu && shotsByScene[activeSceneSubmenu] && (
+                      <div
+                        className="absolute left-full top-0 -ml-1 pl-2 z-[102]"
+                        onMouseEnter={() => {
+                          if (submenuCloseTimeoutRef.current) {
+                            clearTimeout(submenuCloseTimeoutRef.current);
+                            submenuCloseTimeoutRef.current = null;
+                          }
+                        }}
+                        onMouseLeave={() => {
+                          submenuCloseTimeoutRef.current = window.setTimeout(() => {
+                            setShowShotSubmenu(false);
+                            setActiveSceneSubmenu(null);
+                          }, 300);
+                        }}
+                      >
+                        <div
+                          className="bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] animate-context-menu"
+                          style={{ maxHeight: '300px', overflowY: 'auto' }}
+                        >
+                          {shotsByScene[activeSceneSubmenu].shots.map((shot: any) => (
+                            <button
+                              key={shot.id}
+                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md text-text-primary transition-colors"
+                              onMouseEnter={() => {
+                                if (submenuCloseTimeoutRef.current) {
+                                  clearTimeout(submenuCloseTimeoutRef.current);
+                                  submenuCloseTimeoutRef.current = null;
+                                }
+                              }}
+                              onClick={() => handleMoveToShot(shot.id)}
+                            >
+                              Shot {shot.number.toString().padStart(3, '0')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div
+                className="relative"
+                onMouseEnter={() => {
                   if (submenuCloseTimeoutRef.current) {
                     clearTimeout(submenuCloseTimeoutRef.current);
                     submenuCloseTimeoutRef.current = null;
                   }
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const position = calculateSubmenuPosition(rect, 180, 400);
-                  setShotSubmenuPosition(position);
                   setShowShotSubmenu(true);
                   setSubmenuAction('copy');
                 }}
@@ -943,140 +951,100 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                   submenuCloseTimeoutRef.current = window.setTimeout(() => {
                     setShowShotSubmenu(false);
                     setActiveSceneSubmenu(null);
-                  }, 150);
+                  }, 300);
                 }}
               >
-                <span>Copy to shot...</span>
-                <span className="text-zinc-500">›</span>
-              </button>
-            </>
-          )}
-
-          {/* Shot Submenu - Level 1: Scenes */}
-          {showShotSubmenu && submenuAction && project.shots && contextMenu && (
-            <div
-              ref={shotSubmenuRef}
-              className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[140px] max-w-[140px] animate-context-menu z-[100]"
-              style={{
-                left: shotSubmenuPosition.horizontal === 'right'
-                  ? `${(contextMenuRef.current?.getBoundingClientRect().right || 0) + 4}px`
-                  : 'auto',
-                right: shotSubmenuPosition.horizontal === 'left'
-                  ? `${window.innerWidth - (contextMenuRef.current?.getBoundingClientRect().left || 0) + 4}px`
-                  : 'auto',
-                bottom: `${window.innerHeight - (contextMenuRef.current?.getBoundingClientRect().bottom || 0)}px`,
-                maxHeight: (() => {
-                  const menuRect = contextMenuRef.current?.getBoundingClientRect();
-                  if (!menuRect) return '400px';
-                  // Максимальная высота = расстояние от нижнего края меню до верха экрана
-                  const availableHeight = menuRect.bottom - 10; // 10px отступ сверху
-                  return `${Math.min(400, availableHeight)}px`;
-                })(),
-                overflowY: 'auto'
-              }}
-              onMouseEnter={() => {
-                if (submenuCloseTimeoutRef.current) {
-                  clearTimeout(submenuCloseTimeoutRef.current);
-                  submenuCloseTimeoutRef.current = null;
-                }
-              }}
-            >
-              {Object.entries(shotsByScene).length === 0 ? (
-                <div className="px-4 py-2 text-xs text-text-muted">No shots available</div>
-              ) : (
-                Object.entries(shotsByScene).map(([sceneId, { scene, shots }]) => (
-                <div key={sceneId} className="relative">
-                  <button
-                    data-scene-id={sceneId}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-700 flex items-center justify-between text-text-primary"
+                <button className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md flex items-center justify-between text-text-primary transition-colors">
+                  <span>Copy to shot...</span>
+                  <span className="text-zinc-500">›</span>
+                </button>
+                {/* Shot Submenu - Level 1: Scenes (for Copy) */}
+                {showShotSubmenu && submenuAction === 'copy' && (
+                  <div
+                    ref={shotSubmenuRef}
+                    className="absolute left-full top-0 ml-3 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] animate-context-menu z-[101]"
                     onMouseEnter={() => {
                       if (submenuCloseTimeoutRef.current) {
                         clearTimeout(submenuCloseTimeoutRef.current);
                         submenuCloseTimeoutRef.current = null;
                       }
-                      setActiveSceneSubmenu(sceneId);
-                    }}
-                    onMouseLeave={() => {
-                      submenuCloseTimeoutRef.current = window.setTimeout(() => {
-                        setActiveSceneSubmenu(null);
-                      }, 150);
                     }}
                   >
-                    <span className="truncate">{scene.name}</span>
-                    <span className="text-zinc-500 ml-2">›</span>
-                  </button>
-
-                  {/* Shot Submenu - Level 2: Shots in Scene */}
-                  {activeSceneSubmenu === sceneId && (
-                    <div
-                      className="fixed bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[140px] max-w-[140px] animate-context-menu z-[100]"
-                      style={{
-                        left: shotSubmenuPosition.horizontal === 'right'
-                          ? `${(shotSubmenuRef.current?.getBoundingClientRect().right || 0) + 4}px`
-                          : 'auto',
-                        right: shotSubmenuPosition.horizontal === 'left'
-                          ? `${window.innerWidth - (shotSubmenuRef.current?.getBoundingClientRect().left || 0) + 4}px`
-                          : 'auto',
-                        bottom: (() => {
-                          const scenesMenuRect = shotSubmenuRef.current?.getBoundingClientRect();
-                          if (!scenesMenuRect) return 'auto';
-                          // Выравниваем по нижнему краю меню со сценами
-                          return `${window.innerHeight - scenesMenuRect.bottom}px`;
-                        })(),
-                        maxHeight: (() => {
-                          const scenesMenuRect = shotSubmenuRef.current?.getBoundingClientRect();
-                          if (!scenesMenuRect) return '300px';
-                          // Максимальная высота = от верха экрана до нижнего края меню со сценами
-                          const availableHeight = scenesMenuRect.bottom - 10;
-                          return `${Math.min(300, availableHeight)}px`;
-                        })(),
-                        overflowY: 'auto'
-                      }}
-                      onMouseEnter={() => {
-                        if (submenuCloseTimeoutRef.current) {
-                          clearTimeout(submenuCloseTimeoutRef.current);
-                          submenuCloseTimeoutRef.current = null;
-                        }
-                        setActiveSceneSubmenu(sceneId);
-                      }}
-                      onMouseLeave={() => {
-                        submenuCloseTimeoutRef.current = window.setTimeout(() => {
-                          setShowShotSubmenu(false);
-                          setActiveSceneSubmenu(null);
-                        }, 150);
-                      }}
-                    >
-                      {shots.map((shot: any) => (
-                        <button
-                          key={shot.id}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-700 text-text-primary"
-                          onMouseEnter={() => {
-                            if (submenuCloseTimeoutRef.current) {
-                              clearTimeout(submenuCloseTimeoutRef.current);
-                              submenuCloseTimeoutRef.current = null;
-                            }
-                          }}
-                          onClick={() => {
-                            if (submenuAction === 'move') {
-                              handleMoveToShot(shot.number);
-                            } else {
-                              handleCopyToShot(shot.number);
-                            }
-                          }}
-                        >
-                          Shot {shot.number.toString().padStart(3, '0')}
-                        </button>
-                      ))}
+                    <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                      {Object.entries(shotsByScene).length === 0 ? (
+                        <div className="px-4 py-2 text-xs text-text-muted">No shots available</div>
+                      ) : (
+                        Object.entries(shotsByScene).map(([sceneId, { scene }]) => (
+                          <div key={sceneId} className="relative">
+                            <button
+                              data-scene-id={sceneId}
+                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md flex items-center justify-between text-text-primary transition-colors"
+                              onMouseEnter={() => {
+                                if (submenuCloseTimeoutRef.current) {
+                                  clearTimeout(submenuCloseTimeoutRef.current);
+                                  submenuCloseTimeoutRef.current = null;
+                                }
+                                setActiveSceneSubmenu(sceneId);
+                              }}
+                              onMouseLeave={() => {
+                                submenuCloseTimeoutRef.current = window.setTimeout(() => {
+                                  setActiveSceneSubmenu(null);
+                                }, 300);
+                              }}
+                            >
+                              <span className="truncate">{scene.name}</span>
+                              <span className="text-zinc-500 ml-2">›</span>
+                            </button>
+                          </div>
+                        ))
+                      )}
                     </div>
-                  )}
-                </div>
-              ))
-              )}
-            </div>
+                    {/* Shot Submenu - Level 2: Shots in Scene (rendered outside scroll container) */}
+                    {activeSceneSubmenu && shotsByScene[activeSceneSubmenu] && (
+                      <div
+                        className="absolute left-full top-0 -ml-1 pl-2 z-[102]"
+                        onMouseEnter={() => {
+                          if (submenuCloseTimeoutRef.current) {
+                            clearTimeout(submenuCloseTimeoutRef.current);
+                            submenuCloseTimeoutRef.current = null;
+                          }
+                        }}
+                        onMouseLeave={() => {
+                          submenuCloseTimeoutRef.current = window.setTimeout(() => {
+                            setShowShotSubmenu(false);
+                            setActiveSceneSubmenu(null);
+                          }, 300);
+                        }}
+                      >
+                        <div
+                          className="bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] animate-context-menu"
+                          style={{ maxHeight: '300px', overflowY: 'auto' }}
+                        >
+                          {shotsByScene[activeSceneSubmenu].shots.map((shot: any) => (
+                            <button
+                              key={shot.id}
+                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md text-text-primary transition-colors"
+                              onMouseEnter={() => {
+                                if (submenuCloseTimeoutRef.current) {
+                                  clearTimeout(submenuCloseTimeoutRef.current);
+                                  submenuCloseTimeoutRef.current = null;
+                                }
+                              }}
+                              onClick={() => handleCopyToShot(shot.id)}
+                            >
+                              Shot {shot.number.toString().padStart(3, '0')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
           )}
-        </div>,
-        document.body
-      )}
+        </div>
+      </ContextMenu>
     </div>
   );
 }

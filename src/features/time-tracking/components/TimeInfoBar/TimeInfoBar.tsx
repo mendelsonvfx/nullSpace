@@ -16,13 +16,11 @@ export function TimeInfoBar({ project }: TimeInfoBarProps) {
   const totalMinutes = project.totalMinutesSpent || 0;
 
   // Show green dot only when widget is visible (don't show on Finance page)
-  // Read from timeTrackingStore (source of truth) with fallback to projectStore
+  // Read from timeTrackingStore (source of truth) - no fallback to avoid race condition
   const hasActiveSession = useTimeTrackingStore(state =>
     Array.from(state.sessions.values()).some(s =>
       s.projectId === project.id && s.isActive && s.widgetVisible
     )
-  ) || (project.timeEntries || []).some(
-    (e: any) => e.isActive && e.widgetVisible === true
   );
 
   return (

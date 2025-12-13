@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import { AddCategoryModal } from './modals/AddCategoryModal';
 import { RenameCategoryModal } from './modals/RenameCategoryModal';
 import SimpleBar from 'simplebar-react';
+import { ContextMenu, ContextMenuItem } from './ui/ContextMenu';
+import { useContextMenu } from '../hooks/useContextMenu';
 
 interface CategoryTabsProps {
   categories: string[];
@@ -24,25 +26,12 @@ export function CategoryTabs({
   accentColor = '#a855f7'
 }: CategoryTabsProps) {
   const [isAdding, setIsAdding] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; category: string } | null>(null);
-  const contextMenuRef = useRef<HTMLDivElement>(null);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [showScrollShadow, setShowScrollShadow] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Close context menu on click outside
-  useEffect(() => {
-    if (!contextMenu) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [contextMenu]);
+  // Context menu using centralized hook
+  const { isOpen: isContextMenuOpen, position: contextMenuPosition, data: contextMenuCategory, openMenu, closeMenu } = useContextMenu<string>();
 
   // Check if content is scrollable and update shadow
   const checkScrollable = () => {
@@ -64,33 +53,27 @@ export function CategoryTabs({
   };
 
   const handleContextMenu = (e: React.MouseEvent, category: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-
     // Don't show context menu for default categories
     const defaultCategories = ['Commercial', 'Personal'];
     if (defaultCategories.includes(category)) {
+      e.preventDefault();
       return;
     }
 
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      category
-    });
+    openMenu(e, category);
   };
 
   const handleRename = () => {
-    if (contextMenu) {
-      setEditingCategory(contextMenu.category);
-      setContextMenu(null);
+    if (contextMenuCategory) {
+      setEditingCategory(contextMenuCategory);
+      closeMenu();
     }
   };
 
   const handleDelete = () => {
-    if (contextMenu && onDeleteCategory) {
-      onDeleteCategory(contextMenu.category);
-      setContextMenu(null);
+    if (contextMenuCategory && onDeleteCategory) {
+      onDeleteCategory(contextMenuCategory);
+      closeMenu();
     }
   };
 
@@ -199,31 +182,26 @@ export function CategoryTabs({
       )}
 
       {/* Context Menu */}
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="fixed bg-card-bg border border-border-secondary rounded-lg shadow-lg py-1 z-[100] min-w-[180px] animate-context-menu"
-          style={{
-            top: contextMenu.y,
-            left: contextMenu.x
-          }}
+      <ContextMenu
+        isOpen={isContextMenuOpen}
+        position={contextMenuPosition}
+        onClose={closeMenu}
+        menuId="category-tabs"
+      >
+        <ContextMenuItem
+          icon={<IconPencil stroke={1.5} className="w-4 h-4" />}
+          onClick={handleRename}
         >
-          <button
-            onClick={handleRename}
-            className="w-full px-4 py-2 text-left text-sm text-text-primary hover:bg-hover-bg transition-colors flex items-center gap-2"
-          >
-            <IconPencil stroke={1.5} className="w-4 h-4" />
-            Rename
-          </button>
-          <button
-            onClick={handleDelete}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-red-900/50 text-red-400 hover:text-red-300 transition-colors flex items-center gap-2"
-          >
-            <IconTrash stroke={1.5} className="w-4 h-4" />
-            Delete
-          </button>
-        </div>
-      )}
+          Rename
+        </ContextMenuItem>
+        <ContextMenuItem
+          icon={<IconTrash stroke={1.5} className="w-4 h-4" />}
+          onClick={handleDelete}
+          danger
+        >
+          Delete
+        </ContextMenuItem>
+      </ContextMenu>
 
       {/* Rename Modal */}
       <RenameCategoryModal
