@@ -64,49 +64,6 @@ body.animations-disabled * {
   outline: none !important;
 }
 
-/* Borders disabled state - selective targeting */
-
-/* Versions Overview container */
-body.borders-disabled [data-versions-overview] {
-  border-color: transparent !important;
-}
-
-/* Output Overview container */
-body.borders-disabled [data-output-overview] {
-  border-color: transparent !important;
-}
-
-/* Time Analytics containers */
-body.borders-disabled [data-time-analytics] {
-  border-color: transparent !important;
-}
-
-/* Search bar */
-body.borders-disabled [data-search-bar] {
-  border-color: transparent !important;
-}
-
-/* Finance containers */
-body.borders-disabled [data-finance-container] {
-  border-color: transparent !important;
-}
-
-/* Modal windows */
-body.borders-disabled [data-modal-window] {
-  border-color: transparent !important;
-}
-
-/* Notes - MDXEditor borders */
-body.borders-disabled .markdown-editor-container [class*='_toolbarRoot'] {
-  border-color: transparent !important;
-}
-
-body.borders-disabled .markdown-editor-container [class*='_rootContentEditableWrapper'] {
-  border-left-color: transparent !important;
-  border-right-color: transparent !important;
-  border-bottom-color: transparent !important;
-}
-
 /* Smooth transitions for buttons */
 .animate-button {
   transition: transform 0.15s ease-in-out;

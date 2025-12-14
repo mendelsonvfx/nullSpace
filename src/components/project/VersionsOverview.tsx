@@ -858,7 +858,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                 {showShotSubmenu && submenuAction === 'move' && (
                   <div
                     ref={shotSubmenuRef}
-                    className="absolute left-full top-0 ml-3 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] animate-context-menu z-[101]"
+                    className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] z-[101]"
                     onMouseEnter={() => {
                       if (submenuCloseTimeoutRef.current) {
                         clearTimeout(submenuCloseTimeoutRef.current);
@@ -898,7 +898,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                     {/* Shot Submenu - Level 2: Shots in Scene (rendered outside scroll container) */}
                     {activeSceneSubmenu && shotsByScene[activeSceneSubmenu] && (
                       <div
-                        className="absolute left-full top-0 -ml-1 pl-2 z-[102]"
+                        className="absolute left-full top-1/2 -translate-y-1/2 -ml-1 pl-2 z-[102]"
                         onMouseEnter={() => {
                           if (submenuCloseTimeoutRef.current) {
                             clearTimeout(submenuCloseTimeoutRef.current);
@@ -913,7 +913,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                         }}
                       >
                         <div
-                          className="bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] animate-context-menu"
+                          className="bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px]"
                           style={{ maxHeight: '300px', overflowY: 'auto' }}
                         >
                           {shotsByScene[activeSceneSubmenu].shots.map((shot: any) => (
@@ -962,7 +962,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                 {showShotSubmenu && submenuAction === 'copy' && (
                   <div
                     ref={shotSubmenuRef}
-                    className="absolute left-full top-0 ml-3 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] animate-context-menu z-[101]"
+                    className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] z-[101]"
                     onMouseEnter={() => {
                       if (submenuCloseTimeoutRef.current) {
                         clearTimeout(submenuCloseTimeoutRef.current);
@@ -1002,7 +1002,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                     {/* Shot Submenu - Level 2: Shots in Scene (rendered outside scroll container) */}
                     {activeSceneSubmenu && shotsByScene[activeSceneSubmenu] && (
                       <div
-                        className="absolute left-full top-0 -ml-1 pl-2 z-[102]"
+                        className="absolute left-full top-1/2 -translate-y-1/2 -ml-1 pl-2 z-[102]"
                         onMouseEnter={() => {
                           if (submenuCloseTimeoutRef.current) {
                             clearTimeout(submenuCloseTimeoutRef.current);
@@ -1017,7 +1017,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                         }}
                       >
                         <div
-                          className="bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] animate-context-menu"
+                          className="bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px]"
                           style={{ maxHeight: '300px', overflowY: 'auto' }}
                         >
                           {shotsByScene[activeSceneSubmenu].shots.map((shot: any) => (

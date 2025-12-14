@@ -49,6 +49,23 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   // Context menu using centralized hook
   const { isOpen: isContextMenuOpen, position: contextMenuPosition, data: contextMenuData, openMenu: openContextMenu, closeMenu: closeContextMenu } = useContextMenu<{ software: any; executablePath: string }>();
 
+  // Handle ESC to close Project Settings modal (capture phase to run before App.tsx handler)
+  useEffect(() => {
+    if (!showProjectSettings) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation(); // Stop all other handlers
+        setShowProjectSettings(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true); // capture: true
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [showProjectSettings]);
+
   // Sync description value when project changes
   useEffect(() => {
     setDescriptionValue(project.description || '');

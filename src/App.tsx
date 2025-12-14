@@ -537,7 +537,23 @@ function App() {
           setDeleteConfirm(null);
           return;
         }
+        if (sceneRenameConfirm) {
+          e.preventDefault();
+          sceneRenameConfirm.onCancel();
+          setSceneRenameConfirm(null);
+          return;
+        }
         if (selectedProjectId) {
+          // Don't close project if user is editing (input/textarea has focus)
+          const target = e.target as HTMLElement;
+          const isEditing = target?.tagName === 'INPUT' ||
+                           target?.tagName === 'TEXTAREA' ||
+                           target?.isContentEditable ||
+                           document.activeElement?.tagName === 'INPUT' ||
+                           document.activeElement?.tagName === 'TEXTAREA';
+          if (isEditing) {
+            return; // Let the input handle ESC
+          }
           e.preventDefault();
           setSelectedProjectId(null);
           return;
@@ -596,7 +612,7 @@ function App() {
 
     window.addEventListener('keydown', handleGlobalHotkeys);
     return () => window.removeEventListener('keydown', handleGlobalHotkeys);
-  }, [viewMode, selectedProjectId, previousProjectId, showCreateModal, showSettings, showFeedback, showAbout, showWelcomeSetup, deleteConfirm]);
+  }, [viewMode, selectedProjectId, previousProjectId, showCreateModal, showSettings, showFeedback, showAbout, showWelcomeSetup, deleteConfirm, sceneRenameConfirm]);
 
   // Break reminders - check active sessions every minute
   useEffect(() => {
@@ -807,12 +823,6 @@ function App() {
       document.body.classList.add('animations-disabled');
     }
     console.log('ANIMATIONS AFTER:', document.body.className);
-
-    // Initialize borders state
-    const bordersEnabled = localStorage.getItem('bordersEnabled');
-    if (bordersEnabled === null || !JSON.parse(bordersEnabled)) {
-      document.body.classList.add('borders-disabled');
-    }
 
     // Disable default Windows context menu globally
     const disableContextMenu = (e: MouseEvent) => {
@@ -2187,7 +2197,7 @@ function App() {
             {showCategorySubmenu && (
               <div
                 ref={categorySubmenuRef}
-                className="absolute left-full top-0 ml-3 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 z-[101] w-auto animate-context-menu"
+                className="absolute left-full bottom-0 ml-2.5 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 z-[101] w-auto animate-context-menu"
                 onMouseEnter={() => {
                   if (categorySubmenuTimeoutRef.current) {
                     clearTimeout(categorySubmenuTimeoutRef.current);

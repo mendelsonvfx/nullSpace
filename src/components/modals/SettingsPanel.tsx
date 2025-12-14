@@ -635,10 +635,6 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     const saved = localStorage.getItem('modalBlurEnabled');
     return saved !== null ? JSON.parse(saved) : true;
   });
-  const [bordersEnabled, setBordersEnabled] = useState(() => {
-    const saved = localStorage.getItem('bordersEnabled');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
   const [blendPreviewsEnabled, setBlendPreviewsEnabled] = useState(() => {
     const saved = localStorage.getItem('blendPreviewsEnabled');
     return saved !== null ? JSON.parse(saved) : true;
@@ -759,15 +755,6 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       document.documentElement.style.setProperty('--accent-color-hover', hoverColor);
     }
   }, []);
-
-  useEffect(() => {
-    // Apply borders setting on mount
-    if (!bordersEnabled) {
-      document.body.classList.add('borders-disabled');
-    } else {
-      document.body.classList.remove('borders-disabled');
-    }
-  }, [bordersEnabled]);
 
   // Helper to update window settings
   const updateWindowSettings = (updates: Partial<{
@@ -1029,38 +1016,6 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
           <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
             blendPreviewsEnabled ? 'translate-x-6' : 'translate-x-0.5'
           }`} />
-        </button>
-      </div>
-
-      {/* UI Borders */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-medium mb-1">UI Borders</div>
-          <p className="text-sm text-zinc-400">
-            Show borders around components and containers
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            const newValue = !bordersEnabled;
-            setBordersEnabled(newValue);
-            localStorage.setItem('bordersEnabled', JSON.stringify(newValue));
-            if (newValue) {
-              document.body.classList.remove('borders-disabled');
-            } else {
-              document.body.classList.add('borders-disabled');
-            }
-            window.dispatchEvent(new Event('storage'));
-          }}
-          className={`w-12 h-6 rounded-full transition-colors relative ${
-            bordersEnabled ? 'bg-accent' : 'bg-zinc-700'
-          }`}
-        >
-          <div
-            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-              bordersEnabled ? 'translate-x-6' : 'translate-x-0.5'
-            }`}
-          />
         </button>
       </div>
 
