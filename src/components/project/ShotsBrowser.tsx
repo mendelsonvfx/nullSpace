@@ -22,6 +22,8 @@ import {
   IconFilter,
   IconSortAscendingNumbers,
   IconClockHour3,
+  IconLayoutSidebarRightCollapse,
+  IconLayoutSidebarRightExpand,
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
@@ -864,9 +866,11 @@ const SceneCard: React.FC<SceneCardProps> = ({
 interface ShotsBrowserProps {
   projectId: string;
   className?: string;
+  docked?: boolean;
+  onToggleDock?: () => void;
 }
 
-const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }) => {
+const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', docked = false, onToggleDock }) => {
   // Get the entire projects array to ensure reactivity
   const projects = useProjectStore(state => state.projects);
   const project = projects.find(p => p.id === projectId);
@@ -901,6 +905,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
       return 'grid';
     }
   });
+
+  // UI visibility settings (persisted globally)
+  const [showSpecialContextButtons, setShowSpecialContextButtons] = useState(() => {
+    const saved = localStorage.getItem('shotsbrowser_showSpecialContextButtons');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [showSearchFilter, setShowSearchFilter] = useState(() => {
+    const saved = localStorage.getItem('shotsbrowser_showSearchFilter');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  // Header context menu
+  const [headerMenuPosition, setHeaderMenuPosition] = useState<{ x: number; y: number } | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'number-asc' | 'number-desc' | 'created-asc' | 'created-desc'>('number-asc');
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -1796,7 +1814,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
 
   return (
     <div
-      className={`flex flex-col bg-sidebar-bg border-l border-l-border-primary border-t border-t-border-primary p-4 relative ${className}`}
+      className={`flex flex-col bg-sidebar-bg p-4 relative ${docked ? 'border-b border-b-border-primary' : 'border-l border-l-border-primary border-t border-t-border-primary'} ${className}`}
       onContextMenuCapture={(e) => {
         // Check if element or its parents have custom context menu
         const target = e.target as HTMLElement;
@@ -1809,137 +1827,161 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
       }}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4 justify-between">
+      <div
+        className="flex items-center gap-2 mb-4 justify-between"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setHeaderMenuPosition({ x: e.clientX, y: e.clientY });
+        }}
+      >
         <div className="flex items-center gap-2.5">
           <IconMovie className="w-5 h-5 text-text-secondary flex-shrink-0" stroke={1.5} />
           <h3 className="text-section-title font-semibold text-text-primary leading-none">Shots Browser</h3>
         </div>
-        {/* View mode toggle buttons */}
-        <div className="flex items-center gap-0.5 bg-card-bg rounded-button p-0.5 flex-shrink-0">
-          <button
-            onClick={() => setViewMode('grid')}
-            className={`p-1 rounded-badge transition-colors ${
-              viewMode === 'grid'
-                ? 'bg-accent text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-hover-bg'
-            }`}
-            title="Grid view"
-          >
-            <IconLayoutGrid size={13} />
-          </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`p-1 rounded-badge transition-colors ${
-              viewMode === 'list'
-                ? 'bg-accent text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-hover-bg'
-            }`}
-            title="List view"
-          >
-            <IconLayoutList size={13} />
-          </button>
-        </div>
-      </div>
-
-      {/* Search with Sort button */}
-      <div className="mb-3 flex items-center gap-2">
-        <div className="relative flex-1">
-          <IconSearch
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-          />
-          <input
-            type="text"
-            placeholder={
-              project?.hasScenes && project?.hasShots
-                ? "Search scenes & shots..."
-                : project?.hasScenes
-                ? "Search scenes..."
-                : "Search shots..."
-            }
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-card-bg border border-border-primary rounded-button text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
-          />
-        </div>
-
-        {/* Sort button */}
-        <div className="relative" ref={sortMenuRef}>
-          <button
-            onClick={() => setShowSortMenu(!showSortMenu)}
-            className={`p-2 rounded-button transition-colors border ${
-              showSortMenu
-                ? 'bg-hover-bg border-border-secondary text-text-primary'
-                : 'bg-card-bg border-border-primary text-text-secondary hover:text-text-primary hover:bg-hover-bg hover:border-border-secondary'
-            }`}
-            title="Sort shots"
-          >
-            <IconFilter size={14} />
-          </button>
-
-          {/* Sort dropdown menu */}
-          {showSortMenu && (
-            <div className="absolute top-full right-0 mt-1 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 z-50 min-w-[140px] space-y-0.5">
+        {/* View mode toggle buttons + dock button */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-0.5 bg-card-bg rounded-button p-0.5">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1 rounded-badge transition-colors ${
+                viewMode === 'grid'
+                  ? 'bg-accent text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-hover-bg'
+              }`}
+              title="Grid view"
+            >
+              <IconLayoutGrid size={13} />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1 rounded-badge transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-accent text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-hover-bg'
+              }`}
+              title="List view"
+            >
+              <IconLayoutList size={13} />
+            </button>
+          </div>
+          {onToggleDock && (
+            <div className="flex items-center bg-card-bg rounded-button p-0.5">
               <button
-                onClick={() => { setSortBy('number-asc'); setShowSortMenu(false); }}
-                className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 rounded-md transition-colors ${
-                  sortBy === 'number-asc' ? 'bg-white/10 text-text-primary' : 'hover:bg-white/10 text-text-primary'
-                }`}
+                onClick={onToggleDock}
+                className="p-1 rounded-badge transition-colors text-text-secondary hover:text-text-primary hover:bg-hover-bg"
+                title={docked ? "Undock from sidebar" : "Dock in sidebar"}
               >
-                <IconSortAscendingNumbers size={14} />
-                <span>By Number</span>
-              </button>
-              <button
-                onClick={() => { setSortBy('created-asc'); setShowSortMenu(false); }}
-                className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 rounded-md transition-colors ${
-                  sortBy === 'created-asc' ? 'bg-white/10 text-text-primary' : 'hover:bg-white/10 text-text-primary'
-                }`}
-              >
-                <IconClockHour3 size={14} />
-                <span>By Created</span>
+                {docked ? <IconLayoutSidebarRightExpand size={13} /> : <IconLayoutSidebarRightCollapse size={13} />}
               </button>
             </div>
           )}
         </div>
       </div>
 
+      {/* Search with Sort button */}
+      {showSearchFilter && (
+        <div className="mb-3 flex items-center gap-2">
+          <div className="relative flex-1">
+            <IconSearch
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+            />
+            <input
+              type="text"
+              placeholder={
+                project?.hasScenes && project?.hasShots
+                  ? "Search scenes & shots..."
+                  : project?.hasScenes
+                  ? "Search scenes..."
+                  : "Search shots..."
+              }
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-card-bg border border-border-primary rounded-button text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+            />
+          </div>
+
+          {/* Sort button */}
+          <div className="relative" ref={sortMenuRef}>
+            <button
+              onClick={() => setShowSortMenu(!showSortMenu)}
+              className={`p-2 rounded-button transition-colors border ${
+                showSortMenu
+                  ? 'bg-hover-bg border-border-secondary text-text-primary'
+                  : 'bg-card-bg border-border-primary text-text-secondary hover:text-text-primary hover:bg-hover-bg hover:border-border-secondary'
+              }`}
+              title="Sort shots"
+            >
+              <IconFilter size={14} />
+            </button>
+
+            {/* Sort dropdown menu */}
+            {showSortMenu && (
+              <div className="absolute top-full right-0 mt-1 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 z-50 min-w-[140px] space-y-0.5">
+                <button
+                  onClick={() => { setSortBy('number-asc'); setShowSortMenu(false); }}
+                  className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 rounded-md transition-colors ${
+                    sortBy === 'number-asc' ? 'bg-white/10 text-text-primary' : 'hover:bg-white/10 text-text-primary'
+                  }`}
+                >
+                  <IconSortAscendingNumbers size={14} />
+                  <span>By Number</span>
+                </button>
+                <button
+                  onClick={() => { setSortBy('created-asc'); setShowSortMenu(false); }}
+                  className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 rounded-md transition-colors ${
+                    sortBy === 'created-asc' ? 'bg-white/10 text-text-primary' : 'hover:bg-white/10 text-text-primary'
+                  }`}
+                >
+                  <IconClockHour3 size={14} />
+                  <span>By Created</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Global Folders */}
-      <div className="mb-3 grid grid-cols-2 gap-1.5">
-        <button
-          onClick={() => {
-            setSpecialContext(projectId, 'asset');
-          }}
-          className={`flex items-center justify-center gap-1.5 px-2 py-2 text-xs select-none transition-all cursor-pointer rounded-badge ${
-            project?.currentSpecialContextId &&
-            project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.type === 'asset' &&
-            !project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.sceneId &&
-            !project?.currentSceneId &&
-            !project?.currentShotId
-              ? 'bg-accent/20 border border-accent text-text-primary'
-              : 'bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary'
-          }`}
-        >
-          <IconBox size={14} stroke={1.5} className="text-text-secondary flex-shrink-0" />
-          <span className="text-text-primary font-medium truncate">Asset Projects</span>
-        </button>
-        <button
-          onClick={() => {
-            setSpecialContext(projectId, 'compose');
-          }}
-          className={`flex items-center justify-center gap-1.5 px-2 py-2 text-xs select-none transition-all cursor-pointer rounded-badge ${
-            project?.currentSpecialContextId &&
-            project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.type === 'compose' &&
-            !project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.sceneId &&
-            !project?.currentSceneId &&
-            !project?.currentShotId
-              ? 'bg-accent/20 border border-accent text-text-primary'
-              : 'bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary'
-          }`}
-        >
-          <IconStack2 size={14} stroke={1.5} className="text-text-secondary flex-shrink-0" />
-          <span className="text-text-primary font-medium truncate">Compose Projects</span>
-        </button>
-      </div>
+      {showSpecialContextButtons && (
+        <div className="mb-3 grid grid-cols-2 gap-1.5">
+          <button
+            onClick={() => {
+              setSpecialContext(projectId, 'asset');
+            }}
+            className={`flex items-center justify-center gap-1.5 px-2 py-2 text-xs select-none transition-all cursor-pointer rounded-badge ${
+              project?.currentSpecialContextId &&
+              project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.type === 'asset' &&
+              !project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.sceneId &&
+              !project?.currentSceneId &&
+              !project?.currentShotId
+                ? 'bg-accent/20 border border-accent text-text-primary'
+                : 'bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary'
+            }`}
+          >
+            <IconBox size={14} stroke={1.5} className="text-text-secondary flex-shrink-0" />
+            <span className="text-text-primary font-medium truncate">Asset Projects</span>
+          </button>
+          <button
+            onClick={() => {
+              setSpecialContext(projectId, 'compose');
+            }}
+            className={`flex items-center justify-center gap-1.5 px-2 py-2 text-xs select-none transition-all cursor-pointer rounded-badge ${
+              project?.currentSpecialContextId &&
+              project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.type === 'compose' &&
+              !project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.sceneId &&
+              !project?.currentSceneId &&
+              !project?.currentShotId
+                ? 'bg-accent/20 border border-accent text-text-primary'
+                : 'bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary'
+            }`}
+          >
+            <IconStack2 size={14} stroke={1.5} className="text-text-secondary flex-shrink-0" />
+            <span className="text-text-primary font-medium truncate">Compose Projects</span>
+          </button>
+        </div>
+      )}
 
       {/* Top gradient shadow */}
       <div
@@ -2392,6 +2434,37 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
           </div>
         </div>
       )}
+
+      {/* Header Context Menu */}
+      <ContextMenu
+        isOpen={!!headerMenuPosition}
+        position={headerMenuPosition || { x: 0, y: 0 }}
+        onClose={() => setHeaderMenuPosition(null)}
+        menuId="shotsbrowser-header"
+      >
+        <ContextMenuItem
+          icon={showSearchFilter ? <IconCircleCheck size={16} className="text-text-secondary" /> : <IconCircleFilled size={16} className="text-zinc-600" />}
+          onClick={() => {
+            const newValue = !showSearchFilter;
+            setShowSearchFilter(newValue);
+            localStorage.setItem('shotsbrowser_showSearchFilter', JSON.stringify(newValue));
+            setHeaderMenuPosition(null);
+          }}
+        >
+          Show Search & Filter
+        </ContextMenuItem>
+        <ContextMenuItem
+          icon={showSpecialContextButtons ? <IconCircleCheck size={16} className="text-text-secondary" /> : <IconCircleFilled size={16} className="text-zinc-600" />}
+          onClick={() => {
+            const newValue = !showSpecialContextButtons;
+            setShowSpecialContextButtons(newValue);
+            localStorage.setItem('shotsbrowser_showSpecialContextButtons', JSON.stringify(newValue));
+            setHeaderMenuPosition(null);
+          }}
+        >
+          Show Asset/Compose Buttons
+        </ContextMenuItem>
+      </ContextMenu>
     </div>
   );
 };

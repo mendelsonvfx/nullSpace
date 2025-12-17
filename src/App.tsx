@@ -187,6 +187,10 @@ function App() {
     const saved = localStorage.getItem('showCategoryBar');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [shotsBrowserDocked, setShotsBrowserDocked] = useState(() => {
+    const saved = localStorage.getItem('shotsBrowserDocked');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
   const [showWelcomeSetup, setShowWelcomeSetup] = useState(false);
   const [, setIsWindowVisible] = useState(true); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [, setForceRenderKey] = useState(0); // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -1899,13 +1903,29 @@ function App() {
         </div>
       </div>
 
-      {/* ShotsBrowser - between ProjectDetails and TreeView */}
-      {selectedProject && viewMode !== 'finance' && (selectedProject.hasShots || selectedProject.hasScenes) && (
-        <ShotsBrowser projectId={selectedProject.id} className="w-80 flex-shrink-0" />
+      {/* ShotsBrowser - between ProjectDetails and TreeView (only when not docked) */}
+      {selectedProject && viewMode !== 'finance' && (selectedProject.hasShots || selectedProject.hasScenes) && !shotsBrowserDocked && (
+        <ShotsBrowser
+          projectId={selectedProject.id}
+          className="w-80 flex-shrink-0"
+          onToggleDock={() => {
+            setShotsBrowserDocked(true);
+            localStorage.setItem('shotsBrowserDocked', 'true');
+          }}
+        />
       )}
 
       {/* Right Sidebar */}
-      {selectedProject && viewMode !== 'finance' && <RightSidebar project={selectedProject} />}
+      {selectedProject && viewMode !== 'finance' && (
+        <RightSidebar
+          project={selectedProject}
+          shotsBrowserDocked={shotsBrowserDocked && (selectedProject.hasShots || selectedProject.hasScenes)}
+          onToggleDock={() => {
+            setShotsBrowserDocked(false);
+            localStorage.setItem('shotsBrowserDocked', 'false');
+          }}
+        />
+      )}
 
       {/* Create Project Modal */}
       {showCreateModal && (
