@@ -20,7 +20,10 @@ import {
   IconCircleFilled,
   IconCurrencyDollar,
   IconTrash,
-  IconUser
+  IconUser,
+  IconCalendarEvent,
+  IconSortAscendingLetters,
+  IconClockHour3,
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from './store/projectStore';
@@ -1416,53 +1419,56 @@ function App() {
                 <IconFilter stroke={1.5} className="w-3.5 h-3.5" />
               </button>
               {showFilterMenu && (
-                <div className="absolute top-full mt-1 right-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 z-50 min-w-[160px] animate-modal">
-                  <div className="px-3 py-1.5 text-xs text-zinc-500 font-medium">Sort by</div>
+                <div className="absolute top-full mt-1 right-0 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 z-50 min-w-[160px] space-y-0.5">
                   <button
                     onClick={() => {
                       setSortBy('createdAt');
                       setShowFilterMenu(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 ${
-                      sortBy === 'createdAt' ? 'bg-zinc-700 text-white' : ''
+                    className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${
+                      sortBy === 'createdAt' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
                     }`}
                   >
-                    Creation date
+                    <IconClockHour3 size={14} />
+                    By Creation date
                   </button>
                   <button
                     onClick={() => {
                       setSortBy('deadline');
                       setShowFilterMenu(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 ${
-                      sortBy === 'deadline' ? 'bg-zinc-700 text-white' : ''
+                    className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${
+                      sortBy === 'deadline' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
                     }`}
                   >
-                    Deadline
+                    <IconCalendarEvent size={14} />
+                    By Deadline
                   </button>
                   <button
                     onClick={() => {
                       setSortBy('name');
                       setShowFilterMenu(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 ${
-                      sortBy === 'name' ? 'bg-zinc-700 text-white' : ''
+                    className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${
+                      sortBy === 'name' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
                     }`}
                   >
-                    Name
+                    <IconSortAscendingLetters size={14} />
+                    By Name
                   </button>
                   <button
                     onClick={() => {
                       setSortBy('cost');
                       setShowFilterMenu(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 ${
-                      sortBy === 'cost' ? 'bg-zinc-700 text-white' : ''
+                    className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${
+                      sortBy === 'cost' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
                     }`}
                   >
-                    Cost
+                    <IconCurrencyDollar size={14} />
+                    By Cost
                   </button>
-                  <div className="px-3 py-1.5 text-xs text-zinc-500 font-medium border-t border-zinc-700 mt-1">Filter by</div>
+                  <div className="h-px bg-zinc-600/50 my-1" />
                   <div
                     className="relative"
                     onMouseEnter={() => {
@@ -1477,13 +1483,16 @@ function App() {
                       }, 100);
                     }}
                   >
-                    <button className="w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 flex items-center justify-between">
-                      <span>Client</span>
+                    <button className="w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 text-text-primary flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <IconUser size={14} />
+                        By Client
+                      </span>
                       <IconChevronRight stroke={1.5} className="w-3 h-3" />
                     </button>
                     {showClientSubmenu && (
                       <div
-                        className="absolute left-full top-0 ml-3 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[160px] animate-modal"
+                        className="absolute left-full top-0 ml-2 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 min-w-[160px] space-y-0.5"
                         onMouseEnter={() => {
                           if (clientSubmenuTimeoutRef.current) {
                             clearTimeout(clientSubmenuTimeoutRef.current);
@@ -1500,8 +1509,8 @@ function App() {
                             setSelectedClientId(null);
                             setShowFilterMenu(false);
                           }}
-                          className={`w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 ${
-                            selectedClientId === null ? 'bg-zinc-700 text-white' : ''
+                          className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 ${
+                            selectedClientId === null ? 'bg-white/10 text-text-primary' : 'text-text-primary'
                           }`}
                         >
                           All clients
@@ -1513,8 +1522,8 @@ function App() {
                               setSelectedClientId(client.id);
                               setShowFilterMenu(false);
                             }}
-                            className={`w-full px-3 py-1.5 text-left text-sm hover:bg-zinc-700 flex items-center gap-2 ${
-                              selectedClientId === client.id ? 'bg-zinc-700 text-white' : ''
+                            className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${
+                              selectedClientId === client.id ? 'bg-white/10 text-text-primary' : 'text-text-primary'
                             }`}
                           >
                             <div

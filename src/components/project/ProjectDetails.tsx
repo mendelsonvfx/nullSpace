@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconPencil } from '@tabler/icons-react';
+import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconPencil, IconPlayerPlay, IconAppWindow } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api';
 import { useProjectStore } from '../../store/projectStore';
 import { LinkItem, LinkInputForm, NotesSection } from '../shared';
@@ -1902,6 +1902,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         menuId="software-launcher"
       >
         <ContextMenuItem
+          icon={<IconPlayerPlay className="w-4 h-4" stroke={1.5} />}
           onClick={() => {
             if (!contextMenuData) return;
             const latestProject = useProjectStore.getState().projects.find(p => p.id === project.id);
@@ -1927,6 +1928,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           Launch
         </ContextMenuItem>
         <ContextMenuItem
+          icon={<IconAppWindow className="w-4 h-4" stroke={1.5} />}
           onClick={() => {
             if (!contextMenuData) return;
             if (onLaunchSoftwareWithoutProject) {

@@ -642,17 +642,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     });
   };
 
-  const handleContextMenu = useCallback(async (e: React.MouseEvent, node: FileNode) => {
-    // Auto-copy path on right-click
-    try {
-      await writeText(node.path);
-      setCopiedPath(node.path);
-      // Reset after 2 seconds
-      setTimeout(() => setCopiedPath(null), 2000);
-    } catch (error) {
-      console.error('Failed to copy path:', error);
-    }
-
+  const handleContextMenu = useCallback((e: React.MouseEvent, node: FileNode) => {
     setActiveMenu('tree');
     openContextMenu(e, node);
     setShowColorPicker(false);
@@ -1145,34 +1135,30 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             'Copy Path'
           )}
         </ContextMenuItem>
-        {contextMenuNode?.is_dir && (
+        <ContextMenuItem
+          icon={<IconFolderOpen className="w-4 h-4" stroke={1.5} />}
+          onClick={() => contextMenuNode && openInExplorerHandler(contextMenuNode.path)}
+        >
+          {contextMenuNode?.is_dir ? 'Open in Explorer' : 'Reveal in Explorer'}
+        </ContextMenuItem>
+        {contextMenuNode?.is_dir && !getSoftwareFolderIcon(contextMenuNode.name) && (
           <>
+            <ContextMenuDivider />
             <ContextMenuItem
-              icon={<IconFolderOpen className="w-4 h-4" stroke={1.5} />}
-              onClick={() => contextMenuNode && openInExplorerHandler(contextMenuNode.path)}
+              icon={<IconPalette className="w-4 h-4" stroke={1.5} />}
+              onClick={() => setShowColorPicker(!showColorPicker)}
             >
-              Open in Explorer
+              Set Color
             </ContextMenuItem>
-            {contextMenuNode && !getSoftwareFolderIcon(contextMenuNode.name) && (
-              <>
-                <ContextMenuDivider />
-                <ContextMenuItem
-                  icon={<IconPalette className="w-4 h-4" stroke={1.5} />}
-                  onClick={() => setShowColorPicker(!showColorPicker)}
-                >
-                  Set Color
-                </ContextMenuItem>
-              </>
-            )}
-            {showColorPicker && contextMenuNode && (
-              <ContextMenuColorPicker
-                colors={FOLDER_COLORS}
-                label="Set Color"
-                onSelect={(color: string) => handleSetFolderColor(contextMenuNode.path, color)}
-                onClear={folderColors.has(contextMenuNode.path) ? () => handleRemoveFolderColor(contextMenuNode.path) : undefined}
-              />
-            )}
           </>
+        )}
+        {showColorPicker && contextMenuNode?.is_dir && (
+          <ContextMenuColorPicker
+            colors={FOLDER_COLORS}
+            label="Set Color"
+            onSelect={(color: string) => handleSetFolderColor(contextMenuNode.path, color)}
+            onClear={folderColors.has(contextMenuNode.path) ? () => handleRemoveFolderColor(contextMenuNode.path) : undefined}
+          />
         )}
       </ContextMenu>
     </div>

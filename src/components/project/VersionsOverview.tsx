@@ -18,7 +18,8 @@ interface ProjectVersion {
   name: string;
   path: string;
   software: string[];
-  created_at: number; // Unix timestamp in seconds
+  created_at: number;  // Unix timestamp in seconds
+  modified_at: number; // Unix timestamp in seconds
   is_versioned: boolean; // true if file has _v### pattern
 }
 
@@ -620,6 +621,19 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
       return true;
     });
 
+  // Format timestamp to readable date/time
+  const formatDateTime = (timestamp: number) => {
+    if (!timestamp) return 'Unknown';
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   // Version Card Component with optional Blender thumbnail
   const VersionCard = ({ version, isBlendFile, versionMark, onDoubleClick, onContextMenu }: {
     version: ProjectVersion;
@@ -631,12 +645,15 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     const blendThumbnail = useBlendThumbnail(isBlendFile && blendPreviewsEnabled ? version.path : undefined);
     const hasThumbnail = isBlendFile && blendPreviewsEnabled && blendThumbnail;
 
+    // Build tooltip with file dates
+    const tooltip = `${version.name}\nCreated: ${formatDateTime(version.created_at)}\nModified: ${formatDateTime(version.modified_at)}`;
+
     return (
       <div
         className={`relative flex flex-col flex-shrink-0 ${hasThumbnail ? 'w-36' : 'w-32'} cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none`}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
-        title="Double-click to open"
+        title={tooltip}
       >
         {/* Color mark indicator */}
         {versionMark && (

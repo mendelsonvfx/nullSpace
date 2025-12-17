@@ -1,6 +1,6 @@
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { useProjectStore } from '../../store/projectStore';
-import { IconCircleCheckFilled, IconCircleDotted, IconCircle } from '@tabler/icons-react';
+import { IconCircleCheckFilled, IconClock, IconMoon, IconCircle } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
 
 interface TodoItem {
@@ -107,15 +107,15 @@ function ShotRow({ shot, projectId: _projectId, projectPath, onClick }: ShotRowP
     }
     if (shot.wip) {
       return {
-        icon: <IconCircleDotted size={16} className="text-yellow-500" />,
+        icon: <IconClock size={16} className="text-yellow-500" />,
         text: 'In Progress',
         color: 'text-yellow-500'
       };
     }
     return {
-      icon: <IconCircleDotted size={16} className="text-zinc-600" />,
+      icon: <IconMoon size={16} className="text-zinc-500" />,
       text: 'Not Started',
-      color: 'text-zinc-600'
+      color: 'text-zinc-500'
     };
   };
 

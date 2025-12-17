@@ -5,7 +5,8 @@ export interface ProjectVersion {
   name: string;
   path: string;
   software: string[];
-  created_at: number; // Unix timestamp in seconds
+  created_at: number;  // Unix timestamp in seconds
+  modified_at: number; // Unix timestamp in seconds
   is_versioned: boolean; // true if file has _v### pattern
 }
 

@@ -19,6 +19,9 @@ import {
   IconBox,
   IconStack2,
   IconMoon,
+  IconFilter,
+  IconSortAscendingNumbers,
+  IconClockHour3,
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
@@ -298,7 +301,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
             {shot.versions > 0 && (
               <div className="flex items-center gap-1 text-text-secondary mt-0.5">
                 <IconVersions size={11} />
-                <span className="text-xs">{shot.versions} version{shot.versions !== 1 ? 's' : ''}</span>
+                <span className="text-xs">Version {shot.versions}</span>
               </div>
             )}
           </div>
@@ -899,6 +902,9 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     }
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<'number-asc' | 'number-desc' | 'created-asc' | 'created-desc'>('number-asc');
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
   const [animatingShotId, setAnimatingShotId] = useState<string | null>(null);
   const [isContainerHovered, setIsContainerHovered] = useState(false);
   const [isShotsAreaHovered, setIsShotsAreaHovered] = useState(false);
@@ -1560,6 +1566,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
     return () => scrollElement.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Close sort menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setShowSortMenu(false);
+      }
+    };
+
+    if (showSortMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSortMenu]);
+
   // Calculate highest version number for each shot (sceneId + shotNumber combination)
   const shotVersions = useMemo(() => {
     // Map key: "sceneId_shotNumber" -> highest version number
@@ -1618,10 +1638,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
 
     return project.scenes.map(scene => {
       // Get shots for this scene (only if project has shots enabled)
-      const sceneShots = project.hasShots && project.shots
+      let sceneShots = project.hasShots && project.shots
         ? project.shots
             .filter(shot => shot.sceneId === scene.id)
-            .map(shot => ({
+            .map((shot) => ({
               id: shot.id,
               name: shot.name,
               sceneId: shot.sceneId as string, // sceneId is guaranteed to be string here due to filter
@@ -1630,8 +1650,28 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
               completed: shot.completed,
               preview: shot.preview,
               number: shot.number,
+              createdIndex: project.shots!.findIndex(s => s.id === shot.id), // Original array index
             }))
         : [];
+
+      // Sort shots within scene
+      if (sceneShots.length > 0) {
+        sceneShots = [...sceneShots];
+        switch (sortBy) {
+          case 'number-asc':
+            sceneShots.sort((a, b) => a.number - b.number);
+            break;
+          case 'number-desc':
+            sceneShots.sort((a, b) => b.number - a.number);
+            break;
+          case 'created-asc':
+            sceneShots.sort((a, b) => a.createdIndex - b.createdIndex);
+            break;
+          case 'created-desc':
+            sceneShots.sort((a, b) => b.createdIndex - a.createdIndex);
+            break;
+        }
+      }
 
       // Calculate scene status based on shots (only if has shots)
       let sceneWip = scene.wip || false;
@@ -1663,14 +1703,14 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
         shots: sceneShots,
       };
     });
-  }, [project, shotVersions]);
+  }, [project, shotVersions, sortBy]);
 
   // Flat shots list for shots-only mode (no scenes)
   const flatShots = useMemo(() => {
     if (!project?.hasShots || project.hasScenes || !project.shots) return [];
 
-    // Map shots to include versions count for shots-only mode
-    return project.shots.map(shot => ({
+    // Map shots to include versions count and creation index for shots-only mode
+    const shotsWithIndex = project.shots.map((shot, index) => ({
       id: shot.id,
       name: shot.name,
       sceneId: shot.sceneId,
@@ -1679,8 +1719,28 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
       wip: shot.wip,
       completed: shot.completed,
       preview: shot.preview,
+      createdIndex: index, // Array position = creation order
     }));
-  }, [project, shotVersions]);
+
+    // Sort based on sortBy
+    const sorted = [...shotsWithIndex];
+    switch (sortBy) {
+      case 'number-asc':
+        sorted.sort((a, b) => a.number - b.number);
+        break;
+      case 'number-desc':
+        sorted.sort((a, b) => b.number - a.number);
+        break;
+      case 'created-asc':
+        sorted.sort((a, b) => a.createdIndex - b.createdIndex);
+        break;
+      case 'created-desc':
+        sorted.sort((a, b) => b.createdIndex - a.createdIndex);
+        break;
+    }
+
+    return sorted;
+  }, [project, shotVersions, sortBy]);
 
   // Filter scenes and shots based on search
   const filteredScenes = useMemo(() => {
@@ -1756,34 +1816,34 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
         </div>
         {/* View mode toggle buttons */}
         <div className="flex items-center gap-0.5 bg-card-bg rounded-button p-0.5 flex-shrink-0">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1 rounded-badge transition-colors ${
-                viewMode === 'grid'
-                  ? 'bg-accent text-white'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-hover-bg'
-              }`}
-              title="Grid view"
-            >
-              <IconLayoutGrid size={13} />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-1 rounded-badge transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-accent text-white'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-hover-bg'
-              }`}
-              title="List view"
-            >
-              <IconLayoutList size={13} />
-            </button>
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`p-1 rounded-badge transition-colors ${
+              viewMode === 'grid'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary hover:bg-hover-bg'
+            }`}
+            title="Grid view"
+          >
+            <IconLayoutGrid size={13} />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`p-1 rounded-badge transition-colors ${
+              viewMode === 'list'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary hover:bg-hover-bg'
+            }`}
+            title="List view"
+          >
+            <IconLayoutList size={13} />
+          </button>
         </div>
       </div>
 
-      {/* Search */}
-      <div className="mb-3">
-        <div className="relative">
+      {/* Search with Sort button */}
+      <div className="mb-3 flex items-center gap-2">
+        <div className="relative flex-1">
           <IconSearch
             size={14}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
@@ -1801,6 +1861,45 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '' }
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-3 py-2 bg-card-bg border border-border-primary rounded-button text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
           />
+        </div>
+
+        {/* Sort button */}
+        <div className="relative" ref={sortMenuRef}>
+          <button
+            onClick={() => setShowSortMenu(!showSortMenu)}
+            className={`p-2 rounded-button transition-colors border ${
+              showSortMenu
+                ? 'bg-hover-bg border-border-secondary text-text-primary'
+                : 'bg-card-bg border-border-primary text-text-secondary hover:text-text-primary hover:bg-hover-bg hover:border-border-secondary'
+            }`}
+            title="Sort shots"
+          >
+            <IconFilter size={14} />
+          </button>
+
+          {/* Sort dropdown menu */}
+          {showSortMenu && (
+            <div className="absolute top-full right-0 mt-1 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 z-50 min-w-[140px] space-y-0.5">
+              <button
+                onClick={() => { setSortBy('number-asc'); setShowSortMenu(false); }}
+                className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 rounded-md transition-colors ${
+                  sortBy === 'number-asc' ? 'bg-white/10 text-text-primary' : 'hover:bg-white/10 text-text-primary'
+                }`}
+              >
+                <IconSortAscendingNumbers size={14} />
+                <span>By Number</span>
+              </button>
+              <button
+                onClick={() => { setSortBy('created-asc'); setShowSortMenu(false); }}
+                className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 rounded-md transition-colors ${
+                  sortBy === 'created-asc' ? 'bg-white/10 text-text-primary' : 'hover:bg-white/10 text-text-primary'
+                }`}
+              >
+                <IconClockHour3 size={14} />
+                <span>By Created</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

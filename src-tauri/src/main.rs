@@ -1613,7 +1613,8 @@ struct ProjectVersion {
     name: String,
     path: String,
     software: Vec<String>,
-    created_at: u64, // Unix timestamp in seconds
+    created_at: u64,  // Unix timestamp in seconds
+    modified_at: u64, // Unix timestamp in seconds
     is_versioned: bool, // true if file has _v### pattern, false otherwise
 }
 
@@ -1695,17 +1696,25 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
 
                         // Only include versioned files that start with project name
                         if is_versioned && starts_with_base {
-                            // Get file creation time
-                            let created_at = if let Ok(metadata) = entry.metadata() {
-                                if let Ok(created) = metadata.created() {
+                            // Get file creation and modification time
+                            let (created_at, modified_at) = if let Ok(metadata) = entry.metadata() {
+                                let created = if let Ok(created) = metadata.created() {
                                     created.duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default()
                                         .as_secs()
                                 } else {
                                     0
-                                }
+                                };
+                                let modified = if let Ok(modified) = metadata.modified() {
+                                    modified.duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs()
+                                } else {
+                                    0
+                                };
+                                (created, modified)
                             } else {
-                                0
+                                (0, 0)
                             };
 
                             versions.push(ProjectVersion {
@@ -1713,6 +1722,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                                 path: file_path.to_string_lossy().to_string(),
                                 software: vec![software_name.unwrap().to_string()],
                                 created_at,
+                                modified_at,
                                 is_versioned: true, // All files here are versioned
                             });
                         }
