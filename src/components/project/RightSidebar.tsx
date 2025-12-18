@@ -14,7 +14,7 @@ export function RightSidebar({ project, shotsBrowserDocked = false, onToggleDock
   return (
     <div className="w-80 bg-sidebar-bg border-l border-border-primary border-t border-border-primary flex flex-col">
       {shotsBrowserDocked && (
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col">
           <ShotsBrowser
             projectId={project.id}
             className="h-full"
@@ -23,7 +23,7 @@ export function RightSidebar({ project, shotsBrowserDocked = false, onToggleDock
           />
         </div>
       )}
-      <div className={`${shotsBrowserDocked ? 'flex-1 min-h-0' : 'flex-1'} p-4`}>
+      <div className={`${shotsBrowserDocked ? 'flex-1 min-h-0' : 'flex-1'} p-4 h-full`}>
         <TreeView project={project} showHidden={showHidden} onToggleHidden={() => setShowHidden(!showHidden)} />
       </div>
     </div>
