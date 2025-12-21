@@ -52,12 +52,13 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
   useEffect(() => {
     if (useDefaultPath && formData.name) {
       const projectName = formData.name.replace(/\s+/g, '');
+      // Path now includes category folder
       setFormData(prev => ({
         ...prev,
-        path: `${defaultProjectsPath}\\${projectName}`
+        path: `${defaultProjectsPath}\\${selectedCategory}\\${projectName}`
       }));
     }
-  }, [useDefaultPath, formData.name, defaultProjectsPath]);
+  }, [useDefaultPath, formData.name, defaultProjectsPath, selectedCategory]);
 
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {

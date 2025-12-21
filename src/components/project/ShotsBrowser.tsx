@@ -321,7 +321,6 @@ interface SceneCardProps {
   selectedShotId: string | null;
   viewMode: 'grid' | 'list';
   project: any; // Full project object to check special context state
-  onSetSpecialContext: (contextType: 'asset' | 'compose', sceneId: string) => void;
   onToggle: () => void;
   onShotSelect: (shotId: string) => void;
   onSceneClick: (sceneId: string) => void;
@@ -346,7 +345,6 @@ const SceneCard: React.FC<SceneCardProps> = ({
   selectedShotId,
   viewMode,
   project,
-  onSetSpecialContext,
   onToggle,
   onShotSelect,
   onSceneClick,
@@ -506,43 +504,6 @@ const SceneCard: React.FC<SceneCardProps> = ({
             )}
           </div>
         </div>
-
-        {/* Global Folders */}
-        <div className="px-3 py-1.5 grid grid-cols-2 gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSetSpecialContext('asset', scene.id);
-            }}
-            className={`flex items-center justify-center gap-1 px-2 py-1.5 text-xs select-none transition-all cursor-pointer rounded-badge ${
-              project?.currentSpecialContextId &&
-              project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.type === 'asset' &&
-              project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.sceneId === scene.id
-                ? 'bg-accent/20 border border-accent text-text-primary'
-                : 'bg-sidebar-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary'
-            }`}
-          >
-            <IconBox size={12} stroke={1.5} className="text-text-secondary flex-shrink-0" />
-            <span className="text-text-primary font-medium">Assets</span>
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSetSpecialContext('compose', scene.id);
-            }}
-            className={`flex items-center justify-center gap-1 px-2 py-1.5 text-xs select-none transition-all cursor-pointer rounded-badge ${
-              project?.currentSpecialContextId &&
-              project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.type === 'compose' &&
-              project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.sceneId === scene.id
-                ? 'bg-accent/20 border border-accent text-text-primary'
-                : 'bg-sidebar-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary'
-            }`}
-          >
-            <IconStack2 size={12} stroke={1.5} className="text-text-secondary flex-shrink-0" />
-            <span className="text-text-primary font-medium">Compose</span>
-          </button>
-        </div>
-
 
         {/* Shots container */}
         <div
@@ -720,41 +681,6 @@ const SceneCard: React.FC<SceneCardProps> = ({
           </div>
         </div>
 
-        {/* Bottom row: Global Folders buttons */}
-        <div className="mt-2 grid grid-cols-2 gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSetSpecialContext('asset', scene.id);
-            }}
-            className={`flex items-center justify-center gap-1 px-1.5 py-1 text-xs select-none transition-all cursor-pointer rounded-badge ${
-              project?.currentSpecialContextId &&
-              project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.type === 'asset' &&
-              project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.sceneId === scene.id
-                ? 'bg-accent/20 border border-accent text-text-primary'
-                : 'bg-sidebar-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary'
-            }`}
-          >
-            <IconBox size={12} stroke={1.5} className="text-text-secondary flex-shrink-0" />
-            <span className="text-text-primary font-medium">Assets</span>
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSetSpecialContext('compose', scene.id);
-            }}
-            className={`flex items-center justify-center gap-1 px-1.5 py-1 text-xs select-none transition-all cursor-pointer rounded-badge ${
-              project?.currentSpecialContextId &&
-              project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.type === 'compose' &&
-              project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.sceneId === scene.id
-                ? 'bg-accent/20 border border-accent text-text-primary'
-                : 'bg-sidebar-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary'
-            }`}
-          >
-            <IconStack2 size={12} stroke={1.5} className="text-text-secondary flex-shrink-0" />
-            <span className="text-text-primary font-medium">Compose</span>
-          </button>
-        </div>
       </div>
 
       {/* Shots container */}
@@ -2017,7 +1943,6 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                     selectedShotId={project?.currentShotId || null}
                     viewMode={viewMode}
                     project={project}
-                    onSetSpecialContext={(contextType, sceneId) => setSpecialContext(projectId, contextType, sceneId)}
                     onToggle={() => toggleScene(scene.id)}
                     onShotSelect={handleShotSelect}
                     onSceneClick={handleSceneClick}

@@ -528,7 +528,15 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
       }
     }
 
-    const fallbackPath = `${project.path}\\Render\\${typeFolder}\\${relativePath}`;
+    // Fallback path depends on whether project has scenes
+    let fallbackPath: string;
+    if (project.hasScenes && currentScene) {
+      // New hierarchy: Software/SCENE_CODE/Render/Preview/
+      fallbackPath = `${project.path}\\Blender\\${currentScene.name}\\Render\\${typeFolder}\\${relativePath}`;
+    } else {
+      // Flat hierarchy: Software/Render/Preview/
+      fallbackPath = `${project.path}\\Blender\\Render\\${typeFolder}\\${relativePath}`;
+    }
     return fallbackPath;
   };
 

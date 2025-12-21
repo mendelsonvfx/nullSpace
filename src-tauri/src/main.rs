@@ -267,6 +267,8 @@ struct LaunchSoftwareInput {
     shot_number: Option<u32>,
     #[serde(rename = "specialContext")]
     special_context: Option<String>,
+    #[serde(rename = "assetName")]
+    asset_name: Option<String>,
 }
 
 fn get_software_folder_name(software: &str) -> &str {
@@ -286,21 +288,35 @@ fn get_software_folder_name(software: &str) -> &str {
     }
 }
 
+fn read_project_metadata(project_path: &PathBuf) -> Result<Project, String> {
+    let metadata_path = project_path.join(".project-metadata.json");
+    let metadata_content = fs::read_to_string(&metadata_path)
+        .map_err(|e| format!("Failed to read project metadata: {}", e))?;
+    serde_json::from_str(&metadata_content)
+        .map_err(|e| format!("Failed to parse project metadata: {}", e))
+}
+
+fn sanitize_folder_name(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect()
+}
+
 fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> Vec<FolderItem> {
     match software.to_lowercase().as_str() {
         "blender" => vec![
             FolderItem::Nested {
                 name: "Geo".to_string(),
                 subfolders: vec![
-                    FolderItem::Simple("Exported".to_string()),
-                    FolderItem::Simple("Imported".to_string()),
+                    FolderItem::Simple("Export".to_string()),
+                    FolderItem::Simple("Import".to_string()),
                 ],
             },
             FolderItem::Nested {
                 name: "Tex".to_string(),
                 subfolders: vec![
-                    FolderItem::Simple("Exported".to_string()),
-                    FolderItem::Simple("Imported".to_string()),
+                    FolderItem::Simple("Export".to_string()),
+                    FolderItem::Simple("Import".to_string()),
                     FolderItem::Simple("Plates".to_string()),
                 ],
             },
@@ -325,15 +341,15 @@ fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> V
             FolderItem::Nested {
                 name: "Geo".to_string(),
                 subfolders: vec![
-                    FolderItem::Simple("Exported".to_string()),
-                    FolderItem::Simple("Imported".to_string()),
+                    FolderItem::Simple("Export".to_string()),
+                    FolderItem::Simple("Import".to_string()),
                 ],
             },
             FolderItem::Nested {
                 name: "Tex".to_string(),
                 subfolders: vec![
-                    FolderItem::Simple("Exported".to_string()),
-                    FolderItem::Simple("Imported".to_string()),
+                    FolderItem::Simple("Export".to_string()),
+                    FolderItem::Simple("Import".to_string()),
                 ],
             },
             FolderItem::Nested {
@@ -452,21 +468,35 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
     fs::create_dir_all(&project_path)
         .map_err(|e| format!("Failed to create project directory: {}", e))?;
 
+    let has_scenes = input.has_scenes.unwrap_or(false);
+
     for software in &input.software {
-        let software_folders = get_folder_template(
-            software,
-            input.has_scenes.unwrap_or(false),
-            input.has_shots.unwrap_or(false)
-        );
         let folder_name = get_software_folder_name(software);
         let software_path = project_path.join(folder_name);
 
-        for folder_item in software_folders {
-            create_folder_item(&software_path, &folder_item)?;
+        if has_scenes {
+            // For projects with scenes: create only empty software folders
+            // Full hierarchy will be created inside scene folders when scenes are added
+            fs::create_dir_all(&software_path)
+                .map_err(|e| format!("Failed to create software folder {}: {}", folder_name, e))?;
+        } else {
+            // For projects without scenes: create full folder hierarchy (flat structure)
+            let software_folders = get_folder_template(
+                software,
+                false,
+                input.has_shots.unwrap_or(false)
+            );
+            for folder_item in software_folders {
+                create_folder_item(&software_path, &folder_item)?;
+            }
         }
     }
 
-    let common_folders = vec!["_GlobalReferences", "_GlobalAssets"];
+    // Common folders
+    let mut common_folders = vec!["_GlobalReferences", "_GlobalAssets"];
+    if has_scenes {
+        common_folders.push("_GlobalCompose");
+    }
     for folder in common_folders {
         fs::create_dir_all(project_path.join(folder))
             .map_err(|e| format!("Failed to create common folder {}: {}", folder, e))?;
@@ -674,14 +704,15 @@ struct LaunchResult {
 fn find_process_with_file(_file_path: &str, process_name: &str) -> Option<u32> {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    println!("[PID_SEARCH] Starting search for process containing: '{}'", process_name);
+    // Support multiple patterns separated by | (e.g., "houdin|hindie" for Houdini)
+    let patterns: Vec<&str> = process_name.split('|').map(|s| s.trim()).collect();
+    println!("[PID_SEARCH] Starting search for process matching patterns: {:?}", patterns);
 
     let mut system = System::new_all();
-    let search_name = process_name.to_lowercase();
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
     // Check if this is Photoshop/After Effects (they use launcher processes)
-    let is_adobe_software = search_name.contains("photoshop") || search_name.contains("afterfx");
+    let is_adobe_software = patterns.iter().any(|p| p.contains("photoshop") || p.contains("afterfx"));
 
     // Wait up to 20 seconds for process to start (Houdini can be very slow)
     for attempt in 0..40 {
@@ -693,7 +724,8 @@ fn find_process_with_file(_file_path: &str, process_name: &str) -> Option<u32> {
 
         for (pid, process) in system.processes() {
             let proc_name = process.name().to_lowercase();
-            if proc_name.contains(&search_name) {
+            // Check if process name matches ANY of the patterns
+            if patterns.iter().any(|pattern| proc_name.contains(&pattern.to_lowercase())) {
                 let start_time = process.start_time();
                 // If process was started recently (within last 60 seconds for slow-starting apps like Houdini)
                 // Use checked subtraction to avoid underflow if start_time > now
@@ -762,7 +794,7 @@ impl SoftwareLaunchConfig {
             "hip" | "hiplc" | "hipnc" => SoftwareLaunchConfig {
                 use_explorer: true,
                 needs_pid_lookup: true,
-                process_name: "houdin", // Matches "houdini.exe" or "houdinifx.exe"
+                process_name: "houdin|hindie", // Matches houdinifx.exe, houdini.exe, hindie.steam.exe (Steam version)
             },
             "aep" => SoftwareLaunchConfig {
                 use_explorer: false,
@@ -789,7 +821,7 @@ impl SoftwareLaunchConfig {
             SoftwareLaunchConfig {
                 use_explorer: true,
                 needs_pid_lookup: true,
-                process_name: "houdin",
+                process_name: "houdin|hindie", // Matches houdinifx.exe, houdini.exe, hindie.steam.exe (Steam version)
             }
         } else if software_lower == "after effects" || software_lower == "after-effects" {
             SoftwareLaunchConfig {
@@ -889,18 +921,33 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
         _ => (".txt", "Unknown"), // fallback
     };
 
-    // Software folder path
-    let software_path = project_path.join(software_folder);
+    // Determine target folder based on special context or scene
+    let software_path = if let Some(ref context) = input.special_context {
+        // Special contexts: Asset -> _GlobalAssets/, Compose -> _GlobalCompose/
+        let context_folder = match context.to_lowercase().as_str() {
+            "asset" => "_GlobalAssets",
+            "comp" | "compose" => "_GlobalCompose",
+            _ => software_folder,
+        };
+        project_path.join(context_folder)
+    } else if let Some(ref scene_name) = input.scene_name {
+        // Projects with scenes: Software/SCENE_CODE/
+        let scene_folder = sanitize_folder_name(scene_name);
+        project_path.join(software_folder).join(scene_folder)
+    } else {
+        // Projects without scenes: Software/
+        project_path.join(software_folder)
+    };
 
-    // Ensure software directory exists
+    // Ensure target directory exists
     if !software_path.exists() {
         fs::create_dir_all(&software_path)
-            .map_err(|e| format!("Failed to create software directory: {}", e))?;
+            .map_err(|e| format!("Failed to create target directory: {}", e))?;
     }
 
     // Build base name using file_naming module
     let base_name_with_scene_shot = if let (Some(scene_name), Some(shot_num)) = (&input.scene_name, input.shot_number) {
-        // Use new naming format: PROJECT_SCENE_SHOT
+        // Use new naming format: PROJECT_SCENE_SHOT or PROJECT_SCENE_SHOT_CONTEXT
         let components = file_naming::FileNameComponents::new(
             input.project_name.clone(),
             scene_name.clone(),
@@ -910,6 +957,23 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
             String::new(),
         );
         components.get_base_name()
+    } else if let Some(ref context) = input.special_context {
+        // Special context without scene/shot: PROJECT_CONTEXT or PROJECT_CONTEXT_ASSETNAME
+        let project_base = input.project_name.replace(" ", "").to_uppercase();
+        let context_suffix = context.to_uppercase();
+        if let Some(ref asset_name) = input.asset_name {
+            // Sanitize: remove anything except alphanumeric
+            let clean_name: String = asset_name
+                .chars()
+                .filter(|c| c.is_alphanumeric())
+                .collect::<String>()
+                .to_uppercase();
+            // PROJECT_CONTEXT_ASSETNAME (e.g., NEW20_ASSET_CAR)
+            format!("{}_{}_{}", project_base, context_suffix, clean_name)
+        } else {
+            // Old format: PROJECT_CONTEXT (e.g., NEW20_ASSET)
+            format!("{}_{}", project_base, context_suffix)
+        }
     } else {
         // Fallback to simple project name if no scene/shot
         input.project_name.replace(" ", "").to_uppercase()
@@ -1468,7 +1532,23 @@ async fn set_project_thumbnail(project_path: String, image_path: String) -> Resu
         return Err("Source image does not exist".to_string());
     }
 
-    // Delete old thumbnails (with any extension and timestamp)
+    // Create .thumbnails directory if it doesn't exist
+    let thumbnails_dir = project_dir.join(".thumbnails");
+    fs::create_dir_all(&thumbnails_dir)
+        .map_err(|e| format!("Failed to create .thumbnails directory: {}", e))?;
+
+    // Delete old project thumbnails (with any extension and timestamp)
+    if let Ok(entries) = fs::read_dir(&thumbnails_dir) {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let name_str = file_name.to_string_lossy();
+            if name_str.starts_with("project_thumbnail") {
+                let _ = fs::remove_file(entry.path()); // Ignore errors
+            }
+        }
+    }
+
+    // Also clean up old thumbnails from project root (migration)
     if let Ok(entries) = fs::read_dir(&project_dir) {
         for entry in entries.flatten() {
             let file_name = entry.file_name();
@@ -1491,14 +1571,15 @@ async fn set_project_thumbnail(project_path: String, image_path: String) -> Resu
         .unwrap()
         .as_millis();
 
-    let thumbnail_name = format!(".thumbnail_{}.{}", timestamp, extension);
-    let dest_path = project_dir.join(&thumbnail_name);
+    let thumbnail_name = format!("project_thumbnail_{}.{}", timestamp, extension);
+    let dest_path = thumbnails_dir.join(&thumbnail_name);
 
     // Copy the file
     fs::copy(&source_path, &dest_path)
         .map_err(|e| format!("Failed to copy thumbnail: {}", e))?;
 
-    Ok(thumbnail_name)
+    // Return relative path from project root
+    Ok(format!(".thumbnails/{}", thumbnail_name))
 }
 
 #[tauri::command]
@@ -1622,19 +1703,11 @@ struct ProjectVersion {
 async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion>, String> {
     let project_dir = PathBuf::from(&project_path);
 
-    // Get project name from metadata
-    let metadata_path = project_dir.join(".project-metadata.json");
-    let project_name = if let Ok(content) = fs::read_to_string(&metadata_path) {
-        if let Ok(project) = serde_json::from_str::<Project>(&content) {
-            project.name
-        } else {
-            return Err("Failed to parse project metadata".to_string());
-        }
-    } else {
-        return Err("Project metadata not found".to_string());
-    };
+    // Get project metadata
+    let project = read_project_metadata(&project_dir)?;
+    let base_name = project.name.replace(" ", "").to_uppercase();
+    let has_scenes = project.has_scenes.unwrap_or(false);
 
-    let base_name = project_name.replace(" ", "").to_uppercase();
     let mut versions = Vec::new();
 
     // List of software folders to search
@@ -1643,14 +1716,13 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
         "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
     ];
 
-    // Search in each software folder
-    for software_folder in software_folders {
-        let software_dir = project_dir.join(software_folder);
-        if !software_dir.exists() {
-            continue;
-        }
-
-        if let Ok(entries) = fs::read_dir(&software_dir) {
+    // Helper function to scan a directory for version files
+    fn scan_directory_for_versions(
+        dir: &PathBuf,
+        base_name: &str,
+        versions: &mut Vec<ProjectVersion>,
+    ) {
+        if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 if let Ok(file_type) = entry.file_type() {
                     if file_type.is_file() {
@@ -1692,7 +1764,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
 
                         // Check if file is versioned using file_naming module
                         let is_versioned = file_naming::FileNameComponents::is_versioned(&file_name_str);
-                        let starts_with_base = file_name_str.starts_with(&base_name);
+                        let starts_with_base = file_name_str.starts_with(base_name);
 
                         // Only include versioned files that start with project name
                         if is_versioned && starts_with_base {
@@ -1723,12 +1795,50 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                                 software: vec![software_name.unwrap().to_string()],
                                 created_at,
                                 modified_at,
-                                is_versioned: true, // All files here are versioned
+                                is_versioned: true,
                             });
                         }
                     }
                 }
             }
+        }
+    }
+
+    // Search in each software folder
+    for software_folder in software_folders {
+        let software_dir = project_dir.join(software_folder);
+        if !software_dir.exists() {
+            continue;
+        }
+
+        if has_scenes {
+            // For projects with scenes: scan Software/SCENE_CODE/ directories
+            if let Ok(entries) = fs::read_dir(&software_dir) {
+                for entry in entries.flatten() {
+                    if let Ok(file_type) = entry.file_type() {
+                        if file_type.is_dir() {
+                            let scene_dir = entry.path();
+                            let dir_name = entry.file_name().to_string_lossy().to_string();
+                            // Skip hidden and special folders
+                            if !dir_name.starts_with('.') && !dir_name.starts_with('_') {
+                                scan_directory_for_versions(&scene_dir, &base_name, &mut versions);
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // For projects without scenes: scan Software/ directly
+            scan_directory_for_versions(&software_dir, &base_name, &mut versions);
+        }
+    }
+
+    // Also scan special context folders: _GlobalAssets and _GlobalCompose
+    let special_folders = vec!["_GlobalAssets", "_GlobalCompose"];
+    for special_folder in special_folders {
+        let special_dir = project_dir.join(special_folder);
+        if special_dir.exists() {
+            scan_directory_for_versions(&special_dir, &base_name, &mut versions);
         }
     }
 
@@ -3905,45 +4015,71 @@ async fn get_project_outputs(
     let project_dir = PathBuf::from(&project_path);
     let mut outputs = Vec::new();
 
+    // Read project metadata to check has_scenes
+    let project = read_project_metadata(&project_dir)?;
+    let has_scenes = project.has_scenes.unwrap_or(false);
+
     // Define software folders to scan
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
         "Substance", "Unreal", "Unity", "ZBrush", "Marmoset", "Photoshop"
     ];
 
-    // Scan each software folder for Render/Preview and Render/Final
     for software in &software_folders {
         let software_dir = project_dir.join(software);
         if !software_dir.exists() {
             continue;
         }
 
-        // Check Render/Preview (recursively scan all subdirs)
-        let preview_dir = software_dir.join("Render").join("Preview");
-        if preview_dir.exists() {
-            scan_output_dir_recursive(&preview_dir, software, "preview", &mut outputs, 0, &scene_filter, &shot_filter);
-        }
+        // Determine render folder name (Render for most, Output for AfterEffects)
+        let render_folder = if *software == "AfterEffects" { "Output" } else { "Render" };
 
-        // Check Render/Final (recursively scan all subdirs)
-        let final_dir = software_dir.join("Render").join("Final");
-        if final_dir.exists() {
-            scan_output_dir_recursive(&final_dir, software, "final", &mut outputs, 0, &scene_filter, &shot_filter);
-        }
-    }
+        if has_scenes {
+            // New hierarchy: Software/SCENE_CODE/Render/Preview/
+            // Scan all scene folders
+            if let Ok(entries) = fs::read_dir(&software_dir) {
+                for entry in entries.flatten() {
+                    let entry_path = entry.path();
+                    if entry_path.is_dir() {
+                        let scene_name = entry.file_name().to_string_lossy().to_string();
 
-    // Also check for Output/Preview and Output/Final (for After Effects, recursively)
-    let output_dir = project_dir.join("AfterEffects").join("Output");
-    if output_dir.exists() {
-        // Preview
-        let preview_dir = output_dir.join("Preview");
-        if preview_dir.exists() {
-            scan_output_dir_recursive(&preview_dir, "AfterEffects", "preview", &mut outputs, 0, &scene_filter, &shot_filter);
-        }
+                        // Skip hidden folders and special folders
+                        if scene_name.starts_with('.') || scene_name.starts_with('_') {
+                            continue;
+                        }
 
-        // Final
-        let final_dir = output_dir.join("Final");
-        if final_dir.exists() {
-            scan_output_dir_recursive(&final_dir, "AfterEffects", "final", &mut outputs, 0, &scene_filter, &shot_filter);
+                        // Apply scene filter
+                        if let Some(ref filter) = scene_filter {
+                            if !scene_name.eq_ignore_ascii_case(filter) {
+                                continue;
+                            }
+                        }
+
+                        // Check Render/Preview inside scene folder
+                        let preview_dir = entry_path.join(render_folder).join("Preview");
+                        if preview_dir.exists() {
+                            scan_output_dir_recursive(&preview_dir, software, "preview", &mut outputs, 0, &None, &shot_filter);
+                        }
+
+                        // Check Render/Final inside scene folder
+                        let final_dir = entry_path.join(render_folder).join("Final");
+                        if final_dir.exists() {
+                            scan_output_dir_recursive(&final_dir, software, "final", &mut outputs, 0, &None, &shot_filter);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Flat hierarchy: Software/Render/Preview/
+            let preview_dir = software_dir.join(render_folder).join("Preview");
+            if preview_dir.exists() {
+                scan_output_dir_recursive(&preview_dir, software, "preview", &mut outputs, 0, &scene_filter, &shot_filter);
+            }
+
+            let final_dir = software_dir.join(render_folder).join("Final");
+            if final_dir.exists() {
+                scan_output_dir_recursive(&final_dir, software, "final", &mut outputs, 0, &scene_filter, &shot_filter);
+            }
         }
     }
 
@@ -3954,12 +4090,14 @@ async fn get_project_outputs(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CreateSceneFoldersInput {
     project_path: String,
     scene_code: String, // e.g., "RUNB", "INTRO" (no SC_ prefix)
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CreateShotFoldersInput {
     project_path: String,
     scene_code: String, // e.g., "RUNB", "INTRO" (no SC_ prefix)
@@ -3970,15 +4108,15 @@ struct CreateShotFoldersInput {
 fn create_scene_folders(input: CreateSceneFoldersInput) -> Result<(), String> {
     let project_path = PathBuf::from(&input.project_path);
 
-    // List of software and their render/output folders
-    let software_configs = vec![
-        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
-    ];
+    // Read project metadata to get software list
+    let project = read_project_metadata(&project_path)?;
 
-    for (software, folders) in software_configs {
-        let software_path = project_path.join(software);
+    let scene_folder_name = sanitize_folder_name(&input.scene_code);
+
+    // Create scene folder inside each software folder with full hierarchy
+    for software in &project.software {
+        let software_folder_name = get_software_folder_name(&software.name);
+        let software_path = project_path.join(&software_folder_name);
 
         // Create software directory if it doesn't exist
         if !software_path.exists() {
@@ -3986,12 +4124,20 @@ fn create_scene_folders(input: CreateSceneFoldersInput) -> Result<(), String> {
                 .map_err(|e| format!("Failed to create software folder {}: {}", software_path.display(), e))?;
         }
 
-        for folder in folders {
-            let scene_folder = software_path.join(folder).join(&input.scene_code);
-            fs::create_dir_all(&scene_folder)
-                .map_err(|e| format!("Failed to create scene folder {}: {}", scene_folder.display(), e))?;
+        // Create scene folder inside software folder: Software/SCENE_CODE/
+        let scene_path = software_path.join(&scene_folder_name);
+
+        // Get full folder template for this software and create inside scene folder
+        let software_folders = get_folder_template(&software.name, true, project.has_shots.unwrap_or(false));
+        for folder_item in software_folders {
+            create_folder_item(&scene_path, &folder_item)?;
         }
     }
+
+    // Create scene folder in _GlobalCompose
+    let global_compose_scene = project_path.join("_GlobalCompose").join(&scene_folder_name);
+    fs::create_dir_all(&global_compose_scene)
+        .map_err(|e| format!("Failed to create scene folder in _GlobalCompose: {}", e))?;
 
     Ok(())
 }
@@ -4000,28 +4146,37 @@ fn create_scene_folders(input: CreateSceneFoldersInput) -> Result<(), String> {
 fn create_shot_folders(input: CreateShotFoldersInput) -> Result<(), String> {
     let project_path = PathBuf::from(&input.project_path);
 
-    // List of software and their render/output folders
-    let software_configs = vec![
-        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
-    ];
+    // Read project metadata to get software list
+    let project = read_project_metadata(&project_path)?;
 
-    for (software, folders) in software_configs {
-        let software_path = project_path.join(software);
+    let scene_folder_name = if !input.scene_code.is_empty() {
+        sanitize_folder_name(&input.scene_code)
+    } else {
+        String::new()
+    };
+    let shot_folder_name = sanitize_folder_name(&input.shot_code);
 
-        // Create software directory if it doesn't exist
-        if !software_path.exists() {
-            fs::create_dir_all(&software_path)
-                .map_err(|e| format!("Failed to create software folder {}: {}", software_path.display(), e))?;
-        }
+    // Render/Output subfolders for shots
+    let render_subfolders = vec!["Preview", "Final", "Passes"];
+    let output_subfolders = vec!["Preview", "Final"];
 
-        for folder in folders {
-            // If scene_code is empty (shots-only mode), create shot folder directly under render/preview
-            let shot_folder = if input.scene_code.is_empty() {
-                software_path.join(folder).join(&input.shot_code)
+    for software in &project.software {
+        let software_folder_name = get_software_folder_name(&software.name);
+        let software_path = project_path.join(&software_folder_name);
+
+        // Determine if this software uses Render or Output folder
+        let (render_folder, subfolders): (&str, &Vec<&str>) = match software.name.to_lowercase().as_str() {
+            "after-effects" | "after effects" => ("Output", &output_subfolders),
+            _ => ("Render", &render_subfolders),
+        };
+
+        for subfolder in subfolders {
+            // New hierarchy: Software/SCENE_CODE/Render/Preview/SHOT_CODE/
+            // Or for shots-only: Software/Render/Preview/SHOT_CODE/
+            let shot_folder = if scene_folder_name.is_empty() {
+                software_path.join(render_folder).join(subfolder).join(&shot_folder_name)
             } else {
-                software_path.join(folder).join(&input.scene_code).join(&input.shot_code)
+                software_path.join(&scene_folder_name).join(render_folder).join(subfolder).join(&shot_folder_name)
             };
             fs::create_dir_all(&shot_folder)
                 .map_err(|e| format!("Failed to create shot folder {}: {}", shot_folder.display(), e))?;
@@ -4037,45 +4192,63 @@ fn rename_scene_folders(
     old_folder_name: String,
     new_folder_name: String,
 ) -> Result<u32, String> {
-    let project_path = PathBuf::from(&project_path);
+    let project_path_buf = PathBuf::from(&project_path);
     let mut renamed_count = 0;
 
-    // List of software and their render/output folders
-    let software_configs = vec![
-        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
-    ];
+    // Read project metadata to get software list
+    let project = read_project_metadata(&project_path_buf)?;
 
-    for (software, folders) in software_configs {
-        let software_path = project_path.join(software);
+    let old_name = sanitize_folder_name(&old_folder_name);
+    let new_name = sanitize_folder_name(&new_folder_name);
+
+    // New hierarchy: scene folders are at Software/SCENE_CODE/ level
+    for software in &project.software {
+        let software_folder_name = get_software_folder_name(&software.name);
+        let software_path = project_path_buf.join(&software_folder_name);
+
         if software_path.exists() {
-            for folder in folders {
-                let old_scene_folder = software_path.join(folder).join(&old_folder_name);
-                let new_scene_folder = software_path.join(folder).join(&new_folder_name);
+            let old_scene_folder = software_path.join(&old_name);
+            let new_scene_folder = software_path.join(&new_name);
 
-                // Only rename if old folder exists and new folder doesn't exist
-                if old_scene_folder.exists() {
-                    if new_scene_folder.exists() {
-                        return Err(format!(
-                            "Cannot rename: destination folder already exists: {}",
-                            new_scene_folder.display()
-                        ));
-                    }
-
-                    fs::rename(&old_scene_folder, &new_scene_folder)
-                        .map_err(|e| {
-                            format!(
-                                "Failed to rename folder from {} to {}: {}",
-                                old_scene_folder.display(),
-                                new_scene_folder.display(),
-                                e
-                            )
-                        })?;
-
-                    renamed_count += 1;
+            // Only rename if old folder exists and new folder doesn't exist
+            if old_scene_folder.exists() {
+                if new_scene_folder.exists() {
+                    return Err(format!(
+                        "Cannot rename: destination folder already exists: {}",
+                        new_scene_folder.display()
+                    ));
                 }
+
+                fs::rename(&old_scene_folder, &new_scene_folder)
+                    .map_err(|e| {
+                        format!(
+                            "Failed to rename folder from {} to {}: {}",
+                            old_scene_folder.display(),
+                            new_scene_folder.display(),
+                            e
+                        )
+                    })?;
+
+                renamed_count += 1;
             }
+        }
+    }
+
+    // Also rename scene folder in _GlobalCompose
+    let global_compose_path = project_path_buf.join("_GlobalCompose");
+    if global_compose_path.exists() {
+        let old_compose_scene = global_compose_path.join(&old_name);
+        let new_compose_scene = global_compose_path.join(&new_name);
+
+        if old_compose_scene.exists() && !new_compose_scene.exists() {
+            fs::rename(&old_compose_scene, &new_compose_scene)
+                .map_err(|e| {
+                    format!(
+                        "Failed to rename _GlobalCompose scene folder: {}",
+                        e
+                    )
+                })?;
+            renamed_count += 1;
         }
     }
 
@@ -4293,6 +4466,117 @@ fn reset_window_position(window: tauri::Window) -> Result<(), String> {
     Ok(())
 }
 
+// ============================================
+// Category Folder Management Commands
+// ============================================
+
+#[tauri::command]
+async fn ensure_category_folder(
+    projects_dir: String,
+    category_name: String
+) -> Result<String, String> {
+    let category_path = PathBuf::from(&projects_dir).join(&category_name);
+
+    if !category_path.exists() {
+        fs::create_dir_all(&category_path)
+            .map_err(|e| format!("Failed to create category folder: {}", e))?;
+    }
+
+    Ok(category_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn rename_category_folder(
+    projects_dir: String,
+    old_name: String,
+    new_name: String
+) -> Result<(), String> {
+    let old_path = PathBuf::from(&projects_dir).join(&old_name);
+    let new_path = PathBuf::from(&projects_dir).join(&new_name);
+
+    if old_path.exists() {
+        fs::rename(&old_path, &new_path)
+            .map_err(|e| format!("Failed to rename category folder: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn scan_projects_in_folder(folder_path: String, category_name: Option<String>) -> Result<Vec<Project>, String> {
+    let path = PathBuf::from(&folder_path);
+    let mut projects = Vec::new();
+
+    if !path.exists() {
+        return Ok(projects);
+    }
+
+    if let Ok(entries) = fs::read_dir(&path) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                let metadata_path = entry.path().join(".project-metadata.json");
+                if metadata_path.exists() {
+                    if let Ok(content) = fs::read_to_string(&metadata_path) {
+                        if let Ok(mut project) = serde_json::from_str::<Project>(&content) {
+                            // Set category from folder name, not from metadata
+                            project.category = category_name.clone();
+                            projects.push(project);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(projects)
+}
+
+#[tauri::command]
+async fn move_projects_to_category(
+    projects_dir: String,
+    from_category: String,
+    to_category: String
+) -> Result<(), String> {
+    let from_path = PathBuf::from(&projects_dir).join(&from_category);
+    let to_path = PathBuf::from(&projects_dir).join(&to_category);
+
+    // Ensure target folder exists
+    fs::create_dir_all(&to_path)
+        .map_err(|e| format!("Failed to create target folder: {}", e))?;
+
+    // Move all subfolders (projects) - category is determined by folder, not metadata
+    if from_path.exists() {
+        if let Ok(entries) = fs::read_dir(&from_path) {
+            for entry in entries.flatten() {
+                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    let dest = to_path.join(entry.file_name());
+                    fs::rename(entry.path(), &dest)
+                        .map_err(|e| format!("Failed to move project: {}", e))?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn remove_empty_folder(folder_path: String) -> Result<(), String> {
+    let path = PathBuf::from(&folder_path);
+    if path.exists() && path.is_dir() {
+        // Only remove if folder is empty
+        let is_empty = fs::read_dir(&path)
+            .map(|mut entries| entries.next().is_none())
+            .unwrap_or(false);
+
+        if is_empty {
+            fs::remove_dir(&path)
+                .map_err(|e| format!("Failed to remove folder: {}", e))?;
+        }
+    }
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -4358,6 +4642,11 @@ fn main() {
             set_window_to_monitor,
             is_position_valid,
             reset_window_position,
+            ensure_category_folder,
+            rename_category_folder,
+            scan_projects_in_folder,
+            move_projects_to_category,
+            remove_empty_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -56,6 +56,7 @@ import { FinancePage } from './components/finance';
 import { ProjectDetails, RightSidebar } from './components/project';
 import ShotsBrowser from './components/project/ShotsBrowser';
 import { CreateProjectModal } from './components/modals';
+import { AssetNameModal } from './components/modals/AssetNameModal';
 import { darkenColor, STATUS_COLORS, STATUS_LABELS, hslStringToHex } from './utils';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, GlobalTextContextMenu } from './components/ui/ContextMenu';
 import { useContextMenu } from './hooks/useContextMenu';
@@ -154,6 +155,12 @@ function App() {
   //const [view, setView] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [assetNameDialog, setAssetNameDialog] = useState<{
+    software: any;
+    projectName: string;
+    projectPath: string;
+    softwareKey: string;
+  } | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -178,7 +185,7 @@ function App() {
     const saved = localStorage.getItem('showTagIcons');
     return saved !== null ? JSON.parse(saved) : true;
   });
-  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'project' | 'client' | 'category'; name: string; id: string; path?: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'project' | 'client' | 'category'; name: string; id: string; path?: string; projectCount?: number } | null>(null);
   const [previousProjectId, setPreviousProjectId] = useState<string | null>(null);
   const [deadlineNotifications, setDeadlineNotifications] = useState<Array<{ id: string; projectName: string; daysRemaining: number }>>([]);
   const [notificationsShown, setNotificationsShown] = useState(false); // Track if notifications were shown this session
@@ -579,7 +586,7 @@ function App() {
               deleteClient(deleteConfirm.id);
             } else if (deleteConfirm.type === 'category') {
               const { removeCategory } = useProjectStore.getState();
-              removeCategory(deleteConfirm.id);
+              await removeCategory(deleteConfirm.id);
             }
             setDeleteConfirm(null);
           })();
@@ -1339,15 +1346,17 @@ function App() {
           onSelectCategory={setSelectedCategory}
           onAddCategory={addCategory}
           onDeleteCategory={(categoryName) => {
+            const projectCount = projects.filter(p => p.category === categoryName).length;
             setDeleteConfirm({
               type: 'category',
               name: categoryName,
-              id: categoryName
+              id: categoryName,
+              projectCount: projectCount > 0 ? projectCount : undefined
             });
           }}
-          onRenameCategory={(oldName, newName) => {
+          onRenameCategory={async (oldName, newName) => {
             const { renameCategory } = useProjectStore.getState();
-            renameCategory(oldName, newName);
+            await renameCategory(oldName, newName);
           }}
           accentColor={accentColor}
         />
@@ -1876,6 +1885,17 @@ function App() {
                 };
                 const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
 
+                // If in asset context - show dialog to enter asset name
+                if (specialContext?.type === 'asset') {
+                  setAssetNameDialog({
+                    software: sw,
+                    projectName: selectedProject.name,
+                    projectPath: selectedProject.path,
+                    softwareKey: softwareKey
+                  });
+                  return;
+                }
+
                 launchSoftware({
                   projectPath: selectedProject.path,
                   executablePath: sw.executablePath,
@@ -1884,7 +1904,7 @@ function App() {
                   sceneName: currentScene?.name,
                   sceneNumber: currentScene?.number,
                   shotNumber: currentShot?.number,
-                  specialContext: specialContext ? (specialContext.type === 'asset' ? 'ASSET' : 'COMP') : undefined
+                  specialContext: specialContext ? 'COMP' : undefined
                 });
               }}
               onDeleteProject={(project: any) => {
@@ -1936,6 +1956,27 @@ function App() {
         />
       )}
 
+      {/* Asset Name Modal */}
+      {assetNameDialog && (
+        <AssetNameModal
+          isOpen={true}
+          onClose={() => setAssetNameDialog(null)}
+          onConfirm={(assetName) => {
+            launchSoftware({
+              projectPath: assetNameDialog.projectPath,
+              executablePath: assetNameDialog.software.executablePath,
+              software: assetNameDialog.softwareKey,
+              projectName: assetNameDialog.projectName,
+              specialContext: 'ASSET',
+              assetName: assetName
+            });
+            setAssetNameDialog(null);
+          }}
+          softwareName={assetNameDialog.software.name}
+          projectName={assetNameDialog.projectName}
+        />
+      )}
+
       {/* Settings Modal */}
       {showSettings && (
         <SettingsPanel
@@ -1948,10 +1989,12 @@ function App() {
             });
           }}
           onDeleteCategory={(categoryName) => {
+            const projectCount = projects.filter(p => p.category === categoryName).length;
             setDeleteConfirm({
               type: 'category',
               name: categoryName,
-              id: categoryName
+              id: categoryName,
+              projectCount: projectCount > 0 ? projectCount : undefined
             });
           }}
         />
@@ -1993,8 +2036,10 @@ function App() {
           >
             <h3 className="text-lg font-semibold mb-2">Confirm Delete</h3>
             <p className="text-zinc-400 mb-6">
-              {deleteConfirm.type === 'category'
-                ? `Are you sure you want to delete the "${deleteConfirm.name}" category? Projects in this category will be moved to "Personal".`
+              {deleteConfirm.type === 'category' && deleteConfirm.projectCount
+                ? `Are you sure you want to delete category "${deleteConfirm.name}" and move its ${deleteConfirm.projectCount} project(s) to "Personal"? This action cannot be undone.`
+                : deleteConfirm.type === 'category'
+                ? `Are you sure you want to delete the "${deleteConfirm.name}" category?`
                 : `Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone.`
               }
             </p>
@@ -2013,7 +2058,7 @@ function App() {
                     deleteClient(deleteConfirm.id);
                   } else if (deleteConfirm.type === 'category') {
                     const { removeCategory } = useProjectStore.getState();
-                    removeCategory(deleteConfirm.id);
+                    await removeCategory(deleteConfirm.id);
                   }
                   setDeleteConfirm(null);
                 }}

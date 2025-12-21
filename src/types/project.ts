@@ -329,6 +329,7 @@ export interface LaunchSoftwareCommand {
   sceneNumber?: number;
   shotNumber?: number;
   specialContext?: string;
+  assetName?: string; // Custom name for asset context (e.g., "CAR", "01")
 }
 
 export interface StartTimeTrackingCommand {

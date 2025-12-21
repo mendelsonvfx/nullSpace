@@ -666,6 +666,15 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     closeContextMenu();
   }, [closeContextMenu]);
 
+  const revealInExplorerHandler = useCallback(async (path: string) => {
+    try {
+      await invoke('reveal_in_explorer', { path });
+    } catch (error) {
+      console.error('Failed to reveal in explorer:', error);
+    }
+    closeContextMenu();
+  }, [closeContextMenu]);
+
   const handleSetFolderColor = useCallback((path: string, color: string) => {
     setFolderColors(prev => {
       const newMap = new Map(prev);
@@ -1137,7 +1146,10 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         </ContextMenuItem>
         <ContextMenuItem
           icon={<IconFolderOpen className="w-4 h-4" stroke={1.5} />}
-          onClick={() => contextMenuNode && openInExplorerHandler(contextMenuNode.path)}
+          onClick={() => contextMenuNode && (contextMenuNode.is_dir
+            ? openInExplorerHandler(contextMenuNode.path)
+            : revealInExplorerHandler(contextMenuNode.path)
+          )}
         >
           {contextMenuNode?.is_dir ? 'Open in Explorer' : 'Reveal in Explorer'}
         </ContextMenuItem>

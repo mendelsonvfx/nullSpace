@@ -61,10 +61,11 @@ interface ProjectStore {
   deleteClient: (clientId: string) => void;
   getClientById: (clientId: string) => Client | undefined;
   // Category management
-  addCategory: (name: string) => void;
-  removeCategory: (name: string) => void;
-  renameCategory: (oldName: string, newName: string) => void;
-  setSelectedCategory: (category: string) => void;
+  addCategory: (name: string) => Promise<void>;
+  removeCategory: (name: string) => Promise<void>;
+  renameCategory: (oldName: string, newName: string) => Promise<void>;
+  setSelectedCategory: (category: string) => Promise<void>;
+  loadProjectsFromCategory: (category: string) => Promise<void>;
   // Migration
   migrateProjectToScenes: (project: Project) => Project;
   // Scene management
@@ -148,12 +149,34 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   loadProjects: async () => {
     set({ isLoading: true, error: null });
     try {
-      const projectsDir = get().projectsDirectory || get().defaultProjectsPath;
+      const state = get();
+      const projectsDir = state.projectsDirectory || state.defaultProjectsPath;
       console.log('Loading projects from:', projectsDir);
-      const projects = await invoke<Project[]>('load_projects', {
-        projectsDir
+
+      // Ensure default category folders exist
+      const categories = state.categories;
+      for (const category of categories) {
+        try {
+          await invoke('ensure_category_folder', {
+            projectsDir: projectsDir,
+            categoryName: category
+          });
+        } catch (error) {
+          console.warn(`Failed to ensure category folder for "${category}":`, error);
+        }
+      }
+
+      // Load projects from current category folder
+      const selectedCategory = state.selectedCategory;
+      const categoryPath = `${projectsDir}\\${selectedCategory}`;
+
+      // Scan category folder - category is determined by folder, not metadata
+      const projects = await invoke<Project[]>('scan_projects_in_folder', {
+        folderPath: categoryPath,
+        categoryName: selectedCategory
       });
-      console.log('Loaded projects:', projects.length);
+
+      console.log('Loaded projects from category:', selectedCategory, projects.length);
 
       // Migrate projects to scene-based structure if needed
       const migratedProjects = projects.map(project => get().migrateProjectToScenes(project));
@@ -975,6 +998,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         currentShotId: newShotId || project.currentShotId
       };
       get().updateProject(updated);
+
+      // Trigger tree refresh to show new scene folders
+      window.dispatchEvent(new CustomEvent('tree-refresh'));
     }
   },
 
@@ -1149,6 +1175,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         })
       };
       get().updateProject(updated);
+
+      // Trigger tree refresh to show renamed scene folders
+      window.dispatchEvent(new CustomEvent('tree-refresh'));
     }
   },
 
@@ -1968,80 +1997,144 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   // Category management
-  addCategory: (name: string) => {
-    set(state => {
-      if (!state.categories.includes(name)) {
-        const updatedCategories = [...state.categories, name];
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('categories', JSON.stringify(updatedCategories));
-        }
-        return { categories: updatedCategories };
+  addCategory: async (name: string) => {
+    const state = get();
+    if (!state.categories.includes(name)) {
+      // Create category folder on disk
+      try {
+        await invoke('ensure_category_folder', {
+          projectsDir: state.defaultProjectsPath,
+          categoryName: name
+        });
+      } catch (error) {
+        console.error('Failed to create category folder:', error);
       }
-      return state;
-    });
+
+      const updatedCategories = [...state.categories, name];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('categories', JSON.stringify(updatedCategories));
+      }
+      set({ categories: updatedCategories });
+    }
   },
 
-  removeCategory: (name: string) => {
-    const updatedCategories = get().categories.filter(c => c !== name);
+  removeCategory: async (name: string) => {
+    const state = get();
 
+    try {
+      // Move project folders to Personal category folder
+      await invoke('move_projects_to_category', {
+        projectsDir: state.defaultProjectsPath,
+        fromCategory: name,
+        toCategory: 'Personal'
+      });
+
+      // Try to remove empty category folder
+      await invoke('remove_empty_folder', {
+        folderPath: `${state.defaultProjectsPath}\\${name}`
+      });
+    } catch (error) {
+      console.error('Failed to move projects or remove folder:', error);
+    }
+
+    // Update categories list
+    const updatedCategories = state.categories.filter(c => c !== name);
     if (typeof window !== 'undefined') {
       localStorage.setItem('categories', JSON.stringify(updatedCategories));
     }
 
-    // Move projects from deleted category to "Personal"
-    const updatedProjects = get().projects.map(p =>
-      p.category === name ? { ...p, category: 'Personal' } : p
-    );
-
-    // Update state first
+    // Switch to Personal and reload projects
     set({
       categories: updatedCategories,
-      selectedCategory: get().selectedCategory === name ? updatedCategories[0] : get().selectedCategory,
-      projects: updatedProjects
+      selectedCategory: 'Personal'
     });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selectedCategory', 'Personal');
+    }
 
-    // Then save each updated project asynchronously
-    updatedProjects.forEach((p) => {
-      const originalProject = get().projects.find(orig => orig.id === p.id);
-      if (p.category === 'Personal' && originalProject?.category === name) {
-        get().updateProject(p);
-      }
-    });
+    // Reload projects from Personal category
+    await get().loadProjectsFromCategory('Personal');
   },
 
-  renameCategory: (oldName: string, newName: string) => {
+  renameCategory: async (oldName: string, newName: string) => {
+    const state = get();
+
+    try {
+      // Rename folder on disk
+      await invoke('rename_category_folder', {
+        projectsDir: state.defaultProjectsPath,
+        oldName,
+        newName
+      });
+    } catch (error) {
+      console.error('Failed to rename category folder:', error);
+    }
+
     // Update category list
-    const updatedCategories = get().categories.map(c => c === oldName ? newName : c);
-
+    const updatedCategories = state.categories.map(c => c === oldName ? newName : c);
     if (typeof window !== 'undefined') {
       localStorage.setItem('categories', JSON.stringify(updatedCategories));
     }
 
-    // Update all projects with this category
-    const updatedProjects = get().projects.map(p =>
-      p.category === oldName ? { ...p, category: newName } : p
-    );
+    // Update selected category if needed
+    const newSelectedCategory = state.selectedCategory === oldName ? newName : state.selectedCategory;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selectedCategory', newSelectedCategory);
+    }
 
-    // Update state first
     set({
       categories: updatedCategories,
-      selectedCategory: get().selectedCategory === oldName ? newName : get().selectedCategory,
-      projects: updatedProjects
+      selectedCategory: newSelectedCategory
     });
 
-    // Then save each updated project asynchronously
-    updatedProjects.forEach((p) => {
-      const originalProject = get().projects.find(orig => orig.id === p.id);
-      if (p.category === newName && originalProject?.category === oldName) {
-        get().updateProject(p);
-      }
-    });
+    // Reload projects from renamed category if it was selected
+    if (state.selectedCategory === oldName) {
+      await get().loadProjectsFromCategory(newName);
+    }
   },
 
-  setSelectedCategory: (category: string) => {
+  setSelectedCategory: async (category: string) => {
+    const state = get();
+
+    // Ensure category folder exists
+    try {
+      await invoke('ensure_category_folder', {
+        projectsDir: state.defaultProjectsPath,
+        categoryName: category
+      });
+    } catch (error) {
+      console.error('Failed to ensure category folder:', error);
+    }
+
     set({ selectedCategory: category });
     if (typeof window !== 'undefined') {
       localStorage.setItem('selectedCategory', category);
+    }
+
+    // Load projects from this category
+    await get().loadProjectsFromCategory(category);
+  },
+
+  loadProjectsFromCategory: async (category: string) => {
+    const state = get();
+    set({ isLoading: true });
+
+    try {
+      const categoryPath = `${state.defaultProjectsPath}\\${category}`;
+
+      // Scan category folder - category is determined by folder, not metadata
+      const projects = await invoke<Project[]>('scan_projects_in_folder', {
+        folderPath: categoryPath,
+        categoryName: category
+      });
+
+      // Migrate projects to scene-based structure if needed
+      const migratedProjects = projects.map(project => get().migrateProjectToScenes(project));
+
+      set({ projects: migratedProjects, isLoading: false });
+    } catch (error) {
+      console.error('Failed to load projects from category:', error);
+      set({ isLoading: false, error: String(error) });
     }
   },
 

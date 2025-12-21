@@ -612,11 +612,25 @@ fn find_process_by_name_and_parent(name: &str, parent_pid: u32) -> Option<u32> {
 
     let name_lower = name.to_lowercase();
 
+    // Map software names to process name patterns (for software with multiple executables)
+    let patterns: Vec<&str> = match name_lower.as_str() {
+        "houdini" => vec!["houdin", "hindie"],  // houdinifx.exe, houdini.exe, hindie.steam.exe (Steam version)
+        _ => vec![],  // Empty vec means use default name matching
+    };
+
     for child_pid in children {
         if let Some(process) = system.process(Pid::from_u32(child_pid)) {
             let process_name = process.name().to_lowercase();
 
-            // Match exact name or name.exe
+            // If we have specific patterns, check them first
+            if !patterns.is_empty() {
+                if patterns.iter().any(|p| process_name.contains(p)) {
+                    println!("[TimeTracking] Found child process '{}' with PID {} (matched pattern)", process.name(), child_pid);
+                    return Some(child_pid);
+                }
+            }
+
+            // Default matching: exact name, name.exe, or contains
             if process_name == name_lower ||
                process_name == format!("{}.exe", name_lower) ||
                process_name.contains(&name_lower) {
@@ -646,8 +660,70 @@ fn migrate_to_child_process_internal(old_pid: u32, software_name: &str) -> Optio
         return Some(child_pid);
     }
 
-    println!("[TimeTracking] ❌ No child process found for migration");
+    // FALLBACK: For Steam launchers, the real process may not be a direct child
+    // Try to find ANY recently started process matching the software patterns
+    println!("[TimeTracking] No child found, trying global process search...");
+    if let Some(pid) = find_recent_process_by_name(&base_name) {
+        println!("[TimeTracking] ✅ Found process via global search: PID {}", pid);
+        return Some(pid);
+    }
+
+    println!("[TimeTracking] ❌ No process found for migration");
     None
+}
+
+/// Find a recently started process by name (global search, not just children)
+/// Used as fallback for Steam launchers where the app isn't a direct child
+fn find_recent_process_by_name(software_name: &str) -> Option<u32> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let mut system = SYSTEM.lock();
+    system.refresh_processes();
+
+    let name_lower = software_name.to_lowercase();
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+    // Map software names to process name patterns
+    let patterns: Vec<&str> = match name_lower.as_str() {
+        "houdini" => vec!["houdin", "hindie"],  // houdinifx.exe, houdini.exe, hindie.steam.exe
+        _ => vec![],
+    };
+
+    let mut candidates: Vec<(u32, u64)> = Vec::new();
+
+    for (pid, process) in system.processes() {
+        let proc_name = process.name().to_lowercase();
+        let start_time = process.start_time();
+
+        // Check if started recently (within last 30 seconds)
+        let is_recent = if let Some(age) = now.checked_sub(start_time) {
+            age < 30
+        } else {
+            start_time.saturating_sub(now) < 5  // Clock skew tolerance
+        };
+
+        if !is_recent {
+            continue;
+        }
+
+        // Check patterns first (for software with multiple executables like Houdini)
+        if !patterns.is_empty() && patterns.iter().any(|p| proc_name.contains(p)) {
+            println!("[TimeTracking] Global search found: {} (PID: {}, pattern match)", process.name(), pid.as_u32());
+            candidates.push((pid.as_u32(), start_time));
+            continue;
+        }
+
+        // Default name matching
+        if proc_name.contains(&name_lower) {
+            println!("[TimeTracking] Global search found: {} (PID: {}, name match)", process.name(), pid.as_u32());
+            candidates.push((pid.as_u32(), start_time));
+        }
+    }
+
+    // Return the newest matching process
+    candidates.iter()
+        .max_by_key(|(_, st)| st)
+        .map(|(pid, _)| *pid)
 }
 
 /// Tauri command to migrate to a child process

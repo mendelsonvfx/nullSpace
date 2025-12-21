@@ -15,6 +15,7 @@ export interface FileNameComponents {
   sceneName: string;
   shotNumber: number;
   specialContext?: string;
+  assetName?: string; // Custom name for asset/compose contexts (e.g., "CAR", "01")
   version: number;
   extension?: string;
 }
@@ -81,6 +82,34 @@ export function parseFileName(filename: string): FileNameComponents | null {
 
     // Remove version part to get base
     const base = nameWithoutExt.substring(0, versionMatch.index);
+
+    // Check for _ASSET_NAME or _COMP_NAME pattern (asset/compose with custom name)
+    // assetName never contains underscore (validated in UI), so this regex is reliable
+    const assetMatch = base.match(/^(.+)_ASSET_([A-Z0-9]+)$/);
+    if (assetMatch) {
+      return {
+        projectName: assetMatch[1],
+        sceneName: 'MAIN',
+        shotNumber: 1,
+        specialContext: 'ASSET',
+        assetName: assetMatch[2],
+        version,
+        extension,
+      };
+    }
+
+    const compMatch = base.match(/^(.+)_COMP_([A-Z0-9]+)$/);
+    if (compMatch) {
+      return {
+        projectName: compMatch[1],
+        sceneName: 'MAIN',
+        shotNumber: 1,
+        specialContext: 'COMP',
+        assetName: compMatch[2],
+        version,
+        extension,
+      };
+    }
 
     // Split by underscore
     const parts = base.split('_');

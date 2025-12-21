@@ -591,10 +591,19 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   };
 
   // Extract only version number from full name (remove project name and shot info)
+  // For assets with custom name, show "ASSETNAME v001" format
   const getVersionDisplayName = (fullName: string) => {
+    const parsed = parseFileName(fullName);
+    if (parsed) {
+      const versionStr = `v${parsed.version.toString().padStart(3, '0')}`;
+      // Show asset/comp name if present (e.g., "CAR v001" instead of just "v001")
+      if (parsed.assetName) {
+        return `${parsed.assetName} ${versionStr}`;
+      }
+      return versionStr;
+    }
+    // Fallback to regex extraction
     const nameWithoutExt = getVersionNameWithoutExtension(fullName);
-    // Match pattern like "ProjectName_Shot001_v001" or "ProjectName_v001"
-    // Extract only the version part (v001, v002, etc.)
     const versionMatch = nameWithoutExt.match(/_v(\d+)$/i);
     if (versionMatch) {
       return `v${versionMatch[1]}`;

@@ -940,8 +940,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         />
         )}
 
-        {/* Output Overview - hidden when only scene is selected (without shot) */}
-        {!(context.isScene && !context.isShot) && (
+        {/* Output Overview - hidden when only scene is selected (without shot) or in asset context */}
+        {!(context.isScene && !context.isShot) && context.specialContextType !== 'asset' && (
         <OutputOverview
           project={project}
           currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
