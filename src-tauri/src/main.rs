@@ -792,7 +792,7 @@ impl SoftwareLaunchConfig {
     fn from_extension(ext: &str) -> Self {
         match ext {
             "hip" | "hiplc" | "hipnc" => SoftwareLaunchConfig {
-                use_explorer: true,
+                use_explorer: false, // Direct launch with HFS env variable
                 needs_pid_lookup: true,
                 process_name: "houdin|hindie", // Matches houdinifx.exe, houdini.exe, hindie.steam.exe (Steam version)
             },
@@ -819,7 +819,7 @@ impl SoftwareLaunchConfig {
         let software_lower = software.to_lowercase();
         if software_lower == "houdini" {
             SoftwareLaunchConfig {
-                use_explorer: true,
+                use_explorer: false, // Direct launch with HFS env variable
                 needs_pid_lookup: true,
                 process_name: "houdin|hindie", // Matches houdinifx.exe, houdini.exe, hindie.steam.exe (Steam version)
             }
@@ -867,12 +867,75 @@ impl SoftwareLaunchConfig {
                 .spawn()
                 .map_err(|e| format!("Failed to open file via explorer: {}", e))?
         } else {
-            println!("[SoftwareLauncher] Launching directly: {} {}", executable_path, file_path);
-            Command::new(executable_path)
-                .arg(file_path)
-                .creation_flags(CREATE_NO_WINDOW)
-                .spawn()
-                .map_err(|e| format!("Failed to launch software: {}", e))?
+            // For Houdini: launch with proper environment variables for user preferences
+            if self.process_name.contains("houdin") || self.process_name.contains("hindie") {
+                println!("[SoftwareLauncher] Launching Houdini with env setup: {} {}", executable_path, file_path);
+
+                // Extract version from executable path (e.g., "Houdini 20.0.653" -> "20.0")
+                let hfs_path = std::path::Path::new(executable_path)
+                    .parent()  // bin
+                    .and_then(|p| p.parent())  // Houdini X.X.XXX
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+
+                // Try to extract major.minor version for HOUDINI_USER_PREF_DIR
+                let version = std::path::Path::new(&hfs_path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .and_then(|name| {
+                        // Extract version like "20.0" from "Houdini 20.0.653" or "Houdini Indie"
+                        let parts: Vec<&str> = name.split(|c: char| !c.is_ascii_digit() && c != '.').collect();
+                        for part in parts {
+                            if part.contains('.') {
+                                let ver_parts: Vec<&str> = part.split('.').collect();
+                                if ver_parts.len() >= 2 {
+                                    return Some(format!("{}.{}", ver_parts[0], ver_parts[1]));
+                                }
+                            }
+                        }
+                        None
+                    });
+
+                let user_pref_dir = if let Some(ver) = &version {
+                    let home = std::env::var("USERPROFILE").unwrap_or_default();
+                    format!("{}\\Documents\\houdini{}", home, ver)
+                } else {
+                    String::new()
+                };
+
+                // HOME is critical - Houdini uses $HOME to find preferences on Windows
+                let home = std::env::var("USERPROFILE").unwrap_or_default();
+                let home_docs = format!("{}\\Documents", home);
+
+                println!("[SoftwareLauncher] HFS={}", hfs_path);
+                println!("[SoftwareLauncher] HOME={}", home_docs);
+                println!("[SoftwareLauncher] HOUDINI_USER_PREF_DIR={}", user_pref_dir);
+
+                let mut cmd = Command::new(executable_path);
+                cmd.arg(file_path)
+                   .creation_flags(CREATE_NO_WINDOW);
+
+                // Set critical environment variables for Houdini to find user preferences
+                // HOME is the most important - Houdini looks for $HOME/houdiniX.Y/
+                cmd.env("HOME", &home_docs);
+
+                if !hfs_path.is_empty() {
+                    cmd.env("HFS", &hfs_path);
+                }
+                if !user_pref_dir.is_empty() {
+                    cmd.env("HOUDINI_USER_PREF_DIR", &user_pref_dir);
+                }
+
+                cmd.spawn()
+                   .map_err(|e| format!("Failed to launch Houdini: {}", e))?
+            } else {
+                println!("[SoftwareLauncher] Launching directly: {} {}", executable_path, file_path);
+                Command::new(executable_path)
+                    .arg(file_path)
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .spawn()
+                    .map_err(|e| format!("Failed to launch software: {}", e))?
+            }
         };
 
         let initial_pid = child.id();
@@ -4518,8 +4581,24 @@ async fn scan_projects_in_folder(folder_path: String, category_name: Option<Stri
                 if metadata_path.exists() {
                     if let Ok(content) = fs::read_to_string(&metadata_path) {
                         if let Ok(mut project) = serde_json::from_str::<Project>(&content) {
+                            let actual_path = entry.path().to_string_lossy().to_string();
+
+                            // Check if path changed (project was moved manually)
+                            let path_changed = project.path != actual_path;
+
+                            // Update path from actual folder location
+                            project.path = actual_path;
+
                             // Set category from folder name, not from metadata
                             project.category = category_name.clone();
+
+                            // Save updated metadata if path changed
+                            if path_changed {
+                                if let Ok(json) = serde_json::to_string_pretty(&project) {
+                                    let _ = fs::write(&metadata_path, json);
+                                }
+                            }
+
                             projects.push(project);
                         }
                     }
