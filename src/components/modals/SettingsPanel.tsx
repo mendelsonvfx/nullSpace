@@ -15,7 +15,6 @@ import SimpleBar from 'simplebar-react';
 interface SettingsPanelProps {
   onClose: () => void;
   onDeleteClient?: (clientId: string, clientName: string) => void;
-  onDeleteCategory?: (categoryName: string) => void;
 }
 
 interface SoftwarePathConfig {
@@ -44,7 +43,7 @@ function isValidExecutablePath(path: string): boolean {
   return path.toLowerCase().endsWith('.exe');
 }
 
-export function SettingsPanel({ onClose, onDeleteClient, onDeleteCategory }: SettingsPanelProps) {
+export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<'general' | 'software' | 'appearance' | 'clients' | 'finance' | 'categories'>('general');
   const [softwarePaths, setSoftwarePaths] = useState<SoftwarePathConfig[]>([]);
   const [appVersion, setAppVersion] = useState<string>('');
@@ -164,16 +163,6 @@ export function SettingsPanel({ onClose, onDeleteClient, onDeleteCategory }: Set
             >
               Finance
             </button>
-            <button
-              onClick={() => setActiveTab('categories')}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                activeTab === 'categories'
-                  ? 'bg-accent'
-                  : 'hover:bg-zinc-800'
-              }`}
-            >
-              Categories
-            </button>
           </nav>
 
           {/* Version info at bottom */}
@@ -192,8 +181,7 @@ export function SettingsPanel({ onClose, onDeleteClient, onDeleteCategory }: Set
               {activeTab === 'general' && 'General Settings'}
               {activeTab === 'software' && 'Software Paths'}
               {activeTab === 'appearance' && 'Appearance'}
-              {activeTab === 'categories' && 'Categories'}
-              {activeTab === 'clients' && 'Clients'}
+                            {activeTab === 'clients' && 'Clients'}
               {activeTab === 'finance' && 'Finance Settings'}
             </h3>
             <button
@@ -212,7 +200,6 @@ export function SettingsPanel({ onClose, onDeleteClient, onDeleteCategory }: Set
               {activeTab === 'appearance' && <AppearanceSettings showTagIcons={showTagIcons} setShowTagIcons={setShowTagIcons} />}
               {activeTab === 'clients' && <ClientsSettings onDeleteClient={onDeleteClient} />}
               {activeTab === 'finance' && <FinanceSettings />}
-              {activeTab === 'categories' && <CategoriesSettings onDeleteCategory={onDeleteCategory} />}
             </div>
           </SimpleBar>
 
@@ -1361,117 +1348,6 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-function CategoriesSettings({ onDeleteCategory }: { onDeleteCategory?: (categoryName: string) => void }) {
-  const { categories, removeCategory, addCategory } = useProjectStore();
-  const defaultCategories = ['Commercial', 'Personal'];
-  const [showAddCategory, setShowAddCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-
-  const handleDeleteCategory = (categoryName: string) => {
-    if (defaultCategories.includes(categoryName)) {
-      return; // Don't delete default categories
-    }
-
-    // Use custom confirm dialog if provided, otherwise use native confirm
-    if (onDeleteCategory) {
-      onDeleteCategory(categoryName);
-    } else {
-      const confirmed = confirm(`Are you sure you want to delete the "${categoryName}" category? Projects in this category will be moved to "Personal".`);
-      if (confirmed) {
-        removeCategory(categoryName);
-      }
-    }
-  };
-
-  const handleAddCategory = () => {
-    if (newCategoryName.trim()) {
-      addCategory(newCategoryName.trim());
-      setNewCategoryName('');
-      setShowAddCategory(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-zinc-400">
-          Manage your project categories. Default categories (Commercial, Personal) cannot be deleted.
-        </p>
-        <button
-          onClick={() => setShowAddCategory(!showAddCategory)}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium flex items-center gap-2 animate-button"
-        >
-          <Plus className="w-4 h-4" />
-          Add Category
-        </button>
-      </div>
-
-      {showAddCategory && (
-        <div className="bg-zinc-800 rounded-lg p-4">
-          <label className="block text-sm font-medium mb-2">Category Name</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-              placeholder="Enter category name..."
-              className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
-              autoFocus
-            />
-            <button
-              onClick={handleAddCategory}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
-            >
-              Add
-            </button>
-            <button
-              onClick={() => {
-                setShowAddCategory(false);
-                setNewCategoryName('');
-              }}
-              className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors font-medium"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {categories.map((category) => {
-          const isDefault = defaultCategories.includes(category);
-          return (
-            <div
-              key={category}
-              className="flex items-center justify-between bg-zinc-800 rounded-lg px-4 py-3"
-            >
-              <div className="flex items-center gap-3">
-                <span className="font-medium">{category}</span>
-                {isDefault && (
-                  <span className="text-xs bg-zinc-700 text-zinc-400 px-2 py-1 rounded">
-                    Default
-                  </span>
-                )}
-              </div>
-              {!isDefault && (
-                <button
-                  onClick={() => handleDeleteCategory(category)}
-                  className="p-2 hover:bg-red-600/20 rounded-lg transition-colors text-red-400 hover:text-red-300"
-                  title="Delete category"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
     </div>
   );
 }

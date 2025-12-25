@@ -173,6 +173,12 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
         });
         console.log('Thumbnail set:', thumbnailName);
 
+        // Clean up temp file if it was pasted from clipboard
+        if (formData.thumbnailPath.includes('temp_thumbnail_')) {
+          const { removeFile } = await import('@tauri-apps/api/fs');
+          await removeFile(formData.thumbnailPath).catch(() => {}); // Ignore errors
+        }
+
         // Update the project with the thumbnail immediately
         const { updateProject } = useProjectStore.getState();
         updateProject({ ...createdProject, thumbnail: thumbnailName });

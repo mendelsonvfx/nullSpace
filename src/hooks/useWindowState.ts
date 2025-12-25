@@ -21,6 +21,56 @@ const MIN_WIDTH = 1520;
 const MIN_HEIGHT = 700;
 
 export const useWindowState = () => {
+  // Get saved window state
+  const getSavedState = (): WindowState | null => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Get window settings
+  const getSettings = (): WindowSettings => {
+    try {
+      const saved = localStorage.getItem(SETTINGS_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // Fall through to defaults
+    }
+
+    return {
+      autoMaximizeOnLaunch: false,
+      preferredMonitor: 0,
+      preferredMonitorName: '',
+    };
+  };
+
+  // Sync window settings and state to JSON file for Rust startup
+  const syncToFile = async () => {
+    try {
+      const settings = getSettings();
+      const state = getSavedState();
+
+      await invoke('save_window_config', {
+        config: {
+          autoMaximizeOnLaunch: settings.autoMaximizeOnLaunch,
+          preferredMonitor: settings.preferredMonitor,
+          x: state?.x ?? null,
+          y: state?.y ?? null,
+          width: state?.width ?? null,
+          height: state?.height ?? null,
+          isMaximized: state?.isMaximized ?? null,
+        }
+      });
+    } catch (error) {
+      console.error('[WindowState] Failed to sync to file:', error);
+    }
+  };
+
   // Save current window state to localStorage
   const saveWindowState = async () => {
     try {
@@ -42,6 +92,8 @@ export const useWindowState = () => {
 
         console.log('[WindowState] Saving normal state:', state);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        // Sync to file for Rust to read on next startup
+        syncToFile();
       } else if (isMaximized) {
         // Save maximized state but keep previous position
         const saved = getSavedState();
@@ -49,6 +101,8 @@ export const useWindowState = () => {
           saved.isMaximized = true;
           console.log('[WindowState] Saving maximized state');
           localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+          // Sync to file for Rust to read on next startup
+          syncToFile();
         }
       }
     } catch (error) {
@@ -151,39 +205,13 @@ export const useWindowState = () => {
     }
   };
 
-  // Get saved window state
-  const getSavedState = (): WindowState | null => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  };
-
-  // Get window settings
-  const getSettings = (): WindowSettings => {
-    try {
-      const saved = localStorage.getItem(SETTINGS_KEY);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch {
-      // Fall through to defaults
-    }
-
-    return {
-      autoMaximizeOnLaunch: false,
-      preferredMonitor: 0,
-      preferredMonitorName: '',
-    };
-  };
-
   // Update window settings
   const updateSettings = (settings: Partial<WindowSettings>) => {
     const current = getSettings();
     const updated = { ...current, ...settings };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+    // Sync to file for Rust to read on next startup
+    syncToFile();
   };
 
   return {

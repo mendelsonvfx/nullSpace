@@ -89,7 +89,7 @@ function App() {
   console.log('[App] RENDER', { renderCount: renderCountRef.current, timestamp: performance.now() });
 
   // Window state management
-  const { saveWindowState, loadWindowState, autoMaximizeOnMonitor } = useWindowState();
+  const { saveWindowState } = useWindowState();
 
   // ✅ OPTIMIZATION APPROACH:
   // Problem: state.projects array is recreated every second when timer updates timeEntries
@@ -378,27 +378,23 @@ function App() {
     };
   }, []);
 
-  // Restore window state on app launch (only once!)
+  // Show window after WebView is ready (prevents white flash)
+  // Rust applies position/size in setup hook, but doesn't show window
+  // We show it here after React has rendered
   useEffect(() => {
     let didRun = false;
 
-    const restoreWindow = async () => {
+    const initWindow = async () => {
       if (didRun) return;
       didRun = true;
 
-      // Wait for window initialization
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      // Try auto-maximize first (only on first launch)
-      const didAutoMaximize = await autoMaximizeOnMonitor();
-
-      // If auto-maximize is disabled, restore saved state
-      if (!didAutoMaximize) {
-        await loadWindowState();
-      }
+      // Rust already applied window settings (position, size, maximize)
+      // Double rAF ensures paint is complete
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(undefined))));
+      await invoke('show_main_window');
     };
 
-    restoreWindow();
+    initWindow();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - run only once on mount
 
@@ -781,6 +777,10 @@ function App() {
         projectPath: project.path,
         imagePath: tempPath
       });
+
+      // Clean up temp file after successful copy
+      const { removeFile } = await import('@tauri-apps/api/fs');
+      await removeFile(tempPath).catch(() => {}); // Ignore errors
 
       updateProject({ ...project, thumbnail: thumbnailName });
     } catch (error) {
@@ -1986,15 +1986,6 @@ function App() {
               type: 'client',
               name: clientName,
               id: clientId
-            });
-          }}
-          onDeleteCategory={(categoryName) => {
-            const projectCount = projects.filter(p => p.category === categoryName).length;
-            setDeleteConfirm({
-              type: 'category',
-              name: categoryName,
-              id: categoryName,
-              projectCount: projectCount > 0 ? projectCount : undefined
             });
           }}
         />

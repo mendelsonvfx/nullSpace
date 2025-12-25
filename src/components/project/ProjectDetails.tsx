@@ -285,6 +285,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         imagePath: tempPath
       });
 
+      // Clean up temp file after successful copy
+      const { removeFile } = await import('@tauri-apps/api/fs');
+      await removeFile(tempPath).catch(() => {}); // Ignore errors
+
       const { updateProject } = useProjectStore.getState();
       updateProject({ ...project, thumbnail: thumbnailName });
     } catch (error) {

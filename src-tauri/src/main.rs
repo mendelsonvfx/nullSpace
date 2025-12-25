@@ -38,6 +38,22 @@ const TEMPLATE_AEP: &[u8] = include_bytes!("../templates/empty.aep");
 // Embedded Blender setup script
 const BLENDER_SETUP_PY: &str = include_str!("../templates/blender_setup.py");
 
+// Window startup configuration for instant maximize on preferred monitor
+#[derive(Debug, Serialize, Deserialize, Default)]
+struct WindowStartupConfig {
+    #[serde(rename = "autoMaximizeOnLaunch", default)]
+    auto_maximize_on_launch: bool,
+    #[serde(rename = "preferredMonitor", default)]
+    preferred_monitor: usize,
+    // For restoring position when auto-maximize is off
+    x: Option<i32>,
+    y: Option<i32>,
+    width: Option<u32>,
+    height: Option<u32>,
+    #[serde(rename = "isMaximized", default)]
+    is_maximized: Option<bool>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Project {
     id: String,
@@ -4383,18 +4399,13 @@ struct MonitorInfo {
     is_primary: bool,
 }
 
+// Internal function for getting monitors (used by both command and startup)
 #[cfg(target_os = "windows")]
-#[tauri::command]
-fn get_available_monitors() -> Result<Vec<MonitorInfo>, String> {
+fn get_monitors_internal() -> Result<Vec<MonitorInfo>, String> {
     use windows::Win32::Graphics::Gdi::{
         EnumDisplayMonitors, GetMonitorInfoW, HMONITOR, HDC, MONITORINFOEXW,
     };
     use windows::Win32::Foundation::{BOOL, LPARAM, RECT};
-    use std::sync::Mutex;
-
-    lazy_static! {
-        static ref MONITORS: Mutex<Vec<MonitorInfo>> = Mutex::new(Vec::new());
-    }
 
     unsafe extern "system" fn monitor_enum_proc(
         hmonitor: HMONITOR,
@@ -4447,8 +4458,7 @@ fn get_available_monitors() -> Result<Vec<MonitorInfo>, String> {
 }
 
 #[cfg(not(target_os = "windows"))]
-#[tauri::command]
-fn get_available_monitors() -> Result<Vec<MonitorInfo>, String> {
+fn get_monitors_internal() -> Result<Vec<MonitorInfo>, String> {
     Ok(vec![MonitorInfo {
         index: 0,
         name: "Primary Monitor".to_string(),
@@ -4458,6 +4468,11 @@ fn get_available_monitors() -> Result<Vec<MonitorInfo>, String> {
         height: 1080,
         is_primary: true,
     }])
+}
+
+#[tauri::command]
+fn get_available_monitors() -> Result<Vec<MonitorInfo>, String> {
+    get_monitors_internal()
 }
 
 #[tauri::command]
@@ -4656,8 +4671,85 @@ async fn remove_empty_folder(folder_path: String) -> Result<(), String> {
     Ok(())
 }
 
+// Read window startup config from JSON file
+fn read_window_config(app_handle: &tauri::AppHandle) -> WindowStartupConfig {
+    let config_path = app_handle.path_resolver()
+        .app_data_dir()
+        .map(|p| p.join("window-config.json"));
+
+    config_path
+        .and_then(|p| std::fs::read_to_string(&p).ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+// Apply window settings before showing the window
+fn apply_window_startup_settings(window: &tauri::Window, app_handle: &tauri::AppHandle) {
+    let config = read_window_config(app_handle);
+
+    if config.auto_maximize_on_launch {
+        // Move to preferred monitor and maximize
+        if let Ok(monitors) = get_monitors_internal() {
+            if let Some(monitor) = monitors.get(config.preferred_monitor) {
+                let _ = window.set_position(tauri::Position::Physical(
+                    tauri::PhysicalPosition { x: monitor.x, y: monitor.y }
+                ));
+                let _ = window.maximize();
+                return;
+            }
+        }
+    }
+
+    // Restore saved position if auto-maximize is off
+    if let (Some(x), Some(y)) = (config.x, config.y) {
+        let _ = window.set_position(tauri::Position::Physical(
+            tauri::PhysicalPosition { x, y }
+        ));
+    }
+    if let (Some(w), Some(h)) = (config.width, config.height) {
+        let _ = window.set_size(tauri::Size::Physical(
+            tauri::PhysicalSize { width: w, height: h }
+        ));
+    }
+    if config.is_maximized == Some(true) {
+        let _ = window.maximize();
+    }
+}
+
+#[tauri::command]
+fn save_window_config(app_handle: tauri::AppHandle, config: WindowStartupConfig) -> Result<(), String> {
+    let config_path = app_handle.path_resolver()
+        .app_data_dir()
+        .ok_or("Failed to get app data dir")?
+        .join("window-config.json");
+
+    // Ensure directory exists
+    if let Some(parent) = config_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    let json = serde_json::to_string_pretty(&config)
+        .map_err(|e| e.to_string())?;
+    std::fs::write(&config_path, json)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Command to show window after WebView is ready
+#[tauri::command]
+fn show_main_window(window: tauri::Window) {
+    let _ = window.show();
+}
+
 fn main() {
     tauri::Builder::default()
+        .setup(|app| {
+            let window = app.get_window("main").unwrap();
+            apply_window_startup_settings(&window, &app.handle());
+            // Don't show window here - let JS call show_main_window when ready
+            // This prevents the white flash while WebView content loads
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             create_project,
             add_software_to_project,
@@ -4726,6 +4818,8 @@ fn main() {
             scan_projects_in_folder,
             move_projects_to_category,
             remove_empty_folder,
+            save_window_config,
+            show_main_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
