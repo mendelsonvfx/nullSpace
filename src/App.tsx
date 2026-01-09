@@ -26,6 +26,7 @@ import {
   IconClockHour3,
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/tauri';
+import type { Currency } from './types/project';
 import { useProjectStore } from './store/projectStore';
 import { useContextMenuStore } from './store/contextMenuStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -55,11 +56,12 @@ import { EmptyState } from './components/shared';
 import { FinancePage } from './components/finance';
 import { ProjectDetails, RightSidebar } from './components/project';
 import ShotsBrowser from './components/project/ShotsBrowser';
-import { CreateProjectModal } from './components/modals';
+import { CreateProjectModal, PrepaymentAmountModal } from './components/modals';
 import { AssetNameModal } from './components/modals/AssetNameModal';
 import { darkenColor, STATUS_COLORS, STATUS_LABELS, hslStringToHex } from './utils';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, GlobalTextContextMenu } from './components/ui/ContextMenu';
 import { useContextMenu } from './hooks/useContextMenu';
+import { getPaymentStatusUpdate } from './utils/financeService';
 
 // darkenColor now imported from utils
 
@@ -160,6 +162,12 @@ function App() {
     projectName: string;
     projectPath: string;
     softwareKey: string;
+  } | null>(null);
+  const [prepaymentDialog, setPrepaymentDialog] = useState<{
+    projectId: string;
+    projectName: string;
+    projectCost?: number;
+    projectCurrency: Currency;
   } | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -790,6 +798,22 @@ function App() {
 
   useEffect(() => {
     console.log('[App] Loading projects and initializing time tracking...');
+
+    // Preload exchange rates in background (so Finance tab loads instantly)
+    const preloadExchangeRates = async () => {
+      try {
+        const { getCurrentRates, getRateMode } = await import('./utils/exchangeRates');
+        if (getRateMode() === 'auto') {
+          const baseCurrency = localStorage.getItem('baseCurrency') || 'RUB';
+          await getCurrentRates(baseCurrency);
+          console.log('[App] Exchange rates preloaded');
+        }
+      } catch (error) {
+        console.warn('[App] Failed to preload exchange rates:', error);
+      }
+    };
+    preloadExchangeRates();
+
     loadProjects().then(() => {
       console.log('[App] Projects loaded');
       // NOTE: Global statistics are persisted in localStorage via timeStatsStore
@@ -1977,6 +2001,25 @@ function App() {
         />
       )}
 
+      {/* Prepayment Amount Modal */}
+      {prepaymentDialog && (
+        <PrepaymentAmountModal
+          isOpen={true}
+          onClose={() => setPrepaymentDialog(null)}
+          onConfirm={(amount) => {
+            const project = projects.find(p => p.id === prepaymentDialog.projectId);
+            if (project) {
+              const updates = getPaymentStatusUpdate(project, 'prepaid');
+              updateProject({ ...project, ...updates, prepaymentAmount: amount });
+            }
+            setPrepaymentDialog(null);
+          }}
+          projectName={prepaymentDialog.projectName}
+          projectCost={prepaymentDialog.projectCost}
+          projectCurrency={prepaymentDialog.projectCurrency}
+        />
+      )}
+
       {/* Settings Modal */}
       {showSettings && (
         <SettingsPanel
@@ -2187,8 +2230,8 @@ function App() {
             onClick={() => {
               const project = projects.find(p => p.id === projectMenuData);
               if (project) {
-                // Clear completedAt when changing to unpaid
-                updateProject({ ...project, paymentStatus: 'unpaid', completedAt: undefined });
+                const updates = getPaymentStatusUpdate(project, 'unpaid');
+                updateProject({ ...project, ...updates });
               }
               closeContextMenu();
             }}
@@ -2200,11 +2243,13 @@ function App() {
             onClick={() => {
               const project = projects.find(p => p.id === projectMenuData);
               if (project) {
-                // Set completedAt only if changing TO "prepaid" and it's not already set
-                const completedAt = project.paymentStatus === 'prepaid'
-                  ? project.completedAt
-                  : (project.completedAt || new Date().toISOString());
-                updateProject({ ...project, paymentStatus: 'prepaid', completedAt });
+                // Open modal to enter prepayment amount
+                setPrepaymentDialog({
+                  projectId: project.id,
+                  projectName: project.name,
+                  projectCost: project.cost,
+                  projectCurrency: (project.currency || 'USD') as Currency
+                });
               }
               closeContextMenu();
             }}
@@ -2216,11 +2261,8 @@ function App() {
             onClick={() => {
               const project = projects.find(p => p.id === projectMenuData);
               if (project) {
-                // Set completedAt only if changing TO "paid" and it's not already set
-                const completedAt = project.paymentStatus === 'paid'
-                  ? project.completedAt
-                  : (project.completedAt || new Date().toISOString());
-                updateProject({ ...project, paymentStatus: 'paid', completedAt });
+                const updates = getPaymentStatusUpdate(project, 'paid');
+                updateProject({ ...project, ...updates });
               }
               closeContextMenu();
             }}

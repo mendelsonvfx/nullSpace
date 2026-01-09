@@ -164,7 +164,8 @@ export interface Project {
   currency?: Currency;
   paymentStatus?: PaymentStatus;
   prepaymentAmount?: number;
-  completedAt?: string; // ISO date string - when payment status was set to "paid"
+  completedAt?: string; // ISO date string - when first payment was made (prepaid or paid)
+  paidAt?: string; // ISO date string - when full payment was made (status changed to "paid")
   clientId?: string;
   hasScenes?: boolean;
   hasShots?: boolean;

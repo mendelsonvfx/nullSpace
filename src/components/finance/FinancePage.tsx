@@ -16,6 +16,7 @@ import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
 import SimpleBar from 'simplebar-react';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { useFinanceCalculations } from '../../hooks/useFinanceCalculations';
 
 interface FinancePageProps {
   projects: any[];
@@ -81,6 +82,13 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     // Fallback на ручные курсы
     return getManualRates();
   });
+  // Loading state for exchange rates (fallback if rates not preloaded yet)
+  const [isLoadingRates, setIsLoadingRates] = useState(() => {
+    if (getRateMode() === 'auto') {
+      return !getCachedRatesSync(baseCurrency);
+    }
+    return false;
+  });
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'unpaid'>('all');
   const [sortBy, setSortBy] = useState<'amount' | 'name' | 'client' | 'date'>('date');
@@ -88,16 +96,16 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const [showManualTransactionModal, setShowManualTransactionModal] = useState(false);
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; amount: number } | null>(null);
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
-  const [otherProjectTransactions, setOtherProjectTransactions] = useState<any[]>(() => {
-    const saved = localStorage.getItem('otherProjectTransactions');
-    return saved ? JSON.parse(saved) : [];
-  });
   const [showScrollGradient, setShowScrollGradient] = useState(true);
   const [showMinMaxTooltips, setShowMinMaxTooltips] = useState(false);
   const [hoveredMonthIndex, setHoveredMonthIndex] = useState<number | null>(null);
 
   const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
-  const { updateProject } = useProjectStore();
+  const { updateProject, otherProjectTransactions, addOtherTransaction, removeOtherTransaction, selectedCategory, defaultProjectsPath } = useProjectStore();
+
+  // Get transactions for current folder path only
+  const currentFolderPath = `${defaultProjectsPath}\\${selectedCategory}`;
+  const currentCategoryTransactions = otherProjectTransactions[currentFolderPath] || [];
   const { setActiveMenu } = useContextMenuStore();
   const timeTrackingEnabled = useTimeTrackingFeature();
 
@@ -109,6 +117,21 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     currency: string,
     notes?: string
   ) => {
+    // Handle "Other Project" - use store
+    if (projectId === 'other') {
+      addOtherTransaction({
+        amount,
+        currency: currency as Currency,
+        date,
+        notes
+      });
+      return;
+    }
+
+    // Handle regular project
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+
     // Create new transaction
     const newTransaction = {
       id: `transaction_${Date.now()}`,
@@ -118,18 +141,6 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
       notes,
       createdAt: new Date().toISOString()
     };
-
-    // Handle "Other Project" separately
-    if (projectId === 'other') {
-      const updatedTransactions = [...otherProjectTransactions, newTransaction];
-      setOtherProjectTransactions(updatedTransactions);
-      localStorage.setItem('otherProjectTransactions', JSON.stringify(updatedTransactions));
-      return;
-    }
-
-    // Handle regular project
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return;
 
     // Add transaction to project's transactions array
     const updatedProject = {
@@ -146,11 +157,9 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
   // Handle removing manual transaction
   const handleRemoveTransaction = async (projectId: string, transactionId: string) => {
-    // Handle "Other Project" separately
+    // Handle "Other Project" - use store
     if (projectId === 'other') {
-      const updatedTransactions = otherProjectTransactions.filter(t => t.id !== transactionId);
-      setOtherProjectTransactions(updatedTransactions);
-      localStorage.setItem('otherProjectTransactions', JSON.stringify(updatedTransactions));
+      removeOtherTransaction(transactionId);
       return;
     }
 
@@ -215,8 +224,10 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         });
 
         setExchangeRates(nestedRates);
+        setIsLoadingRates(false);
       } else {
         setExchangeRates(getManualRates());
+        setIsLoadingRates(false);
       }
     };
     loadRates();
@@ -317,114 +328,23 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     'EUR': '€'
   };
 
-  const convertCurrency = (amount: number, from: string, to: string): number => {
-    if (from === to) return amount;
-
-    // Для автоматического режима (API курсы): exchangeRates[to] = курсы из API
-    // Для ручного режима: exchangeRates[to][from] = сколько TO валюты за 1 FROM
-
-    // Попробуем найти курс в структуре для целевой валюты
-    const toRates = exchangeRates[to];
-    if (toRates && typeof toRates[from] === 'number') {
-      return amount * toRates[from];
-    }
-
-    // Если не нашли, попробуем обратный курс
-    const fromRates = exchangeRates[from];
-    if (fromRates && typeof fromRates[to] === 'number') {
-      return amount / fromRates[to];
-    }
-
-    return amount;
-  };
-
-  // Подсчет общего дохода (оплаченные проекты)
-  const totalRevenue: Record<string, number> = {};
-  const paidProjects: any[] = [];
-
-  projects.forEach(project => {
-    if (project.paymentStatus === 'paid' && project.cost) {
-      const currency = project.currency || 'USD';
-
-      if (convertToBaseCurrency) {
-        const convertedAmount = convertCurrency(project.cost, currency, baseCurrency);
-        totalRevenue[baseCurrency] = (totalRevenue[baseCurrency] || 0) + convertedAmount;
-      } else {
-        totalRevenue[currency] = (totalRevenue[currency] || 0) + project.cost;
-      }
-
-      paidProjects.push(project);
-    } else if (project.paymentStatus === 'prepaid' && project.cost && project.prepaymentAmount) {
-      // Для prepaid проектов в "Оплачено" показываем только предоплату
-      const currency = project.currency || 'USD';
-
-      if (convertToBaseCurrency) {
-        const convertedAmount = convertCurrency(project.prepaymentAmount, currency, baseCurrency);
-        totalRevenue[baseCurrency] = (totalRevenue[baseCurrency] || 0) + convertedAmount;
-      } else {
-        totalRevenue[currency] = (totalRevenue[currency] || 0) + project.prepaymentAmount;
-      }
-
-      // Вместо добавления prepayment как отдельной карточки, добавляем полный проект с флагом
-      paidProjects.push({
-        ...project,
-        displayAmount: project.prepaymentAmount,
-        remainingAmount: project.cost - project.prepaymentAmount,
-        isPrepaidProject: true
-      });
-    }
-  });
-
-  // Add "Other Project" transactions to total revenue
-  otherProjectTransactions.forEach(transaction => {
-    const currency = transaction.currency || 'USD';
-
-    if (convertToBaseCurrency) {
-      const convertedAmount = convertCurrency(transaction.amount, currency, baseCurrency);
-      totalRevenue[baseCurrency] = (totalRevenue[baseCurrency] || 0) + convertedAmount;
-    } else {
-      totalRevenue[currency] = (totalRevenue[currency] || 0) + transaction.amount;
-    }
-  });
-
-  // Подсчет ожидающих доходов (неоплаченные проекты)
-  const pendingRevenue: Record<string, number> = {};
-  const pendingProjects: any[] = [];
-
-  projects.forEach(project => {
-    if (project.paymentStatus === 'unpaid' && project.cost) {
-      const currency = project.currency || 'USD';
-
-      if (convertToBaseCurrency) {
-        const convertedAmount = convertCurrency(project.cost, currency, baseCurrency);
-        pendingRevenue[baseCurrency] = (pendingRevenue[baseCurrency] || 0) + convertedAmount;
-      } else {
-        pendingRevenue[currency] = (pendingRevenue[currency] || 0) + project.cost;
-      }
-
-      pendingProjects.push(project);
-    } else if (project.paymentStatus === 'prepaid' && project.prepaymentAmount && project.cost) {
-      // Для prepaid проектов в "Ожидает" показываем остаток
-      const currency = project.currency || 'USD';
-      const remainingAmount = project.cost - project.prepaymentAmount;
-
-      if (convertToBaseCurrency) {
-        const convertedAmount = convertCurrency(remainingAmount, currency, baseCurrency);
-        pendingRevenue[baseCurrency] = (pendingRevenue[baseCurrency] || 0) + convertedAmount;
-      } else {
-        pendingRevenue[currency] = (pendingRevenue[currency] || 0) + remainingAmount;
-      }
-
-      // Добавляем в pending с акцентом на remaining
-      pendingProjects.push({
-        ...project,
-        displayAmount: remainingAmount,
-        prepaidAmount: project.prepaymentAmount,
-        isPrepaidProject: true,
-        showRemainingFirst: true
-      });
-    }
-  });
+  // Use centralized finance calculations hook
+  const {
+    convertCurrency,
+    totalRevenue,
+    pendingRevenue,
+    paidProjects,
+    pendingProjects,
+    chartDataPoints,
+    statistics,
+    getMonthlyRevenue
+  } = useFinanceCalculations(
+    projects,
+    currentCategoryTransactions,
+    exchangeRates,
+    baseCurrency,
+    convertToBaseCurrency
+  );
 
   const formatRevenue = (revenues: Record<string, number>) => {
     return Object.entries(revenues)
@@ -436,7 +356,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const { clients } = useProjectStore();
 
   // Sorted/filtered projects for full list + Other Project transactions
-  const otherProjectItems = otherProjectTransactions.map((transaction: any) => ({
+  const otherProjectItems = currentCategoryTransactions.map((transaction: any) => ({
     id: transaction.id,
     name: 'Other Project',
     cost: transaction.amount,
@@ -468,7 +388,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     const seenIds = new Set();
     const allItems = [...paidProjects, ...pendingProjects, ...otherProjectItems];
     filtered = allItems.filter(item => {
-      if (item.isPrepaidProject) {
+      if ('isPrepaidProject' in item && item.isPrepaidProject) {
         if (seenIds.has(item.id)) {
           return false; // Уже добавили этот prepaid проект
         }
@@ -491,58 +411,11 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     }
   });
 
-  // Statistics
-  const totalPaid = Object.values(totalRevenue).reduce((sum, val) => sum + val, 0);
-  const displayCurrency = convertToBaseCurrency ? baseCurrency : (paidProjects[0]?.currency || 'USD');
-  const avgValue = paidProjects.length > 0 ? totalPaid / paidProjects.length : 0;
-  let totalDaysWorked = 0;
-  paidProjects.forEach((project: any) => {
-    if (project.createdAt && !project.isPrepaidPart) {
-      const createdDate = new Date(project.createdAt);
-      const completedDate = new Date();
-      const daysWorked = Math.max(1, Math.ceil(
-        (completedDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)
-      ));
-      totalDaysWorked += daysWorked;
-    }
-  });
-  const dailyRate = totalDaysWorked > 0 ? totalPaid / totalDaysWorked : 0;
-  const statistics = { totalPaid, displayCurrency, avgValue, dailyRate };
-
-  // Timeline data - use completedAt (when payment was marked as "paid"), fallback to createdAt for old projects
-  const projectsWithDates = [
-    ...paidProjects
-      .filter((p: any) => p.completedAt || p.createdAt)  // Use completedAt or fallback to createdAt
-      .map((project: any) => {
-        const originalCurrency = project.currency || 'USD';
-        const originalAmount = project.displayAmount || project.cost || 0;
-        const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
-          ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
-          : originalAmount;
-        return {
-          date: new Date(project.completedAt || project.createdAt),  // Use completedAt, fallback to createdAt
-          amount: displayAmount,
-          name: project.name
-        };
-      }),
-    // Add "Other Project" transactions
-    ...otherProjectTransactions.map((transaction: any) => {
-      const originalCurrency = transaction.currency || 'USD';
-      const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
-        ? convertCurrency(transaction.amount, originalCurrency, baseCurrency)
-        : transaction.amount;
-      return {
-        date: new Date(transaction.date),
-        amount: displayAmount,
-        name: 'Other Project'
-      };
-    })
-  ].sort((a, b) => a.date.getTime() - b.date.getTime());
-
+  // Timeline data - built from chartDataPoints (from useFinanceCalculations hook)
   let timelineData = null;
-  if (projectsWithDates.length > 0) {
-    // Group projects by date (same day) and sum their amounts
-    const groupedByDate = projectsWithDates.reduce((acc, item) => {
+  if (chartDataPoints.length > 0) {
+    // Group chart data points by date (same day) and sum their amounts
+    const groupedByDate = chartDataPoints.reduce((acc, item) => {
       const dateKey = item.date.toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
@@ -702,9 +575,13 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
               {/* Total Revenue */}
               <div>
                 <h2 className="text-2xl font-medium text-zinc-400 mb-4">Total Revenue</h2>
-                <div className="text-6xl font-bold text-green-500 mb-6">
-                  {Object.keys(totalRevenue).length > 0 ? formatRevenue(totalRevenue) : '0'}
-                </div>
+                {isLoadingRates ? (
+                  <div className="text-6xl font-bold text-green-500/30 mb-6 animate-pulse">---</div>
+                ) : (
+                  <div className="text-6xl font-bold text-green-500 mb-6">
+                    {Object.keys(totalRevenue).length > 0 ? formatRevenue(totalRevenue) : '0'}
+                  </div>
+                )}
 
                 {paidProjects.length > 0 && (
                   <div className="space-y-2">
@@ -733,9 +610,13 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
               {/* Pending */}
               <div>
                 <h2 className="text-2xl font-medium text-zinc-400 mb-4">Pending</h2>
-                <div className="text-6xl font-bold text-zinc-600 mb-6">
-                  {Object.keys(pendingRevenue).length > 0 ? formatRevenue(pendingRevenue) : '0'}
-                </div>
+                {isLoadingRates ? (
+                  <div className="text-6xl font-bold text-zinc-600/30 mb-6 animate-pulse">---</div>
+                ) : (
+                  <div className="text-6xl font-bold text-zinc-600 mb-6">
+                    {Object.keys(pendingRevenue).length > 0 ? formatRevenue(pendingRevenue) : '0'}
+                  </div>
+                )}
 
                 {pendingProjects.length > 0 && (
                   <div className="space-y-2">
@@ -1271,26 +1152,10 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   });
                 }
 
-                // Calculate revenue for each month
+                // Calculate revenue for each month using centralized hook
                 const monthlyRevenue = months.map(month => {
-                  const projectsInMonth = paidProjects.filter((p: any) => {
-                    const dateToUse = p.completedAt || p.createdAt;
-                    if (!dateToUse) return false;
-                    const completedDate = new Date(dateToUse);
-                    return completedDate.getFullYear() === month.year &&
-                           completedDate.getMonth() === month.monthIndex;
-                  });
-
-                  const revenue = projectsInMonth.reduce((sum: number, p: any) => {
-                    const originalCurrency = p.currency || 'USD';
-                    const originalAmount = p.displayAmount || p.cost || 0;
-                    const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
-                      ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
-                      : originalAmount;
-                    return sum + displayAmount;
-                  }, 0);
-
-                  return { ...month, revenue, projectCount: projectsInMonth.length };
+                  const { revenue, pointCount } = getMonthlyRevenue(month.year, month.monthIndex);
+                  return { ...month, revenue, projectCount: pointCount };
                 });
 
                 // Threshold normalization like Weekly Timeline
@@ -1572,7 +1437,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         isOpen={showManualTransactionModal}
         onClose={() => setShowManualTransactionModal(false)}
         projects={projects}
-        otherProjectTransactions={otherProjectTransactions}
+        otherProjectTransactions={currentCategoryTransactions}
         onAddTransaction={handleAddTransaction}
         onRemoveTransaction={handleRemoveTransaction}
       />

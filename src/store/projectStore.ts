@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
-import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, TimeEntry, SoftwareName } from '../types/project';
+import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, TimeEntry, SoftwareName, Transaction } from '../types/project';
 import { thumbnailCache } from '../utils/thumbnailCache';
 import { useTimeStatsStore, useTimeTrackingStore } from '../features/time-tracking';
 import { generateProjectColor, generateBrightColor } from '../utils/colorUtils';
@@ -125,6 +125,10 @@ interface ProjectStore {
   removeTimeEntry: (projectId: string, entryId: string) => void;
   getActiveTimeEntry: (projectId: string) => TimeEntry | undefined;
   updateTargetHourlyRate: (projectId: string, rate: number) => void;
+  // Other Project transactions (finance) - stored per category
+  otherProjectTransactions: Record<string, Transaction[]>;
+  addOtherTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => void;
+  removeOtherTransaction: (transactionId: string) => void;
 }
 
 // Private update queue to prevent race conditions
@@ -144,6 +148,42 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   launchingStatus: {},
   isRenaming: false,
   renameProgress: null,
+  // Other Project transactions - stored per folder path, with migration from old formats
+  otherProjectTransactions: typeof window !== 'undefined' ? (() => {
+    // Try newest format first (by path)
+    const byPath = localStorage.getItem('otherProjectTransactionsByPath');
+    if (byPath) return JSON.parse(byPath) as Record<string, Transaction[]>;
+
+    // Get default path for migration
+    const defaultPath = localStorage.getItem('defaultProjectsPath') || 'E:\\Projects\\Personal';
+
+    // Migrate from byCategory format
+    const byCategory = localStorage.getItem('otherProjectTransactionsByCategory');
+    if (byCategory) {
+      const parsed = JSON.parse(byCategory) as Record<string, Transaction[]>;
+      const migrated: Record<string, Transaction[]> = {};
+      // Convert category keys to full paths
+      for (const [category, transactions] of Object.entries(parsed)) {
+        migrated[`${defaultPath}\\${category}`] = transactions;
+      }
+      localStorage.setItem('otherProjectTransactionsByPath', JSON.stringify(migrated));
+      localStorage.removeItem('otherProjectTransactionsByCategory');
+      return migrated;
+    }
+
+    // Migrate from old array format
+    const oldFormat = localStorage.getItem('otherProjectTransactions');
+    if (oldFormat) {
+      const migrated: Record<string, Transaction[]> = {
+        [`${defaultPath}\\Personal`]: JSON.parse(oldFormat)
+      };
+      localStorage.setItem('otherProjectTransactionsByPath', JSON.stringify(migrated));
+      localStorage.removeItem('otherProjectTransactions');
+      return migrated;
+    }
+
+    return {} as Record<string, Transaction[]>;
+  })() : {} as Record<string, Transaction[]>,
 
   // Load all projects
   loadProjects: async () => {
@@ -2583,6 +2623,38 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to set shot preview:', error);
     }
+  },
+
+  // Other Project transactions (finance) - stored per folder path
+  addOtherTransaction: (transaction) => {
+    const state = get();
+    const folderPath = `${state.defaultProjectsPath}\\${state.selectedCategory}`;
+    const newTransaction: Transaction = {
+      ...transaction,
+      id: `other_${Date.now()}`,
+      createdAt: new Date().toISOString()
+    };
+
+    set(state => {
+      const currentPathTransactions = state.otherProjectTransactions[folderPath] || [];
+      const updated: Record<string, Transaction[]> = {
+        ...state.otherProjectTransactions,
+        [folderPath]: [...currentPathTransactions, newTransaction]
+      };
+      localStorage.setItem('otherProjectTransactionsByPath', JSON.stringify(updated));
+      return { otherProjectTransactions: updated };
+    });
+  },
+
+  removeOtherTransaction: (transactionId) => {
+    set(state => {
+      const updated: Record<string, Transaction[]> = {};
+      for (const [path, transactions] of Object.entries(state.otherProjectTransactions)) {
+        updated[path] = transactions.filter(t => t.id !== transactionId);
+      }
+      localStorage.setItem('otherProjectTransactionsByPath', JSON.stringify(updated));
+      return { otherProjectTransactions: updated };
+    });
   }
 }));
 

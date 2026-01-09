@@ -17,6 +17,7 @@ import { useModalBlur } from '../../hooks/useModalBlur';
 import SimpleBar from 'simplebar-react';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { getPaymentStatusUpdate } from '../../utils/financeService';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
@@ -1187,19 +1188,15 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   onChange={(e) => {
                     const { updateProject } = useProjectStore.getState();
                     const newStatus = e.target.value as 'paid' | 'prepaid' | 'unpaid';
-
-                    // Set completedAt when changing TO paid or prepaid (if not already set)
-                    // Clear completedAt when changing TO unpaid
-                    let completedAt = project.completedAt;
-                    if (newStatus === 'paid' || newStatus === 'prepaid') {
-                      if (project.paymentStatus !== newStatus) {
-                        completedAt = completedAt || new Date().toISOString();
-                      }
-                    } else if (newStatus === 'unpaid') {
-                      completedAt = undefined;
+                    // For prepaid, only update if there's already a prepayment amount or it's switching away
+                    if (newStatus === 'prepaid' && !project.prepaymentAmount) {
+                      // Just update status, user needs to fill prepaymentAmount below
+                      const updates = getPaymentStatusUpdate(project, newStatus);
+                      updateProject({ ...project, ...updates });
+                    } else {
+                      const updates = getPaymentStatusUpdate(project, newStatus);
+                      updateProject({ ...project, ...updates });
                     }
-
-                    updateProject({ ...project, paymentStatus: newStatus, completedAt });
                   }}
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent transition-colors"
                 >
@@ -1211,7 +1208,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
               {project.paymentStatus === 'prepaid' && (
                 <div>
-                  <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Prepayment Amount</label>
+                  <label className="block text-xs text-zinc-400 mb-1.5 font-medium">
+                    Prepayment Amount {!project.prepaymentAmount && <span className="text-red-400">*</span>}
+                  </label>
                   <input
                     type="number"
                     value={project.prepaymentAmount || ''}
@@ -1220,8 +1219,16 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       updateProject({ ...project, prepaymentAmount: e.target.value ? parseFloat(e.target.value) : undefined });
                     }}
                     placeholder="0"
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent transition-colors"
+                    autoFocus={!project.prepaymentAmount}
+                    className={`w-full bg-zinc-800 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none transition-colors ${
+                      !project.prepaymentAmount
+                        ? 'border-red-500 focus:border-red-400'
+                        : 'border-zinc-700 focus:border-accent'
+                    }`}
                   />
+                  {!project.prepaymentAmount && (
+                    <p className="text-xs text-red-400 mt-1">Required for prepaid status</p>
+                  )}
                 </div>
               )}
               </div>
@@ -1653,19 +1660,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     onChange={(e) => {
                       const { updateProject } = useProjectStore.getState();
                       const newStatus = e.target.value as 'paid' | 'prepaid' | 'unpaid';
-
-                      // Set completedAt when changing TO paid or prepaid (if not already set)
-                      // Clear completedAt when changing TO unpaid
-                      let completedAt = project.completedAt;
-                      if (newStatus === 'paid' || newStatus === 'prepaid') {
-                        if (project.paymentStatus !== newStatus) {
-                          completedAt = completedAt || new Date().toISOString();
-                        }
-                      } else if (newStatus === 'unpaid') {
-                        completedAt = undefined;
-                      }
-
-                      updateProject({ ...project, paymentStatus: newStatus, completedAt });
+                      const updates = getPaymentStatusUpdate(project, newStatus);
+                      updateProject({ ...project, ...updates });
                     }}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
                   >
@@ -1675,7 +1671,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1.5">Prepayment Amount</label>
+                  <label className="block text-sm font-medium mb-1.5">
+                    Prepayment Amount {project.paymentStatus === 'prepaid' && !project.prepaymentAmount && <span className="text-red-400">*</span>}
+                  </label>
                   <input
                     type="number"
                     value={project.prepaymentAmount || ''}
@@ -1685,8 +1683,15 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     }}
                     placeholder="0"
                     disabled={project.paymentStatus !== 'prepaid'}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`w-full bg-zinc-800 border rounded-lg px-3 py-2 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                      project.paymentStatus === 'prepaid' && !project.prepaymentAmount
+                        ? 'border-red-500 focus:border-red-400'
+                        : 'border-zinc-700 focus:border-accent'
+                    }`}
                   />
+                  {project.paymentStatus === 'prepaid' && !project.prepaymentAmount && (
+                    <p className="text-xs text-red-400 mt-1">Required</p>
+                  )}
                 </div>
               </div>
 

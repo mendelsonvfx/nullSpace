@@ -217,6 +217,7 @@ button:not(:hover) .animate-settings-icon {
 html {
   overflow: hidden;
   border-radius: 8px;
+  background: #09090b;
 }
 
 body {
@@ -224,6 +225,7 @@ body {
   border-radius: 8px;
   margin: 0;
   position: relative;
+  background: #09090b;
 }
 
 #root {
