@@ -299,20 +299,19 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
       // Remove scene and shot folders from display if they match current filters
       // (since files are guaranteed to be in those folders when filtering is active)
-      // Only filter if we have both scenes and shots enabled in the project
-      if (project.hasScenes && project.hasShots && (currentSceneFilter || currentShotFilter)) {
+      if ((currentSceneFilter && project.hasScenes) || (currentShotFilter && project.hasShots)) {
         relevantParts = relevantParts.filter(part => {
           const partNormalized = part.toUpperCase().replace(/\s/g, '');
 
           // Check if part matches scene filter
-          if (currentSceneFilter) {
+          if (currentSceneFilter && project.hasScenes) {
             const sceneNormalized = currentSceneFilter.toUpperCase().replace(/\s/g, '');
             if (partNormalized === sceneNormalized) return false;
           }
 
-          // Check if part matches shot filter
-          if (currentShotFilter) {
-            const shotNormalized = currentShotFilter.toUpperCase().replace(/\s/g, '');
+          // Check if part matches shot filter (strip "SH" prefix to match folder name)
+          if (currentShotFilter && project.hasShots) {
+            const shotNormalized = currentShotFilter.toUpperCase().replace(/\s/g, '').replace(/^SH/, '');
             if (partNormalized === shotNormalized) return false;
           }
 
@@ -338,20 +337,19 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
       let relevantParts = isSequence ? pathParts : pathParts.slice(0, -1);
 
       // Remove scene and shot folders from path parts for grouping
-      // Only filter if we have both scenes and shots enabled in the project
-      if (project.hasScenes && project.hasShots && (currentSceneFilter || currentShotFilter)) {
+      if ((currentSceneFilter && project.hasScenes) || (currentShotFilter && project.hasShots)) {
         relevantParts = relevantParts.filter(part => {
           const partNormalized = part.toUpperCase().replace(/\s/g, '');
 
           // Check if part matches scene filter
-          if (currentSceneFilter) {
+          if (currentSceneFilter && project.hasScenes) {
             const sceneNormalized = currentSceneFilter.toUpperCase().replace(/\s/g, '');
             if (partNormalized === sceneNormalized) return false;
           }
 
-          // Check if part matches shot filter
-          if (currentShotFilter) {
-            const shotNormalized = currentShotFilter.toUpperCase().replace(/\s/g, '');
+          // Check if part matches shot filter (strip "SH" prefix to match folder name)
+          if (currentShotFilter && project.hasShots) {
+            const shotNormalized = currentShotFilter.toUpperCase().replace(/\s/g, '').replace(/^SH/, '');
             if (partNormalized === shotNormalized) return false;
           }
 
