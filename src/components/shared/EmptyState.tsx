@@ -15,7 +15,7 @@ export const EmptyState = memo(function EmptyState({ onCreateProject }: EmptySta
       <p className="text-sm mb-6">Select a project from the sidebar or create a new one</p>
       <button
         onClick={onCreateProject}
-        className="border border-accent px-6 py-3 rounded-button flex items-center justify-center gap-2 font-medium text-white animate-button"
+        className="border border-accent px-6 py-3 rounded-xl flex items-center justify-center gap-2 font-medium text-white animate-button"
         style={{
           background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-color-hover) 100%)',
           backgroundSize: '200% 200%',

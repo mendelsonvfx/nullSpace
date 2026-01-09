@@ -4014,7 +4014,9 @@ fn scan_output_dir_recursive(
 
                                 let shot_index = path_components.iter().position(|&component| {
                                     let comp_normalized = component.to_uppercase().replace(" ", "");
-                                    comp_normalized == shot_normalized
+                                    // Match exact "SH001" OR just "001" (without SH prefix)
+                                    comp_normalized == shot_normalized ||
+                                    (shot_normalized.starts_with("SH") && comp_normalized == &shot_normalized[2..])
                                 });
 
                                 // Both must exist AND shot must come after scene in the path
@@ -4047,7 +4049,9 @@ fn scan_output_dir_recursive(
 
                                     let has_shot_folder = path_components.iter().any(|&component| {
                                         let comp_normalized = component.to_uppercase().replace(" ", "");
-                                        comp_normalized == shot_normalized
+                                        // Match exact "SH001" OR just "001" (without SH prefix)
+                                        comp_normalized == shot_normalized ||
+                                        (shot_normalized.starts_with("SH") && comp_normalized == &shot_normalized[2..])
                                     });
 
                                     if !has_shot_folder {
