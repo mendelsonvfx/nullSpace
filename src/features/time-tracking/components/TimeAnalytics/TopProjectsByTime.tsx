@@ -29,7 +29,7 @@ export const TopProjectsByTime: React.FC<TopProjectsByTimeProps> = ({
   const totalMinutes = topProjectsByTime.reduce((sum, p) => sum + p.totalMinutes, 0);
 
   return (
-    <div data-time-analytics className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 mt-6">
+    <div data-time-analytics className="bg-card-bg rounded-xl p-6 border border-border-primary mt-6">
       <h2 className="text-2xl font-medium text-zinc-400 mb-6">Top 3 Projects by Time Spent</h2>
       <div className="space-y-4">
         {topProjectsByTime.map((project) => {

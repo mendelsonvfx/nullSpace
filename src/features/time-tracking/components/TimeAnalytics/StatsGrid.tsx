@@ -31,7 +31,7 @@ export const StatsGrid: React.FC<StatsGridProps> = ({
   return (
     <div className="grid grid-cols-3 gap-6">
       {/* This Week */}
-      <div data-time-analytics className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+      <div data-time-analytics className="bg-card-bg rounded-xl p-6 border border-border-primary">
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-zinc-500">This Week</p>
           {weekOverWeekChange !== 0 && (
@@ -110,7 +110,7 @@ export const StatsGrid: React.FC<StatsGridProps> = ({
       </div>
 
       {/* Average per Day */}
-      <div data-time-analytics className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+      <div data-time-analytics className="bg-card-bg rounded-xl p-6 border border-border-primary">
         <div className="flex items-center gap-2 mb-2">
           <Calendar className="w-4 h-4 text-zinc-500" />
           <p className="text-sm text-zinc-500">Avg per Day</p>
@@ -122,7 +122,7 @@ export const StatsGrid: React.FC<StatsGridProps> = ({
       </div>
 
       {/* Most Productive Day */}
-      <div data-time-analytics className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+      <div data-time-analytics className="bg-card-bg rounded-xl p-6 border border-border-primary">
         <div className="flex items-center gap-2 mb-2">
           <Clock className="w-4 h-4 text-zinc-500" />
           <p className="text-sm text-zinc-500">Most Productive</p>

@@ -160,7 +160,7 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
     return (
       <div className="mt-12">
         <h2 className="text-2xl font-medium text-zinc-400 mb-6">Time Analytics</h2>
-        <div data-time-analytics className="bg-zinc-900 rounded-xl p-12 border border-zinc-800 text-center">
+        <div data-time-analytics className="bg-card-bg rounded-xl p-12 border border-border-primary text-center">
           <Clock className="w-16 h-16 text-zinc-700 mx-auto mb-4" />
           <p className="text-zinc-500 text-lg">No time tracked yet</p>
           <p className="text-zinc-600 text-sm mt-2">

@@ -27,7 +27,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
   return (
     <div className="grid grid-cols-2 gap-6 mb-6">
       {/* Total Time Card */}
-      <div data-time-analytics className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+      <div data-time-analytics className="bg-card-bg rounded-xl p-6 border border-border-primary">
         <p className="text-sm text-zinc-500 mb-2">Total Time Tracked</p>
         <p className="text-5xl font-bold text-blue-400">
           {formatTime(totalMinutesAllProjects)}
@@ -38,7 +38,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
       </div>
 
       {/* Average Hourly Rate Card */}
-      <div data-time-analytics className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+      <div data-time-analytics className="bg-card-bg rounded-xl p-6 border border-border-primary">
         <p className="text-sm text-zinc-500 mb-2">Average Hourly Rate</p>
         <p className="text-5xl font-bold text-green-400">
           {currencySymbols[baseCurrency] || '$'}

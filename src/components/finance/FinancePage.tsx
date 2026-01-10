@@ -548,7 +548,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   console.log('[FinancePage] RENDER END', { duration: (renderEnd - renderStart).toFixed(2) + 'ms' });
 
   return (
-    <div className="h-full flex flex-col bg-zinc-950 overflow-hidden animate-fade-in">
+    <div className="h-full flex flex-col bg-app-bg overflow-hidden animate-fade-in">
       <SimpleBar
         scrollableNodeProps={{ ref: scrollContainerRef }}
         className="flex-1 custom-page-scrollbar"
@@ -571,88 +571,92 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             /* General Finance Overview */
             <div className="w-full">
             {/* Total Revenue and Pending */}
-            <div className="grid grid-cols-2 gap-8 mb-12">
+            <div className="grid grid-cols-2 gap-5 mb-8">
               {/* Total Revenue */}
-              <div>
-                <h2 className="text-2xl font-medium text-zinc-400 mb-4">Total Revenue</h2>
+              <div className="bg-card-bg border border-border-primary rounded-xl p-6">
+                <div className="text-sm text-zinc-500 font-medium mb-3">Total Revenue</div>
                 {isLoadingRates ? (
-                  <div className="text-6xl font-bold text-green-500/30 mb-6 animate-pulse">---</div>
+                  <div className="text-5xl font-bold text-green-400/30 mb-6 tracking-tight animate-pulse">---</div>
                 ) : (
-                  <div className="text-6xl font-bold text-green-500 mb-6">
+                  <div className="text-5xl font-bold text-green-400 mb-6 tracking-tight">
                     {Object.keys(totalRevenue).length > 0 ? formatRevenue(totalRevenue) : '0'}
                   </div>
                 )}
 
                 {paidProjects.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium text-zinc-500 mb-3">Project Breakdown:</h3>
-                    {paidProjects.slice(0, 3).map((project: any) => {
-                      const originalCurrency = project.currency || 'USD';
-                      const originalAmount = project.displayAmount || project.cost;
+                  <div className="mt-5">
+                    <div className="text-xs text-zinc-500 uppercase tracking-wide mb-4">Project Breakdown:</div>
+                    <div className="space-y-2">
+                      {paidProjects.slice(0, 3).map((project: any) => {
+                        const originalCurrency = project.currency || 'USD';
+                        const originalAmount = project.displayAmount || project.cost;
 
-                      const displayText = convertToBaseCurrency
-                        ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
-                        : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`;
+                        const displayText = convertToBaseCurrency
+                          ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
+                          : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`;
 
-                      return (
-                        <ProjectBreakdownCard
-                          key={project.id}
-                          project={{ ...project, displayText }}
-                          textColorClass="text-green-400"
-                          gradientColor="green"
-                        />
-                      );
-                    })}
+                        return (
+                          <ProjectBreakdownCard
+                            key={project.id}
+                            project={{ ...project, displayText }}
+                            textColorClass="text-green-400"
+                            gradientColor="green"
+                          />
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
 
               {/* Pending */}
-              <div>
-                <h2 className="text-2xl font-medium text-zinc-400 mb-4">Pending</h2>
+              <div className="bg-card-bg border border-border-primary rounded-xl p-6">
+                <div className="text-sm text-zinc-500 font-medium mb-3">Pending</div>
                 {isLoadingRates ? (
-                  <div className="text-6xl font-bold text-zinc-600/30 mb-6 animate-pulse">---</div>
+                  <div className="text-5xl font-bold text-zinc-500/30 mb-6 tracking-tight animate-pulse">---</div>
                 ) : (
-                  <div className="text-6xl font-bold text-zinc-600 mb-6">
+                  <div className="text-5xl font-bold text-zinc-500 mb-6 tracking-tight">
                     {Object.keys(pendingRevenue).length > 0 ? formatRevenue(pendingRevenue) : '0'}
                   </div>
                 )}
 
                 {pendingProjects.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium text-zinc-500 mb-3">Project Breakdown:</h3>
-                    {pendingProjects.slice(0, 3).map((project: any) => {
-                      const originalCurrency = project.currency || 'USD';
-                      const originalAmount = project.displayAmount || project.cost;
+                  <div className="mt-5">
+                    <div className="text-xs text-zinc-500 uppercase tracking-wide mb-4">Project Breakdown:</div>
+                    <div className="space-y-2">
+                      {pendingProjects.slice(0, 3).map((project: any) => {
+                        const originalCurrency = project.currency || 'USD';
+                        const originalAmount = project.displayAmount || project.cost;
 
-                      const displayText = convertToBaseCurrency
-                        ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
-                        : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`;
+                        const displayText = convertToBaseCurrency
+                          ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
+                          : `${originalAmount?.toLocaleString()} ${currencySymbols[originalCurrency]}`;
 
-                      return (
-                        <ProjectBreakdownCard
-                          key={project.id}
-                          project={{ ...project, displayText }}
-                          textColorClass="text-zinc-400"
-                          gradientColor="gray"
-                        />
-                      );
-                    })}
+                        return (
+                          <ProjectBreakdownCard
+                            key={project.id}
+                            project={{ ...project, displayText }}
+                            textColorClass="text-zinc-400"
+                            gradientColor="gray"
+                          />
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Full Project List Button */}
-            <div className="mt-8 mb-8 relative">
+            <div className="mb-8 relative">
               <div className="relative">
                 <button
                   onClick={() => setShowAllProjects(!showAllProjects)}
-                  className={`w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 font-medium cursor-pointer relative z-20 flex items-center justify-center gap-2 transition-colors ${
-                    showAllProjects ? 'rounded-t-lg' : 'rounded-lg'
+                  className={`w-full px-6 py-4 bg-card-bg border border-border-primary hover:bg-zinc-800 hover:border-zinc-700 font-semibold text-sm cursor-pointer relative z-20 flex items-center justify-center gap-2 transition-colors ${
+                    showAllProjects ? 'rounded-t-xl' : 'rounded-xl'
                   }`}
                   style={{
-                    transition: showAllProjects ? 'background-color 150ms' : 'background-color 150ms, border-radius 150ms 250ms'
+                    transition: showAllProjects ? 'background-color 150ms, border-color 150ms' : 'background-color 150ms, border-color 150ms, border-radius 150ms 250ms'
                   }}
                 >
                   <span>Statement</span>
@@ -670,7 +674,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   showAllProjects ? 'max-h-[2000px]' : 'max-h-0'
                 }`}
               >
-                <div className="bg-zinc-900 rounded-b-lg p-6">
+                <div className="bg-card-bg rounded-b-xl p-6 border border-t-0 border-border-primary">
                   {/* Фильтры */}
                   <div className="flex flex-wrap gap-3 mb-6 pb-4 border-b border-zinc-800">
                     <div className="flex gap-1 bg-zinc-800/50 rounded-lg p-1">
@@ -914,35 +918,40 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             </div>
 
             {/* Statistics */}
-            <div className="mb-12">
-          <h2 className="text-2xl font-medium text-zinc-400 mb-6">Statistics</h2>
-          <div className="grid grid-cols-3 gap-6">
+            <div className="mb-8">
+          <h2 className="text-xl font-semibold text-zinc-200 mb-5">Statistics</h2>
+          <div className="grid grid-cols-3 gap-5">
             {/* Total Projects */}
-            <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
-              <p className="text-sm text-zinc-500 mb-2">Total Projects</p>
-              <p className="text-5xl font-bold text-blue-400 mb-2">{projects.length}</p>
-              <div className="flex gap-2 text-xs text-zinc-500">
-                <span className="text-green-500">{paidProjects.length} paid</span>
-                <span>•</span>
-                <span className="text-yellow-500">{pendingProjects.length} pending</span>
+            <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary">
+              <p className="text-sm text-zinc-500 mb-3">Total Projects</p>
+              <p className="text-4xl font-bold text-blue-400 mb-3 tracking-tight">{projects.length}</p>
+              <div className="flex gap-3 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400"></div>
+                  <span className="text-green-400">{paidProjects.length} paid</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-yellow-400"></div>
+                  <span className="text-yellow-400">{pendingProjects.length} pending</span>
+                </div>
               </div>
             </div>
 
             {/* Average Project Value */}
             {paidProjects.length > 0 && (
-              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
-                <p className="text-sm text-zinc-500 mb-2">Average Project Value</p>
-                <p className="text-5xl font-bold text-purple-400">
-                  {statistics.avgValue.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} <span className="text-purple-400">{currencySymbols[statistics.displayCurrency]}</span>
+              <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary">
+                <p className="text-sm text-zinc-500 mb-3">Average Project Value</p>
+                <p className="text-4xl font-bold text-purple-400 tracking-tight">
+                  {statistics.avgValue.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[statistics.displayCurrency]}
                 </p>
               </div>
             )}
 
             {/* Revenue per Day */}
-            <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
-              <p className="text-sm text-zinc-500 mb-2">Revenue per Day</p>
-              <p className="text-5xl font-bold text-accent">
-                {statistics.dailyRate.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} <span className="text-accent">{currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}</span>
+            <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary">
+              <p className="text-sm text-zinc-500 mb-3">Revenue per Day</p>
+              <p className="text-4xl font-bold text-pink-400 tracking-tight">
+                {statistics.dailyRate.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}
               </p>
             </div>
           </div>
@@ -951,11 +960,11 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         {/* Finance Analytics */}
         {paidProjects.length > 0 && timelineData && (
           <>
-            <h2 className="text-2xl font-medium text-zinc-400 mb-6">Finance Analytics</h2>
+            <h2 className="text-xl font-semibold text-zinc-200 mb-5">Finance Analytics</h2>
 
             {/* Revenue Timeline Chart */}
             <div className="mb-6">
-              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+              <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary">
                 <h3 className="text-lg font-semibold mb-4 text-zinc-200">Revenue Timeline</h3>
               <div
                 ref={timelineContainerRef}
@@ -1136,7 +1145,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             {/* Monthly Revenue Breakdown - Last 12 months */}
             {paidProjects.length > 0 && (
               <div className="mb-6">
-                <div data-finance-container className="bg-zinc-900 rounded-xl p-8 border border-zinc-800">
+                <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary">
                   <h3 className="text-lg font-semibold mb-4 text-zinc-200">Monthly Revenue Breakdown</h3>
               {(() => {
                 // Get last 12 months
@@ -1293,7 +1302,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         {paidProjects.length > 0 && (
           <div className="mb-6">
             <div className="grid grid-cols-[1fr,300px] gap-6 items-start">
-              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+              <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary">
                 <h3 className="text-lg font-semibold mb-4 text-zinc-200">Top 3 Projects by Revenue</h3>
                 <div className="space-y-4">
                   {top3Projects.map(({ project, displayAmount, displayCurr, percentage }) => {
@@ -1327,7 +1336,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             </div>
 
               {/* Pie Chart */}
-              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 flex items-center justify-center h-full">
+              <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary flex items-center justify-center h-full">
                 {projectsPieChartData.length > 0 ? (
                   <PieChart data={projectsPieChartData} title="All&#10;Projects" id="projects" />
                 ) : (
@@ -1342,7 +1351,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         {paidProjects.length > 0 && (
           <div>
             <div className="grid grid-cols-[1fr,300px] gap-6 items-start">
-              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 min-h-[280px]">
+              <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary min-h-[280px]">
                 <h3 className="text-lg font-semibold mb-4 text-zinc-200">Top 3 Clients by Revenue</h3>
                 <div className="space-y-4">
                   {top3Clients.map(({ clientId, data, percentage }) => {
@@ -1395,7 +1404,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             </div>
 
               {/* Pie Chart */}
-              <div data-finance-container className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 flex items-center justify-center h-full">
+              <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary flex items-center justify-center h-full">
                 {clientsPieChartData.length > 0 ? (
                   <PieChart data={clientsPieChartData} title="All&#10;Clients" id="clients" />
                 ) : (

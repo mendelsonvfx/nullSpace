@@ -16,7 +16,7 @@ export const SoftwareBreakdown: React.FC<SoftwareBreakdownProps> = ({
   totalMinutes
 }) => {
   return (
-    <div data-time-analytics className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 mb-6">
+    <div data-time-analytics className="bg-card-bg rounded-xl p-6 border border-border-primary mb-6">
       <h3 className="text-lg font-semibold mb-4 text-zinc-200">Software Breakdown</h3>
       <div className="space-y-3">
         {sortedSoftware.map(([software, minutes]) => {
