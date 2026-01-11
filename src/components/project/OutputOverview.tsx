@@ -57,12 +57,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   }, [specialContextType, project.hasScenes, project.hasShots, currentShot]);
 
   // Generate unique cache key for project + scene + shot + specialContext combination
-  const getCacheKey = () => {
+  const cacheKey = useMemo(() => {
     const shotId = currentShot ? `_shot_${currentShot.number}` : '';
     const sceneId = currentScene ? `_scene_${currentScene.name}` : '';
     const specialContextId = specialContextType ? `_context_${specialContextType}` : '';
     return `${project.path}${sceneId}${shotId}${specialContextId}`;
-  };
+  }, [project.path, currentScene, currentShot, specialContextType]);
 
   // Initialize with empty values - will be set in useLayoutEffect before paint
   const [selectedSoftware, setSelectedSoftware] = useState<SoftwareName | ''>('');
@@ -89,14 +89,14 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   // Save selected software and persist to cache
   const updateSelectedSoftware = (software: SoftwareName) => {
     setSelectedSoftware(software);
-    outputsCache.setOutputState(getCacheKey(), software, selectedOutputType);
+    outputsCache.setOutputState(cacheKey, software, selectedOutputType);
   };
 
   // Save selected output type and persist to cache
   // const updateSelectedOutputType = (type: 'preview' | 'final') => {
   //   setSelectedOutputType(type);
   //   if (selectedSoftware) {
-  //     outputsCache.setOutputState(getCacheKey(), selectedSoftware, type);
+  //     outputsCache.setOutputState(cacheKey, selectedSoftware, type);
   //   }
   // };
 
@@ -107,7 +107,6 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
     // Check cache first if not forcing reload
     if (!forceReload) {
-      const cacheKey = getCacheKey();
       const cachedOutputs = outputsCache.get(cacheKey);
       if (cachedOutputs) {
         setOutputs(cachedOutputs);
@@ -162,7 +161,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
       setOutputs(outputsArray);
 
       // Cache the results
-      outputsCache.set(getCacheKey(), outputsArray);
+      outputsCache.set(cacheKey, outputsArray);
     } catch (err) {
       console.error('Failed to load outputs:', err);
       setError(err instanceof Error ? err.message : 'Failed to load outputs');
@@ -188,7 +187,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         console.log('Output changed detected by file watcher');
         // Invalidate cache and reload immediately
         // No additional debounce needed - backend already debounces at 500ms
-        outputsCache.invalidate(getCacheKey());
+        outputsCache.invalidate(cacheKey);
         loadOutputs(true);
       }).then((fn) => {
         unlisten = fn;
@@ -203,7 +202,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
       if (unlisten) unlisten();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.path]);
+  }, [project.path, cacheKey]);
 
   // Get unique software from outputs and sort alphabetically
   const availableSoftware = useMemo(() => {
@@ -215,7 +214,6 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   useLayoutEffect(() => {
     isRestoringStateRef.current = true; // Mark that we're restoring state programmatically
 
-    const cacheKey = getCacheKey();
     const savedState = outputsCache.getOutputState(cacheKey);
 
     // Check if saved software exists in available outputs
@@ -562,7 +560,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     setIsRefreshing(true);
 
     // Invalidate cache and trigger reload
-    outputsCache.invalidate(getCacheKey());
+    outputsCache.invalidate(cacheKey);
     await loadOutputs(true);
 
     // Trigger global refresh event for TreeView and VersionsOverview

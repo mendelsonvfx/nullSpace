@@ -26,15 +26,11 @@ def setup_blender_project(blend_file_path, project_root, scene_code=None, shot_c
     blender_folder = os.path.dirname(blend_file_path)
 
     # === RENDER OUTPUT PATH ONLY ===
-    # Build render path with scene and shot hierarchy if provided
-    # New format: //Render/Preview/SCENE/SHOT/ (no prefixes)
-    if scene_code and shot_code:
-        # Path: //Render/Preview/RUNB/010/
-        render_path = f"//Render/Preview/{scene_code}/{shot_code}/"
-        print(f"✓ Render output path set to: {render_path}")
-    elif scene_code:
-        # Path: //Render/Preview/RUNB/
-        render_path = f"//Render/Preview/{scene_code}/"
+    # Build render path relative to .blend file location
+    # .blend file is already in Blender/SCENE/, so path is //Render/Preview/SHOT/
+    if shot_code:
+        # Path: //Render/Preview/001/
+        render_path = f"//Render/Preview/{shot_code}/"
         print(f"✓ Render output path set to: {render_path}")
     else:
         render_path = "//Render/Preview/"

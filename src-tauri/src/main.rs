@@ -1800,6 +1800,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
         dir: &PathBuf,
         base_name: &str,
         versions: &mut Vec<ProjectVersion>,
+        expected_software_folder: Option<&str>,
     ) {
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
@@ -1839,6 +1840,13 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                         // Skip files with unknown extensions
                         if software_name.is_none() {
                             continue;
+                        }
+
+                        // Filter by expected software folder if specified
+                        if let Some(expected) = expected_software_folder {
+                            if software_name.unwrap() != expected {
+                                continue;
+                            }
                         }
 
                         // Check if file is versioned using file_naming module
@@ -1883,12 +1891,32 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
         }
     }
 
+    // Map folder names to expected software names for filtering
+    fn get_expected_software_name(folder: &str) -> Option<&'static str> {
+        match folder {
+            "Blender" => Some("Blender"),
+            "Houdini" => Some("Houdini"),
+            "Maya" => Some("Maya"),
+            "AfterEffects" => Some("After Effects"),
+            "Photoshop" => Some("Photoshop"),
+            "Cinema4D" => Some("Cinema 4D"),
+            "Substance" => Some("Substance"),
+            "Unreal" => Some("Unreal"),
+            "Unity" => Some("Unity"),
+            "ZBrush" => Some("ZBrush"),
+            "Marmoset" => Some("Marmoset"),
+            _ => None,
+        }
+    }
+
     // Search in each software folder
     for software_folder in software_folders {
         let software_dir = project_dir.join(software_folder);
         if !software_dir.exists() {
             continue;
         }
+
+        let expected_software = get_expected_software_name(software_folder);
 
         if has_scenes {
             // For projects with scenes: scan Software/SCENE_CODE/ directories
@@ -1900,7 +1928,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                             let dir_name = entry.file_name().to_string_lossy().to_string();
                             // Skip hidden and special folders
                             if !dir_name.starts_with('.') && !dir_name.starts_with('_') {
-                                scan_directory_for_versions(&scene_dir, &base_name, &mut versions);
+                                scan_directory_for_versions(&scene_dir, &base_name, &mut versions, expected_software);
                             }
                         }
                     }
@@ -1908,16 +1936,16 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
             }
         } else {
             // For projects without scenes: scan Software/ directly
-            scan_directory_for_versions(&software_dir, &base_name, &mut versions);
+            scan_directory_for_versions(&software_dir, &base_name, &mut versions, expected_software);
         }
     }
 
-    // Also scan special context folders: _GlobalAssets and _GlobalCompose
+    // Also scan special context folders: _GlobalAssets and _GlobalCompose (no filtering)
     let special_folders = vec!["_GlobalAssets", "_GlobalCompose"];
     for special_folder in special_folders {
         let special_dir = project_dir.join(special_folder);
         if special_dir.exists() {
-            scan_directory_for_versions(&special_dir, &base_name, &mut versions);
+            scan_directory_for_versions(&special_dir, &base_name, &mut versions, None);
         }
     }
 
@@ -1937,39 +1965,49 @@ async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
     let project_dir = PathBuf::from(&project_path);
     let mut deleted_count = 0u32;
 
-    // List of software folders to search
-    let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
-    ];
-
-    // Search in each software folder
-    for software_folder in software_folders {
-        let software_dir = project_dir.join(software_folder);
-        if !software_dir.exists() {
-            continue;
-        }
-
-        if let Ok(entries) = fs::read_dir(&software_dir) {
+    // Helper function to recursively scan directory for .blend1 files
+    fn scan_for_blend1(dir: &PathBuf, deleted_count: &mut u32) {
+        if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        let file_path = entry.path();
-                        let extension = file_path.extension()
+                    let path = entry.path();
+                    if file_type.is_dir() {
+                        // Skip hidden and special folders
+                        let dir_name = entry.file_name().to_string_lossy().to_string();
+                        if !dir_name.starts_with('.') && !dir_name.starts_with('_')
+                            && dir_name != "Render" && dir_name != "Output" && dir_name != "Cache" {
+                            scan_for_blend1(&path, deleted_count);
+                        }
+                    } else if file_type.is_file() {
+                        let extension = path.extension()
                             .and_then(|e| e.to_str())
                             .unwrap_or("")
                             .to_lowercase();
 
                         // Delete .blend1 backup files
                         if extension == "blend1" {
-                            if fs::remove_file(&file_path).is_ok() {
-                                deleted_count += 1;
-                                println!("Deleted backup file: {:?}", file_path);
+                            if fs::remove_file(&path).is_ok() {
+                                *deleted_count += 1;
+                                println!("Deleted backup file: {:?}", path);
                             }
                         }
                     }
                 }
             }
+        }
+    }
+
+    // List of software folders to search
+    let software_folders = vec![
+        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
+        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+    ];
+
+    // Search in each software folder (recursively including scene subfolders)
+    for software_folder in software_folders {
+        let software_dir = project_dir.join(software_folder);
+        if software_dir.exists() {
+            scan_for_blend1(&software_dir, &mut deleted_count);
         }
     }
 
@@ -2065,7 +2103,8 @@ async fn delete_shot_files(
     }
 
     // Delete shot folders from software directories
-    let shot_code = format!("SH{:03}", shot_number);
+    // Shot folder name is just the number, e.g. "001", not "SH001"
+    let shot_folder_name = format!("{:03}", shot_number);
     // Use sanitized scene name instead of SC{number} to match folder creation
     let scene_code = if scene_number > 0 {
         Some(file_naming::sanitize_folder_name(&scene_name))
@@ -2088,11 +2127,12 @@ async fn delete_shot_files(
 
         for folder in folders {
             let shot_folder = if let Some(ref sc) = scene_code {
-                // Scene mode: {Software}/{Render|Output}/{Preview|Final}/{scene_code}/{shot_code}
-                software_path.join(folder).join(sc).join(&shot_code)
+                // Scene mode: {Software}/{scene}/{Render|Output}/{Preview|Final}/{shot}
+                // e.g. Blender/HUSKY/Render/Preview/001
+                software_path.join(sc).join(folder).join(&shot_folder_name)
             } else {
-                // Shots-only mode: {Software}/{Render|Output}/{Preview|Final}/{shot_code}
-                software_path.join(folder).join(&shot_code)
+                // Shots-only mode: {Software}/{Render|Output}/{Preview|Final}/{shot}
+                software_path.join(folder).join(&shot_folder_name)
             };
 
             if shot_folder.exists() {
@@ -2853,7 +2893,7 @@ fn create_wal(project_path: &str, operation_type: &str) -> Result<RenameWAL, Str
         operations: Vec::new(),
     };
 
-    let wal_path = Path::new(project_path).join(".rayhub").join("rename_wal.json");
+    let wal_path = Path::new(project_path).join(".nulls").join("rename_wal.json");
     fs::create_dir_all(wal_path.parent().unwrap())
         .map_err(|e| format!("Failed to create WAL directory: {}", e))?;
 
@@ -2867,7 +2907,7 @@ fn create_wal(project_path: &str, operation_type: &str) -> Result<RenameWAL, Str
 
 /// Save current WAL state to disk
 fn save_wal(wal: &RenameWAL) -> Result<(), String> {
-    let wal_path = Path::new(&wal.project_path).join(".rayhub").join("rename_wal.json");
+    let wal_path = Path::new(&wal.project_path).join(".nulls").join("rename_wal.json");
     let json = serde_json::to_string_pretty(wal)
         .map_err(|e| format!("Failed to serialize WAL: {}", e))?;
     fs::write(&wal_path, json)
@@ -2915,19 +2955,24 @@ fn rollback_from_wal(wal: &RenameWAL) -> Result<(), String> {
     Ok(())
 }
 
-/// Delete WAL file after successful operation
+/// Delete WAL file and .nulls folder after successful operation
 fn delete_wal(wal: &RenameWAL) -> Result<(), String> {
-    let wal_path = Path::new(&wal.project_path).join(".rayhub").join("rename_wal.json");
+    let nulls_dir = Path::new(&wal.project_path).join(".nulls");
+    let wal_path = nulls_dir.join("rename_wal.json");
     if wal_path.exists() {
         fs::remove_file(&wal_path)
             .map_err(|e| format!("Failed to delete WAL: {}", e))?;
+    }
+    // Remove .nulls directory if empty
+    if nulls_dir.exists() {
+        let _ = fs::remove_dir(&nulls_dir); // Ignore error if not empty
     }
     Ok(())
 }
 
 /// Check for and recover from incomplete WAL operations on project open
 fn check_and_recover_wal(project_path: &str) -> Result<(), String> {
-    let wal_path = Path::new(project_path).join(".rayhub").join("rename_wal.json");
+    let wal_path = Path::new(project_path).join(".nulls").join("rename_wal.json");
 
     if wal_path.exists() {
         println!("🔧 Found incomplete WAL operation, recovering...");

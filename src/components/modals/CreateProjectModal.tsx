@@ -37,8 +37,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
     prepaymentAmount: '',
     clientId: '',
     thumbnailPath: '',
-    hasScenes: false,
-    hasShots: false,
+    shotBased: false,
     category: selectedCategory
   });
 
@@ -153,7 +152,8 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
       prepaymentAmount: formData.prepaymentAmount ? parseFloat(formData.prepaymentAmount) : undefined,
       paymentStatus: formData.paymentStatus || undefined,
       clientId: finalClientId || undefined,
-      hasShots: formData.hasShots
+      hasScenes: formData.shotBased,
+      hasShots: formData.shotBased
     };
     console.log('Project data being sent:', projectData);
     console.log('projectData.clientId:', projectData.clientId);
@@ -248,20 +248,11 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
               />
             </div>
             <label className="flex items-center gap-2 cursor-pointer h-[38px] px-3">
-              <span className="text-sm whitespace-nowrap">Has scenes</span>
+              <span className="text-sm whitespace-nowrap">Shot-based</span>
               <input
                 type="checkbox"
-                checked={formData.hasScenes}
-                onChange={(e) => setFormData(prev => ({ ...prev, hasScenes: e.target.checked }))}
-                className="w-4 h-4"
-              />
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer h-[38px] px-3">
-              <span className="text-sm whitespace-nowrap">Has shots</span>
-              <input
-                type="checkbox"
-                checked={formData.hasShots}
-                onChange={(e) => setFormData(prev => ({ ...prev, hasShots: e.target.checked }))}
+                checked={formData.shotBased}
+                onChange={(e) => setFormData(prev => ({ ...prev, shotBased: e.target.checked }))}
                 className="w-4 h-4"
               />
             </label>
