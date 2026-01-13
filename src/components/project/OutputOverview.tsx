@@ -49,9 +49,9 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   }, [specialContextType, project.hasScenes, currentScene]);
 
   const currentShotFilter = useMemo(() => {
-    if (specialContextType) return 'SH001';
+    if (specialContextType) return '001';
     if (project.hasScenes && project.hasShots && currentShot) {
-      return `SH${currentShot.number.toString().padStart(3, '0')}`;
+      return currentShot.number.toString().padStart(3, '0');
     }
     return null;
   }, [specialContextType, project.hasScenes, project.hasShots, currentShot]);

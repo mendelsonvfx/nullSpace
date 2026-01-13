@@ -372,13 +372,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           project.shots = [firstShot];
           project.currentShotId = firstShot.id;
 
-          // Create SH001 folders
+          // Create 001 folders
           try {
             await invoke('create_shot_folders', {
               input: {
                 project_path: project.path,
                 scene_code: firstSceneCode,
-                shot_code: 'SH001'
+                shot_code: '001'
               }
             });
           } catch (error) {
@@ -1016,13 +1016,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         updatedShots = [...updatedShots, newShot];
         newShotId = newShot.id;
 
-        // Create SH001 folders
+        // Create 001 folders
         try {
           await invoke('create_shot_folders', {
             input: {
               project_path: project.path,
               scene_code: sceneCode,
-              shot_code: 'SH001'
+              shot_code: '001'
             }
           });
         } catch (error) {
@@ -1533,7 +1533,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const currentScene = targetSceneId ? (project.scenes || []).find(s => s.id === targetSceneId) : null;
       if (currentScene) {
         const sceneCode = sanitizeFolderName(currentScene.name);
-        const shotCode = `SH${shotNumber.toString().padStart(3, '0')}`;
+        const shotCode = shotNumber.toString().padStart(3, '0');
 
         // Create shot folders dynamically
         try {
@@ -1549,7 +1549,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         }
       } else if (!project.hasScenes) {
         // Shots-only mode: create folders without scene hierarchy
-        const shotCode = `SH${shotNumber.toString().padStart(3, '0')}`;
+        const shotCode = shotNumber.toString().padStart(3, '0');
         try {
           await invoke('create_shot_folders', {
             input: {
