@@ -934,27 +934,6 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         </div>
         )}
 
-        {/* Versions Overview - hidden when only scene is selected (without shot) */}
-        {!(context.isScene && !context.isShot) && (
-        <VersionsOverview
-          project={project}
-          currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
-          currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
-          specialContextType={context.isSpecialContext ? context.specialContextType : null}
-          showNotification={showNotification}
-        />
-        )}
-
-        {/* Output Overview - hidden when only scene is selected (without shot) or in asset context */}
-        {!(context.isScene && !context.isShot) && context.specialContextType !== 'asset' && (
-        <OutputOverview
-          project={project}
-          currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
-          currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
-          specialContextType={context.isSpecialContext ? context.specialContextType : null}
-        />
-        )}
-
         {/* Todo Section - hidden when only scene is selected (shown at top instead) */}
         {!(context.isScene && !context.isShot) && (
         <div className="mb-7">
@@ -1091,6 +1070,27 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             />
           </div>
         </div>
+        )}
+
+        {/* Versions Overview - hidden when only scene is selected (without shot) */}
+        {!(context.isScene && !context.isShot) && (
+        <VersionsOverview
+          project={project}
+          currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
+          currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
+          specialContextType={context.isSpecialContext ? context.specialContextType : null}
+          showNotification={showNotification}
+        />
+        )}
+
+        {/* Output Overview - hidden when only scene is selected (without shot) or in asset context */}
+        {!(context.isScene && !context.isShot) && context.specialContextType !== 'asset' && (
+        <OutputOverview
+          project={project}
+          currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
+          currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
+          specialContextType={context.isSpecialContext ? context.specialContextType : null}
+        />
         )}
 
         {/* Links Section */}

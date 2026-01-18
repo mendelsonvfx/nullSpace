@@ -289,11 +289,14 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
     // Stop minute timer
     TimerService.stop(entryId);
 
-    // Calculate final minutes from elapsedSeconds
-    const finalMinutes = Math.floor(entry.elapsedSeconds / 60);
-    const now = new Date().toISOString();
+    // Calculate actual duration from startTime to now (reliable even after app restart)
+    // This fixes the bug where elapsedSeconds wasn't saved to localStorage between app restarts
+    const startDate = new Date(entry.startTime);
+    const nowDate = new Date();
+    const finalMinutes = Math.floor((nowDate.getTime() - startDate.getTime()) / 60000);
+    const now = nowDate.toISOString();
 
-    console.log(`[TimeTrackingStore] 🛑 Stopped ${entry.software}: ${finalMinutes}m total (${entry.elapsedSeconds}s)`);
+    console.log(`[TimeTrackingStore] 🛑 Stopped ${entry.software}: ${finalMinutes}m total (from startTime: ${entry.startTime})`);
 
     // Update entry in timeTrackingStore
     set(state => {
