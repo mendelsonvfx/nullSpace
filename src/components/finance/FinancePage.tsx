@@ -587,7 +587,14 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   <div className="mt-5">
                     <div className="text-xs text-zinc-500 uppercase tracking-wide mb-4">Project Breakdown:</div>
                     <div className="space-y-2">
-                      {paidProjects.slice(0, 3).map((project: any) => {
+                      {[...paidProjects]
+                      .sort((a, b) => {
+                        const dateA = new Date(a.paidAt || a.completedAt || a.createdAt || 0).getTime();
+                        const dateB = new Date(b.paidAt || b.completedAt || b.createdAt || 0).getTime();
+                        return dateB - dateA;
+                      })
+                      .slice(0, 3)
+                      .map((project: any) => {
                         const originalCurrency = project.currency || 'USD';
                         const originalAmount = project.displayAmount || project.cost;
 

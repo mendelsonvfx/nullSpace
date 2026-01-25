@@ -403,45 +403,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <h1 className="text-project-title font-bold">{project.name}</h1>
-                {/* Context Breadcrumb */}
-                {(() => {
-                  const parts: string[] = [];
-
-                  // Check for special context (Asset/Compose)
-                  if (project.currentSpecialContextId) {
-                    const specialContext = project.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId);
-                    if (specialContext) {
-                      if (specialContext.sceneId) {
-                        const scene = project.scenes?.find((s: any) => s.id === specialContext.sceneId);
-                        if (scene) parts.push(scene.name);
-                      }
-                      parts.push(specialContext.type === 'asset' ? 'Asset Projects' : 'Compose Projects');
-                    }
-                  } else {
-                    // Regular scene/shot context
-                    if (project.currentSceneId) {
-                      const scene = project.scenes?.find((s: any) => s.id === project.currentSceneId);
-                      if (scene) parts.push(scene.name);
-                    }
-                    if (project.currentShotId) {
-                      const shot = project.shots?.find((s: any) => s.id === project.currentShotId);
-                      if (shot) parts.push(shot.name);
-                    }
-                  }
-
-                  if (parts.length > 0) {
-                    return (
-                      <span className="text-sm font-normal text-text-muted flex items-center gap-1.5">
-                        <span>/</span>
-                        {parts.join(' / ')}
-                      </span>
-                    );
-                  }
-                  return null;
-                })()}
-              </div>
+              <h1 className="text-project-title font-bold">{project.name}</h1>
               <span className={`px-2.5 py-1 rounded-badge text-xs font-medium ${
               project.status === 'active' ? 'bg-status-active/15 text-status-active border border-status-active/30' :
               project.status === 'completed' ? 'bg-status-completed/15 text-status-completed border border-status-completed/30' :
@@ -550,9 +512,45 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             </div>
           </div>
 
+          {/* Context Breadcrumb - shown below title */}
+          {(() => {
+            const parts: string[] = [];
+
+            // Check for special context (Asset/Compose)
+            if (project.currentSpecialContextId) {
+              const specialContext = project.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId);
+              if (specialContext) {
+                if (specialContext.sceneId) {
+                  const scene = project.scenes?.find((s: any) => s.id === specialContext.sceneId);
+                  if (scene) parts.push(scene.name);
+                }
+                parts.push(specialContext.type === 'asset' ? 'Asset Projects' : 'Compose Projects');
+              }
+            } else {
+              // Regular scene/shot context
+              if (project.currentSceneId) {
+                const scene = project.scenes?.find((s: any) => s.id === project.currentSceneId);
+                if (scene) parts.push(scene.name);
+              }
+              if (project.currentShotId) {
+                const shot = project.shots?.find((s: any) => s.id === project.currentShotId);
+                if (shot) parts.push(shot.name);
+              }
+            }
+
+            if (parts.length > 0) {
+              return (
+                <div className="text-xs text-text-dim -mt-3">
+                  {parts.join(' / ')}
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           {/* Project Description */}
           {(project.description || isEditingDescription) && (
-            <div className="group/desc inline-flex items-center gap-1.5">
+            <div className="group/desc inline-flex items-center gap-1.5 mt-2.5">
               {isEditingDescription ? (
                 <>
                   <input

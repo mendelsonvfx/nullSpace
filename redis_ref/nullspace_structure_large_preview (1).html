@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Structure - nullSpace</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e4e4e7;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Panel Container */
+        .structure-panel {
+            width: 340px;
+            height: 90vh;
+            background: #0f0f0f;
+            border: 1px solid #1a1a1a;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .panel-header {
+            padding: 16px 18px;
+            border-bottom: 1px solid #1a1a1a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .panel-title svg {
+            width: 20px;
+            height: 20px;
+            color: #8b5cf6;
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 4px;
+            background: #141414;
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid #1a1a1a;
+        }
+
+        .view-btn {
+            width: 32px;
+            height: 32px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #71717a;
+        }
+
+        .view-btn:hover {
+            background: #1a1a1a;
+            color: #e4e4e7;
+        }
+
+        .view-btn.active {
+            background: rgba(139, 92, 246, 0.15);
+            color: #c4b5fd;
+        }
+
+        .view-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Search */
+        .search-box {
+            padding: 12px 18px;
+            border-bottom: 1px solid #1a1a1a;
+        }
+
+        .search-wrapper {
+            position: relative;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            color: #71717a;
+            pointer-events: none;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 14px 10px 40px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            color: #e4e4e7;
+            font-size: 13px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .search-input:focus {
+            background: #1a1a1a;
+            border-color: rgba(139, 92, 246, 0.5);
+        }
+
+        /* Content Area */
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .panel-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .panel-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .panel-content::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 3px;
+        }
+
+        /* Scene Card */
+        .scene-card {
+            margin-bottom: 12px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 14px;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        .scene-card:hover {
+            border-color: #262626;
+        }
+
+        .scene-card.expanded {
+            border-color: rgba(139, 92, 246, 0.3);
+        }
+
+        /* Scene Preview */
+        .scene-preview {
+            width: 100%;
+            height: 110px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .scene-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .scene-preview-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 8px;
+            color: #52525b;
+        }
+
+        .scene-preview-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .scene-preview-icon.kick {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            color: white;
+        }
+
+        .scene-preview-icon.main {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+        }
+
+        .scene-preview-icon.run {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .scene-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 10px 14px;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+            backdrop-filter: blur(8px);
+        }
+
+        .scene-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+            margin-bottom: 2px;
+        }
+
+        .scene-subtitle {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .scene-badge {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            padding: 6px 10px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .expand-indicator {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            width: 32px;
+            height: 32px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .expand-indicator svg {
+            width: 18px;
+            height: 18px;
+            color: white;
+            transition: transform 0.2s ease;
+        }
+
+        .scene-card.expanded .expand-indicator svg {
+            transform: rotate(90deg);
+        }
+
+        /* Scene Info */
+        .scene-info-bar {
+            padding: 10px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #1a1a1a;
+            cursor: pointer;
+        }
+
+        .scene-meta {
+            display: flex;
+            gap: 12px;
+            font-size: 10px;
+            color: #71717a;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .meta-item svg {
+            width: 13px;
+            height: 13px;
+        }
+
+        /* Shots Container */
+        .shots-container {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .scene-card.expanded .shots-container {
+            max-height: 600px;
+        }
+
+        /* Shots Grid */
+        .shots-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            padding: 12px;
+        }
+
+        .shot-card {
+            background: #0f0f0f;
+            border: 1px solid #1a1a1a;
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .shot-card:hover {
+            border-color: rgba(139, 92, 246, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .shot-card.active {
+            border-color: rgba(139, 92, 246, 0.6);
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+        }
+
+        .shot-thumbnail {
+            width: 100%;
+            height: 75px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .shot-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .shot-placeholder {
+            color: #52525b;
+            font-size: 11px;
+        }
+
+        .shot-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 4px 8px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .shot-badge.blender {
+            color: #fb923c;
+        }
+
+        .shot-badge.ae {
+            color: #c084fc;
+        }
+
+        .shot-info {
+            padding: 10px;
+        }
+
+        .shot-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #e4e4e7;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .shot-versions {
+            font-size: 10px;
+            color: #71717a;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .version-dot {
+            width: 3px;
+            height: 3px;
+            background: #34d399;
+            border-radius: 50%;
+        }
+
+        /* List View */
+        .shots-list {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            padding: 12px;
+        }
+
+        .shots-list.active {
+            display: flex;
+        }
+
+        .shot-list-item {
+            padding: 10px;
+            background: #0f0f0f;
+            border: 1px solid #1a1a1a;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .shot-list-item:hover {
+            background: #141414;
+            border-color: #262626;
+        }
+
+        .shot-list-item.active {
+            background: rgba(139, 92, 246, 0.15);
+            border-color: rgba(139, 92, 246, 0.4);
+        }
+
+        .shot-list-thumb {
+            width: 60px;
+            height: 40px;
+            background: #141414;
+            border-radius: 8px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .shot-list-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .shot-list-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .shot-list-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #e4e4e7;
+            margin-bottom: 4px;
+        }
+
+        .shot-list-meta {
+            font-size: 11px;
+            color: #71717a;
+        }
+
+        .shot-list-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .shot-list-icon.blender {
+            background: rgba(249, 115, 22, 0.2);
+            color: #fb923c;
+        }
+
+        .shot-list-icon.ae {
+            background: rgba(147, 51, 234, 0.2);
+            color: #c084fc;
+        }
+
+        /* Footer */
+        .panel-footer {
+            padding: 12px 18px;
+            border-top: 1px solid #1a1a1a;
+            font-size: 10px;
+            color: #71717a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .footer-stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .footer-stat svg {
+            width: 13px;
+            height: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="structure-panel">
+        <!-- Header -->
+        <div class="panel-header">
+            <div class="panel-title">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                Project Structure
+            </div>
+            <div class="view-toggle">
+                <button class="view-btn active" data-view="grid" title="Grid View">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                </button>
+                <button class="view-btn" data-view="list" title="List View">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Search -->
+        <div class="search-box">
+            <div class="search-wrapper">
+                <svg class="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input type="text" class="search-input" placeholder="Search scenes & shots...">
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="panel-content">
+            <!-- KICK Scene -->
+            <div class="scene-card expanded">
+                <div class="scene-preview">
+                    <div class="expand-indicator">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                    <div class="scene-badge">4 shots</div>
+                    <div class="scene-preview-placeholder">
+                        <div class="scene-preview-icon kick">K</div>
+                        <span style="font-size: 11px; color: #71717a;">No preview</span>
+                    </div>
+                    <div class="scene-overlay">
+                        <div class="scene-title">SC_KICK</div>
+                        <div class="scene-subtitle">Kick sequence</div>
+                    </div>
+                </div>
+
+                <div class="scene-info-bar">
+                    <div class="scene-meta">
+                        <div class="meta-item">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            4 shots
+                        </div>
+                        <div class="meta-item">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                            </svg>
+                            Blender
+                        </div>
+                    </div>
+                </div>
+
+                <div class="shots-container">
+                    <div class="shots-grid active">
+                        <div class="shot-card active">
+                            <div class="shot-thumbnail">
+                                <span class="shot-placeholder">No preview</span>
+                                <div class="shot-badge blender">🎨</div>
+                            </div>
+                            <div class="shot-info">
+                                <div class="shot-name">
+                                    <span>SH010</span>
+                                    <div class="shot-versions">
+                                        <div class="version-dot"></div>
+                                        4
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="shot-card">
+                            <div class="shot-thumbnail">
+                                <span class="shot-placeholder">No preview</span>
+                                <div class="shot-badge blender">🎨</div>
+                            </div>
+                            <div class="shot-info">
+                                <div class="shot-name">
+                                    <span>SH020</span>
+                                    <div class="shot-versions">
+                                        <div class="version-dot"></div>
+                                        1
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="shot-card">
+                            <div class="shot-thumbnail">
+                                <span class="shot-placeholder">No preview</span>
+                                <div class="shot-badge blender">🎨</div>
+                            </div>
+                            <div class="shot-info">
+                                <div class="shot-name">
+                                    <span>SH030</span>
+                                    <div class="shot-versions">
+                                        <div class="version-dot"></div>
+                                        2
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="shot-card">
+                            <div class="shot-thumbnail">
+                                <span class="shot-placeholder">No preview</span>
+                                <div class="shot-badge blender">🎨</div>
+                            </div>
+                            <div class="shot-info">
+                                <div class="shot-name">
+                                    <span>SH040</span>
+                                    <div class="shot-versions">
+                                        <div class="version-dot"></div>
+                                        3
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="shots-list">
+                        <div class="shot-list-item active">
+                            <div class="shot-list-thumb">
+                                <span style="font-size: 10px; color: #52525b;">No preview</span>
+                            </div>
+                            <div class="shot-list-info">
+                                <div class="shot-list-name">SH010</div>
+                                <div class="shot-list-meta">4 versions</div>
+                            </div>
+                            <div class="shot-list-icon blender">🎨</div>
+                        </div>
+
+                        <div class="shot-list-item">
+                            <div class="shot-list-thumb">
+                                <span style="font-size: 10px; color: #52525b;">No preview</span>
+                            </div>
+                            <div class="shot-list-info">
+                                <div class="shot-list-name">SH020</div>
+                                <div class="shot-list-meta">1 version</div>
+                            </div>
+                            <div class="shot-list-icon blender">🎨</div>
+                        </div>
+
+                        <div class="shot-list-item">
+                            <div class="shot-list-thumb">
+                                <span style="font-size: 10px; color: #52525b;">No preview</span>
+                            </div>
+                            <div class="shot-list-info">
+                                <div class="shot-list-name">SH030</div>
+                                <div class="shot-list-meta">2 versions</div>
+                            </div>
+                            <div class="shot-list-icon blender">🎨</div>
+                        </div>
+
+                        <div class="shot-list-item">
+                            <div class="shot-list-thumb">
+                                <span style="font-size: 10px; color: #52525b;">No preview</span>
+                            </div>
+                            <div class="shot-list-info">
+                                <div class="shot-list-name">SH040</div>
+                                <div class="shot-list-meta">3 versions</div>
+                            </div>
+                            <div class="shot-list-icon blender">🎨</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MAIN Scene -->
+            <div class="scene-card">
+                <div class="scene-preview">
+                    <div class="expand-indicator">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                    <div class="scene-badge">2 shots</div>
+                    <div class="scene-preview-placeholder">
+                        <div class="scene-preview-icon main">M</div>
+                        <span style="font-size: 11px; color: #71717a;">No preview</span>
+                    </div>
+                    <div class="scene-overlay">
+                        <div class="scene-title">SC_MAIN</div>
+                        <div class="scene-subtitle">Main sequence</div>
+                    </div>
+                </div>
+
+                <div class="scene-info-bar">
+                    <div class="scene-meta">
+                        <div class="meta-item">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            2 shots
+                        </div>
+                        <div class="meta-item">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                            </svg>
+                            Blender
+                        </div>
+                    </div>
+                </div>
+
+                <div class="shots-container">
+                    <div class="shots-grid active">
+                        <div class="shot-card">
+                            <div class="shot-thumbnail">
+                                <span class="shot-placeholder">No preview</span>
+                                <div class="shot-badge blender">🎨</div>
+                            </div>
+                            <div class="shot-info">
+                                <div class="shot-name">
+                                    <span>SH000</span>
+                                    <div class="shot-versions">
+                                        <div class="version-dot"></div>
+                                        2
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="shot-card">
+                            <div class="shot-thumbnail">
+                                <span class="shot-placeholder">No preview</span>
+                                <div class="shot-badge blender">🎨</div>
+                            </div>
+                            <div class="shot-info">
+                                <div class="shot-name">
+                                    <span>SH001</span>
+                                    <div class="shot-versions">
+                                        <div class="version-dot"></div>
+                                        2
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="shots-list">
+                        <div class="shot-list-item">
+                            <div class="shot-list-thumb">
+                                <span style="font-size: 10px; color: #52525b;">No preview</span>
+                            </div>
+                            <div class="shot-list-info">
+                                <div class="shot-list-name">SH000</div>
+                                <div class="shot-list-meta">2 versions</div>
+                            </div>
+                            <div class="shot-list-icon blender">🎨</div>
+                        </div>
+
+                        <div class="shot-list-item">
+                            <div class="shot-list-thumb">
+                                <span style="font-size: 10px; color: #52525b;">No preview</span>
+                            </div>
+                            <div class="shot-list-info">
+                                <div class="shot-list-name">SH001</div>
+                                <div class="shot-list-meta">2 versions</div>
+                            </div>
+                            <div class="shot-list-icon blender">🎨</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RUN Scene -->
+            <div class="scene-card">
+                <div class="scene-preview">
+                    <div class="expand-indicator">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                    <div class="scene-badge">10 shots</div>
+                    <div class="scene-preview-placeholder">
+                        <div class="scene-preview-icon run">R</div>
+                        <span style="font-size: 11px; color: #71717a;">No preview</span>
+                    </div>
+                    <div class="scene-overlay">
+                        <div class="scene-title">SC_RUN</div>
+                        <div class="scene-subtitle">Running sequence</div>
+                    </div>
+                </div>
+
+                <div class="scene-info-bar">
+                    <div class="scene-meta">
+                        <div class="meta-item">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            10 shots
+                        </div>
+                        <div class="meta-item">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                            </svg>
+                            Mixed
+                        </div>
+                    </div>
+                </div>
+
+                <div class="shots-container">
+                    <div class="shots-grid active">
+                        <div class="shot-card">
+                            <div class="shot-thumbnail">
+                                <span class="shot-placeholder">No preview</span>
+                                <div class="shot-badge blender">🎨</div>
+                            </div>
+                            <div class="shot-info">
+                                <div class="shot-name">
+                                    <span>SH010</span>
+                                    <div class="shot-versions">
+                                        <div class="version-dot"></div>
+                                        10
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="shot-card">
+                            <div class="shot-thumbnail">
+                                <span class="shot-placeholder">No preview</span>
+                                <div class="shot-badge blender">🎨</div>
+                            </div>
+                            <div class="shot-info">
+                                <div class="shot-name">
+                                    <span>SH020</span>
+                                    <div class="shot-versions">
+                                        <div class="version-dot"></div>
+                                        6
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="shots-list">
+                        <div class="shot-list-item">
+                            <div class="shot-list-thumb">
+                                <span style="font-size: 10px; color: #52525b;">No preview</span>
+                            </div>
+                            <div class="shot-list-info">
+                                <div class="shot-list-name">SH010</div>
+                                <div class="shot-list-meta">10 versions</div>
+                            </div>
+                            <div class="shot-list-icon blender">🎨</div>
+                        </div>
+
+                        <div class="shot-list-item">
+                            <div class="shot-list-thumb">
+                                <span style="font-size: 10px; color: #52525b;">No preview</span>
+                            </div>
+                            <div class="shot-list-info">
+                                <div class="shot-list-name">SH020</div>
+                                <div class="shot-list-meta">6 versions</div>
+                            </div>
+                            <div class="shot-list-icon blender">🎨</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="panel-footer">
+            <div class="footer-stat">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                </svg>
+                16 shots
+            </div>
+            <div class="footer-stat">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                </svg>
+                22.33 GB
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // View toggle
+        const viewBtns = document.querySelectorAll('.view-btn');
+        viewBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const view = this.dataset.view;
+                viewBtns.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+
+                document.querySelectorAll('.shots-grid, .shots-list').forEach(el => {
+                    el.classList.remove('active');
+                });
+
+                if (view === 'grid') {
+                    document.querySelectorAll('.shots-grid').forEach(el => el.classList.add('active'));
+                } else {
+                    document.querySelectorAll('.shots-list').forEach(el => el.classList.add('active'));
+                }
+            });
+        });
+
+        // Scene expand/collapse
+        document.querySelectorAll('.scene-preview, .scene-info-bar').forEach(el => {
+            el.addEventListener('click', function() {
+                const card = this.closest('.scene-card');
+                card.classList.toggle('expanded');
+            });
+        });
+
+        // Shot selection
+        document.querySelectorAll('.shot-card, .shot-list-item').forEach(shot => {
+            shot.addEventListener('click', function() {
+                document.querySelectorAll('.shot-card, .shot-list-item').forEach(s => s.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Search
+        const searchInput = document.querySelector('.search-input');
+        searchInput.addEventListener('input', function(e) {
+            const term = e.target.value.toLowerCase();
+            document.querySelectorAll('.scene-card').forEach(card => {
+                const sceneName = card.querySelector('.scene-title').textContent.toLowerCase();
+                const shots = card.querySelectorAll('.shot-name, .shot-list-name');
+                let hasMatch = sceneName.includes(term);
+
+                shots.forEach(shot => {
+                    const shotName = shot.textContent.toLowerCase();
+                    if (shotName.includes(term)) hasMatch = true;
+                });
+
+                card.style.display = hasMatch || term === '' ? '' : 'none';
+            });
+        });
+    </script>
+</body>
+</html>

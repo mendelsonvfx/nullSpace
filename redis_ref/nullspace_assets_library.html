@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assets Library - nullSpace</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e4e4e7;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Header */
+        .page-header {
+            padding: 20px 32px;
+            border-bottom: 1px solid #1a1a1a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .project-title {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .project-subtitle {
+            font-size: 14px;
+            color: #71717a;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .icon-btn:hover {
+            background: #1a1a1a;
+            border-color: #262626;
+        }
+
+        .icon-btn svg {
+            width: 18px;
+            height: 18px;
+            color: #a1a1aa;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 28px 32px;
+        }
+
+        .main-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .main-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .main-content::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 4px;
+        }
+
+        /* Section */
+        .section {
+            margin-bottom: 32px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #e4e4e7;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .filter-tab {
+            padding: 6px 12px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            color: #71717a;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .filter-tab.active {
+            background: rgba(139, 92, 246, 0.15);
+            border-color: rgba(139, 92, 246, 0.3);
+            color: #c4b5fd;
+        }
+
+        .filter-tab:hover:not(.active) {
+            background: #1a1a1a;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            padding: 16px 20px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 12px;
+            display: flex;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .stat-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #71717a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #e4e4e7;
+        }
+
+        .stat-trend {
+            font-size: 11px;
+            color: #34d399;
+        }
+
+        /* Assets Table */
+        .assets-table {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .table-header {
+            display: grid;
+            grid-template-columns: 40px 2fr 1fr 120px 140px 100px 80px;
+            padding: 14px 20px;
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #71717a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .asset-row-container {
+            border-bottom: 1px solid #1a1a1a;
+            margin-bottom: 16px;
+            background: #141414;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #1a1a1a;
+        }
+
+        .asset-row-container:last-child {
+            border-bottom: 1px solid #1a1a1a;
+            margin-bottom: 0;
+        }
+
+        .table-row {
+            display: grid;
+            grid-template-columns: 40px 2fr 1fr 120px 140px 100px 80px;
+            padding: 14px 20px;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+
+        .table-row:hover {
+            background: #1a1a1a;
+        }
+
+        .asset-icon-small {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+        }
+
+        .asset-name-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .asset-name-text {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e4e4e7;
+        }
+
+        .asset-description-text {
+            font-size: 12px;
+            color: #71717a;
+        }
+
+        .asset-type-cell {
+            font-size: 12px;
+            color: #a1a1aa;
+        }
+
+        .asset-software-cell {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #a1a1aa;
+        }
+
+        .asset-software-cell svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .asset-date-cell {
+            font-size: 12px;
+            color: #71717a;
+        }
+
+        .asset-tags-cell {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .tag-small {
+            padding: 2px 6px;
+            background: rgba(139, 92, 246, 0.15);
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 500;
+            color: #c4b5fd;
+        }
+
+        .asset-action-cell {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        /* Open Button */
+        .open-btn {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .open-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+
+        .open-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* Versions Overview */
+        .versions-overview {
+            background: #0f0f0f;
+            border-top: 1px solid #1a1a1a;
+        }
+
+        .versions-header {
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #1a1a1a;
+        }
+
+        .versions-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #e4e4e7;
+        }
+
+        .versions-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .version-tab {
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid #262626;
+            border-radius: 6px;
+            color: #71717a;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .version-tab.active {
+            background: #1a1a1a;
+            border-color: #3f3f46;
+            color: #e4e4e7;
+        }
+
+        .version-tab:hover:not(.active) {
+            background: #141414;
+        }
+
+        .versions-content {
+            padding: 16px 20px;
+        }
+
+        .versions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 12px;
+        }
+
+        .version-card {
+            background: #141414;
+            border: 1px solid #1a1a1a;
+            border-radius: 10px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .version-card:hover {
+            border-color: rgba(139, 92, 246, 0.4);
+            background: #1a1a1a;
+        }
+
+        .version-card.active {
+            border-color: rgba(139, 92, 246, 0.6);
+            background: rgba(139, 92, 246, 0.1);
+        }
+
+        .version-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: rgba(139, 92, 246, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: #c4b5fd;
+        }
+
+        .version-card.active .version-icon {
+            background: rgba(139, 92, 246, 0.25);
+        }
+
+        .version-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #e4e4e7;
+        }
+
+        .version-date {
+            font-size: 10px;
+            color: #71717a;
+        }
+
+        .no-versions {
+            padding: 40px 20px;
+            text-align: center;
+            color: #71717a;
+            font-size: 12px;
+        }
+
+        /* Create New Row */
+        .create-row {
+            display: grid;
+            grid-template-columns: 1fr;
+            padding: 20px;
+            border-bottom: 1px solid #1a1a1a;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .create-row:hover {
+            background: rgba(139, 92, 246, 0.05);
+        }
+
+        .create-content {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .create-icon-small {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(139, 92, 246, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .create-icon-small svg {
+            width: 20px;
+            height: 20px;
+            color: #8b5cf6;
+        }
+
+        .create-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .create-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e4e4e7;
+        }
+
+        .create-subtitle {
+            font-size: 12px;
+            color: #71717a;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="page-header">
+            <div class="header-left">
+                <div>
+                    <h1 class="project-title">Assets Library</h1>
+                    <div class="project-subtitle">Manage all your asset projects</div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="icon-btn" title="Search">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </button>
+                <button class="icon-btn" title="Settings">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Stats Bar -->
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <div class="stat-label">Total Assets</div>
+                    <div class="stat-value">24</div>
+                    <div class="stat-trend">+3 this week</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Categories</div>
+                    <div class="stat-value">5</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Storage Used</div>
+                    <div class="stat-value">18.4 GB</div>
+                    <div class="stat-trend">of 100 GB</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Last Updated</div>
+                    <div class="stat-value" style="font-size: 16px;">Today</div>
+                </div>
+            </div>
+
+            <!-- Assets Section -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title">Asset Projects</h2>
+                    <div class="filter-tabs">
+                        <button class="filter-tab active">All</button>
+                        <button class="filter-tab">Characters</button>
+                        <button class="filter-tab">Props</button>
+                        <button class="filter-tab">Environments</button>
+                        <button class="filter-tab">VFX</button>
+                    </div>
+                </div>
+
+                <div class="assets-table">
+                    <!-- Create New Row -->
+                    <div class="create-row">
+                        <div class="create-content">
+                            <div class="create-icon-small">
+                                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                </svg>
+                            </div>
+                            <div class="create-info">
+                                <div class="create-title">Create New Asset</div>
+                                <div class="create-subtitle">Start a new asset project</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Table Header -->
+                    <div class="table-header">
+                        <div></div>
+                        <div>Name</div>
+                        <div>Type</div>
+                        <div>Software</div>
+                        <div>Last Modified</div>
+                        <div>Tags</div>
+                        <div></div>
+                    </div>
+
+                    <!-- Asset 1: Wizard Character -->
+                    <div class="asset-row-container">
+                        <div class="table-row">
+                            <div class="asset-icon-small">🧙</div>
+                            <div class="asset-name-cell">
+                                <div class="asset-name-text">Wizard Character</div>
+                                <div class="asset-description-text">High-poly wizard character with cloth simulation</div>
+                            </div>
+                            <div class="asset-type-cell">Character</div>
+                            <div class="asset-software-cell">
+                                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                                </svg>
+                                Blender
+                            </div>
+                            <div class="asset-date-cell">2 weeks ago</div>
+                            <div class="asset-tags-cell">
+                                <span class="tag-small">Rigged</span>
+                                <span class="tag-small">Textured</span>
+                            </div>
+                            <div class="asset-action-cell">
+                                <button class="open-btn">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    Open
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="versions-overview">
+                            <div class="versions-header">
+                                <div class="versions-title">Versions Overview</div>
+                                <div class="versions-tabs">
+                                    <button class="version-tab active">All</button>
+                                    <button class="version-tab">Blender</button>
+                                </div>
+                            </div>
+                            <div class="versions-content">
+                                <div class="versions-grid">
+                                    <div class="version-card active">
+                                        <div class="version-icon" style="background: rgba(249, 115, 22, 0.2); color: #fb923c;">🎨</div>
+                                        <div class="version-name">v003</div>
+                                        <div class="version-date">Dec 18</div>
+                                    </div>
+                                    <div class="version-card">
+                                        <div class="version-icon" style="background: rgba(249, 115, 22, 0.2); color: #fb923c;">🎨</div>
+                                        <div class="version-name">v002</div>
+                                        <div class="version-date">Dec 15</div>
+                                    </div>
+                                    <div class="version-card">
+                                        <div class="version-icon" style="background: rgba(249, 115, 22, 0.2); color: #fb923c;">🎨</div>
+                                        <div class="version-name">v001</div>
+                                        <div class="version-date">Dec 10</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Asset 2: Medieval Castle -->
+                    <div class="asset-row-container">
+                        <div class="table-row">
+                            <div class="asset-icon-small" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);">🏰</div>
+                            <div class="asset-name-cell">
+                                <div class="asset-name-text">Medieval Castle</div>
+                                <div class="asset-description-text">Modular castle set with walls and towers</div>
+                            </div>
+                            <div class="asset-type-cell">Environment</div>
+                            <div class="asset-software-cell">
+                                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                                </svg>
+                                Blender
+                            </div>
+                            <div class="asset-date-cell">1 week ago</div>
+                            <div class="asset-tags-cell">
+                                <span class="tag-small">Modular</span>
+                                <span class="tag-small">PBR</span>
+                            </div>
+                            <div class="asset-action-cell">
+                                <button class="open-btn">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    Open
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="versions-overview">
+                            <div class="versions-header">
+                                <div class="versions-title">Versions Overview</div>
+                                <div class="versions-tabs">
+                                    <button class="version-tab active">All</button>
+                                    <button class="version-tab">Blender</button>
+                                </div>
+                            </div>
+                            <div class="versions-content">
+                                <div class="versions-grid">
+                                    <div class="version-card active">
+                                        <div class="version-icon" style="background: rgba(249, 115, 22, 0.2); color: #fb923c;">🎨</div>
+                                        <div class="version-name">v002</div>
+                                        <div class="version-date">Dec 19</div>
+                                    </div>
+                                    <div class="version-card">
+                                        <div class="version-icon" style="background: rgba(249, 115, 22, 0.2); color: #fb923c;">🎨</div>
+                                        <div class="version-name">v001</div>
+                                        <div class="version-date">Dec 12</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Asset 3: Weapon Pack -->
+                    <div class="asset-row-container">
+                        <div class="table-row">
+                            <div class="asset-icon-small" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">⚔️</div>
+                            <div class="asset-name-cell">
+                                <div class="asset-name-text">Weapon Pack</div>
+                                <div class="asset-description-text">Medieval weapons - swords, axes, bows</div>
+                            </div>
+                            <div class="asset-type-cell">Prop</div>
+                            <div class="asset-software-cell">
+                                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                                </svg>
+                                Blender
+                            </div>
+                            <div class="asset-date-cell">3 days ago</div>
+                            <div class="asset-tags-cell">
+                                <span class="tag-small">Game-ready</span>
+                                <span class="tag-small">LODs</span>
+                            </div>
+                            <div class="asset-action-cell">
+                                <button class="open-btn">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    Open
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="versions-overview">
+                            <div class="versions-header">
+                                <div class="versions-title">Versions Overview</div>
+                                <div class="versions-tabs">
+                                    <button class="version-tab active">All</button>
+                                    <button class="version-tab">Blender</button>
+                                </div>
+                            </div>
+                            <div class="versions-content">
+                                <div class="versions-grid">
+                                    <div class="version-card active">
+                                        <div class="version-icon" style="background: rgba(249, 115, 22, 0.2); color: #fb923c;">🎨</div>
+                                        <div class="version-name">v005</div>
+                                        <div class="version-date">Dec 20</div>
+                                    </div>
+                                    <div class="version-card">
+                                        <div class="version-icon" style="background: rgba(249, 115, 22, 0.2); color: #fb923c;">🎨</div>
+                                        <div class="version-name">v004</div>
+                                        <div class="version-date">Dec 18</div>
+                                    </div>
+                                    <div class="version-card">
+                                        <div class="version-icon" style="background: rgba(249, 115, 22, 0.2); color: #fb923c;">🎨</div>
+                                        <div class="version-name">v003</div>
+                                        <div class="version-date">Dec 17</div>
+                                    </div>
+                                    <div class="version-card">
+                                        <div class="version-icon" style="background: rgba(249, 115, 22, 0.2); color: #fb923c;">🎨</div>
+                                        <div class="version-name">v002</div>
+                                        <div class="version-date">Dec 15</div>
+                                    </div>
+                                    <div class="version-card">
+                                        <div class="version-icon" style="background: rgba(249, 115, 22, 0.2); color: #fb923c;">🎨</div>
+                                        <div class="version-name">v001</div>
+                                        <div class="version-date">Dec 12</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Asset 4: Magic Effects -->
+                    <div class="asset-row-container">
+                        <div class="table-row">
+                            <div class="asset-icon-small" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">✨</div>
+                            <div class="asset-name-cell">
+                                <div class="asset-name-text">Magic Effects</div>
+                                <div class="asset-description-text">Particle systems for magic spells</div>
+                            </div>
+                            <div class="asset-type-cell">VFX</div>
+                            <div class="asset-software-cell">
+                                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                                </svg>
+                                After Effects
+                            </div>
+                            <div class="asset-date-cell">5 days ago</div>
+                            <div class="asset-tags-cell">
+                                <span class="tag-small">Compositing</span>
+                            </div>
+                            <div class="asset-action-cell">
+                                <button class="open-btn">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    Open
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="versions-overview">
+                            <div class="versions-header">
+                                <div class="versions-title">Versions Overview</div>
+                                <div class="versions-tabs">
+                                    <button class="version-tab active">All</button>
+                                    <button class="version-tab">After Effects</button>
+                                </div>
+                            </div>
+                            <div class="versions-content">
+                                <div class="versions-grid">
+                                    <div class="version-card active">
+                                        <div class="version-icon" style="background: rgba(147, 51, 234, 0.2); color: #c084fc;">Ae</div>
+                                        <div class="version-name">v001</div>
+                                        <div class="version-date">Dec 15</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Asset 5: Nature Pack -->
+                    <div class="asset-row-container">
+                        <div class="table-row">
+                            <div class="asset-icon-small" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);">🌳</div>
+                            <div class="asset-name-cell">
+                                <div class="asset-name-text">Nature Pack</div>
+                                <div class="asset-description-text">Trees, bushes and ground textures</div>
+                            </div>
+                            <div class="asset-type-cell">Environment</div>
+                            <div class="asset-software-cell">
+                                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                                </svg>
+                                Blender
+                            </div>
+                            <div class="asset-date-cell">1 month ago</div>
+                            <div class="asset-tags-cell">
+                                <span class="tag-small">Scatter</span>
+                                <span class="tag-small">Procedural</span>
+                            </div>
+                            <div class="asset-action-cell">
+                                <button class="open-btn">
+                                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    Open
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="versions-overview">
+                            <div class="versions-header">
+                                <div class="versions-title">Versions Overview</div>
+                                <div class="versions-tabs">
+                                    <button class="version-tab active">All</button>
+                                    <button class="version-tab">Blender</button>
+                                </div>
+                            </div>
+                            <div class="versions-content">
+                                <div class="no-versions">No versions available</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Filter tabs
+        document.querySelectorAll('.filter-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Create new asset
+        document.querySelector('.create-row').addEventListener('click', function() {
+            console.log('Create new asset');
+            alert('Open asset creation modal');
+        });
+
+        // Open buttons
+        document.querySelectorAll('.open-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const assetName = this.closest('.table-row').querySelector('.asset-name-text').textContent;
+                console.log('Open asset:', assetName);
+                alert('Opening: ' + assetName);
+            });
+        });
+
+        // Version tabs
+        document.querySelectorAll('.version-tab').forEach(tab => {
+            tab.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const parent = this.closest('.versions-tabs');
+                parent.querySelectorAll('.version-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active);
+            });
+        });
+
+        // Version cards
+        document.querySelectorAll('.version-card').forEach(card => {
+            card.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const parent = this.closest('.versions-grid');
+                parent.querySelectorAll('.version-card').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+                console.log('Selected version:', this.querySelector('.version-name').textContent);
+            });
+        });
+    </script>
+</body>
+</html>
