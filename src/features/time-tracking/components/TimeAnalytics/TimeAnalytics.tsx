@@ -1,6 +1,7 @@
 // src/features/time-tracking/components/TimeAnalytics/TimeAnalytics.tsx
 import React, { useMemo } from 'react';
 import { useTimeStatsStore } from '../../stores/timeStatsStore';
+import { useWorkSessionStore } from '../../stores/workSessionStore';
 import { StatsCards } from './StatsCards';
 import { SoftwareBreakdown } from './SoftwareBreakdown';
 import { WeeklyTimeline } from './WeeklyTimeline';
@@ -75,14 +76,22 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
       .sort((a, b) => b[1] - a[1]);
   }, [softwareMinutes]);
 
+  // Get sessions Map reference from work session store
+  const workSessionsMap = useWorkSessionStore(state => state.sessions);
+
   // Calculate weekly data (last 12 weeks)
   const weeklyData = useMemo(() => {
+    // Calculate active session minutes inside useMemo to avoid stale closure
+    const activeSessionMinutes = Array.from(workSessionsMap.values())
+      .filter(s => s.isActive)
+      .reduce((sum, s) => sum + (s.elapsedMinutes || 0), 0);
+
     const weeks = getLastNWeeks(12);
 
     return weeks.map((weekStart, index) => {
       const weekMinutes = getTotalMinutesForWeek(allTimeEntries, weekStart);
       const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 6);
+      weekEnd.setDate(weekEnd.getDate() + 7); // weekEnd is exclusive (start of next week)
 
       // Generate relative week label
       const weeksAgo = weeks.length - 1 - index;
@@ -95,15 +104,21 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
         label = `${weeksAgo}w ago`;
       }
 
+      // Add elapsed minutes from active WorkSessions for current week only
+      // WorkSession.elapsedMinutes tracks real-time session progress
+      const totalMinutes = weeksAgo === 0
+        ? weekMinutes + activeSessionMinutes
+        : weekMinutes;
+
       return {
         weekStart,
         weekEnd,
-        minutes: weekMinutes,
-        hours: weekMinutes / 60,
+        minutes: totalMinutes,
+        hours: totalMinutes / 60,
         label
       };
     });
-  }, [allTimeEntries]);
+  }, [allTimeEntries, workSessionsMap]);
 
   // Calculate this week vs last week
   const thisWeekMinutes = weeklyData[weeklyData.length - 1]?.minutes || 0;
