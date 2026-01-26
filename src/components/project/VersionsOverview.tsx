@@ -309,6 +309,23 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     return sorted;
   }, [allVersions, currentScene, currentShot, specialContextType, project.name]);
 
+  // Reset selectedSoftware if it's not available in current context (e.g., after switching projects)
+  useEffect(() => {
+    // Skip if "all" is selected - always valid
+    if (selectedSoftware === 'all') return;
+
+    // Skip if showing only unversioned - software filter not active
+    if (showOnlyUnversioned) return;
+
+    // Get unique software from versions (already filtered by scene/shot)
+    const availableSoftware = Array.from(new Set(versions.flatMap(v => v.software)));
+
+    // If selected software is not available, reset to 'all'
+    if (availableSoftware.length > 0 && !availableSoftware.includes(selectedSoftware)) {
+      setSelectedSoftware('all');
+    }
+  }, [versions, selectedSoftware, showOnlyUnversioned]);
+
   // Group shots by scenes for nested menu
   const shotsByScene = useMemo(() => {
     if (!project.shots || !project.scenes) return {};
@@ -667,11 +684,10 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
         {/* Color mark indicator */}
         {versionMark && (
           <div
-            className={`absolute ${hasThumbnail ? 'top-1 right-1' : 'top-1'} w-1.5 h-1.5 rounded-full ${
-              versionMark === 'red' ? 'bg-red-500' :
-              versionMark === 'green' ? 'bg-green-500' :
-              'bg-blue-500'
-            }`}
+            className={`absolute ${hasThumbnail ? 'top-1 right-1' : 'top-1'} w-1.5 h-1.5 rounded-full ${versionMark === 'red' ? 'bg-red-500' :
+                versionMark === 'green' ? 'bg-green-500' :
+                  'bg-blue-500'
+              }`}
             style={hasThumbnail ? undefined : { right: '40px' }}
             title={`Marked as ${versionMark}`}
           />
@@ -750,11 +766,10 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                     setSelectedSoftware(software);
                     setShowOnlyUnversioned(false);
                   }}
-                  className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                    selectedSoftware === software && !showOnlyUnversioned
+                  className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap flex items-center gap-1.5 ${selectedSoftware === software && !showOnlyUnversioned
                       ? 'bg-zinc-700 text-white'
                       : 'text-text-secondary hover:text-white'
-                  }`}
+                    }`}
                 >
                   <SoftwareIcon name={software} className="w-3.5 h-3.5" />
                   {software}
@@ -768,11 +783,10 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                 setSelectedSoftware('all');
                 setShowOnlyUnversioned(false);
               }}
-              className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${
-                selectedSoftware === 'all' && !showOnlyUnversioned
+              className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${selectedSoftware === 'all' && !showOnlyUnversioned
                   ? 'bg-zinc-700 text-white'
                   : 'text-text-secondary hover:text-white'
-              }`}
+                }`}
             >
               All
             </button>
@@ -781,11 +795,10 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                 setShowOnlyUnversioned(!showOnlyUnversioned);
                 setSelectedSoftware('all');
               }}
-              className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${
-                showOnlyUnversioned
+              className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${showOnlyUnversioned
                   ? 'bg-zinc-700 text-white'
                   : 'text-text-secondary hover:text-white'
-              }`}
+                }`}
             >
               Other
             </button>

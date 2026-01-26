@@ -3903,7 +3903,12 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
         if let Some((prefix, _frame_num, ext)) = extract_frame_number(&file.name) {
             // Only group image formats into sequences
             if is_image_format(&ext) {
-                let key = format!("{}_{}_{}_{}",prefix, ext, file.software, file.render_type);
+                // Include parent directory in key to separate sequences from different folders
+                let parent_dir = std::path::Path::new(&file.path)
+                    .parent()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let key = format!("{}_{}_{}_{}_{}", prefix, ext, file.software, file.render_type, parent_dir);
                 sequences.entry(key).or_insert_with(Vec::new).push(file);
             } else {
                 // Non-image files are treated as standalone

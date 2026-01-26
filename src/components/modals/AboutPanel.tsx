@@ -87,11 +87,10 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
                   href={link.disabled ? undefined : link.url}
                   target={link.disabled ? undefined : "_blank"}
                   rel={link.disabled ? undefined : "noopener noreferrer"}
-                  className={`block p-3 rounded-lg border transition-colors ${
-                    link.disabled
+                  className={`block p-3 rounded-lg border transition-colors ${link.disabled
                       ? 'border-zinc-800 bg-zinc-900/50 cursor-not-allowed opacity-50'
                       : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:border-zinc-700'
-                  }`}
+                    }`}
                   onClick={(e) => link.disabled && e.preventDefault()}
                 >
                   <div className="flex items-center justify-between">
@@ -107,7 +106,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
           </div>
 
           <div className="text-center text-xs text-zinc-500">
-            <p>Version 1.4.3</p>
+            <p>Version 1.4.6</p>
             <p className="mt-1">Made with passion by Vision One</p>
           </div>
         </div>
