@@ -577,15 +577,45 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     return (
       <div className="mb-6">
         <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
-        <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
-          {/* Skeleton placeholders mimicking output cards */}
-          <div className="flex gap-3 overflow-hidden">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="flex-shrink-0 w-40">
-                <div className="h-4 bg-zinc-700/50 rounded animate-pulse mb-2 w-3/4" />
-                <div className="h-3 bg-zinc-700/30 rounded animate-pulse w-1/2" />
+        <div data-output-overview className="bg-card-bg border border-border-primary rounded-med overflow-hidden">
+          {/* Skeleton header mimicking software header */}
+          <div className="bg-zinc-800/50 px-4 py-2 flex items-center gap-2 border-b border-zinc-700/50">
+            <div className="w-4 h-4 bg-zinc-700/50 rounded animate-pulse" />
+            <div className="h-4 bg-zinc-700/50 rounded animate-pulse w-16" />
+            <div className="h-3 bg-zinc-700/30 rounded animate-pulse w-12 ml-auto" />
+          </div>
+
+          {/* Skeleton two-column layout mimicking Preview/Final */}
+          <div className="grid grid-cols-2 divide-x divide-border-secondary">
+            {/* Preview column skeleton */}
+            <div className="flex flex-col">
+              {/* Preview Header */}
+              <div className="flex items-center gap-2 px-5 pt-3 pb-2">
+                <div className="w-3.5 h-3.5 bg-zinc-700/30 rounded animate-pulse" />
+                <div className="h-3 bg-zinc-700/30 rounded animate-pulse w-16" />
               </div>
-            ))}
+              {/* Preview Content */}
+              <div className="px-3 pb-3 space-y-2">
+                <div className="h-10 bg-zinc-800/50 rounded animate-pulse" />
+                <div className="h-10 bg-zinc-800/50 rounded animate-pulse" />
+                <div className="h-10 bg-zinc-800/50 rounded animate-pulse w-3/4" />
+              </div>
+            </div>
+            {/* Final column skeleton */}
+            <div className="flex flex-col">
+              {/* Final Header */}
+              <div className="flex items-center gap-2 px-5 pt-3 pb-2">
+                <div className="w-3.5 h-3.5 bg-zinc-700/30 rounded animate-pulse" />
+                <div className="h-3 bg-zinc-700/30 rounded animate-pulse w-12" />
+              </div>
+              {/* Final Content */}
+              <div className="px-3 pb-3 space-y-2">
+                <div className="h-10 bg-zinc-800/50 rounded animate-pulse" />
+                <div className="h-10 bg-zinc-800/50 rounded animate-pulse" />
+                <div className="h-10 bg-zinc-800/50 rounded animate-pulse" />
+                <div className="h-10 bg-zinc-800/50 rounded animate-pulse w-2/3" />
+              </div>
+            </div>
           </div>
         </div>
       </div>

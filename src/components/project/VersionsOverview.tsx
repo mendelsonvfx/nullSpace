@@ -674,15 +674,16 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     onDoubleClick: () => void;
     onContextMenu: (e: React.MouseEvent) => void;
   }) => {
-    const blendThumbnail = useBlendThumbnail(isBlendFile && blendPreviewsEnabled ? version.path : undefined);
-    const hasThumbnail = isBlendFile && blendPreviewsEnabled && blendThumbnail;
+    // Determine if this card will show a thumbnail area (reserve space immediately)
+    const willShowThumbnail = isBlendFile && blendPreviewsEnabled;
+    const blendThumbnail = useBlendThumbnail(willShowThumbnail ? version.path : undefined);
 
     // Build tooltip with file dates
     const tooltip = `${version.name}\nCreated: ${formatDateTime(version.created_at)}\nModified: ${formatDateTime(version.modified_at)}`;
 
     return (
       <div
-        className={`relative flex flex-col flex-shrink-0 ${hasThumbnail ? 'w-36' : 'w-32'} cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none`}
+        className={`relative flex flex-col flex-shrink-0 ${willShowThumbnail ? 'w-36' : 'w-32'} cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none`}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
         title={tooltip}
@@ -690,24 +691,26 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
         {/* Color mark indicator */}
         {versionMark && (
           <div
-            className={`absolute ${hasThumbnail ? 'top-1 right-1' : 'top-1'} w-1.5 h-1.5 rounded-full ${versionMark === 'red' ? 'bg-red-500' :
+            className={`absolute ${willShowThumbnail ? 'top-1 right-1' : 'top-1'} w-1.5 h-1.5 rounded-full ${versionMark === 'red' ? 'bg-red-500' :
               versionMark === 'green' ? 'bg-green-500' :
                 'bg-blue-500'
               }`}
-            style={hasThumbnail ? undefined : { right: '40px' }}
+            style={willShowThumbnail ? undefined : { right: '40px' }}
             title={`Marked as ${versionMark}`}
           />
         )}
 
-        {/* Blender thumbnail preview or software icons */}
-        {hasThumbnail ? (
-          <div className="mb-2 rounded overflow-hidden bg-zinc-800 border border-border-primary relative">
-            <img
-              src={blendThumbnail}
-              alt="Blender preview"
-              className="w-full h-16 object-cover"
-              draggable={false}
-            />
+        {/* Blender thumbnail preview area (fixed size) or software icons */}
+        {willShowThumbnail ? (
+          <div className="mb-2 rounded overflow-hidden bg-zinc-800 border border-border-primary relative h-16">
+            {blendThumbnail && (
+              <img
+                src={blendThumbnail}
+                alt="Blender preview"
+                className="w-full h-full object-cover"
+                draggable={false}
+              />
+            )}
             {/* Software icon overlay in bottom-right corner */}
             <div className="absolute bottom-1 right-1 w-5 h-5">
               <SoftwareIcon name="Blender" />
