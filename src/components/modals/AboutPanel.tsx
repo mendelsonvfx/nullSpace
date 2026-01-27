@@ -88,8 +88,8 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
                   target={link.disabled ? undefined : "_blank"}
                   rel={link.disabled ? undefined : "noopener noreferrer"}
                   className={`block p-3 rounded-lg border transition-colors ${link.disabled
-                      ? 'border-zinc-800 bg-zinc-900/50 cursor-not-allowed opacity-50'
-                      : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:border-zinc-700'
+                    ? 'border-zinc-800 bg-zinc-900/50 cursor-not-allowed opacity-50'
+                    : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:border-zinc-700'
                     }`}
                   onClick={(e) => link.disabled && e.preventDefault()}
                 >
@@ -106,7 +106,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
           </div>
 
           <div className="text-center text-xs text-zinc-500">
-            <p>Version 1.4.6</p>
+            <p>Version 1.4.7</p>
             <p className="mt-1">Made with passion by Vision One</p>
           </div>
         </div>

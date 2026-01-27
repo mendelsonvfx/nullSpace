@@ -565,8 +565,14 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
       <div className="mb-6">
         <h3 className="text-sm font-medium text-text-secondary mb-3">Versions Overview</h3>
         <div className="bg-card-bg border border-border-primary rounded-med p-4">
-          <div className="flex items-center justify-center">
-            <div className="animate-spin w-5 h-5 border-2 border-accent border-t-transparent rounded-full" />
+          {/* Skeleton placeholders mimicking version cards */}
+          <div className="flex gap-3 overflow-hidden">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="flex-shrink-0 w-32 flex flex-col items-center">
+                <div className="w-6 h-6 bg-zinc-700/50 rounded animate-pulse mb-2" />
+                <div className="h-3 bg-zinc-700/30 rounded animate-pulse w-16" />
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -685,8 +691,8 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
         {versionMark && (
           <div
             className={`absolute ${hasThumbnail ? 'top-1 right-1' : 'top-1'} w-1.5 h-1.5 rounded-full ${versionMark === 'red' ? 'bg-red-500' :
-                versionMark === 'green' ? 'bg-green-500' :
-                  'bg-blue-500'
+              versionMark === 'green' ? 'bg-green-500' :
+                'bg-blue-500'
               }`}
             style={hasThumbnail ? undefined : { right: '40px' }}
             title={`Marked as ${versionMark}`}
@@ -767,8 +773,8 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                     setShowOnlyUnversioned(false);
                   }}
                   className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap flex items-center gap-1.5 ${selectedSoftware === software && !showOnlyUnversioned
-                      ? 'bg-zinc-700 text-white'
-                      : 'text-text-secondary hover:text-white'
+                    ? 'bg-zinc-700 text-white'
+                    : 'text-text-secondary hover:text-white'
                     }`}
                 >
                   <SoftwareIcon name={software} className="w-3.5 h-3.5" />
@@ -784,8 +790,8 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                 setShowOnlyUnversioned(false);
               }}
               className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${selectedSoftware === 'all' && !showOnlyUnversioned
-                  ? 'bg-zinc-700 text-white'
-                  : 'text-text-secondary hover:text-white'
+                ? 'bg-zinc-700 text-white'
+                : 'text-text-secondary hover:text-white'
                 }`}
             >
               All
@@ -796,8 +802,8 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                 setSelectedSoftware('all');
               }}
               className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${showOnlyUnversioned
-                  ? 'bg-zinc-700 text-white'
-                  : 'text-text-secondary hover:text-white'
+                ? 'bg-zinc-700 text-white'
+                : 'text-text-secondary hover:text-white'
                 }`}
             >
               Other

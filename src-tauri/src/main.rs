@@ -3823,13 +3823,17 @@ struct OutputFile {
     missing_frames: Option<String>, // e.g., "(0002-0004), 0007"
 }
 
+// Regex for frame number extraction - compiled once at first use
+lazy_static! {
+    static ref FRAME_NUMBER_REGEX: regex::Regex = 
+        regex::Regex::new(r"^(.*)[\._]?(\d{3,})\.([a-zA-Z0-9]+)$").unwrap();
+}
+
 // Helper function to extract frame number from filename
 fn extract_frame_number(filename: &str) -> Option<(String, u32, String)> {
-    use regex::Regex;
     // Match patterns like: name.001.exr, name_001.png, 001.exr, etc.
     // Requires 3+ digits to avoid grouping files like "1.png", "2.png"
-    let re = Regex::new(r"^(.*)[\._]?(\d{3,})\.([a-zA-Z0-9]+)$").ok()?;
-    if let Some(caps) = re.captures(filename) {
+    if let Some(caps) = FRAME_NUMBER_REGEX.captures(filename) {
         let prefix = caps.get(1).map_or("", |m| m.as_str()).to_string();
         let frame_str = caps.get(2)?.as_str();
         let frame_num = frame_str.parse::<u32>().ok()?;

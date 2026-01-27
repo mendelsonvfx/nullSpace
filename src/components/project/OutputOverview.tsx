@@ -172,6 +172,9 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   };
 
   useEffect(() => {
+    // Reset outputs immediately to prevent showing stale data from previous context
+    setOutputs([]);
+    isFirstLoadRef.current = true;
     loadOutputs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.path, currentScene, currentShot, specialContextType]);
@@ -575,13 +578,20 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
       <div className="mb-6">
         <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
         <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
-          <div className="flex items-center justify-center">
-            <div className="animate-spin w-5 h-5 border-2 border-accent border-t-transparent rounded-full" />
+          {/* Skeleton placeholders mimicking output cards */}
+          <div className="flex gap-3 overflow-hidden">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="flex-shrink-0 w-40">
+                <div className="h-4 bg-zinc-700/50 rounded animate-pulse mb-2 w-3/4" />
+                <div className="h-3 bg-zinc-700/30 rounded animate-pulse w-1/2" />
+              </div>
+            ))}
           </div>
         </div>
       </div>
     );
   }
+
 
   if (error) {
     return (
@@ -652,13 +662,11 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
               <button
                 key={software}
                 onClick={() => updateSelectedSoftware(software)}
-                className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 ${
-                  !isRestoringStateRef.current ? 'transition-colors' : ''
-                } ${
-                  selectedSoftware === software
+                className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 ${!isRestoringStateRef.current ? 'transition-colors' : ''
+                  } ${selectedSoftware === software
                     ? 'bg-zinc-700 text-white'
                     : 'text-text-secondary hover:text-white'
-                }`}
+                  }`}
               >
                 <SoftwareIcon name={software} className="w-3.5 h-3.5" />
                 <span>{formatSoftwareName(software)}</span>
@@ -692,93 +700,92 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                 </div>
                 {/* Preview Content - Scrollable */}
                 <div className="px-3 pb-3 space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar">
-                      {(() => {
-                        const { grouped, ungrouped } = groupedByPath[software]?.preview || { grouped: [], ungrouped: [] };
+                  {(() => {
+                    const { grouped, ungrouped } = groupedByPath[software]?.preview || { grouped: [], ungrouped: [] };
 
-                        const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
-                  <button
-                    key={output.path}
-                    onDoubleClick={() => handleOutputClick(output)}
-                    onContextMenu={(e) => handleContextMenu(e, output)}
-                    className="w-full text-left px-3 py-2 rounded bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors group"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm text-text-primary group-hover:text-white transition-colors truncate block">
-                          {groupPrefix ? (
-                            <span className="text-text-muted">{getRelativePathInGroup(output, groupPrefix)}</span>
-                          ) : (
-                            getFolderName(output.path, output.is_sequence) && (
-                              <span className="text-text-muted">{getFolderName(output.path, output.is_sequence)} / </span>
-                            )
-                          )}
-                          {output.name}
-                        </span>
-                        {output.is_sequence && output.frame_count && (() => {
-                          // Check if this is an image sequence format
-                          const ext = output.name.split('.').pop()?.toLowerCase() || '';
-                          const isImageSequence = IMAGE_SEQUENCE_FORMATS.includes(ext);
-
-                          // Only show frame info for image sequences
-                          if (!isImageSequence) return null;
-
-                          return (
-                            <span className="text-xs text-text-muted">
-                              {output.frame_count} frames
-                              {output.missing_frames && (
-                                <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
+                    const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
+                      <button
+                        key={output.path}
+                        onDoubleClick={() => handleOutputClick(output)}
+                        onContextMenu={(e) => handleContextMenu(e, output)}
+                        className="w-full text-left px-3 py-2 rounded bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors group"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm text-text-primary group-hover:text-white transition-colors truncate block">
+                              {groupPrefix ? (
+                                <span className="text-text-muted">{getRelativePathInGroup(output, groupPrefix)}</span>
+                              ) : (
+                                getFolderName(output.path, output.is_sequence) && (
+                                  <span className="text-text-muted">{getFolderName(output.path, output.is_sequence)} / </span>
+                                )
                               )}
+                              {output.name}
                             </span>
-                          );
-                        })()}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-text-muted flex-shrink-0">
-                        <span>{formatFileSize(output.size)}</span>
-                        <span>{formatDate(output.created_at)}</span>
-                      </div>
-                    </div>
-                  </button>
-                );
+                            {output.is_sequence && output.frame_count && (() => {
+                              // Check if this is an image sequence format
+                              const ext = output.name.split('.').pop()?.toLowerCase() || '';
+                              const isImageSequence = IMAGE_SEQUENCE_FORMATS.includes(ext);
 
-                return (
-                  <div className="space-y-2">
-                      {/* Grouped files */}
-                      {grouped.map(group => {
-                        const isExpanded = expandedGroups.has(group.path);
-                        return (
-                          <div key={group.path} className="space-y-1">
-                            {/* Group header */}
-                            <button
-                              onClick={() => toggleGroup(group.path)}
-                              onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'preview')}
-                              className="w-full text-left px-3 py-2 rounded bg-zinc-700/30 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
-                            >
-                              <ChevronDown
-                                className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
-                              />
-                              <span className="text-sm text-text-secondary">{group.path} /</span>
-                              <span className="text-xs text-text-muted ml-auto">({group.files.length})</span>
-                            </button>
+                              // Only show frame info for image sequences
+                              if (!isImageSequence) return null;
 
-                            {/* Group files */}
-                            <div
-                              className={`overflow-hidden transition-[max-height] duration-200 ease-in-out ${
-                                isExpanded ? 'max-h-[2000px]' : 'max-h-0'
-                              }`}
-                            >
-                              <div className="pl-6 space-y-1 pt-1">
-                                {group.files.map(output => renderOutputButton(output, group.path))}
+                              return (
+                                <span className="text-xs text-text-muted">
+                                  {output.frame_count} frames
+                                  {output.missing_frames && (
+                                    <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
+                                  )}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-text-muted flex-shrink-0">
+                            <span>{formatFileSize(output.size)}</span>
+                            <span>{formatDate(output.created_at)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+
+                    return (
+                      <div className="space-y-2">
+                        {/* Grouped files */}
+                        {grouped.map(group => {
+                          const isExpanded = expandedGroups.has(group.path);
+                          return (
+                            <div key={group.path} className="space-y-1">
+                              {/* Group header */}
+                              <button
+                                onClick={() => toggleGroup(group.path)}
+                                onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'preview')}
+                                className="w-full text-left px-3 py-2 rounded bg-zinc-700/30 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
+                              >
+                                <ChevronDown
+                                  className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
+                                />
+                                <span className="text-sm text-text-secondary">{group.path} /</span>
+                                <span className="text-xs text-text-muted ml-auto">({group.files.length})</span>
+                              </button>
+
+                              {/* Group files */}
+                              <div
+                                className={`overflow-hidden transition-[max-height] duration-200 ease-in-out ${isExpanded ? 'max-h-[2000px]' : 'max-h-0'
+                                  }`}
+                              >
+                                <div className="pl-6 space-y-1 pt-1">
+                                  {group.files.map(output => renderOutputButton(output, group.path))}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
 
                         {/* Ungrouped files */}
                         {ungrouped.map(output => renderOutputButton(output))}
                       </div>
-                      );
-                      })()}
+                    );
+                  })()}
                   {types.preview.length === 0 && (
                     <div className="p-4 text-center text-xs text-text-muted">No preview outputs</div>
                   )}
@@ -794,93 +801,92 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                 </div>
                 {/* Final Content - Scrollable */}
                 <div className="px-3 pb-3 space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar">
-                      {(() => {
-                const { grouped, ungrouped } = groupedByPath[software]?.final || { grouped: [], ungrouped: [] };
+                  {(() => {
+                    const { grouped, ungrouped } = groupedByPath[software]?.final || { grouped: [], ungrouped: [] };
 
-                const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
-                  <button
-                    key={output.path}
-                    onDoubleClick={() => handleOutputClick(output)}
-                    onContextMenu={(e) => handleContextMenu(e, output)}
-                    className="w-full text-left px-3 py-2 rounded bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors group"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm text-text-primary group-hover:text-white transition-colors truncate block">
-                          {groupPrefix ? (
-                            <span className="text-text-muted">{getRelativePathInGroup(output, groupPrefix)}</span>
-                          ) : (
-                            getFolderName(output.path, output.is_sequence) && (
-                              <span className="text-text-muted">{getFolderName(output.path, output.is_sequence)} / </span>
-                            )
-                          )}
-                          {output.name}
-                        </span>
-                        {output.is_sequence && output.frame_count && (() => {
-                          // Check if this is an image sequence format
-                          const ext = output.name.split('.').pop()?.toLowerCase() || '';
-                          const isImageSequence = IMAGE_SEQUENCE_FORMATS.includes(ext);
-
-                          // Only show frame info for image sequences
-                          if (!isImageSequence) return null;
-
-                          return (
-                            <span className="text-xs text-text-muted">
-                              {output.frame_count} frames
-                              {output.missing_frames && (
-                                <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
+                    const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
+                      <button
+                        key={output.path}
+                        onDoubleClick={() => handleOutputClick(output)}
+                        onContextMenu={(e) => handleContextMenu(e, output)}
+                        className="w-full text-left px-3 py-2 rounded bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors group"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm text-text-primary group-hover:text-white transition-colors truncate block">
+                              {groupPrefix ? (
+                                <span className="text-text-muted">{getRelativePathInGroup(output, groupPrefix)}</span>
+                              ) : (
+                                getFolderName(output.path, output.is_sequence) && (
+                                  <span className="text-text-muted">{getFolderName(output.path, output.is_sequence)} / </span>
+                                )
                               )}
+                              {output.name}
                             </span>
-                          );
-                        })()}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-text-muted flex-shrink-0">
-                        <span>{formatFileSize(output.size)}</span>
-                        <span>{formatDate(output.created_at)}</span>
-                      </div>
-                    </div>
-                  </button>
-                );
+                            {output.is_sequence && output.frame_count && (() => {
+                              // Check if this is an image sequence format
+                              const ext = output.name.split('.').pop()?.toLowerCase() || '';
+                              const isImageSequence = IMAGE_SEQUENCE_FORMATS.includes(ext);
 
-                return (
-                  <div className="space-y-2">
-                      {/* Grouped files */}
-                      {grouped.map(group => {
-                        const isExpanded = expandedGroups.has(group.path);
-                        return (
-                          <div key={group.path} className="space-y-1">
-                            {/* Group header */}
-                            <button
-                              onClick={() => toggleGroup(group.path)}
-                              onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'final')}
-                              className="w-full text-left px-3 py-2 rounded bg-zinc-700/30 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
-                            >
-                              <ChevronDown
-                                className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
-                              />
-                              <span className="text-sm text-text-secondary">{group.path} /</span>
-                              <span className="text-xs text-text-muted ml-auto">({group.files.length})</span>
-                            </button>
+                              // Only show frame info for image sequences
+                              if (!isImageSequence) return null;
 
-                            {/* Group files */}
-                            <div
-                              className={`overflow-hidden transition-[max-height] duration-200 ease-in-out ${
-                                isExpanded ? 'max-h-[2000px]' : 'max-h-0'
-                              }`}
-                            >
-                              <div className="pl-6 space-y-1 pt-1">
-                                {group.files.map(output => renderOutputButton(output, group.path))}
+                              return (
+                                <span className="text-xs text-text-muted">
+                                  {output.frame_count} frames
+                                  {output.missing_frames && (
+                                    <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
+                                  )}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-text-muted flex-shrink-0">
+                            <span>{formatFileSize(output.size)}</span>
+                            <span>{formatDate(output.created_at)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+
+                    return (
+                      <div className="space-y-2">
+                        {/* Grouped files */}
+                        {grouped.map(group => {
+                          const isExpanded = expandedGroups.has(group.path);
+                          return (
+                            <div key={group.path} className="space-y-1">
+                              {/* Group header */}
+                              <button
+                                onClick={() => toggleGroup(group.path)}
+                                onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'final')}
+                                className="w-full text-left px-3 py-2 rounded bg-zinc-700/30 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
+                              >
+                                <ChevronDown
+                                  className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
+                                />
+                                <span className="text-sm text-text-secondary">{group.path} /</span>
+                                <span className="text-xs text-text-muted ml-auto">({group.files.length})</span>
+                              </button>
+
+                              {/* Group files */}
+                              <div
+                                className={`overflow-hidden transition-[max-height] duration-200 ease-in-out ${isExpanded ? 'max-h-[2000px]' : 'max-h-0'
+                                  }`}
+                              >
+                                <div className="pl-6 space-y-1 pt-1">
+                                  {group.files.map(output => renderOutputButton(output, group.path))}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
 
                         {/* Ungrouped files */}
                         {ungrouped.map(output => renderOutputButton(output))}
                       </div>
-                      );
-                      })()}
+                    );
+                  })()}
                   {types.final.length === 0 && (
                     <div className="p-4 text-center text-xs text-text-muted">No final outputs</div>
                   )}

@@ -1,7 +1,7 @@
 // src/features/time-tracking/components/TimeAnalytics/TimeAnalytics.tsx
 import React, { useMemo } from 'react';
 import { useTimeStatsStore } from '../../stores/timeStatsStore';
-import { useWorkSessionStore } from '../../stores/workSessionStore';
+import { useTimeTrackingStore } from '../../stores/timeTrackingStore';
 import { StatsCards } from './StatsCards';
 import { SoftwareBreakdown } from './SoftwareBreakdown';
 import { WeeklyTimeline } from './WeeklyTimeline';
@@ -36,10 +36,26 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
   // Get global software statistics (persisted)
   const { softwareMinutes } = useTimeStatsStore();
 
-  // Collect all time entries from all projects
+  // Get sessions from timeTrackingStore for real-time elapsedSeconds
+  const timeTrackingSessions = useTimeTrackingStore(state => state.sessions);
+
+  // Collect all time entries from all projects, merging real-time data for active entries
   const allTimeEntries = useMemo(() => {
-    return projects.flatMap(p => p.timeEntries || []) as TimeEntry[];
-  }, [projects]);
+    return projects.flatMap(p => (p.timeEntries || []).map(entry => {
+      // For active entries, merge real-time elapsedSeconds from timeTrackingStore
+      if (entry.isActive) {
+        const liveEntry = timeTrackingSessions.get(entry.id);
+        if (liveEntry) {
+          return {
+            ...entry,
+            elapsedSeconds: liveEntry.elapsedSeconds,
+            durationMinutes: Math.floor(liveEntry.elapsedSeconds / 60)
+          };
+        }
+      }
+      return entry;
+    })) as TimeEntry[];
+  }, [projects, timeTrackingSessions]);
 
   // Calculate total time from GLOBAL statistics (focused time only - persists after project deletion)
   const totalFocusedMinutes = useMemo(() => {
@@ -76,16 +92,8 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
       .sort((a, b) => b[1] - a[1]);
   }, [softwareMinutes]);
 
-  // Get sessions Map reference from work session store
-  const workSessionsMap = useWorkSessionStore(state => state.sessions);
-
   // Calculate weekly data (last 12 weeks)
   const weeklyData = useMemo(() => {
-    // Calculate active session minutes inside useMemo to avoid stale closure
-    const activeSessionMinutes = Array.from(workSessionsMap.values())
-      .filter(s => s.isActive)
-      .reduce((sum, s) => sum + (s.elapsedMinutes || 0), 0);
-
     const weeks = getLastNWeeks(12);
 
     return weeks.map((weekStart, index) => {
@@ -104,21 +112,15 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
         label = `${weeksAgo}w ago`;
       }
 
-      // Add elapsed minutes from active WorkSessions for current week only
-      // WorkSession.elapsedMinutes tracks real-time session progress
-      const totalMinutes = weeksAgo === 0
-        ? weekMinutes + activeSessionMinutes
-        : weekMinutes;
-
       return {
         weekStart,
         weekEnd,
-        minutes: totalMinutes,
-        hours: totalMinutes / 60,
+        minutes: weekMinutes,
+        hours: weekMinutes / 60,
         label
       };
     });
-  }, [allTimeEntries, workSessionsMap]);
+  }, [allTimeEntries]);
 
   // Calculate this week vs last week
   const thisWeekMinutes = weeklyData[weeklyData.length - 1]?.minutes || 0;
