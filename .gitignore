@@ -19,12 +19,17 @@ src-tauri/target
 src-tauri/gen
 
 # Portable builds and config
+nullSpace-v*.zip
 nullSpace_v*.zip
 portable-build/
 .claude/
+.agent/
+redis_ref/
 
 # Accidental file from Windows commands
 nul
+*.stackdump
+temp_shots_list.txt
 
 # Editor directories and files
 .vscode/*
