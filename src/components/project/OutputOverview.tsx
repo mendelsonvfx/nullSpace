@@ -576,7 +576,11 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   if (loading) {
     return (
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
+        {/* Header with title and refresh button placeholder */}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-text-secondary">Output Overview</h3>
+          <div className="w-7 h-7 bg-zinc-800/50 rounded-lg" />
+        </div>
         <div data-output-overview className="bg-card-bg border border-border-primary rounded-med overflow-hidden">
           {/* Skeleton header mimicking software header */}
           <div className="bg-zinc-800/50 px-4 py-2 flex items-center gap-2 border-b border-zinc-700/50">

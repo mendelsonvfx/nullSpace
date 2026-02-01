@@ -543,8 +543,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           console.log('[TimeTracking] Starting tracking for software:', softwareKey, 'PID:', result.pid, 'Scene:', sceneId, 'Shot:', shotId);
 
           // Use new time-tracking module
-          const { startSession, getSession } = useTimeTrackingStore.getState();
-          const entryId = await startSession({
+          const { startSession } = useTimeTrackingStore.getState();
+          await startSession({
             projectId: project.id,
             projectPath: project.path,
             software: softwareKey,
@@ -552,19 +552,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             sceneId,
             shotId
           });
-
-          // Get the created entry from timeTrackingStore
-          const timeEntry = getSession(entryId);
-          if (timeEntry) {
-            // Add the entry to project's timeEntries
-            const updatedProject = {
-              ...project,
-              timeEntries: [...(project.timeEntries || []), timeEntry]
-            };
-            get().updateProject(updatedProject);
-            console.log('[TimeTracking] ✓ Time entry added to project');
-          }
-
+          // Entry is already saved to project.timeEntries inside startSession
           console.log('[TimeTracking] ✓ Time tracking started for', softwareKey);
         } catch (error) {
           console.error('[TimeTracking] ✗ Failed to start time tracking:', error);
@@ -1334,11 +1322,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         scenes: (project.scenes || []).map(s =>
           s.id === sceneId
             ? {
-                ...s,
-                notes: s.notes.map(n =>
-                  n.id === noteId ? { ...n, content, updatedAt: new Date().toISOString() } : n
-                )
-              }
+              ...s,
+              notes: s.notes.map(n =>
+                n.id === noteId ? { ...n, content, updatedAt: new Date().toISOString() } : n
+              )
+            }
             : s
         )
       };
@@ -1387,11 +1375,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         scenes: (project.scenes || []).map(s =>
           s.id === sceneId
             ? {
-                ...s,
-                todos: s.todos.map(t =>
-                  t.id === todoId ? { ...t, completed: !t.completed } : t
-                )
-              }
+              ...s,
+              todos: s.todos.map(t =>
+                t.id === todoId ? { ...t, completed: !t.completed } : t
+              )
+            }
             : s
         )
       };
@@ -1474,11 +1462,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         scenes: (project.scenes || []).map(s =>
           s.id === sceneId
             ? {
-                ...s,
-                links: s.links.map(l =>
-                  l.id === linkId ? { ...l, title: newTitle } : l
-                )
-              }
+              ...s,
+              links: s.links.map(l =>
+                l.id === linkId ? { ...l, title: newTitle } : l
+              )
+            }
             : s
         )
       };
@@ -1875,11 +1863,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         shots: (project.shots || []).map(s =>
           s.id === shotId
             ? {
-                ...s,
-                notes: s.notes.map(n =>
-                  n.id === noteId ? { ...n, content, updatedAt: new Date().toISOString() } : n
-                )
-              }
+              ...s,
+              notes: s.notes.map(n =>
+                n.id === noteId ? { ...n, content, updatedAt: new Date().toISOString() } : n
+              )
+            }
             : s
         )
       };
@@ -1928,9 +1916,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         shots: (project.shots || []).map(s =>
           s.id === shotId
             ? {
-                ...s,
-                todos: s.todos.map(t => (t.id === todoId ? { ...t, completed: !t.completed } : t))
-              }
+              ...s,
+              todos: s.todos.map(t => (t.id === todoId ? { ...t, completed: !t.completed } : t))
+            }
             : s
         )
       };
@@ -2013,9 +2001,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         shots: (project.shots || []).map(s =>
           s.id === shotId
             ? {
-                ...s,
-                links: (s.links || []).map(l => (l.id === linkId ? { ...l, title: newTitle } : l))
-              }
+              ...s,
+              links: (s.links || []).map(l => (l.id === linkId ? { ...l, title: newTitle } : l))
+            }
             : s
         )
       };
@@ -2395,11 +2383,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         specialContexts: project.specialContexts.map(ctx =>
           ctx.id === contextId
             ? {
-                ...ctx,
-                links: (ctx.links || []).map(link =>
-                  link.id === linkId ? { ...link, title: newTitle } : link
-                )
-              }
+              ...ctx,
+              links: (ctx.links || []).map(link =>
+                link.id === linkId ? { ...link, title: newTitle } : link
+              )
+            }
             : ctx
         )
       };
@@ -2450,11 +2438,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         specialContexts: project.specialContexts.map(ctx =>
           ctx.id === contextId
             ? {
-                ...ctx,
-                todos: (ctx.todos || []).map(todo =>
-                  todo.id === todoId ? { ...todo, completed: !todo.completed } : todo
-                )
-              }
+              ...ctx,
+              todos: (ctx.todos || []).map(todo =>
+                todo.id === todoId ? { ...todo, completed: !todo.completed } : todo
+              )
+            }
             : ctx
         )
       };
@@ -2505,11 +2493,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         specialContexts: project.specialContexts.map(ctx =>
           ctx.id === contextId
             ? {
-                ...ctx,
-                notes: (ctx.notes || []).map(note =>
-                  note.id === noteId ? { ...note, content, updatedAt: new Date().toISOString() } : note
-                )
-              }
+              ...ctx,
+              notes: (ctx.notes || []).map(note =>
+                note.id === noteId ? { ...note, content, updatedAt: new Date().toISOString() } : note
+              )
+            }
             : ctx
         )
       };

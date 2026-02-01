@@ -39,22 +39,32 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
   // Get sessions from timeTrackingStore for real-time elapsedSeconds
   const timeTrackingSessions = useTimeTrackingStore(state => state.sessions);
 
-  // Collect all time entries from all projects, merging real-time data for active entries
+  // Collect all time entries from all projects, with deduplication and real-time data merge
   const allTimeEntries = useMemo(() => {
-    return projects.flatMap(p => (p.timeEntries || []).map(entry => {
-      // For active entries, merge real-time elapsedSeconds from timeTrackingStore
-      if (entry.isActive) {
-        const liveEntry = timeTrackingSessions.get(entry.id);
-        if (liveEntry) {
-          return {
-            ...entry,
-            elapsedSeconds: liveEntry.elapsedSeconds,
-            durationMinutes: Math.floor(liveEntry.elapsedSeconds / 60)
-          };
+    const entriesMap = new Map<string, TimeEntry>();
+
+    projects.forEach(p => {
+      (p.timeEntries || []).forEach(entry => {
+        // For active entries, merge real-time elapsedSeconds from timeTrackingStore
+        if (entry.isActive) {
+          const liveEntry = timeTrackingSessions.get(entry.id);
+          if (liveEntry) {
+            entriesMap.set(entry.id, {
+              ...entry,
+              elapsedSeconds: liveEntry.elapsedSeconds,
+              durationMinutes: Math.floor(liveEntry.elapsedSeconds / 60)
+            });
+            return;
+          }
         }
-      }
-      return entry;
-    })) as TimeEntry[];
+        // Only add if not already present (deduplication)
+        if (!entriesMap.has(entry.id)) {
+          entriesMap.set(entry.id, entry);
+        }
+      });
+    });
+
+    return Array.from(entriesMap.values());
   }, [projects, timeTrackingSessions]);
 
   // Calculate total time from GLOBAL statistics (focused time only - persists after project deletion)

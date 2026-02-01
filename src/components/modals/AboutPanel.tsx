@@ -106,7 +106,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
           </div>
 
           <div className="text-center text-xs text-zinc-500">
-            <p>Version 1.4.8</p>
+            <p>Version 1.4.9</p>
             <p className="mt-1">Made with passion by Vision One</p>
           </div>
         </div>
