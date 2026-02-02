@@ -4797,15 +4797,78 @@ fn show_main_window(window: tauri::Window) {
     let _ = window.show();
 }
 
+// Set DWM window corner preference and disable border (Windows 11)
+#[cfg(target_os = "windows")]
+fn set_window_corners_internal(window: &tauri::Window, rounded: bool) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWA_BORDER_COLOR, DWMWCP_ROUND, DWMWCP_DONOTROUND};
+    
+    if let Ok(hwnd) = window.hwnd() {
+        let hwnd = HWND(hwnd.0 as isize);
+        let preference = if rounded { DWMWCP_ROUND } else { DWMWCP_DONOTROUND };
+        
+        unsafe {
+            // Set corner preference
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                &preference as *const _ as *const _,
+                std::mem::size_of_val(&preference) as u32,
+            );
+            
+            // Disable window border (Windows 11 Build 22000+)
+            // DWMWA_COLOR_NONE = 0xFFFFFFFE
+            let no_border: u32 = 0xFFFFFFFE;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_BORDER_COLOR,
+                &no_border as *const _ as *const _,
+                std::mem::size_of_val(&no_border) as u32,
+            );
+        }
+    }
+}
+
+
+
+// Tauri command to set window corners (rounded or square)
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn set_window_corners(window: tauri::Window, rounded: bool) {
+    set_window_corners_internal(&window, rounded);
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn set_window_corners(_window: tauri::Window, _rounded: bool) {
+    // No-op on non-Windows platforms
+}
+
+
 fn main() {
+    // Set WebView2 default background to transparent to prevent white corners
+    std::env::set_var("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "00000000");
+    
     tauri::Builder::default()
+
         .setup(|app| {
             let window = app.get_window("main").unwrap();
+            
+            // Apply startup settings (which may maximize the window)
             apply_window_startup_settings(&window, &app.handle());
+            
+            // Apply DWM corners based on final window state
+            // Use square corners if maximized, rounded otherwise
+            let is_maximized = window.is_maximized().unwrap_or(false);
+            set_window_corners_internal(&window, !is_maximized);
+
+
             // Don't show window here - let JS call show_main_window when ready
             // This prevents the white flash while WebView content loads
             Ok(())
         })
+
+
         .invoke_handler(tauri::generate_handler![
             create_project,
             add_software_to_project,
@@ -4876,7 +4939,9 @@ fn main() {
             remove_empty_folder,
             save_window_config,
             show_main_window,
+            set_window_corners,
         ])
+
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -296,15 +296,17 @@ function App() {
     }
   }, []);
 
-  // Handle window maximize/unmaximize to cover rounded corners
+  // Handle window resize: save state, update fullscreen class and DWM corners
   useEffect(() => {
     let saveTimeout: ReturnType<typeof setTimeout>;
 
     const updateFullscreenClass = async () => {
       const isMaximized = await appWindow.isMaximized();
       const isFullscreen = await appWindow.isFullscreen();
+      const isFullMode = isMaximized || isFullscreen;
 
-      if (isMaximized || isFullscreen) {
+      // Toggle fullscreen class for CSS overlays
+      if (isFullMode) {
         document.documentElement.classList.add('fullscreen');
         document.body.classList.add('fullscreen');
       } else {
@@ -312,17 +314,20 @@ function App() {
         document.body.classList.remove('fullscreen');
       }
 
-      // Save window state after resize (debounced)
-      clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(() => {
-        saveWindowState();
-      }, 300);
+      // Set DWM corners: rounded for normal window, square for maximized/fullscreen
+      invoke('set_window_corners', { rounded: !isFullMode });
     };
 
+    // Set initial state
     updateFullscreenClass();
 
     const unlisten = appWindow.onResized(() => {
       updateFullscreenClass();
+
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+        saveWindowState();
+      }, 300);
     });
 
     return () => {
@@ -330,6 +335,8 @@ function App() {
       unlisten.then(f => f());
     };
   }, [saveWindowState]);
+
+
 
   // Handle window focus and visibility to fix blank screen on restore
   useEffect(() => {
@@ -487,8 +494,8 @@ function App() {
       // Ignore if typing in input, textarea, or contenteditable element
       const target = e.target as HTMLElement;
       const isTyping = target.tagName === 'INPUT' ||
-                       target.tagName === 'TEXTAREA' ||
-                       target.isContentEditable;
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
 
       // F11 - Toggle fullscreen
       if (e.key === 'F11') {
@@ -565,10 +572,10 @@ function App() {
           // Don't close project if user is editing (input/textarea has focus)
           const target = e.target as HTMLElement;
           const isEditing = target?.tagName === 'INPUT' ||
-                           target?.tagName === 'TEXTAREA' ||
-                           target?.isContentEditable ||
-                           document.activeElement?.tagName === 'INPUT' ||
-                           document.activeElement?.tagName === 'TEXTAREA';
+            target?.tagName === 'TEXTAREA' ||
+            target?.isContentEditable ||
+            document.activeElement?.tagName === 'INPUT' ||
+            document.activeElement?.tagName === 'TEXTAREA';
           if (isEditing) {
             return; // Let the input handle ESC
           }
@@ -788,7 +795,7 @@ function App() {
 
       // Clean up temp file after successful copy
       const { removeFile } = await import('@tauri-apps/api/fs');
-      await removeFile(tempPath).catch(() => {}); // Ignore errors
+      await removeFile(tempPath).catch(() => { }); // Ignore errors
 
       updateProject({ ...project, thumbnail: thumbnailName });
     } catch (error) {
@@ -1356,582 +1363,993 @@ function App() {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-      {/* Category Tabs - крайний левый */}
-      <div
-        className="transition-all duration-300 ease-in-out overflow-hidden"
-        style={{
-          width: showCategoryBar ? '40px' : '0px',
-          opacity: showCategoryBar ? 1 : 0
-        }}
-      >
-        <CategoryTabs
-          categories={categories}
-          selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
-          onAddCategory={addCategory}
-          onDeleteCategory={(categoryName) => {
-            const projectCount = projects.filter(p => p.category === categoryName).length;
-            setDeleteConfirm({
-              type: 'category',
-              name: categoryName,
-              id: categoryName,
-              projectCount: projectCount > 0 ? projectCount : undefined
-            });
+        {/* Category Tabs - крайний левый */}
+        <div
+          className="transition-all duration-300 ease-in-out overflow-hidden"
+          style={{
+            width: showCategoryBar ? '40px' : '0px',
+            opacity: showCategoryBar ? 1 : 0
           }}
-          onRenameCategory={async (oldName, newName) => {
-            const { renameCategory } = useProjectStore.getState();
-            await renameCategory(oldName, newName);
-          }}
-          accentColor={accentColor}
-        />
-      </div>
-      {/* Sidebar - Project List */}
-      <div className="w-80 border-r border-t border-border-primary bg-sidebar-bg flex flex-col relative">
-        {/* Sidebar Header */}
-        <div className="px-4 pt-5 pb-0 flex flex-col relative">
-          {/* Search */}
-          <div className="flex items-center gap-2 mb-4">
-            <div className="relative flex-1">
-              <IconSearch stroke={1.5} className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-              <input
-                type="text"
-                placeholder="Search projects..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                data-search-bar
-                className="bg-hover-bg border border-border-secondary rounded-button pl-10 pr-3.5 py-2.5 w-full focus:outline-none focus:border-border-hover transition-colors text-sm text-text-primary placeholder:text-text-muted"
-              />
-            </div>
-          </div>
-
-          {/* Filter Tabs */}
-          <div className="flex gap-2 mb-1 relative">
-            <button
-              onClick={() => setFilterView('all')}
-              className={`flex-1 px-3 py-2 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border ${
-                filterView === 'all'
-                  ? 'bg-hover-bg border-border-hover text-text-primary'
-                  : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
-              }`}
-              title="All projects"
-            >
-              <IconLayoutGrid stroke={1.5} className="w-3.5 h-3.5" />
-              <span>All</span>
-            </button>
-            <button
-              onClick={() => setFilterView('favorites')}
-              className={`flex-1 px-3 py-2 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border ${
-                filterView === 'favorites'
-                  ? 'bg-hover-bg border-border-hover text-text-primary'
-                  : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
-              }`}
-              title="Favorites"
-            >
-              {filterView === 'favorites' ? <IconStarFilled stroke={1.5} className="w-3.5 h-3.5 text-yellow-400" /> : <IconStar stroke={1.5} className="w-3.5 h-3.5" />}
-              <span>Fav</span>
-            </button>
-            <button
-              onClick={() => setFilterView('archive')}
-              className={`flex-1 px-3 py-2 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border ${
-                filterView === 'archive'
-                  ? 'bg-hover-bg border-border-hover text-text-primary'
-                  : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
-              }`}
-              title="Archive"
-            >
-              <IconArchive stroke={1.5} className="w-3.5 h-3.5" />
-              <span>Archive</span>
-            </button>
-            <div className="relative" ref={filterMenuRef}>
-              <button
-                onClick={() => {
-                  setActiveMenu(showFilterMenu ? null : 'filters');
-                  setShowFilterMenu(!showFilterMenu);
-                }}
-                className={`px-3 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border h-full ${
-                  showFilterMenu ? 'bg-hover-bg border-border-hover text-text-primary' : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
-                }`}
-                title="Sort & Filter"
-              >
-                <IconFilter stroke={1.5} className="w-3.5 h-3.5" />
-              </button>
-              {showFilterMenu && (
-                <div className="absolute top-full mt-1 right-0 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 z-50 min-w-[160px] space-y-0.5">
-                  <button
-                    onClick={() => {
-                      setSortBy('createdAt');
-                      setShowFilterMenu(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${
-                      sortBy === 'createdAt' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
-                    }`}
-                  >
-                    <IconClockHour3 size={14} />
-                    By Creation date
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSortBy('deadline');
-                      setShowFilterMenu(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${
-                      sortBy === 'deadline' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
-                    }`}
-                  >
-                    <IconCalendarEvent size={14} />
-                    By Deadline
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSortBy('name');
-                      setShowFilterMenu(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${
-                      sortBy === 'name' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
-                    }`}
-                  >
-                    <IconSortAscendingLetters size={14} />
-                    By Name
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSortBy('cost');
-                      setShowFilterMenu(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${
-                      sortBy === 'cost' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
-                    }`}
-                  >
-                    <IconCurrencyDollar size={14} />
-                    By Cost
-                  </button>
-                  <div className="h-px bg-zinc-600/50 my-1" />
-                  <div
-                    className="relative"
-                    onMouseEnter={() => {
-                      if (clientSubmenuTimeoutRef.current) {
-                        clearTimeout(clientSubmenuTimeoutRef.current);
-                      }
-                      setShowClientSubmenu(true);
-                    }}
-                    onMouseLeave={() => {
-                      clientSubmenuTimeoutRef.current = window.setTimeout(() => {
-                        setShowClientSubmenu(false);
-                      }, 100);
-                    }}
-                  >
-                    <button className="w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 text-text-primary flex items-center justify-between">
-                      <span className="flex items-center gap-2">
-                        <IconUser size={14} />
-                        By Client
-                      </span>
-                      <IconChevronRight stroke={1.5} className="w-3 h-3" />
-                    </button>
-                    {showClientSubmenu && (
-                      <div
-                        className="absolute left-full top-0 ml-2 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 min-w-[160px] space-y-0.5"
-                        onMouseEnter={() => {
-                          if (clientSubmenuTimeoutRef.current) {
-                            clearTimeout(clientSubmenuTimeoutRef.current);
-                          }
-                        }}
-                        onMouseLeave={() => {
-                          clientSubmenuTimeoutRef.current = window.setTimeout(() => {
-                            setShowClientSubmenu(false);
-                          }, 100);
-                        }}
-                      >
-                        <button
-                          onClick={() => {
-                            setSelectedClientId(null);
-                            setShowFilterMenu(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 ${
-                            selectedClientId === null ? 'bg-white/10 text-text-primary' : 'text-text-primary'
-                          }`}
-                        >
-                          All clients
-                        </button>
-                        {clients.map(client => (
-                          <button
-                            key={client.id}
-                            onClick={() => {
-                              setSelectedClientId(client.id);
-                              setShowFilterMenu(false);
-                            }}
-                            className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${
-                              selectedClientId === client.id ? 'bg-white/10 text-text-primary' : 'text-text-primary'
-                            }`}
-                          >
-                            <div
-                              className="w-3 h-3 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: client.color || '#ffffff' }}
-                            />
-                            {client.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-          {/* Gradient fade at the bottom of filter tabs */}
-          <div className="absolute -bottom-8 left-0 right-0 h-8 pointer-events-none z-10 transition-opacity duration-300" style={{
-            background: 'linear-gradient(to bottom, #0f0f0f 0%, rgba(15, 15, 15, 0.9) 20%, rgba(15, 15, 15, 0.7) 40%, rgba(15, 15, 15, 0.4) 60%, rgba(15, 15, 15, 0.15) 80%, transparent 100%)',
-            opacity: showTopShadow ? 1 : 0
-          }}></div>
-        </div>
-
-        {/* Project List */}
-        <SimpleBar
-          className="flex-1 custom-page-scrollbar"
-          autoHide={false}
-          scrollableNodeProps={{ ref: projectListRef }}
         >
-          <div className="px-4 pr-2 pt-4" style={{ paddingBottom: '110px' }}>
-            {isLoading ? (
-              <div className="flex items-center justify-center h-32">
-                <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full" />
+          <CategoryTabs
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+            onAddCategory={addCategory}
+            onDeleteCategory={(categoryName) => {
+              const projectCount = projects.filter(p => p.category === categoryName).length;
+              setDeleteConfirm({
+                type: 'category',
+                name: categoryName,
+                id: categoryName,
+                projectCount: projectCount > 0 ? projectCount : undefined
+              });
+            }}
+            onRenameCategory={async (oldName, newName) => {
+              const { renameCategory } = useProjectStore.getState();
+              await renameCategory(oldName, newName);
+            }}
+            accentColor={accentColor}
+          />
+        </div>
+        {/* Sidebar - Project List */}
+        <div className="w-80 border-r border-t border-border-primary bg-sidebar-bg flex flex-col relative">
+          {/* Sidebar Header */}
+          <div className="px-4 pt-5 pb-0 flex flex-col relative">
+            {/* Search */}
+            <div className="flex items-center gap-2 mb-4">
+              <div className="relative flex-1">
+                <IconSearch stroke={1.5} className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                <input
+                  type="text"
+                  placeholder="Search projects..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  data-search-bar
+                  className="bg-hover-bg border border-border-secondary rounded-button pl-10 pr-3.5 py-2.5 w-full focus:outline-none focus:border-border-hover transition-colors text-sm text-text-primary placeholder:text-text-muted"
+                />
               </div>
-            ) : filteredProjects.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-32 text-text-muted text-sm">
-                <IconFolder stroke={1.5} className="w-8 h-8 mb-2 opacity-50" />
-                <p>No projects found</p>
-              </div>
-            ) : (
-              <div className="space-y-3 pr-2">
-                {filteredProjects.map(project => (
-                  <div
-                    key={project.id}
-                    onMouseEnter={() => setHoveredProjectId(project.id)}
-                    onMouseLeave={() => setHoveredProjectId(null)}
-                  >
-                    <ProjectCard
-                      projectPath={project.path}
-                      thumbnail={project.thumbnail}
-                      isSelected={selectedProjectId === project.id}
-                      onClick={() => handleOpenProject(project)}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setActiveMenu('projects');
-                        openProjectMenu(e, project.id);
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex gap-2 mb-1 relative">
+              <button
+                onClick={() => setFilterView('all')}
+                className={`flex-1 px-3 py-2 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border ${filterView === 'all'
+                  ? 'bg-hover-bg border-border-hover text-text-primary'
+                  : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
+                  }`}
+                title="All projects"
+              >
+                <IconLayoutGrid stroke={1.5} className="w-3.5 h-3.5" />
+                <span>All</span>
+              </button>
+              <button
+                onClick={() => setFilterView('favorites')}
+                className={`flex-1 px-3 py-2 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border ${filterView === 'favorites'
+                  ? 'bg-hover-bg border-border-hover text-text-primary'
+                  : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
+                  }`}
+                title="Favorites"
+              >
+                {filterView === 'favorites' ? <IconStarFilled stroke={1.5} className="w-3.5 h-3.5 text-yellow-400" /> : <IconStar stroke={1.5} className="w-3.5 h-3.5" />}
+                <span>Fav</span>
+              </button>
+              <button
+                onClick={() => setFilterView('archive')}
+                className={`flex-1 px-3 py-2 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border ${filterView === 'archive'
+                  ? 'bg-hover-bg border-border-hover text-text-primary'
+                  : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
+                  }`}
+                title="Archive"
+              >
+                <IconArchive stroke={1.5} className="w-3.5 h-3.5" />
+                <span>Archive</span>
+              </button>
+              <div className="relative" ref={filterMenuRef}>
+                <button
+                  onClick={() => {
+                    setActiveMenu(showFilterMenu ? null : 'filters');
+                    setShowFilterMenu(!showFilterMenu);
+                  }}
+                  className={`px-3 rounded-button text-[13px] transition-all font-normal flex items-center justify-center gap-1.5 border h-full ${showFilterMenu ? 'bg-hover-bg border-border-hover text-text-primary' : 'bg-transparent border-border-secondary text-text-muted hover:border-border-hover'
+                    }`}
+                  title="Sort & Filter"
+                >
+                  <IconFilter stroke={1.5} className="w-3.5 h-3.5" />
+                </button>
+                {showFilterMenu && (
+                  <div className="absolute top-full mt-1 right-0 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 z-50 min-w-[160px] space-y-0.5">
+                    <button
+                      onClick={() => {
+                        setSortBy('createdAt');
+                        setShowFilterMenu(false);
+                      }}
+                      className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${sortBy === 'createdAt' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                        }`}
+                    >
+                      <IconClockHour3 size={14} />
+                      By Creation date
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSortBy('deadline');
+                        setShowFilterMenu(false);
+                      }}
+                      className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${sortBy === 'deadline' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                        }`}
+                    >
+                      <IconCalendarEvent size={14} />
+                      By Deadline
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSortBy('name');
+                        setShowFilterMenu(false);
+                      }}
+                      className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${sortBy === 'name' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                        }`}
+                    >
+                      <IconSortAscendingLetters size={14} />
+                      By Name
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSortBy('cost');
+                        setShowFilterMenu(false);
+                      }}
+                      className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${sortBy === 'cost' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                        }`}
+                    >
+                      <IconCurrencyDollar size={14} />
+                      By Cost
+                    </button>
+                    <div className="h-px bg-zinc-600/50 my-1" />
+                    <div
+                      className="relative"
+                      onMouseEnter={() => {
+                        if (clientSubmenuTimeoutRef.current) {
+                          clearTimeout(clientSubmenuTimeoutRef.current);
+                        }
+                        setShowClientSubmenu(true);
+                      }}
+                      onMouseLeave={() => {
+                        clientSubmenuTimeoutRef.current = window.setTimeout(() => {
+                          setShowClientSubmenu(false);
+                        }, 100);
                       }}
                     >
-                      {/* Header with title, pin, favorite, status */}
-                      <div className="flex items-center gap-2.5 mb-1">
-                        <h3 className="font-bold text-card-title text-text-primary truncate flex-1">{project.name}</h3>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {project.isPinned && (
-                            <IconPinFilled stroke={1.5} className="w-3.5 h-3.5 text-text-primary" />
-                          )}
-                          {project.isFavorite && (
-                            <IconStarFilled stroke={1.5} className="w-3.5 h-3.5 text-yellow-400" />
-                          )}
+                      <button className="w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 text-text-primary flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <IconUser size={14} />
+                          By Client
+                        </span>
+                        <IconChevronRight stroke={1.5} className="w-3 h-3" />
+                      </button>
+                      {showClientSubmenu && (
+                        <div
+                          className="absolute left-full top-0 ml-2 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 min-w-[160px] space-y-0.5"
+                          onMouseEnter={() => {
+                            if (clientSubmenuTimeoutRef.current) {
+                              clearTimeout(clientSubmenuTimeoutRef.current);
+                            }
+                          }}
+                          onMouseLeave={() => {
+                            clientSubmenuTimeoutRef.current = window.setTimeout(() => {
+                              setShowClientSubmenu(false);
+                            }, 100);
+                          }}
+                        >
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              cycleStatus(project.id, project.status as ProjectStatus);
+                            onClick={() => {
+                              setSelectedClientId(null);
+                              setShowFilterMenu(false);
                             }}
-                            className={`w-3 h-3 rounded-full ${STATUS_COLORS[project.status as keyof typeof STATUS_COLORS]} ${
-                              activeSessionsByProject.get(project.id) && project.status !== 'archived'
+                            className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 ${selectedClientId === null ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                              }`}
+                          >
+                            All clients
+                          </button>
+                          {clients.map(client => (
+                            <button
+                              key={client.id}
+                              onClick={() => {
+                                setSelectedClientId(client.id);
+                                setShowFilterMenu(false);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${selectedClientId === client.id ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                                }`}
+                            >
+                              <div
+                                className="w-3 h-3 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: client.color || '#ffffff' }}
+                              />
+                              {client.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* Gradient fade at the bottom of filter tabs */}
+            <div className="absolute -bottom-8 left-0 right-0 h-8 pointer-events-none z-10 transition-opacity duration-300" style={{
+              background: 'linear-gradient(to bottom, #0f0f0f 0%, rgba(15, 15, 15, 0.9) 20%, rgba(15, 15, 15, 0.7) 40%, rgba(15, 15, 15, 0.4) 60%, rgba(15, 15, 15, 0.15) 80%, transparent 100%)',
+              opacity: showTopShadow ? 1 : 0
+            }}></div>
+          </div>
+
+          {/* Project List */}
+          <SimpleBar
+            className="flex-1 custom-page-scrollbar"
+            autoHide={false}
+            scrollableNodeProps={{ ref: projectListRef }}
+          >
+            <div className="px-4 pr-2 pt-4" style={{ paddingBottom: '110px' }}>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full" />
+                </div>
+              ) : filteredProjects.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-32 text-text-muted text-sm">
+                  <IconFolder stroke={1.5} className="w-8 h-8 mb-2 opacity-50" />
+                  <p>No projects found</p>
+                </div>
+              ) : (
+                <div className="space-y-3 pr-2">
+                  {filteredProjects.map(project => (
+                    <div
+                      key={project.id}
+                      onMouseEnter={() => setHoveredProjectId(project.id)}
+                      onMouseLeave={() => setHoveredProjectId(null)}
+                    >
+                      <ProjectCard
+                        projectPath={project.path}
+                        thumbnail={project.thumbnail}
+                        isSelected={selectedProjectId === project.id}
+                        onClick={() => handleOpenProject(project)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setActiveMenu('projects');
+                          openProjectMenu(e, project.id);
+                        }}
+                      >
+                        {/* Header with title, pin, favorite, status */}
+                        <div className="flex items-center gap-2.5 mb-1">
+                          <h3 className="font-bold text-card-title text-text-primary truncate flex-1">{project.name}</h3>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {project.isPinned && (
+                              <IconPinFilled stroke={1.5} className="w-3.5 h-3.5 text-text-primary" />
+                            )}
+                            {project.isFavorite && (
+                              <IconStarFilled stroke={1.5} className="w-3.5 h-3.5 text-yellow-400" />
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                cycleStatus(project.id, project.status as ProjectStatus);
+                              }}
+                              className={`w-3 h-3 rounded-full ${STATUS_COLORS[project.status as keyof typeof STATUS_COLORS]} ${activeSessionsByProject.get(project.id) && project.status !== 'archived'
                                 ? project.status === 'active'
                                   ? 'status-glow-green brightness-150'
                                   : project.status === 'paused'
-                                  ? 'status-glow-yellow brightness-150'
-                                  : project.status === 'completed'
-                                  ? 'status-glow-blue brightness-150'
-                                  : ''
+                                    ? 'status-glow-yellow brightness-150'
+                                    : project.status === 'completed'
+                                      ? 'status-glow-blue brightness-150'
+                                      : ''
                                 : ''
-                            } hover:ring-2 hover:ring-white/50 transition-all cursor-pointer`}
-                            title={`Status: ${STATUS_LABELS[project.status as keyof typeof STATUS_LABELS]} (click to change)`}
-                          />
+                                } hover:ring-2 hover:ring-white/50 transition-all cursor-pointer`}
+                              title={`Status: ${STATUS_LABELS[project.status as keyof typeof STATUS_LABELS]} (click to change)`}
+                            />
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Description */}
-                      <p className="text-xs text-text-secondary truncate mb-3">{project.description}</p>
+                        {/* Description */}
+                        <p className="text-xs text-text-secondary truncate mb-3">{project.description}</p>
 
-                      {(() => {
-                        const hasClient = project.clientId && clientsById.get(project.clientId);
-                        const hasPayment = project.paymentStatus === 'paid' || project.paymentStatus === 'prepaid';
-                        const hasDeadline = project.deadline && project.status !== 'completed' && project.status !== 'archived';
+                        {(() => {
+                          const hasClient = project.clientId && clientsById.get(project.clientId);
+                          const hasPayment = project.paymentStatus === 'paid' || project.paymentStatus === 'prepaid';
+                          const hasDeadline = project.deadline && project.status !== 'completed' && project.status !== 'archived';
 
-                        // Show tags in bottom row when NOT both payment AND deadline exist
-                        const showTagsBottom = !(hasPayment && hasDeadline);
-                        // Show tags in top row when BOTH payment AND deadline exist
-                        const showTagsTop = hasPayment && hasDeadline;
+                          // Show tags in bottom row when NOT both payment AND deadline exist
+                          const showTagsBottom = !(hasPayment && hasDeadline);
+                          // Show tags in top row when BOTH payment AND deadline exist
+                          const showTagsTop = hasPayment && hasDeadline;
 
-                        return (
-                          <>
-                            {/* Software Icons + Tags (top) row */}
-                            {((project.software && project.software.length > 0) || (showTagsTop && project.tags && project.tags.length > 0)) && (
-                              <div className="flex items-center justify-between gap-2 mb-3">
-                                {/* Left: Software icons */}
-                                <div className="flex gap-2">
-                                  {project.software && project.software.slice(0, 6).map((sw: any) => (
-                                    <div
-                                      key={sw.name}
-                                      className="transition-transform hover:scale-110 duration-200"
-                                    >
-                                      <SoftwareIcon name={sw.name} className="w-7 h-7" />
-                                    </div>
-                                  ))}
-                                </div>
-
-                                {/* Right: Tags (only when both payment AND deadline exist) */}
-                                {showTagsTop && project.tags && project.tags.length > 0 && (
-                                  <div className="flex gap-1.5 flex-shrink-0">
-                                    {project.tags.slice(0, 2).map(tag => (
-                                      <span key={tag} className="px-2 py-1 bg-hover-bg rounded-full text-badge text-text-muted">
-                                        {tag}
-                                      </span>
+                          return (
+                            <>
+                              {/* Software Icons + Tags (top) row */}
+                              {((project.software && project.software.length > 0) || (showTagsTop && project.tags && project.tags.length > 0)) && (
+                                <div className="flex items-center justify-between gap-2 mb-3">
+                                  {/* Left: Software icons */}
+                                  <div className="flex gap-2">
+                                    {project.software && project.software.slice(0, 6).map((sw: any) => (
+                                      <div
+                                        key={sw.name}
+                                        className="transition-transform hover:scale-110 duration-200"
+                                      >
+                                        <SoftwareIcon name={sw.name} className="w-7 h-7" />
+                                      </div>
                                     ))}
                                   </div>
-                                )}
-                              </div>
-                            )}
 
-                            {/* Bottom section */}
-                            <div className="flex items-center justify-between gap-2">
-                              {/* Left: Client */}
-                              <div className="flex gap-1.5 flex-wrap flex-1 min-w-0">
-                                {hasClient && (
-                                  <span
-                                    className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 flex-shrink-0"
-                                    style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
-                                  >
-                                    {showTagIcons && <IconUser stroke={1.5} className="w-3 h-3 fill-current opacity-40" />}
-                                    {clientsById.get(project.clientId)!.name}
-                                  </span>
-                                )}
-                              </div>
+                                  {/* Right: Tags (only when both payment AND deadline exist) */}
+                                  {showTagsTop && project.tags && project.tags.length > 0 && (
+                                    <div className="flex gap-1.5 flex-shrink-0">
+                                      {project.tags.slice(0, 2).map(tag => (
+                                        <span key={tag} className="px-2 py-1 bg-hover-bg rounded-full text-badge text-text-muted">
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
-                              {/* Right: Tags + Payment + Deadline */}
-                              <div className="flex items-center gap-1.5 flex-shrink-0">
-                                {/* Tags - show only when NOT both payment AND deadline */}
-                                {showTagsBottom && project.tags && project.tags.length > 0 && (
-                                  <>
-                                    {project.tags.slice(0, 2).map(tag => (
-                                      <span key={tag} className="px-2 py-1 bg-hover-bg rounded-full text-badge text-text-muted">
-                                        {tag}
-                                      </span>
-                                    ))}
-                                  </>
-                                )}
-                                {/* Payment Status */}
-                                {project.paymentStatus === 'paid' && (
-                                  <span className="text-badge px-2 py-1 bg-green-900 text-green-400 rounded-button flex items-center gap-1 font-medium">
-                                    {showTagIcons && <IconCurrencyDollar stroke={1.5} className="w-3 h-3" />}
-                                    Paid
-                                  </span>
-                                )}
-                                {project.paymentStatus === 'prepaid' && (
-                                  <span className="text-badge px-2 py-1 bg-yellow-900 text-yellow-400 rounded-button flex items-center gap-1 font-medium">
-                                    {showTagIcons && <IconCurrencyDollar stroke={1.5} className="w-3 h-3" />}
-                                    Prepaid
-                                  </span>
-                                )}
-                                {/* Deadline */}
-                                {project.deadline && project.status !== 'completed' && project.status !== 'archived' && (() => {
-                                  const daysLeft = getDaysRemaining(project.deadline);
-                                  if (daysLeft === null) return null;
+                              {/* Bottom section */}
+                              <div className="flex items-center justify-between gap-2">
+                                {/* Left: Client */}
+                                <div className="flex gap-1.5 flex-wrap flex-1 min-w-0">
+                                  {hasClient && (
+                                    <span
+                                      className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 flex-shrink-0"
+                                      style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
+                                    >
+                                      {showTagIcons && <IconUser stroke={1.5} className="w-3 h-3 fill-current opacity-40" />}
+                                      {clientsById.get(project.clientId)!.name}
+                                    </span>
+                                  )}
+                                </div>
 
-                                  let displayText;
-                                  if (daysLeft < 0) {
-                                    const absDays = Math.abs(daysLeft);
-                                    displayText = absDays >= 100 ? '99+ overdue' : `${absDays}d overdue`;
-                                  } else if (daysLeft === 0) {
-                                    displayText = 'today';
-                                  } else {
-                                    displayText = daysLeft >= 100 ? '99+ left' : `${daysLeft}d left`;
-                                  }
+                                {/* Right: Tags + Payment + Deadline */}
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  {/* Tags - show only when NOT both payment AND deadline */}
+                                  {showTagsBottom && project.tags && project.tags.length > 0 && (
+                                    <>
+                                      {project.tags.slice(0, 2).map(tag => (
+                                        <span key={tag} className="px-2 py-1 bg-hover-bg rounded-full text-badge text-text-muted">
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </>
+                                  )}
+                                  {/* Payment Status */}
+                                  {project.paymentStatus === 'paid' && (
+                                    <span className="text-badge px-2 py-1 bg-green-900 text-green-400 rounded-button flex items-center gap-1 font-medium">
+                                      {showTagIcons && <IconCurrencyDollar stroke={1.5} className="w-3 h-3" />}
+                                      Paid
+                                    </span>
+                                  )}
+                                  {project.paymentStatus === 'prepaid' && (
+                                    <span className="text-badge px-2 py-1 bg-yellow-900 text-yellow-400 rounded-button flex items-center gap-1 font-medium">
+                                      {showTagIcons && <IconCurrencyDollar stroke={1.5} className="w-3 h-3" />}
+                                      Prepaid
+                                    </span>
+                                  )}
+                                  {/* Deadline */}
+                                  {project.deadline && project.status !== 'completed' && project.status !== 'archived' && (() => {
+                                    const daysLeft = getDaysRemaining(project.deadline);
+                                    if (daysLeft === null) return null;
 
-                                  return (
-                                    <span className={`text-badge px-2 py-1 rounded-button whitespace-nowrap font-medium border ${
-                                      daysLeft < 0
+                                    let displayText;
+                                    if (daysLeft < 0) {
+                                      const absDays = Math.abs(daysLeft);
+                                      displayText = absDays >= 100 ? '99+ overdue' : `${absDays}d overdue`;
+                                    } else if (daysLeft === 0) {
+                                      displayText = 'today';
+                                    } else {
+                                      displayText = daysLeft >= 100 ? '99+ left' : `${daysLeft}d left`;
+                                    }
+
+                                    return (
+                                      <span className={`text-badge px-2 py-1 rounded-button whitespace-nowrap font-medium border ${daysLeft < 0
                                         ? 'bg-red-900 text-red-400 border-red-900'
                                         : daysLeft === 0
-                                        ? 'bg-red-900 text-red-400 border-red-900'
-                                        : daysLeft < 5
-                                        ? 'bg-red-900 text-red-400 border-red-900'
-                                        : daysLeft < 10
-                                        ? 'bg-yellow-900 text-yellow-400 border-yellow-900'
-                                        : 'bg-hover-bg text-text-muted border-border-secondary'
-                                    }`}>
-                                      {displayText}
-                                    </span>
-                                  );
-                                })()}
+                                          ? 'bg-red-900 text-red-400 border-red-900'
+                                          : daysLeft < 5
+                                            ? 'bg-red-900 text-red-400 border-red-900'
+                                            : daysLeft < 10
+                                              ? 'bg-yellow-900 text-yellow-400 border-yellow-900'
+                                              : 'bg-hover-bg text-text-muted border-border-secondary'
+                                        }`}>
+                                        {displayText}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
                               </div>
-                            </div>
-                          </>
-                        );
-                      })()}
-                  </ProjectCard>
+                            </>
+                          );
+                        })()}
+                      </ProjectCard>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-            )}
-          </div>
-        </SimpleBar>
+          </SimpleBar>
 
-        {/* Bottom gradient shadow */}
-        <div
-          className="absolute left-0 right-0 pointer-events-none transition-opacity duration-1000"
-          style={{
-            bottom: '0',
-            height: '60px',
-            background: 'linear-gradient(to top, rgba(0, 0, 0, 0.5), transparent)',
-            zIndex: 40,
-            opacity: showBottomShadow ? 1 : 0
-          }}
-        />
+          {/* Bottom gradient shadow */}
+          <div
+            className="absolute left-0 right-0 pointer-events-none transition-opacity duration-1000"
+            style={{
+              bottom: '0',
+              height: '60px',
+              background: 'linear-gradient(to top, rgba(0, 0, 0, 0.5), transparent)',
+              zIndex: 40,
+              opacity: showBottomShadow ? 1 : 0
+            }}
+          />
 
-        {/* Sidebar Footer */}
-        <div className="absolute bottom-0 left-0 right-0 px-2 pb-2 pointer-events-none z-50">
-          <div className="bg-card-bg border border-border-primary rounded-xl p-2 space-y-2 pointer-events-auto">
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="w-full border border-accent px-4 py-2 rounded-button flex items-center justify-center gap-2 font-medium text-white animate-button"
-              style={{
-                background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-color-hover) 100%)',
-                backgroundSize: '200% 200%',
-                backgroundPosition: '0% 50%',
-                transition: 'background-position 0.5s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundPosition = '100% 50%';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundPosition = '0% 50%';
-              }}
-            >
-              <IconPlus stroke={1.5} className="w-5 h-5" />
-              New Project
-            </button>
+          {/* Sidebar Footer */}
+          <div className="absolute bottom-0 left-0 right-0 px-2 pb-2 pointer-events-none z-50">
+            <div className="bg-card-bg border border-border-primary rounded-xl p-2 space-y-2 pointer-events-auto">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="w-full border border-accent px-4 py-2 rounded-button flex items-center justify-center gap-2 font-medium text-white animate-button"
+                style={{
+                  background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-color-hover) 100%)',
+                  backgroundSize: '200% 200%',
+                  backgroundPosition: '0% 50%',
+                  transition: 'background-position 0.5s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundPosition = '100% 50%';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundPosition = '0% 50%';
+                }}
+              >
+                <IconPlus stroke={1.5} className="w-5 h-5" />
+                New Project
+              </button>
 
-            {/* Mode Switcher */}
-            <div className="flex items-center gap-2">
-              <div className="flex-1 flex items-center bg-app-bg bg-opacity-50 rounded-lg p-0.5">
-                <button
-                  onClick={() => setViewMode('projects')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
-                    viewMode === 'projects'
+              {/* Mode Switcher */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center bg-app-bg bg-opacity-50 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setViewMode('projects')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${viewMode === 'projects'
                       ? 'bg-hover-bg text-white'
                       : 'bg-transparent text-zinc-500 hover:text-zinc-400'
-                  }`}
-                  title="Projects"
-                >
-                  <IconFolder stroke={1.5} className="w-3.5 h-3.5" />
-                  <span className="text-xs font-medium">Projects</span>
-                </button>
-                <button
-                  onClick={handleToggleFinanceMode}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
-                    viewMode === 'finance'
+                      }`}
+                    title="Projects"
+                  >
+                    <IconFolder stroke={1.5} className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">Projects</span>
+                  </button>
+                  <button
+                    onClick={handleToggleFinanceMode}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${viewMode === 'finance'
                       ? 'bg-hover-bg text-white'
                       : 'bg-transparent text-zinc-500 hover:text-zinc-400'
-                  }`}
-                  title="Statistics"
+                      }`}
+                    title="Statistics"
+                  >
+                    <IconChartBar stroke={1.5} className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">Statistics</span>
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="px-3 hover:bg-hover-bg rounded-lg transition-colors flex-shrink-0 flex items-center justify-center py-1.5"
+                  title="Settings"
                 >
-                  <IconChartBar stroke={1.5} className="w-3.5 h-3.5" />
-                  <span className="text-xs font-medium">Statistics</span>
+                  <IconSettings stroke={1.5} className="w-4 h-4 text-text-muted animate-settings-icon" />
                 </button>
               </div>
-              <button
-                onClick={() => setShowSettings(true)}
-                className="px-3 hover:bg-hover-bg rounded-lg transition-colors flex-shrink-0 flex items-center justify-center py-1.5"
-                title="Settings"
-              >
-                <IconSettings stroke={1.5} className="w-4 h-4 text-text-muted animate-settings-icon" />
-              </button>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden border-t border-border-primary">
-        {/* Lazy load FinancePage - only mount after first use, then keep mounted but hidden */}
-        {financePageMounted && (
-          <div style={{ display: viewMode === 'finance' ? 'flex' : 'none', height: '100%' }} className="flex flex-col">
-            <FinancePage projects={projects} selectedProjectId={selectedProjectId} onClose={handleCloseFinance} />
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden border-t border-border-primary">
+          {/* Lazy load FinancePage - only mount after first use, then keep mounted but hidden */}
+          {financePageMounted && (
+            <div style={{ display: viewMode === 'finance' ? 'flex' : 'none', height: '100%' }} className="flex flex-col">
+              <FinancePage projects={projects} selectedProjectId={selectedProjectId} onClose={handleCloseFinance} />
+            </div>
+          )}
+
+          {/* Projects view */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ display: viewMode !== 'finance' ? 'flex' : 'none' }}>
+            {viewMode !== 'finance' && (
+              selectedProject ? (
+                <ProjectDetails
+                  project={selectedProject}
+                  launchingStatus={launchingStatus}
+                  onClose={() => setSelectedProjectId(null)}
+                  onOpenFolder={() => {
+                    console.log('Opening folder:', selectedProject.path);
+                    openInExplorer(selectedProject.path);
+                  }}
+                  showNotification={addGeneralNotification}
+                  onLaunchSoftwareWithoutProject={launchSoftwareWithoutProject}
+                  onLaunchSoftware={(sw: any) => {
+                    // Get special context if exists
+                    let specialContext = null;
+                    if (selectedProject.currentSpecialContextId) {
+                      specialContext = selectedProject.specialContexts?.find(
+                        (c: any) => c.id === selectedProject.currentSpecialContextId
+                      );
+                    }
+
+                    const currentScene = selectedProject.hasScenes && selectedProject.currentSceneId
+                      ? selectedProject.scenes?.find((s: any) => s.id === selectedProject.currentSceneId)
+                      : null;
+
+                    const currentShot = selectedProject.hasShots && selectedProject.currentShotId
+                      ? selectedProject.shots?.find((s: any) => s.id === selectedProject.currentShotId)
+                      : null;
+
+                    // Convert display name to SoftwareName key
+                    const nameToKey: Record<string, string> = {
+                      'Blender': 'blender',
+                      'Houdini': 'houdini',
+                      'Maya': 'maya',
+                      'After Effects': 'after-effects',
+                      'Cinema 4D': 'cinema4d',
+                      'Substance Painter': 'substance',
+                      'Substance Designer': 'substance',
+                      'Unreal Engine': 'unreal',
+                      'Unity': 'unity',
+                      'ZBrush': 'zbrush',
+                      'Marmoset': 'marmoset',
+                      'Photoshop': 'photoshop'
+                    };
+                    const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+
+                    // If in asset context - show dialog to enter asset name
+                    if (specialContext?.type === 'asset') {
+                      setAssetNameDialog({
+                        software: sw,
+                        projectName: selectedProject.name,
+                        projectPath: selectedProject.path,
+                        softwareKey: softwareKey
+                      });
+                      return;
+                    }
+
+                    launchSoftware({
+                      projectPath: selectedProject.path,
+                      executablePath: sw.executablePath,
+                      software: softwareKey,
+                      projectName: selectedProject.name,
+                      sceneName: currentScene?.name,
+                      sceneNumber: currentScene?.number,
+                      shotNumber: currentShot?.number,
+                      specialContext: specialContext ? 'COMP' : undefined
+                    });
+                  }}
+                  onDeleteProject={(project: any) => {
+                    setDeleteConfirm({
+                      type: 'project',
+                      name: project.name,
+                      id: project.id,
+                      path: project.path
+                    });
+                  }}
+                />
+              ) : (
+                <EmptyState onCreateProject={() => setShowCreateModal(true)} />
+              )
+            )}
+          </div>
+        </div>
+
+        {/* ShotsBrowser - between ProjectDetails and TreeView (only when not docked) */}
+        {selectedProject && viewMode !== 'finance' && (selectedProject.hasShots || selectedProject.hasScenes) && !shotsBrowserDocked && (
+          <ShotsBrowser
+            projectId={selectedProject.id}
+            className="w-80 flex-shrink-0"
+            onToggleDock={() => {
+              setShotsBrowserDocked(true);
+              localStorage.setItem('shotsBrowserDocked', 'true');
+            }}
+          />
+        )}
+
+        {/* Right Sidebar */}
+        {selectedProject && viewMode !== 'finance' && (
+          <RightSidebar
+            project={selectedProject}
+            shotsBrowserDocked={shotsBrowserDocked && (selectedProject.hasShots || selectedProject.hasScenes)}
+            onToggleDock={() => {
+              setShotsBrowserDocked(false);
+              localStorage.setItem('shotsBrowserDocked', 'false');
+            }}
+          />
+        )}
+
+        {/* Create Project Modal */}
+        {showCreateModal && (
+          <CreateProjectModal
+            onClose={() => setShowCreateModal(false)}
+            onCreate={createProject}
+            onProjectCreated={(projectId) => setSelectedProjectId(projectId)}
+          />
+        )}
+
+        {/* Asset Name Modal */}
+        {assetNameDialog && (
+          <AssetNameModal
+            isOpen={true}
+            onClose={() => setAssetNameDialog(null)}
+            onConfirm={(assetName) => {
+              launchSoftware({
+                projectPath: assetNameDialog.projectPath,
+                executablePath: assetNameDialog.software.executablePath,
+                software: assetNameDialog.softwareKey,
+                projectName: assetNameDialog.projectName,
+                specialContext: 'ASSET',
+                assetName: assetName
+              });
+              setAssetNameDialog(null);
+            }}
+            softwareName={assetNameDialog.software.name}
+            projectName={assetNameDialog.projectName}
+          />
+        )}
+
+        {/* Prepayment Amount Modal */}
+        {prepaymentDialog && (
+          <PrepaymentAmountModal
+            isOpen={true}
+            onClose={() => setPrepaymentDialog(null)}
+            onConfirm={(amount) => {
+              const project = projects.find(p => p.id === prepaymentDialog.projectId);
+              if (project) {
+                const updates = getPaymentStatusUpdate(project, 'prepaid');
+                updateProject({ ...project, ...updates, prepaymentAmount: amount });
+              }
+              setPrepaymentDialog(null);
+            }}
+            projectName={prepaymentDialog.projectName}
+            projectCost={prepaymentDialog.projectCost}
+            projectCurrency={prepaymentDialog.projectCurrency}
+          />
+        )}
+
+        {/* Settings Modal */}
+        {showSettings && (
+          <SettingsPanel
+            onClose={() => setShowSettings(false)}
+            onDeleteClient={(clientId, clientName) => {
+              setDeleteConfirm({
+                type: 'client',
+                name: clientName,
+                id: clientId
+              });
+            }}
+          />
+        )}
+
+        {/* Feedback Panel */}
+        {showFeedback && (
+          <FeedbackPanel
+            onClose={() => setShowFeedback(false)}
+          />
+        )}
+
+        {/* About Panel */}
+        {showAbout && (
+          <AboutPanel
+            onClose={() => setShowAbout(false)}
+          />
+        )}
+
+        {/* Delete Confirmation Dialog */}
+        {deleteConfirm && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) {
+                (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
+              }
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget && (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
+                setDeleteConfirm(null);
+              }
+              delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
+            }}
+          >
+            <div
+              className="bg-zinc-900 border border-red-700 rounded-lg p-6 max-w-md w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold mb-2">Confirm Delete</h3>
+              <p className="text-zinc-400 mb-6">
+                {deleteConfirm.type === 'category' && deleteConfirm.projectCount
+                  ? `Are you sure you want to delete category "${deleteConfirm.name}" and move its ${deleteConfirm.projectCount} project(s) to "Personal"? This action cannot be undone.`
+                  : deleteConfirm.type === 'category'
+                    ? `Are you sure you want to delete the "${deleteConfirm.name}" category?`
+                    : `Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone.`
+                }
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors animate-button"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (deleteConfirm.type === 'project' && deleteConfirm.path) {
+                      await deleteProject(deleteConfirm.path);
+                    } else if (deleteConfirm.type === 'client') {
+                      deleteClient(deleteConfirm.id);
+                    } else if (deleteConfirm.type === 'category') {
+                      const { removeCategory } = useProjectStore.getState();
+                      await removeCategory(deleteConfirm.id);
+                    }
+                    setDeleteConfirm(null);
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium animate-button"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Projects view */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ display: viewMode !== 'finance' ? 'flex' : 'none' }}>
-        {viewMode !== 'finance' && (
-          selectedProject ? (
-            <ProjectDetails
-              project={selectedProject}
-              launchingStatus={launchingStatus}
-              onClose={() => setSelectedProjectId(null)}
-              onOpenFolder={() => {
-               console.log('Opening folder:', selectedProject.path);
-               openInExplorer(selectedProject.path);
-               }}
-              showNotification={addGeneralNotification}
-              onLaunchSoftwareWithoutProject={launchSoftwareWithoutProject}
-              onLaunchSoftware={(sw: any) => {
-                // Get special context if exists
-                let specialContext = null;
-                if (selectedProject.currentSpecialContextId) {
-                  specialContext = selectedProject.specialContexts?.find(
-                    (c: any) => c.id === selectedProject.currentSpecialContextId
-                  );
+        {/* Context Menu */}
+        <ContextMenu
+          ref={contextMenuRef}
+          isOpen={isProjectMenuOpen}
+          position={projectMenuPosition}
+          onClose={closeContextMenu}
+          menuId="projects"
+        >
+          <div>
+            <ContextMenuItem
+              icon={<IconPin stroke={1.5} className="w-4 h-4" />}
+              onClick={() => {
+                if (projectMenuData) {
+                  togglePin(projectMenuData);
+                  closeContextMenu();
                 }
+              }}
+            >
+              {projects.find(p => p.id === projectMenuData)?.isPinned ? 'Unpin' : 'Pin to top'}
+            </ContextMenuItem>
+            <ContextMenuItem
+              icon={<IconStar stroke={1.5} className="w-4 h-4" />}
+              onClick={() => {
+                if (projectMenuData) {
+                  toggleFavorite(projectMenuData);
+                  closeContextMenu();
+                }
+              }}
+            >
+              {projects.find(p => p.id === projectMenuData)?.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            </ContextMenuItem>
+            <ContextMenuItem
+              icon={<IconPhoto stroke={1.5} className="w-4 h-4" />}
+              onClick={async () => {
+                const project = projects.find(p => p.id === projectMenuData);
+                if (project) {
+                  try {
+                    const clipboardItems = await navigator.clipboard.read();
+                    for (const item of clipboardItems) {
+                      const imageTypes = item.types.filter(type => type.startsWith('image/'));
+                      if (imageTypes.length > 0) {
+                        const blob = await item.getType(imageTypes[0]);
+                        await processImageBlobForProject(project, blob);
+                        break;
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Failed to paste thumbnail from clipboard:', error);
+                  }
+                }
+                closeContextMenu();
+              }}
+            >
+              Paste Thumbnail
+            </ContextMenuItem>
+            <ContextMenuItem
+              icon={<IconX stroke={1.5} className="w-4 h-4" />}
+              onClick={() => {
+                const project = projects.find(p => p.id === projectMenuData);
+                if (project) {
+                  updateProject({ ...project, thumbnail: undefined });
+                }
+                closeContextMenu();
+              }}
+            >
+              Remove Thumbnail
+            </ContextMenuItem>
+            <ContextMenuDivider />
 
-                const currentScene = selectedProject.hasScenes && selectedProject.currentSceneId
-                  ? selectedProject.scenes?.find((s: any) => s.id === selectedProject.currentSceneId)
-                  : null;
+            {/* Status submenu */}
+            <div className="px-3 py-1 text-[11px] text-text-muted opacity-70 font-medium">Status</div>
+            <ContextMenuItem
+              icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-green-500 text-green-500" />}
+              onClick={() => {
+                if (projectMenuData) {
+                  updateStatus(projectMenuData, 'active');
+                  closeContextMenu();
+                }
+              }}
+            >
+              Active
+            </ContextMenuItem>
+            <ContextMenuItem
+              icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-yellow-500 text-yellow-500" />}
+              onClick={() => {
+                if (projectMenuData) {
+                  updateStatus(projectMenuData, 'paused');
+                  closeContextMenu();
+                }
+              }}
+            >
+              Paused
+            </ContextMenuItem>
+            <ContextMenuItem
+              icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-blue-500 text-blue-500" />}
+              onClick={() => {
+                if (projectMenuData) {
+                  updateStatus(projectMenuData, 'completed');
+                  closeContextMenu();
+                }
+              }}
+            >
+              Completed
+            </ContextMenuItem>
+            <ContextMenuItem
+              icon={<IconArchive stroke={1.5} className="w-4 h-4" />}
+              onClick={() => {
+                if (projectMenuData) {
+                  updateStatus(projectMenuData, 'archived');
+                  closeContextMenu();
+                }
+              }}
+            >
+              Archived
+            </ContextMenuItem>
 
-                const currentShot = selectedProject.hasShots && selectedProject.currentShotId
-                  ? selectedProject.shots?.find((s: any) => s.id === selectedProject.currentShotId)
-                  : null;
+            <ContextMenuDivider />
 
-                // Convert display name to SoftwareName key
-                const nameToKey: Record<string, string> = {
-                  'Blender': 'blender',
-                  'Houdini': 'houdini',
-                  'Maya': 'maya',
-                  'After Effects': 'after-effects',
-                  'Cinema 4D': 'cinema4d',
-                  'Substance Painter': 'substance',
-                  'Substance Designer': 'substance',
-                  'Unreal Engine': 'unreal',
-                  'Unity': 'unity',
-                  'ZBrush': 'zbrush',
-                  'Marmoset': 'marmoset',
-                  'Photoshop': 'photoshop'
-                };
-                const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
-
-                // If in asset context - show dialog to enter asset name
-                if (specialContext?.type === 'asset') {
-                  setAssetNameDialog({
-                    software: sw,
-                    projectName: selectedProject.name,
-                    projectPath: selectedProject.path,
-                    softwareKey: softwareKey
+            {/* Payment Status submenu */}
+            <div className="px-3 py-1 text-[11px] text-text-muted opacity-70 font-medium">Payment Status</div>
+            <ContextMenuItem
+              icon={<IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-zinc-500" />}
+              onClick={() => {
+                const project = projects.find(p => p.id === projectMenuData);
+                if (project) {
+                  const updates = getPaymentStatusUpdate(project, 'unpaid');
+                  updateProject({ ...project, ...updates });
+                }
+                closeContextMenu();
+              }}
+            >
+              Unpaid
+            </ContextMenuItem>
+            <ContextMenuItem
+              icon={<IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-yellow-500" />}
+              onClick={() => {
+                const project = projects.find(p => p.id === projectMenuData);
+                if (project) {
+                  // Open modal to enter prepayment amount
+                  setPrepaymentDialog({
+                    projectId: project.id,
+                    projectName: project.name,
+                    projectCost: project.cost,
+                    projectCurrency: (project.currency || 'USD') as Currency
                   });
+                }
+                closeContextMenu();
+              }}
+            >
+              Prepaid
+            </ContextMenuItem>
+            <ContextMenuItem
+              icon={<IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-green-500" />}
+              onClick={() => {
+                const project = projects.find(p => p.id === projectMenuData);
+                if (project) {
+                  const updates = getPaymentStatusUpdate(project, 'paid');
+                  updateProject({ ...project, ...updates });
+                }
+                closeContextMenu();
+              }}
+            >
+              Paid
+            </ContextMenuItem>
+
+            <ContextMenuDivider />
+
+            {/* Move to Category submenu */}
+            <div
+              className="relative"
+              onMouseEnter={() => {
+                if (categorySubmenuTimeoutRef.current) {
+                  clearTimeout(categorySubmenuTimeoutRef.current);
+                }
+                setShowCategorySubmenu(true);
+              }}
+              onMouseLeave={() => {
+                categorySubmenuTimeoutRef.current = window.setTimeout(() => {
+                  setShowCategorySubmenu(false);
+                }, 100);
+              }}
+            >
+              <button
+                ref={categoryButtonRef}
+                className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-white/10 rounded-md flex items-center justify-between gap-2 transition-colors"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="w-4 h-4 flex items-center justify-center opacity-80">
+                    <IconFolder stroke={1.5} className="w-4 h-4" />
+                  </span>
+                  Move to...
+                </div>
+                <IconChevronRight stroke={1.5} className="w-4 h-4 opacity-50" />
+              </button>
+
+              {/* Category submenu */}
+              {showCategorySubmenu && (
+                <div
+                  ref={categorySubmenuRef}
+                  className="absolute left-full bottom-0 ml-2.5 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 z-[101] w-auto animate-context-menu"
+                  onMouseEnter={() => {
+                    if (categorySubmenuTimeoutRef.current) {
+                      clearTimeout(categorySubmenuTimeoutRef.current);
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    categorySubmenuTimeoutRef.current = window.setTimeout(() => {
+                      setShowCategorySubmenu(false);
+                    }, 100);
+                  }}
+                >
+                  {categories.map((category) => {
+                    const project = projects.find(p => p.id === projectMenuData);
+                    const isCurrentCategory = project?.category === category;
+
+                    return (
+                      <button
+                        key={category}
+                        onClick={() => {
+                          if (project && !isCurrentCategory) {
+                            updateProject({ ...project, category });
+                          }
+                          closeContextMenu();
+                          setShowCategorySubmenu(false);
+                        }}
+                        className={`block w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-white/10 rounded-md whitespace-nowrap transition-colors ${isCurrentCategory ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                        disabled={isCurrentCategory}
+                      >
+                        {category}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <ContextMenuDivider />
+            <ContextMenuItem
+              icon={<IconTrash stroke={1.5} className="w-4 h-4" />}
+              danger
+              onClick={() => {
+                const projectId = projectMenuData;
+                const project = projects.find(p => p.id === projectId);
+
+                if (!project) {
+                  closeContextMenu();
                   return;
                 }
 
-                launchSoftware({
-                  projectPath: selectedProject.path,
-                  executablePath: sw.executablePath,
-                  software: softwareKey,
-                  projectName: selectedProject.name,
-                  sceneName: currentScene?.name,
-                  sceneNumber: currentScene?.number,
-                  shotNumber: currentShot?.number,
-                  specialContext: specialContext ? 'COMP' : undefined
-                });
-              }}
-              onDeleteProject={(project: any) => {
+                // Close menu and show custom confirm dialog
+                closeContextMenu();
                 setDeleteConfirm({
                   type: 'project',
                   name: project.name,
@@ -1939,443 +2357,17 @@ function App() {
                   path: project.path
                 });
               }}
-            />
-          ) : (
-            <EmptyState onCreateProject={() => setShowCreateModal(true)} />
-          )
-        )}
-        </div>
-      </div>
-
-      {/* ShotsBrowser - between ProjectDetails and TreeView (only when not docked) */}
-      {selectedProject && viewMode !== 'finance' && (selectedProject.hasShots || selectedProject.hasScenes) && !shotsBrowserDocked && (
-        <ShotsBrowser
-          projectId={selectedProject.id}
-          className="w-80 flex-shrink-0"
-          onToggleDock={() => {
-            setShotsBrowserDocked(true);
-            localStorage.setItem('shotsBrowserDocked', 'true');
-          }}
-        />
-      )}
-
-      {/* Right Sidebar */}
-      {selectedProject && viewMode !== 'finance' && (
-        <RightSidebar
-          project={selectedProject}
-          shotsBrowserDocked={shotsBrowserDocked && (selectedProject.hasShots || selectedProject.hasScenes)}
-          onToggleDock={() => {
-            setShotsBrowserDocked(false);
-            localStorage.setItem('shotsBrowserDocked', 'false');
-          }}
-        />
-      )}
-
-      {/* Create Project Modal */}
-      {showCreateModal && (
-        <CreateProjectModal
-          onClose={() => setShowCreateModal(false)}
-          onCreate={createProject}
-          onProjectCreated={(projectId) => setSelectedProjectId(projectId)}
-        />
-      )}
-
-      {/* Asset Name Modal */}
-      {assetNameDialog && (
-        <AssetNameModal
-          isOpen={true}
-          onClose={() => setAssetNameDialog(null)}
-          onConfirm={(assetName) => {
-            launchSoftware({
-              projectPath: assetNameDialog.projectPath,
-              executablePath: assetNameDialog.software.executablePath,
-              software: assetNameDialog.softwareKey,
-              projectName: assetNameDialog.projectName,
-              specialContext: 'ASSET',
-              assetName: assetName
-            });
-            setAssetNameDialog(null);
-          }}
-          softwareName={assetNameDialog.software.name}
-          projectName={assetNameDialog.projectName}
-        />
-      )}
-
-      {/* Prepayment Amount Modal */}
-      {prepaymentDialog && (
-        <PrepaymentAmountModal
-          isOpen={true}
-          onClose={() => setPrepaymentDialog(null)}
-          onConfirm={(amount) => {
-            const project = projects.find(p => p.id === prepaymentDialog.projectId);
-            if (project) {
-              const updates = getPaymentStatusUpdate(project, 'prepaid');
-              updateProject({ ...project, ...updates, prepaymentAmount: amount });
-            }
-            setPrepaymentDialog(null);
-          }}
-          projectName={prepaymentDialog.projectName}
-          projectCost={prepaymentDialog.projectCost}
-          projectCurrency={prepaymentDialog.projectCurrency}
-        />
-      )}
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <SettingsPanel
-          onClose={() => setShowSettings(false)}
-          onDeleteClient={(clientId, clientName) => {
-            setDeleteConfirm({
-              type: 'client',
-              name: clientName,
-              id: clientId
-            });
-          }}
-        />
-      )}
-
-      {/* Feedback Panel */}
-      {showFeedback && (
-        <FeedbackPanel
-          onClose={() => setShowFeedback(false)}
-        />
-      )}
-
-      {/* About Panel */}
-      {showAbout && (
-        <AboutPanel
-          onClose={() => setShowAbout(false)}
-        />
-      )}
-
-      {/* Delete Confirmation Dialog */}
-      {deleteConfirm && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
-              (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
-            }
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget && (e.currentTarget as HTMLDivElement).dataset.mousedownTarget === 'backdrop') {
-              setDeleteConfirm(null);
-            }
-            delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
-          }}
-        >
-          <div
-            className="bg-zinc-900 border border-red-700 rounded-lg p-6 max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold mb-2">Confirm Delete</h3>
-            <p className="text-zinc-400 mb-6">
-              {deleteConfirm.type === 'category' && deleteConfirm.projectCount
-                ? `Are you sure you want to delete category "${deleteConfirm.name}" and move its ${deleteConfirm.projectCount} project(s) to "Personal"? This action cannot be undone.`
-                : deleteConfirm.type === 'category'
-                ? `Are you sure you want to delete the "${deleteConfirm.name}" category?`
-                : `Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone.`
-              }
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors animate-button"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  if (deleteConfirm.type === 'project' && deleteConfirm.path) {
-                    await deleteProject(deleteConfirm.path);
-                  } else if (deleteConfirm.type === 'client') {
-                    deleteClient(deleteConfirm.id);
-                  } else if (deleteConfirm.type === 'category') {
-                    const { removeCategory } = useProjectStore.getState();
-                    await removeCategory(deleteConfirm.id);
-                  }
-                  setDeleteConfirm(null);
-                }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium animate-button"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Context Menu */}
-      <ContextMenu
-        ref={contextMenuRef}
-        isOpen={isProjectMenuOpen}
-        position={projectMenuPosition}
-        onClose={closeContextMenu}
-        menuId="projects"
-      >
-        <div>
-          <ContextMenuItem
-            icon={<IconPin stroke={1.5} className="w-4 h-4" />}
-            onClick={() => {
-              if (projectMenuData) {
-                togglePin(projectMenuData);
-                closeContextMenu();
-              }
-            }}
-          >
-            {projects.find(p => p.id === projectMenuData)?.isPinned ? 'Unpin' : 'Pin to top'}
-          </ContextMenuItem>
-          <ContextMenuItem
-            icon={<IconStar stroke={1.5} className="w-4 h-4" />}
-            onClick={() => {
-              if (projectMenuData) {
-                toggleFavorite(projectMenuData);
-                closeContextMenu();
-              }
-            }}
-          >
-            {projects.find(p => p.id === projectMenuData)?.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          </ContextMenuItem>
-          <ContextMenuItem
-            icon={<IconPhoto stroke={1.5} className="w-4 h-4" />}
-            onClick={async () => {
-              const project = projects.find(p => p.id === projectMenuData);
-              if (project) {
-                try {
-                  const clipboardItems = await navigator.clipboard.read();
-                  for (const item of clipboardItems) {
-                    const imageTypes = item.types.filter(type => type.startsWith('image/'));
-                    if (imageTypes.length > 0) {
-                      const blob = await item.getType(imageTypes[0]);
-                      await processImageBlobForProject(project, blob);
-                      break;
-                    }
-                  }
-                } catch (error) {
-                  console.error('Failed to paste thumbnail from clipboard:', error);
-                }
-              }
-              closeContextMenu();
-            }}
-          >
-            Paste Thumbnail
-          </ContextMenuItem>
-          <ContextMenuItem
-            icon={<IconX stroke={1.5} className="w-4 h-4" />}
-            onClick={() => {
-              const project = projects.find(p => p.id === projectMenuData);
-              if (project) {
-                updateProject({ ...project, thumbnail: undefined });
-              }
-              closeContextMenu();
-            }}
-          >
-            Remove Thumbnail
-          </ContextMenuItem>
-          <ContextMenuDivider />
-
-          {/* Status submenu */}
-          <div className="px-3 py-1 text-[11px] text-text-muted opacity-70 font-medium">Status</div>
-          <ContextMenuItem
-            icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-green-500 text-green-500" />}
-            onClick={() => {
-              if (projectMenuData) {
-                updateStatus(projectMenuData, 'active');
-                closeContextMenu();
-              }
-            }}
-          >
-            Active
-          </ContextMenuItem>
-          <ContextMenuItem
-            icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-yellow-500 text-yellow-500" />}
-            onClick={() => {
-              if (projectMenuData) {
-                updateStatus(projectMenuData, 'paused');
-                closeContextMenu();
-              }
-            }}
-          >
-            Paused
-          </ContextMenuItem>
-          <ContextMenuItem
-            icon={<IconCircleFilled stroke={1.5} className="w-4 h-4 fill-blue-500 text-blue-500" />}
-            onClick={() => {
-              if (projectMenuData) {
-                updateStatus(projectMenuData, 'completed');
-                closeContextMenu();
-              }
-            }}
-          >
-            Completed
-          </ContextMenuItem>
-          <ContextMenuItem
-            icon={<IconArchive stroke={1.5} className="w-4 h-4" />}
-            onClick={() => {
-              if (projectMenuData) {
-                updateStatus(projectMenuData, 'archived');
-                closeContextMenu();
-              }
-            }}
-          >
-            Archived
-          </ContextMenuItem>
-
-          <ContextMenuDivider />
-
-          {/* Payment Status submenu */}
-          <div className="px-3 py-1 text-[11px] text-text-muted opacity-70 font-medium">Payment Status</div>
-          <ContextMenuItem
-            icon={<IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-zinc-500" />}
-            onClick={() => {
-              const project = projects.find(p => p.id === projectMenuData);
-              if (project) {
-                const updates = getPaymentStatusUpdate(project, 'unpaid');
-                updateProject({ ...project, ...updates });
-              }
-              closeContextMenu();
-            }}
-          >
-            Unpaid
-          </ContextMenuItem>
-          <ContextMenuItem
-            icon={<IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-yellow-500" />}
-            onClick={() => {
-              const project = projects.find(p => p.id === projectMenuData);
-              if (project) {
-                // Open modal to enter prepayment amount
-                setPrepaymentDialog({
-                  projectId: project.id,
-                  projectName: project.name,
-                  projectCost: project.cost,
-                  projectCurrency: (project.currency || 'USD') as Currency
-                });
-              }
-              closeContextMenu();
-            }}
-          >
-            Prepaid
-          </ContextMenuItem>
-          <ContextMenuItem
-            icon={<IconCurrencyDollar stroke={1.5} className="w-4 h-4 text-green-500" />}
-            onClick={() => {
-              const project = projects.find(p => p.id === projectMenuData);
-              if (project) {
-                const updates = getPaymentStatusUpdate(project, 'paid');
-                updateProject({ ...project, ...updates });
-              }
-              closeContextMenu();
-            }}
-          >
-            Paid
-          </ContextMenuItem>
-
-          <ContextMenuDivider />
-
-          {/* Move to Category submenu */}
-          <div
-            className="relative"
-            onMouseEnter={() => {
-              if (categorySubmenuTimeoutRef.current) {
-                clearTimeout(categorySubmenuTimeoutRef.current);
-              }
-              setShowCategorySubmenu(true);
-            }}
-            onMouseLeave={() => {
-              categorySubmenuTimeoutRef.current = window.setTimeout(() => {
-                setShowCategorySubmenu(false);
-              }, 100);
-            }}
-          >
-            <button
-              ref={categoryButtonRef}
-              className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-white/10 rounded-md flex items-center justify-between gap-2 transition-colors"
             >
-              <div className="flex items-center gap-2.5">
-                <span className="w-4 h-4 flex items-center justify-center opacity-80">
-                  <IconFolder stroke={1.5} className="w-4 h-4" />
-                </span>
-                Move to...
-              </div>
-              <IconChevronRight stroke={1.5} className="w-4 h-4 opacity-50" />
-            </button>
-
-            {/* Category submenu */}
-            {showCategorySubmenu && (
-              <div
-                ref={categorySubmenuRef}
-                className="absolute left-full bottom-0 ml-2.5 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 z-[101] w-auto animate-context-menu"
-                onMouseEnter={() => {
-                  if (categorySubmenuTimeoutRef.current) {
-                    clearTimeout(categorySubmenuTimeoutRef.current);
-                  }
-                }}
-                onMouseLeave={() => {
-                  categorySubmenuTimeoutRef.current = window.setTimeout(() => {
-                    setShowCategorySubmenu(false);
-                  }, 100);
-                }}
-              >
-                {categories.map((category) => {
-                  const project = projects.find(p => p.id === projectMenuData);
-                  const isCurrentCategory = project?.category === category;
-
-                  return (
-                    <button
-                      key={category}
-                      onClick={() => {
-                        if (project && !isCurrentCategory) {
-                          updateProject({ ...project, category });
-                        }
-                        closeContextMenu();
-                        setShowCategorySubmenu(false);
-                      }}
-                      className={`block w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-white/10 rounded-md whitespace-nowrap transition-colors ${
-                        isCurrentCategory ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
-                      disabled={isCurrentCategory}
-                    >
-                      {category}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+              Delete project
+            </ContextMenuItem>
           </div>
+        </ContextMenu>
 
-          <ContextMenuDivider />
-          <ContextMenuItem
-            icon={<IconTrash stroke={1.5} className="w-4 h-4" />}
-            danger
-            onClick={() => {
-              const projectId = projectMenuData;
-              const project = projects.find(p => p.id === projectId);
-
-              if (!project) {
-                closeContextMenu();
-                return;
-              }
-
-              // Close menu and show custom confirm dialog
-              closeContextMenu();
-              setDeleteConfirm({
-                type: 'project',
-                name: project.name,
-                id: project.id,
-                path: project.path
-              });
-            }}
-          >
-            Delete project
-          </ContextMenuItem>
-        </div>
-      </ContextMenu>
-
-      {/* Break Reminders */}
-      <BreakReminderContainer
-        reminders={breakReminders}
-        onDismiss={(id) => setBreakReminders(prev => prev.filter(r => r.id !== id))}
-      />
+        {/* Break Reminders */}
+        <BreakReminderContainer
+          reminders={breakReminders}
+          onDismiss={(id) => setBreakReminders(prev => prev.filter(r => r.id !== id))}
+        />
       </div>
       {/* Global Text Context Menu for all inputs/textareas */}
       <GlobalTextContextMenu />
