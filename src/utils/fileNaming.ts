@@ -18,6 +18,7 @@ export interface FileNameComponents {
   assetName?: string; // Custom name for asset/compose contexts (e.g., "CAR", "01")
   version: number;
   extension?: string;
+  suffix?: string; // Suffix after version (e.g., "TESTEXPORT" from "_v001_TESTEXPORT")
 }
 
 /**
@@ -74,9 +75,12 @@ export function parseFileName(filename: string): FileNameComponents | null {
     const nameWithoutExt = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
     const extension = lastDotIndex > 0 ? filename.substring(lastDotIndex + 1) : undefined;
 
-    // Extract version: _v001, _v010, etc
-    const versionMatch = nameWithoutExt.match(/_v(\d+)$/);
+    // Extract version: _v001, _v010, etc (with optional suffix after)
+    // Suffix can be separated by underscore or space: _v001_TESTEXPORT or _v001 TESTEXPORT
+    const versionMatch = nameWithoutExt.match(/_v(\d+)(?:[\s_](.+))?$/);
     if (!versionMatch) return null;
+
+    const suffix = versionMatch[2] || undefined;
 
     const version = parseInt(versionMatch[1], 10);
 
@@ -160,6 +164,7 @@ export function parseFileName(filename: string): FileNameComponents | null {
       specialContext,
       version,
       extension,
+      suffix,
     };
   } catch (error) {
     return null;
@@ -233,4 +238,13 @@ export function extractSceneName(filename: string): string | null {
 export function extractProjectName(filename: string): string | null {
   const components = parseFileName(filename);
   return components ? components.projectName : null;
+}
+
+/**
+ * Check if filename has a suffix after version number
+ * @returns true if suffix exists (e.g., "TESTEXPORT" in "_v001_TESTEXPORT")
+ */
+export function hasSuffix(filename: string): boolean {
+  const components = parseFileName(filename);
+  return components?.suffix != null && components.suffix.length > 0;
 }

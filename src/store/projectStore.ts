@@ -376,9 +376,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           try {
             await invoke('create_shot_folders', {
               input: {
-                project_path: project.path,
-                scene_code: firstSceneCode,
-                shot_code: '001'
+                projectPath: project.path,
+                sceneCode: firstSceneCode,
+                shotCode: '001'
               }
             });
           } catch (error) {
@@ -1527,9 +1527,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         try {
           await invoke('create_shot_folders', {
             input: {
-              project_path: project.path,
-              scene_code: sceneCode,
-              shot_code: shotCode
+              projectPath: project.path,
+              sceneCode: sceneCode,
+              shotCode: shotCode
             }
           });
         } catch (error) {
@@ -1541,9 +1541,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         try {
           await invoke('create_shot_folders', {
             input: {
-              project_path: project.path,
-              scene_code: '', // Empty scene code for shots-only mode
-              shot_code: shotCode
+              projectPath: project.path,
+              sceneCode: '', // Empty scene code for shots-only mode
+              shotCode: shotCode
             }
           });
         } catch (error) {

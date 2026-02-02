@@ -9,7 +9,7 @@ import { useContextMenuStore } from '../../store/contextMenuStore';
 import { FolderOpen, Copy, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import type { SoftwareName } from '../../types/project';
-import { getScenePattern, getShotPattern, extractShotNumber, parseFileName } from '../../utils/fileNaming';
+import { getScenePattern, getShotPattern, extractShotNumber, parseFileName, hasSuffix } from '../../utils/fileNaming';
 import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuColorPicker, VERSION_MARK_COLORS } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
@@ -619,6 +619,12 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     const parsed = parseFileName(fullName);
     if (parsed) {
       const versionStr = `v${parsed.version.toString().padStart(3, '0')}`;
+
+      // Show suffix if present (e.g., "v001 TESTEXPORT")
+      if (parsed.suffix) {
+        return `${versionStr} ${parsed.suffix}`;
+      }
+
       // Show asset/comp name if present (e.g., "CAR v001" instead of just "v001")
       if (parsed.assetName) {
         return `${parsed.assetName} ${versionStr}`;
@@ -646,9 +652,12 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
       if (selectedSoftware !== 'all' && !v.software.includes(selectedSoftware)) {
         return false;
       }
-      // Filter by versioned status
-      if (showOnlyUnversioned && v.is_versioned) {
-        return false;
+      // Filter by versioned status: show files with suffix OR unversioned files
+      if (showOnlyUnversioned) {
+        const fileSuffix = hasSuffix(v.name);
+        if (!fileSuffix && v.is_versioned) {
+          return false;
+        }
       }
       return true;
     });
