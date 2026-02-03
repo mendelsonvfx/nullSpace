@@ -231,9 +231,49 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         console.log(`[Migration] Migrated ${migrationPromises.length} projects to scene-based structure`);
       }
 
+      // RESTORE: Check for pending session saves from beforeunload
+      // This recovers correct durationMinutes for crashes or window closes
+      let projectsProcessing = migratedProjects;
+
+      if (typeof window !== 'undefined') {
+        const pendingSavesJson = localStorage.getItem('pendingSessionSaves');
+        if (pendingSavesJson) {
+          try {
+            const pendingSaves = JSON.parse(pendingSavesJson);
+            if (Array.isArray(pendingSaves) && pendingSaves.length > 0) {
+              console.log('[TimeTracking] ♻️ Restoring pending sessions:', pendingSaves.length);
+
+              projectsProcessing = projectsProcessing.map(project => {
+                const projectSaves = pendingSaves.filter((s: any) => s.projectId === project.id);
+                if (projectSaves.length === 0) return project;
+
+                const updatedEntries = (project.timeEntries || []).map(entry => {
+                  const save = projectSaves.find((s: any) => s.entryId === entry.id);
+                  if (save && entry.isActive) {
+                    console.log(`[TimeTracking] ♻️ Restored duration for ${entry.software}: ${save.durationMinutes}m`);
+                    return {
+                      ...entry,
+                      durationMinutes: save.durationMinutes
+                      // logic below will handle closing or continuing
+                    };
+                  }
+                  return entry;
+                });
+
+                return { ...project, timeEntries: updatedEntries };
+              });
+
+              localStorage.removeItem('pendingSessionSaves');
+            }
+          } catch (e) {
+            console.error('[TimeTracking] Failed to restore pending saves:', e);
+          }
+        }
+      }
+
       // Clean up stale active sessions (processes that no longer exist)
       const cleanedProjects = await Promise.all(
-        migratedProjects.map(async (project) => {
+        projectsProcessing.map(async (project) => {
           const activeEntries = project.timeEntries?.filter(e => e.isActive && e.pid) || [];
 
           if (activeEntries.length === 0) {

@@ -431,10 +431,33 @@ function App() {
     };
   }, [saveWindowState]);
 
-  // Save window state before closing
+  // Save window state and active sessions before closing
   useEffect(() => {
     const handleBeforeUnload = () => {
       saveWindowState();
+
+      // Save active sessions durationMinutes to localStorage for recovery
+      // (beforeunload cannot wait for async operations, so we use localStorage)
+      try {
+        const sessions = useTimeTrackingStore.getState().getAllSessions();
+        const activeSessions = sessions.filter(s => s.isActive);
+
+        if (activeSessions.length > 0) {
+          const now = Date.now();
+          const pendingSaves = activeSessions.map(session => ({
+            entryId: session.id,
+            projectId: session.projectId,
+            durationMinutes: Math.floor((now - new Date(session.startTime).getTime()) / 60000),
+            startTime: session.startTime,
+            software: session.software
+          }));
+
+          localStorage.setItem('pendingSessionSaves', JSON.stringify(pendingSaves));
+          console.log('[TimeTracking] 💾 Saved pending sessions to localStorage:', pendingSaves.length);
+        }
+      } catch (error) {
+        console.error('[TimeTracking] Failed to save pending sessions:', error);
+      }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);

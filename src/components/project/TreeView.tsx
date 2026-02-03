@@ -938,21 +938,22 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       displayName = 'After Effects';
     }
 
-    // Render hidden items with animation instead of skipping them
-    const shouldShow = !isHidden || showHidden;
+    // Skip rendering hidden items when showHidden is false
+    if (isHidden && !showHidden) {
+      return null;
+    }
 
     return (
       <div
         key={node.path}
         style={{ marginLeft: depth > 0 ? '12px' : '0' }}
-        className={`transition-opacity duration-150 ${!shouldShow ? 'opacity-0 h-0 overflow-hidden pointer-events-none' : isHidden ? 'opacity-40' : 'opacity-100'}`}
+        className={`transition-opacity duration-150 ${isHidden ? 'opacity-40' : 'opacity-100'}`}
       >
         <div
-          className={`flex items-center gap-2 px-2.5 py-2 text-xs select-none group transition-all cursor-pointer ${
-            node.is_dir
+          className={`flex items-center gap-2 px-2.5 py-2 text-xs select-none group transition-all cursor-pointer ${node.is_dir
               ? `bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary ${isExpanded ? 'bg-hover-bg border-border-secondary' : ''}`
               : 'hover:bg-hover-bg/30 rounded'
-          }`}
+            }`}
           onDoubleClick={(e) => handleDoubleClick(e, node)}
           onContextMenu={(e) => handleContextMenu(e, node)}
         >
@@ -1017,9 +1018,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         </div>
         {node.is_dir && node.children && (
           <div
-            className={`overflow-hidden transition-all duration-150 ease-out ${
-              isExpanded ? 'mt-1 max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-            }`}
+            className={`overflow-hidden transition-all duration-150 ease-out ${isExpanded ? 'mt-1 max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+              }`}
           >
             <div className="flex flex-col gap-1">
               {node.children.map(child => renderNode(child, depth + 1))}
@@ -1065,26 +1065,26 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
 
       <SimpleBar className="custom-scrollbar" autoHide={false} style={{ height: 'calc(100% - 40px)', paddingBottom: '45px' }}>
         <div className="flex flex-col">
-        {tree.length > 0 ? (
-          <>
-            {/* Normal items (without underscore) */}
-            <div className="flex flex-col gap-1">
-              {normalItems.map(node => renderNode(node))}
-            </div>
+          {tree.length > 0 ? (
+            <>
+              {/* Normal items (without underscore) */}
+              <div className="flex flex-col gap-1">
+                {normalItems.map(node => renderNode(node))}
+              </div>
 
-            {/* Separator between normal and underscore items */}
-            {normalItems.length > 0 && underscoreItems.length > 0 && (
-              <div className="my-2 mx-12 border-t border-border-secondary" />
-            )}
+              {/* Separator between normal and underscore items */}
+              {normalItems.length > 0 && underscoreItems.length > 0 && (
+                <div className="my-2 mx-12 border-t border-border-secondary" />
+              )}
 
-            {/* Underscore items (starting with _) */}
-            <div className="flex flex-col gap-1">
-              {underscoreItems.map(node => renderNode(node))}
-            </div>
-          </>
-        ) : (
-          <p className="text-xs text-text-muted">No files found</p>
-        )}
+              {/* Underscore items (starting with _) */}
+              <div className="flex flex-col gap-1">
+                {underscoreItems.map(node => renderNode(node))}
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-text-muted">No files found</p>
+          )}
         </div>
       </SimpleBar>
 
