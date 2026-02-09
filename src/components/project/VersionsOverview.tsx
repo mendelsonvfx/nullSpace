@@ -633,9 +633,15 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     }
     // Fallback to regex extraction
     const nameWithoutExt = getVersionNameWithoutExtension(fullName);
-    const versionMatch = nameWithoutExt.match(/_v(\d+)$/i);
+    // Match version with optional suffix: _v001 or _v001_TEST
+    const versionMatch = nameWithoutExt.match(/_v(\d+)(?:[\s_](.+))?$/i);
     if (versionMatch) {
-      return `v${versionMatch[1]}`;
+      const versionStr = `v${versionMatch[1]}`;
+      // Include suffix if present
+      if (versionMatch[2]) {
+        return `${versionStr} ${versionMatch[2]}`;
+      }
+      return versionStr;
     }
     return nameWithoutExt;
   };

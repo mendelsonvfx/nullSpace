@@ -294,16 +294,24 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 const isAlive = await invoke<boolean>('check_process_alive', { pid: entry.pid });
 
                 if (!isAlive) {
-                  console.log(`[TimeTracking] Process ${entry.pid} no longer exists, closing session ${entry.id} with ${entry.durationMinutes}m`);
+                  // CRITICAL: Recalculate durationMinutes from startTime
+                  // This ensures time is not lost even if pendingSessionSaves was empty (crash/kill)
+                  const startMs = new Date(entry.startTime).getTime();
+                  const recalculatedMinutes = Math.floor((Date.now() - startMs) / 60000);
+                  const durationMinutes = Math.max(
+                    entry.durationMinutes || 0,  // Keep saved value if higher
+                    recalculatedMinutes           // Recalculate from startTime
+                  );
 
-                  // Close the session - keep existing durationMinutes (don't recalculate)
+                  console.log(`[TimeTracking] Process ${entry.pid} no longer exists, closing session ${entry.id} with ${durationMinutes}m (saved: ${entry.durationMinutes}m, recalculated: ${recalculatedMinutes}m)`);
+
                   const now = new Date().toISOString();
 
                   return {
                     ...entry,
                     isActive: false,
                     endTime: now,
-                    // Keep the existing durationMinutes - it was already being tracked
+                    durationMinutes,  // Use recalculated value
                     widgetVisible: false
                   };
                 }
