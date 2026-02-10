@@ -231,49 +231,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         console.log(`[Migration] Migrated ${migrationPromises.length} projects to scene-based structure`);
       }
 
-      // RESTORE: Check for pending session saves from beforeunload
-      // This recovers correct durationMinutes for crashes or window closes
-      let projectsProcessing = migratedProjects;
-
-      if (typeof window !== 'undefined') {
-        const pendingSavesJson = localStorage.getItem('pendingSessionSaves');
-        if (pendingSavesJson) {
-          try {
-            const pendingSaves = JSON.parse(pendingSavesJson);
-            if (Array.isArray(pendingSaves) && pendingSaves.length > 0) {
-              console.log('[TimeTracking] ♻️ Restoring pending sessions:', pendingSaves.length);
-
-              projectsProcessing = projectsProcessing.map(project => {
-                const projectSaves = pendingSaves.filter((s: any) => s.projectId === project.id);
-                if (projectSaves.length === 0) return project;
-
-                const updatedEntries = (project.timeEntries || []).map(entry => {
-                  const save = projectSaves.find((s: any) => s.entryId === entry.id);
-                  if (save && entry.isActive) {
-                    console.log(`[TimeTracking] ♻️ Restored duration for ${entry.software}: ${save.durationMinutes}m`);
-                    return {
-                      ...entry,
-                      durationMinutes: save.durationMinutes
-                      // logic below will handle closing or continuing
-                    };
-                  }
-                  return entry;
-                });
-
-                return { ...project, timeEntries: updatedEntries };
-              });
-
-              localStorage.removeItem('pendingSessionSaves');
-            }
-          } catch (e) {
-            console.error('[TimeTracking] Failed to restore pending saves:', e);
-          }
-        }
-      }
-
       // Clean up stale active sessions (processes that no longer exist)
+      // durationMinutes is already saved to disk every minute by incrementMinute,
+      // so we trust the saved value (max loss = 1 minute)
       const cleanedProjects = await Promise.all(
-        projectsProcessing.map(async (project) => {
+        migratedProjects.map(async (project) => {
           const activeEntries = project.timeEntries?.filter(e => e.isActive && e.pid) || [];
 
           if (activeEntries.length === 0) {
@@ -294,16 +256,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 const isAlive = await invoke<boolean>('check_process_alive', { pid: entry.pid });
 
                 if (!isAlive) {
-                  // CRITICAL: Recalculate durationMinutes from startTime
-                  // This ensures time is not lost even if pendingSessionSaves was empty (crash/kill)
-                  const startMs = new Date(entry.startTime).getTime();
-                  const recalculatedMinutes = Math.floor((Date.now() - startMs) / 60000);
-                  const durationMinutes = Math.max(
-                    entry.durationMinutes || 0,  // Keep saved value if higher
-                    recalculatedMinutes           // Recalculate from startTime
-                  );
-
-                  console.log(`[TimeTracking] Process ${entry.pid} no longer exists, closing session ${entry.id} with ${durationMinutes}m (saved: ${entry.durationMinutes}m, recalculated: ${recalculatedMinutes}m)`);
+                  // Keep saved durationMinutes from disk (already accurate from periodic saves)
+                  // DO NOT recalculate from startTime — it includes hours when app was closed
+                  console.log(`[TimeTracking] Process ${entry.pid} no longer exists, closing session ${entry.id} with ${entry.durationMinutes}m`);
 
                   const now = new Date().toISOString();
 
@@ -311,7 +266,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                     ...entry,
                     isActive: false,
                     endTime: now,
-                    durationMinutes,  // Use recalculated value
                     widgetVisible: false
                   };
                 }

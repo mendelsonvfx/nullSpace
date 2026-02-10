@@ -219,18 +219,17 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
       const project = projectStore.projects.find(p => p.id === session.projectId);
 
       if (project) {
-        // Update timeEntries with new softwareMinutes AND durationMinutes from timeTrackingStore
-        const now = Date.now();
+        // Update timeEntries with new softwareMinutes AND durationMinutes
         const updatedEntries = (project.timeEntries || []).map(entry => {
           const trackedEntry = timeTrackingStore.sessions.get(entry.id);
           if (trackedEntry && trackedEntry.isActive) {
-            // Calculate durationMinutes from startTime for crash recovery
-            const startMs = new Date(entry.startTime).getTime();
-            const durationMinutes = Math.floor((now - startMs) / 60000);
+            // Increment durationMinutes by 1 (safe after app restart, no inflation)
+            // DO NOT use now - startTime — it includes hours when app was closed
+            const durationMinutes = (entry.durationMinutes || 0) + 1;
             return {
               ...entry,
               softwareMinutes: trackedEntry.softwareMinutes || 0,
-              durationMinutes  // Periodic save for crash recovery
+              durationMinutes
             };
           }
           return entry;

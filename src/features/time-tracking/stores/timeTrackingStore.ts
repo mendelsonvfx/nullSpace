@@ -289,14 +289,18 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
     // Stop minute timer
     TimerService.stop(entryId);
 
-    // Calculate actual duration from startTime to now (reliable even after app restart)
-    // This fixes the bug where elapsedSeconds wasn't saved to localStorage between app restarts
-    const startDate = new Date(entry.startTime);
-    const nowDate = new Date();
-    const finalMinutes = Math.floor((nowDate.getTime() - startDate.getTime()) / 60000);
-    const now = nowDate.toISOString();
+    // Use saved durationMinutes from project store (updated every minute by incrementMinute)
+    // DO NOT use now - startTime — it includes hours when app was closed for restored sessions
+    const { useProjectStore } = await import('../../../store/projectStore');
+    const projectData = useProjectStore.getState().projects.find(p => p.id === entry.projectId);
+    const savedEntry = projectData?.timeEntries?.find(e => e.id === entryId);
+    // For brand-new sessions (first minute, durationMinutes=0 on disk), fall back to startTime calc
+    const finalMinutes = (savedEntry?.durationMinutes && savedEntry.durationMinutes > 0)
+      ? savedEntry.durationMinutes
+      : Math.floor((new Date().getTime() - new Date(entry.startTime).getTime()) / 60000);
+    const now = new Date().toISOString();
 
-    console.log(`[TimeTrackingStore] 🛑 Stopped ${entry.software}: ${finalMinutes}m total (from startTime: ${entry.startTime})`);
+    console.log(`[TimeTrackingStore] 🛑 Stopped ${entry.software}: ${finalMinutes}m total (saved from disk)`);
 
     // Update entry in timeTrackingStore
     set(state => {
@@ -363,13 +367,13 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
           const updatedEntries = (project.timeEntries || []).map(e =>
             e.id === entryId
               ? {
-                  ...e,
-                  endTime: now,
-                  durationMinutes: finalMinutes,
-                  softwareMinutes: updatedEntry?.softwareMinutes || 0,  // Save focused minutes
-                  isActive: false,
-                  widgetVisible: false
-                }
+                ...e,
+                endTime: now,
+                durationMinutes: finalMinutes,
+                softwareMinutes: updatedEntry?.softwareMinutes || 0,  // Save focused minutes
+                isActive: false,
+                widgetVisible: false
+              }
               : e
           );
 
