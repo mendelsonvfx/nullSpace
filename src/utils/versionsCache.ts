@@ -10,6 +10,11 @@ export interface ProjectVersion {
   is_versioned: boolean; // true if file has _v### pattern
 }
 
+export interface VersionsFilterState {
+  selectedSoftware: string;
+  showOnlyUnversioned: boolean;
+}
+
 interface CacheEntry {
   data: ProjectVersion[];
   timestamp: number;
@@ -18,14 +23,17 @@ interface CacheEntry {
 class VersionsCache {
   private cache: Map<string, CacheEntry> = new Map();
   private expandedStacksCache: Map<string, Set<string>> = new Map();
+  private filterCache: Map<string, VersionsFilterState> = new Map();
   private readonly STORAGE_PREFIX = 'versions_cache_';
   private readonly EXPANDED_STACKS_PREFIX = 'versions_expanded_stacks_';
+  private readonly FILTER_PREFIX = 'versions_filter_';
   private readonly TTL_MS = 5 * 60 * 1000; // 5 minutes cache lifetime
 
   constructor() {
     // Load cache from localStorage on initialization
     this.loadFromStorage();
     this.loadExpandedStacks();
+    this.loadFilters();
     // Clean expired entries on startup
     this.cleanExpiredEntries();
   }
@@ -203,6 +211,46 @@ class VersionsCache {
       localStorage.setItem(storageKey, JSON.stringify(Array.from(stacks)));
     } catch (error) {
       console.error('Failed to save expanded stacks to storage:', error);
+    }
+  }
+
+  // Load filter state from localStorage
+  private loadFilters(): void {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const keys = Object.keys(localStorage);
+      for (const key of keys) {
+        if (key.startsWith(this.FILTER_PREFIX)) {
+          const projectPath = key.substring(this.FILTER_PREFIX.length);
+          const value = localStorage.getItem(key);
+          if (value) {
+            const filter: VersionsFilterState = JSON.parse(value);
+            this.filterCache.set(projectPath, filter);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load filter state from storage:', error);
+    }
+  }
+
+  // Get saved filter state for a project
+  getFilter(projectPath: string): VersionsFilterState | null {
+    return this.filterCache.get(projectPath) || null;
+  }
+
+  // Save filter state for a project
+  setFilter(projectPath: string, filter: VersionsFilterState): void {
+    this.filterCache.set(projectPath, filter);
+
+    if (typeof window === 'undefined') return;
+
+    try {
+      const storageKey = this.FILTER_PREFIX + projectPath;
+      localStorage.setItem(storageKey, JSON.stringify(filter));
+    } catch (error) {
+      console.error('Failed to save filter state to storage:', error);
     }
   }
 }

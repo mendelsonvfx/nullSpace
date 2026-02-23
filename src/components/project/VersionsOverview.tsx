@@ -9,7 +9,7 @@ import { useContextMenuStore } from '../../store/contextMenuStore';
 import { FolderOpen, Copy, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import type { SoftwareName } from '../../types/project';
-import { getScenePattern, getShotPattern, extractShotNumber, parseFileName, hasSuffix } from '../../utils/fileNaming';
+import { getScenePattern, getShotPattern, parseFileName, hasSuffix } from '../../utils/fileNaming';
 import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuColorPicker, VERSION_MARK_COLORS } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
@@ -39,6 +39,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   const [showShotSubmenu, setShowShotSubmenu] = useState(false);
   const [submenuAction, setSubmenuAction] = useState<'move' | 'copy' | null>(null);
   const [activeSceneSubmenu, setActiveSceneSubmenu] = useState<string | null>(null);
+  const [activeSceneTop, setActiveSceneTop] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [versionMarks, setVersionMarks] = useState<Record<string, MarkColor>>({});
   const [blendPreviewsEnabled, setBlendPreviewsEnabled] = useState(() => {
@@ -51,6 +52,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const shotSubmenuRef = useRef<HTMLDivElement>(null);
   const submenuCloseTimeoutRef = useRef<number | null>(null);
+  const skipFilterSaveRef = useRef(false);
   const startSession = useTimeTrackingStore(state => state.startSession);
   const { activeMenu, setActiveMenu } = useContextMenuStore();
 
@@ -153,6 +155,28 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     const marks = versionMarksCache.getProjectMarks(project.path);
     setVersionMarks(marks);
   }, [project.path]);
+
+  // Restore filter state when project changes
+  useEffect(() => {
+    skipFilterSaveRef.current = true;
+    const saved = versionsCache.getFilter(project.path);
+    if (saved) {
+      setSelectedSoftware(saved.selectedSoftware);
+      setShowOnlyUnversioned(saved.showOnlyUnversioned);
+    } else {
+      setSelectedSoftware('all');
+      setShowOnlyUnversioned(false);
+    }
+  }, [project.path]);
+
+  // Persist filter state on change (skip during restore to avoid race condition)
+  useEffect(() => {
+    if (skipFilterSaveRef.current) {
+      skipFilterSaveRef.current = false;
+      return;
+    }
+    versionsCache.setFilter(project.path, { selectedSoftware, showOnlyUnversioned });
+  }, [selectedSoftware, showOnlyUnversioned, project.path]);
 
   // Listen for blend previews setting changes
   useEffect(() => {
@@ -330,16 +354,15 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   const shotsByScene = useMemo(() => {
     if (!project.shots || !project.scenes) return {};
 
-    const currentShotNumber = contextMenuVersion
-      ? extractShotNumber(contextMenuVersion.name)
-      : null;
+    // Exclude only the exact current shot by ID (not all shots with same number)
+    const currentShotId = currentShot?.id || null;
 
     // Group shots by scene_id
     const grouped: Record<string, { scene: any; shots: any[] }> = {};
 
     project.shots.forEach((shot: any) => {
-      // Exclude current shot
-      if (shot.number === currentShotNumber) return;
+      // Exclude current shot by ID
+      if (shot.id === currentShotId) return;
 
       const sceneId = shot.sceneId;
       if (!grouped[sceneId]) {
@@ -364,7 +387,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
     });
 
     return Object.fromEntries(sorted);
-  }, [project.shots, project.scenes, contextMenuVersion]);
+  }, [project.shots, project.scenes, currentShot]);
 
   const handleVersionDoubleClick = async (versionPath: string, softwareList: string[]) => {
     try {
@@ -938,12 +961,19 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                             <button
                               data-scene-id={sceneId}
                               className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md flex items-center justify-between text-text-primary transition-colors"
-                              onMouseEnter={() => {
+                              onMouseEnter={(e) => {
                                 if (submenuCloseTimeoutRef.current) {
                                   clearTimeout(submenuCloseTimeoutRef.current);
                                   submenuCloseTimeoutRef.current = null;
                                 }
                                 setActiveSceneSubmenu(sceneId);
+                                const button = e.currentTarget;
+                                const container = shotSubmenuRef.current;
+                                if (button && container) {
+                                  const buttonRect = button.getBoundingClientRect();
+                                  const containerRect = container.getBoundingClientRect();
+                                  setActiveSceneTop(buttonRect.top - containerRect.top);
+                                }
                               }}
                               onMouseLeave={() => {
                                 submenuCloseTimeoutRef.current = window.setTimeout(() => {
@@ -961,7 +991,8 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                     {/* Shot Submenu - Level 2: Shots in Scene (rendered outside scroll container) */}
                     {activeSceneSubmenu && shotsByScene[activeSceneSubmenu] && (
                       <div
-                        className="absolute left-full top-1/2 -translate-y-1/2 -ml-1 pl-2 z-[102]"
+                        className="absolute left-full -ml-1 pl-2 z-[102]"
+                        style={{ top: `${activeSceneTop}px` }}
                         onMouseEnter={() => {
                           if (submenuCloseTimeoutRef.current) {
                             clearTimeout(submenuCloseTimeoutRef.current);
@@ -1042,12 +1073,19 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                             <button
                               data-scene-id={sceneId}
                               className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md flex items-center justify-between text-text-primary transition-colors"
-                              onMouseEnter={() => {
+                              onMouseEnter={(e) => {
                                 if (submenuCloseTimeoutRef.current) {
                                   clearTimeout(submenuCloseTimeoutRef.current);
                                   submenuCloseTimeoutRef.current = null;
                                 }
                                 setActiveSceneSubmenu(sceneId);
+                                const button = e.currentTarget;
+                                const container = shotSubmenuRef.current;
+                                if (button && container) {
+                                  const buttonRect = button.getBoundingClientRect();
+                                  const containerRect = container.getBoundingClientRect();
+                                  setActiveSceneTop(buttonRect.top - containerRect.top);
+                                }
                               }}
                               onMouseLeave={() => {
                                 submenuCloseTimeoutRef.current = window.setTimeout(() => {
@@ -1065,7 +1103,8 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
                     {/* Shot Submenu - Level 2: Shots in Scene (rendered outside scroll container) */}
                     {activeSceneSubmenu && shotsByScene[activeSceneSubmenu] && (
                       <div
-                        className="absolute left-full top-1/2 -translate-y-1/2 -ml-1 pl-2 z-[102]"
+                        className="absolute left-full -ml-1 pl-2 z-[102]"
+                        style={{ top: `${activeSceneTop}px` }}
                         onMouseEnter={() => {
                           if (submenuCloseTimeoutRef.current) {
                             clearTimeout(submenuCloseTimeoutRef.current);

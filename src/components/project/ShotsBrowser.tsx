@@ -119,7 +119,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
     <div
       onClick={onClick}
       className={`
-        cursor-pointer rounded-med transition-transform duration-150
+        cursor-pointer rounded-med transition-transform duration-150 select-none
         ${!isSelected && !shot.completed ? 'hover:-translate-y-0.5' : ''}
         ${shot.completed && !isSelected ? 'hover:-translate-y-0.5' : ''}
         ${isAnimating ? 'animate-shot-complete-glow' : ''}

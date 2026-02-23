@@ -312,12 +312,6 @@ fn read_project_metadata(project_path: &PathBuf) -> Result<Project, String> {
         .map_err(|e| format!("Failed to parse project metadata: {}", e))
 }
 
-fn sanitize_folder_name(name: &str) -> String {
-    name.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-        .collect()
-}
-
 fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> Vec<FolderItem> {
     match software.to_lowercase().as_str() {
         "blender" => vec![
@@ -709,6 +703,26 @@ fn find_hython_path(houdinifx_path: &str) -> Result<PathBuf, String> {
     }
 }
 
+/// Determine the correct Houdini file extension based on the executable name.
+/// - hindie.exe / hindie.steam.exe -> .hiplc (Indie edition)
+/// - happrentice.exe -> .hipnc (Apprentice/Non-Commercial edition)
+/// - houdinifx.exe / houdinicore.exe / houdini.exe -> .hip (Commercial)
+fn determine_houdini_extension(executable_path: &str) -> &'static str {
+    let exe_name = std::path::Path::new(executable_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    if exe_name.contains("hindie") {
+        ".hiplc"
+    } else if exe_name.contains("happrentice") {
+        ".hipnc"
+    } else {
+        ".hip"
+    }
+}
+
 #[derive(Serialize)]
 struct LaunchResult {
     file_name: String,
@@ -810,7 +824,7 @@ impl SoftwareLaunchConfig {
             "hip" | "hiplc" | "hipnc" => SoftwareLaunchConfig {
                 use_explorer: false, // Direct launch with HFS env variable
                 needs_pid_lookup: true,
-                process_name: "houdin|hindie", // Matches houdinifx.exe, houdini.exe, hindie.steam.exe (Steam version)
+                process_name: "houdin|hindie|happrentice", // Matches houdinifx.exe, houdini.exe, hindie.steam.exe, happrentice.exe
             },
             "aep" => SoftwareLaunchConfig {
                 use_explorer: false,
@@ -837,7 +851,7 @@ impl SoftwareLaunchConfig {
             SoftwareLaunchConfig {
                 use_explorer: false, // Direct launch with HFS env variable
                 needs_pid_lookup: true,
-                process_name: "houdin|hindie", // Matches houdinifx.exe, houdini.exe, hindie.steam.exe (Steam version)
+                process_name: "houdin|hindie|happrentice", // Matches houdinifx.exe, houdini.exe, hindie.steam.exe, happrentice.exe
             }
         } else if software_lower == "after effects" || software_lower == "after-effects" {
             SoftwareLaunchConfig {
@@ -884,7 +898,7 @@ impl SoftwareLaunchConfig {
                 .map_err(|e| format!("Failed to open file via explorer: {}", e))?
         } else {
             // For Houdini: launch with proper environment variables for user preferences
-            if self.process_name.contains("houdin") || self.process_name.contains("hindie") {
+            if self.process_name.contains("houdin") || self.process_name.contains("hindie") || self.process_name.contains("happrentice") {
                 println!("[SoftwareLauncher] Launching Houdini with env setup: {} {}", executable_path, file_path);
 
                 // Extract version from executable path (e.g., "Houdini 20.0.653" -> "20.0")
@@ -987,7 +1001,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
     // Determine file extension and software folder based on software
     let (file_extension, software_folder) = match input.software.to_lowercase().as_str() {
         "blender" => (".blend", "Blender"),
-        "houdini" => (".hip", "Houdini"),
+        "houdini" => (determine_houdini_extension(&input.executable_path), "Houdini"),
         "maya" => (".ma", "Maya"),
         "after effects" | "after-effects" => (".aep", "AfterEffects"),
         "photoshop" => (".psd", "Photoshop"),
@@ -1011,7 +1025,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
         project_path.join(context_folder)
     } else if let Some(ref scene_name) = input.scene_name {
         // Projects with scenes: Software/SCENE_CODE/
-        let scene_folder = sanitize_folder_name(scene_name);
+        let scene_folder = file_naming::sanitize_folder_name(scene_name);
         project_path.join(software_folder).join(scene_folder)
     } else {
         // Projects without scenes: Software/
@@ -1287,13 +1301,17 @@ async fn launch_software_without_project(executable_path: String, software: Stri
     {
         let software_lower = software.to_lowercase();
 
-        // Special handling for Houdini - use Windows file association
+        // Special handling for Houdini - launch directly with configured executable
         if software_lower == "houdini" {
-            // Create temporary .hip file
-            let temp_dir = std::env::temp_dir();
-            let temp_file = temp_dir.join(format!("houdini_temp_{}.hip", Utc::now().timestamp()));
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-            // Use hython to create empty hip file
+            // Determine correct extension for this Houdini edition (.hip / .hiplc / .hipnc)
+            let ext = determine_houdini_extension(&executable_path);
+            let temp_dir = std::env::temp_dir();
+            let temp_file = temp_dir.join(format!("houdini_temp_{}{}", Utc::now().timestamp(), ext));
+
+            // Use hython to create empty project file
             let hython_path = find_hython_path(&executable_path)?;
             let file_path_str = temp_file.to_str()
                 .ok_or("Invalid file path encoding")?
@@ -1311,13 +1329,47 @@ async fn launch_software_without_project(executable_path: String, software: Stri
                 return Err(format!("hython failed to create temp project: {}", stderr));
             }
 
-            // Launch using Windows file association
-            Command::new("explorer")
-                .arg(&temp_file)
-                .spawn()
-                .map_err(|e| format!("Failed to launch Houdini: {}", e))?;
+            // Set up environment variables (same as project launch)
+            let hfs_path = std::path::Path::new(&*executable_path)
+                .parent().and_then(|p| p.parent())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
 
-            println!("[LAUNCH_NO_PROJECT] Successfully launched Houdini via explorer");
+            let version = std::path::Path::new(&hfs_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|name| {
+                    let parts: Vec<&str> = name.split(|c: char| !c.is_ascii_digit() && c != '.').collect();
+                    for part in parts {
+                        if part.contains('.') {
+                            let ver_parts: Vec<&str> = part.split('.').collect();
+                            if ver_parts.len() >= 2 {
+                                return Some(format!("{}.{}", ver_parts[0], ver_parts[1]));
+                            }
+                        }
+                    }
+                    None
+                });
+
+            let home = std::env::var("USERPROFILE").unwrap_or_default();
+            let home_docs = format!("{}\\Documents", home);
+
+            let mut cmd = Command::new(&executable_path);
+            cmd.arg(temp_file.to_str().ok_or("Invalid temp file path")?)
+               .creation_flags(CREATE_NO_WINDOW)
+               .env("HOME", &home_docs);
+
+            if !hfs_path.is_empty() {
+                cmd.env("HFS", &hfs_path);
+            }
+            if let Some(ver) = &version {
+                cmd.env("HOUDINI_USER_PREF_DIR", format!("{}\\houdini{}", home_docs, ver));
+            }
+
+            cmd.spawn()
+               .map_err(|e| format!("Failed to launch Houdini: {}", e))?;
+
+            println!("[LAUNCH_NO_PROJECT] Successfully launched Houdini directly: {}", executable_path);
             Ok(())
         } else {
             // Default behavior for other software
@@ -2295,15 +2347,32 @@ async fn move_version_to_shot(
         return Err("Project metadata not found".to_string());
     };
 
-    // Update components with new shot and scene
+    // Update components with new shot and scene (sanitize scene name from metadata)
     components.shot_number = target_shot_number;
-    components.scene_name = target_scene_name;
+    let sanitized_scene = file_naming::sanitize_folder_name(&target_scene_name);
+    components.scene_name = sanitized_scene.clone();
 
     // Build new file name
     let new_file_name = components.build();
 
-    let parent_dir = version_file.parent().ok_or("No parent directory")?;
-    let new_path = parent_dir.join(&new_file_name);
+    // Determine target directory: for projects with scenes, move to target scene folder
+    let target_dir = if !target_scene_name.is_empty() {
+        // Go up from scene folder to software folder, then into target scene folder
+        let software_dir = version_file.parent()
+            .and_then(|p| p.parent())
+            .ok_or("Cannot determine software directory")?;
+        let target = software_dir.join(&sanitized_scene);
+        if !target.exists() {
+            fs::create_dir_all(&target)
+                .map_err(|e| format!("Failed to create target directory: {}", e))?;
+        }
+        target
+    } else {
+        // Shots-only mode: same directory
+        version_file.parent().ok_or("No parent directory")?.to_path_buf()
+    };
+
+    let new_path = target_dir.join(&new_file_name);
 
     // Move the file
     fs::rename(&version_file, &new_path)
@@ -2364,15 +2433,32 @@ async fn copy_version_to_shot(
         return Err("Project metadata not found".to_string());
     };
 
-    // Update components with new shot and scene
+    // Update components with new shot and scene (sanitize scene name from metadata)
     components.shot_number = target_shot_number;
-    components.scene_name = target_scene_name;
+    let sanitized_scene = file_naming::sanitize_folder_name(&target_scene_name);
+    components.scene_name = sanitized_scene.clone();
 
     // Build new file name
     let new_file_name = components.build();
 
-    let parent_dir = version_file.parent().ok_or("No parent directory")?;
-    let new_path = parent_dir.join(&new_file_name);
+    // Determine target directory: for projects with scenes, copy to target scene folder
+    let target_dir = if !target_scene_name.is_empty() {
+        // Go up from scene folder to software folder, then into target scene folder
+        let software_dir = version_file.parent()
+            .and_then(|p| p.parent())
+            .ok_or("Cannot determine software directory")?;
+        let target = software_dir.join(&sanitized_scene);
+        if !target.exists() {
+            fs::create_dir_all(&target)
+                .map_err(|e| format!("Failed to create target directory: {}", e))?;
+        }
+        target
+    } else {
+        // Shots-only mode: same directory
+        version_file.parent().ok_or("No parent directory")?.to_path_buf()
+    };
+
+    let new_path = target_dir.join(&new_file_name);
 
     // Copy the file
     fs::copy(&version_file, &new_path)
@@ -4171,6 +4257,9 @@ async fn get_project_outputs(
 
         if has_scenes {
             // New hierarchy: Software/SCENE_CODE/Render/Preview/
+            // Sanitize scene filter to match folder naming convention
+            let sanitized_scene_filter = scene_filter.as_ref().map(|f| file_naming::sanitize_folder_name(f));
+
             // Scan all scene folders
             if let Ok(entries) = fs::read_dir(&software_dir) {
                 for entry in entries.flatten() {
@@ -4183,9 +4272,9 @@ async fn get_project_outputs(
                             continue;
                         }
 
-                        // Apply scene filter
-                        if let Some(ref filter) = scene_filter {
-                            if !scene_name.eq_ignore_ascii_case(filter) {
+                        // Apply scene filter (compare sanitized names)
+                        if let Some(ref filter) = sanitized_scene_filter {
+                            if file_naming::sanitize_folder_name(&scene_name) != *filter {
                                 continue;
                             }
                         }
@@ -4246,7 +4335,7 @@ fn create_scene_folders(input: CreateSceneFoldersInput) -> Result<(), String> {
     // Read project metadata to get software list
     let project = read_project_metadata(&project_path)?;
 
-    let scene_folder_name = sanitize_folder_name(&input.scene_code);
+    let scene_folder_name = file_naming::sanitize_folder_name(&input.scene_code);
 
     // Create scene folder inside each software folder with full hierarchy
     for software in &project.software {
@@ -4285,11 +4374,11 @@ fn create_shot_folders(input: CreateShotFoldersInput) -> Result<(), String> {
     let project = read_project_metadata(&project_path)?;
 
     let scene_folder_name = if !input.scene_code.is_empty() {
-        sanitize_folder_name(&input.scene_code)
+        file_naming::sanitize_folder_name(&input.scene_code)
     } else {
         String::new()
     };
-    let shot_folder_name = sanitize_folder_name(&input.shot_code);
+    let shot_folder_name = file_naming::sanitize_folder_name(&input.shot_code);
 
     // Render/Output subfolders for shots
     let render_subfolders = vec!["Preview", "Final", "Passes"];
@@ -4333,8 +4422,8 @@ fn rename_scene_folders(
     // Read project metadata to get software list
     let project = read_project_metadata(&project_path_buf)?;
 
-    let old_name = sanitize_folder_name(&old_folder_name);
-    let new_name = sanitize_folder_name(&new_folder_name);
+    let old_name = file_naming::sanitize_folder_name(&old_folder_name);
+    let new_name = file_naming::sanitize_folder_name(&new_folder_name);
 
     // New hierarchy: scene folders are at Software/SCENE_CODE/ level
     for software in &project.software {

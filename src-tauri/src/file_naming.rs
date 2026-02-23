@@ -14,6 +14,7 @@ pub struct FileNameComponents {
     pub special_context: Option<String>,
     pub version: u32,
     pub extension: String,
+    pub suffix: Option<String>,
 }
 
 impl FileNameComponents {
@@ -27,20 +28,25 @@ impl FileNameComponents {
         extension: String,
     ) -> Self {
         Self {
-            project_name: project_name.replace(" ", "").to_uppercase(),
-            scene_name: scene_name.replace(" ", "").to_uppercase(),
+            project_name: sanitize_folder_name(&project_name),
+            scene_name: sanitize_folder_name(&scene_name),
             shot_number,
-            special_context: special_context.map(|c| c.replace(" ", "").to_uppercase()),
+            special_context: special_context.map(|c| sanitize_folder_name(&c)),
             version,
             extension,
+            suffix: None,
         }
     }
 
     /// Build full file name: PROJECT_SCENE_SHOT_v001.ext
     /// Or with context: PROJECT_SCENE_SHOT_CONTEXT_v001.ext
+    /// Or with suffix: PROJECT_SCENE_SHOT_v001_SUFFIX.ext
     pub fn build(&self) -> String {
         let base = self.get_base_name();
-        let version_str = format!("v{:0width$}", self.version, width = VERSION_DIGITS);
+        let version_str = match &self.suffix {
+            Some(s) => format!("v{:0width$}_{}", self.version, s, width = VERSION_DIGITS),
+            None => format!("v{:0width$}", self.version, width = VERSION_DIGITS),
+        };
 
         if self.extension.is_empty() {
             format!("{}_{}", base, version_str)
@@ -88,12 +94,14 @@ impl FileNameComponents {
         };
 
         // Pattern: PROJECT_SCENE_SHOT_v001 or PROJECT_SCENE_SHOT_CONTEXT_v001
+        // Also supports suffix: PROJECT_SCENE_SHOT_v001_SUFFIX
         // We need to extract version first, then work backwards
-        let version_regex = Regex::new(r"_v(\d+)$").ok()?;
+        let version_regex = Regex::new(r"_v(\d+)(?:[_\s](.+))?$").ok()?;
         let version_match = version_regex.captures(name_without_ext)?;
         let version = version_match.get(1)?.as_str().parse::<u32>().ok()?;
+        let suffix = version_match.get(2).map(|m| m.as_str().to_string());
 
-        // Remove version part to get: PROJECT_SCENE_SHOT or PROJECT_SCENE_SHOT_CONTEXT
+        // Remove version part (and suffix) to get: PROJECT_SCENE_SHOT or PROJECT_SCENE_SHOT_CONTEXT
         let base = &name_without_ext[..version_match.get(0)?.start()];
 
         // Split by underscore
@@ -144,6 +152,7 @@ impl FileNameComponents {
             special_context,
             version,
             extension,
+            suffix,
         })
     }
 
@@ -199,9 +208,12 @@ impl FileNameComponents {
 }
 
 /// Sanitize a name for use as a folder name
-/// Removes spaces and converts to uppercase to match file naming conventions
+/// Removes whitespace and special characters (keeps alphanumeric, _ and -), converts to uppercase
 pub fn sanitize_folder_name(name: &str) -> String {
-    name.replace(" ", "").to_uppercase()
+    name.chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        .collect::<String>()
+        .to_uppercase()
 }
 
 #[cfg(test)]
@@ -218,7 +230,7 @@ mod tests {
             10,
             "blend".to_string(),
         );
-        assert_eq!(components.build(), "LION_RUNB_010_v010.blend");
+        assert_eq!(components.build(), "LION_RUNB_SH010_v010.blend");
     }
 
     #[test]
@@ -231,28 +243,63 @@ mod tests {
             1,
             "blend".to_string(),
         );
-        assert_eq!(components.build(), "LION_RUNB_010_ASSET_v001.blend");
+        assert_eq!(components.build(), "LION_RUNB_SH010_ASSET_v001.blend");
     }
 
     #[test]
     fn test_parse_simple() {
-        let parsed = FileNameComponents::parse("LION_RUNB_010_v010.blend").unwrap();
+        let parsed = FileNameComponents::parse("LION_RUNB_SH010_v010.blend").unwrap();
         assert_eq!(parsed.project_name, "LION");
         assert_eq!(parsed.scene_name, "RUNB");
         assert_eq!(parsed.shot_number, 10);
         assert_eq!(parsed.version, 10);
         assert_eq!(parsed.extension, "blend");
         assert_eq!(parsed.special_context, None);
+        assert_eq!(parsed.suffix, None);
+    }
+
+    #[test]
+    fn test_parse_old_format() {
+        // Old format without SH prefix should still work
+        let parsed = FileNameComponents::parse("LION_RUNB_010_v010.blend").unwrap();
+        assert_eq!(parsed.project_name, "LION");
+        assert_eq!(parsed.scene_name, "RUNB");
+        assert_eq!(parsed.shot_number, 10);
+        assert_eq!(parsed.version, 10);
     }
 
     #[test]
     fn test_parse_with_context() {
-        let parsed = FileNameComponents::parse("LION_RUNB_010_ASSET_v001.blend").unwrap();
+        let parsed = FileNameComponents::parse("LION_RUNB_SH010_ASSET_v001.blend").unwrap();
         assert_eq!(parsed.project_name, "LION");
         assert_eq!(parsed.scene_name, "RUNB");
         assert_eq!(parsed.shot_number, 10);
         assert_eq!(parsed.special_context, Some("ASSET".to_string()));
         assert_eq!(parsed.version, 1);
+    }
+
+    #[test]
+    fn test_parse_with_suffix() {
+        let parsed = FileNameComponents::parse("LION_RUNB_SH010_v010_TEST.blend").unwrap();
+        assert_eq!(parsed.project_name, "LION");
+        assert_eq!(parsed.scene_name, "RUNB");
+        assert_eq!(parsed.shot_number, 10);
+        assert_eq!(parsed.version, 10);
+        assert_eq!(parsed.suffix, Some("TEST".to_string()));
+    }
+
+    #[test]
+    fn test_build_with_suffix() {
+        let mut components = FileNameComponents::new(
+            "Lion".to_string(),
+            "RUNB".to_string(),
+            10,
+            None,
+            10,
+            "blend".to_string(),
+        );
+        components.suffix = Some("TEST".to_string());
+        assert_eq!(components.build(), "LION_RUNB_SH010_v010_TEST.blend");
     }
 
     #[test]
@@ -267,24 +314,24 @@ mod tests {
         );
         assert_eq!(
             FileNameComponents::shot_pattern("Lion", "RUNB", 10),
-            "LION_RUNB_010_"
+            "LION_RUNB_SH010_"
         );
     }
 
     #[test]
     fn test_is_versioned() {
-        assert!(FileNameComponents::is_versioned("LION_RUNB_010_v010.blend"));
-        assert!(!FileNameComponents::is_versioned("LION_RUNB_010.blend"));
+        assert!(FileNameComponents::is_versioned("LION_RUNB_SH010_v010.blend"));
+        assert!(!FileNameComponents::is_versioned("LION_RUNB_SH010.blend"));
     }
 
     #[test]
     fn test_extract_version() {
         assert_eq!(
-            FileNameComponents::extract_version("LION_RUNB_010_v010.blend"),
+            FileNameComponents::extract_version("LION_RUNB_SH010_v010.blend"),
             Some(10)
         );
         assert_eq!(
-            FileNameComponents::extract_version("LION_RUNB_010.blend"),
+            FileNameComponents::extract_version("LION_RUNB_SH010.blend"),
             None
         );
     }

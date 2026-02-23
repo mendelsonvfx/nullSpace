@@ -614,7 +614,7 @@ fn find_process_by_name_and_parent(name: &str, parent_pid: u32) -> Option<u32> {
 
     // Map software names to process name patterns (for software with multiple executables)
     let patterns: Vec<&str> = match name_lower.as_str() {
-        "houdini" => vec!["houdin", "hindie"],  // houdinifx.exe, houdini.exe, hindie.steam.exe (Steam version)
+        "houdini" => vec!["houdin", "hindie", "happrentice"],  // houdinifx.exe, houdini.exe, hindie.steam.exe, happrentice.exe
         _ => vec![],  // Empty vec means use default name matching
     };
 
