@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import * as React from 'react';
 import { Filter, Plus, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
@@ -25,6 +25,10 @@ interface FinancePageProps {
 }
 
 export const FinancePage = React.memo(function FinancePage({ projects, selectedProjectId, onClose }: FinancePageProps) {
+  // Include orphaned backup projects in financial calculations
+  const archivedBackups = useProjectStore(state => state.archivedBackups);
+  const allProjects = useMemo(() => [...projects, ...archivedBackups], [projects, archivedBackups]);
+
   const renderStart = performance.now();
   const renderCountRef = React.useRef(0);
   renderCountRef.current += 1;
@@ -100,7 +104,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const [showMinMaxTooltips, setShowMinMaxTooltips] = useState(false);
   const [hoveredMonthIndex, setHoveredMonthIndex] = useState<number | null>(null);
 
-  const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
+  const selectedProject = selectedProjectId ? allProjects.find(p => p.id === selectedProjectId) : null;
   const { updateProject, otherProjectTransactions, addOtherTransaction, removeOtherTransaction, selectedCategory, defaultProjectsPath } = useProjectStore();
 
   // Get transactions for current folder path only
@@ -129,7 +133,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     }
 
     // Handle regular project
-    const project = projects.find(p => p.id === projectId);
+    const project = allProjects.find(p => p.id === projectId);
     if (!project) return;
 
     // Create new transaction
@@ -164,7 +168,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     }
 
     // Handle regular project
-    const project = projects.find(p => p.id === projectId);
+    const project = allProjects.find(p => p.id === projectId);
     if (!project || !project.transactions) return;
 
     const transaction = project.transactions.find((t: any) => t.id === transactionId);
@@ -339,7 +343,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     statistics,
     getMonthlyRevenue
   } = useFinanceCalculations(
-    projects,
+    allProjects,
     currentCategoryTransactions,
     exchangeRates,
     baseCurrency,
@@ -559,7 +563,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             /* Project Financial Details */
             <FinanceProjectDetails
             project={selectedProject}
-            projects={projects}
+            projects={allProjects}
             baseCurrency={baseCurrency}
             convertToBaseCurrency={convertToBaseCurrency}
             currencySymbols={currencySymbols}
@@ -1437,7 +1441,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
             return (
               <TimeAnalytics
-                projects={projects}
+                projects={allProjects}
                 baseCurrency={baseCurrency}
                 totalRevenue={totalRevenueInBaseCurrency}
               />
@@ -1452,7 +1456,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
       <ManualTransactionModal
         isOpen={showManualTransactionModal}
         onClose={() => setShowManualTransactionModal(false)}
-        projects={projects}
+        projects={allProjects}
         otherProjectTransactions={currentCategoryTransactions}
         onAddTransaction={handleAddTransaction}
         onRemoveTransaction={handleRemoveTransaction}

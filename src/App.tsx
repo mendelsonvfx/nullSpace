@@ -99,6 +99,8 @@ function App() {
 
   // Get full projects array (will update every second, but that's OK)
   const projects = useProjectStore((state) => state.projects);
+  const archivedBackups = useProjectStore((state) => state.archivedBackups);
+  const deleteBackup = useProjectStore((state) => state.deleteBackup);
 
   // Get other store values with useShallow for shallow comparison
   const {
@@ -1056,54 +1058,63 @@ function App() {
   // ✅ OPTIMIZATION: Memoize expensive filter/sort operations
   // Only recalculates when dependencies actually change
   const filteredProjects = useMemo(() => {
-    return projects
-      .filter(p => {
-        // Filter by category
-        const matchesCategory = p.category === selectedCategory || !p.category && selectedCategory === 'Personal';
+    const searchLower = searchQuery.toLowerCase();
 
-        // Filter by search query
-        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesFilters = (p: typeof projects[number]) => {
+      const matchesCategory = p.category === selectedCategory || !p.category && selectedCategory === 'Personal';
+      const matchesSearch = p.name.toLowerCase().includes(searchLower) ||
+        p.tags.some((tag: string) => tag.toLowerCase().includes(searchLower));
+      const matchesClient = selectedClientId ? p.clientId === selectedClientId : true;
+      return matchesCategory && matchesSearch && matchesClient;
+    };
 
-        // Filter by client
+    let result: typeof projects;
+
+    if (filterView === 'archive') {
+      // Archived projects from filesystem + orphaned backups (folder deleted)
+      const archivedFromFS = projects.filter(p => matchesFilters(p) && p.status === 'archived');
+      const orphaned = archivedBackups.filter(p => {
+        const matchesSearch = p.name.toLowerCase().includes(searchLower) ||
+          p.tags.some(tag => tag.toLowerCase().includes(searchLower));
         const matchesClient = selectedClientId ? p.clientId === selectedClientId : true;
-
-        // Filter by view
-        if (filterView === 'archive') {
-          return matchesCategory && matchesSearch && matchesClient && p.status === 'archived';
-        } else if (filterView === 'favorites') {
-          return matchesCategory && matchesSearch && matchesClient && p.isFavorite && p.status !== 'archived';
-        } else {
-          // 'all' - show all except archived
-          return matchesCategory && matchesSearch && matchesClient && p.status !== 'archived';
-        }
-      })
-      .sort((a, b) => {
-        // Pinned projects first
-        if (a.isPinned && !b.isPinned) return -1;
-        if (!a.isPinned && b.isPinned) return 1;
-
-        // Then sort by selected criteria
-        switch (sortBy) {
-          case 'name':
-            return a.name.localeCompare(b.name);
-          case 'createdAt':
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-          case 'deadline':
-            if (!a.deadline && !b.deadline) return 0;
-            if (!a.deadline) return 1;
-            if (!b.deadline) return -1;
-            return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-          case 'cost':
-            return (b.cost || 0) - (a.cost || 0);
-          default:
-            return 0;
-        }
+        return matchesSearch && matchesClient;
       });
-  }, [projects, searchQuery, selectedCategory, selectedClientId, filterView, sortBy]);
+      result = [...archivedFromFS, ...orphaned];
+    } else if (filterView === 'favorites') {
+      result = projects.filter(p => matchesFilters(p) && p.isFavorite && p.status !== 'archived');
+    } else {
+      result = projects.filter(p => matchesFilters(p) && p.status !== 'archived');
+    }
+
+    return result.sort((a, b) => {
+      // Pinned projects first
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+
+      // Then sort by selected criteria
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'createdAt':
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case 'deadline':
+          if (!a.deadline && !b.deadline) return 0;
+          if (!a.deadline) return 1;
+          if (!b.deadline) return -1;
+          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+        case 'cost':
+          return (b.cost || 0) - (a.cost || 0);
+        default:
+          return 0;
+      }
+    });
+  }, [projects, archivedBackups, searchQuery, selectedCategory, selectedClientId, filterView, sortBy]);
 
   // ✅ OPTIMIZATION: Memoize event handlers to maintain stable function references
   const handleOpenProject = useCallback((project: any) => {
+    // Don't open orphaned projects (folder deleted)
+    if (project._isOrphaned) return;
+
     setSelectedProjectId(project.id);
     selectProject(project);
 
@@ -1609,8 +1620,9 @@ function App() {
                     >
                       <ProjectCard
                         projectPath={project.path}
-                        thumbnail={project.thumbnail}
+                        thumbnail={project._isOrphaned ? undefined : project.thumbnail}
                         isSelected={selectedProjectId === project.id}
+                        isOrphaned={project._isOrphaned}
                         onClick={() => handleOpenProject(project)}
                         onContextMenu={(e) => {
                           e.preventDefault();
@@ -1648,10 +1660,25 @@ function App() {
                           </div>
                         </div>
 
-                        {/* Description */}
-                        <p className="text-xs text-text-secondary truncate mb-3">{project.description}</p>
+                        {/* Description / Orphaned info */}
+                        {project._isOrphaned ? (
+                          <div className="flex items-center justify-between gap-2 mt-1">
+                            <span className="text-xs text-zinc-600 select-none">Project folder not found</span>
+                            {project.clientId && clientsById.get(project.clientId) && (
+                              <span
+                                className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 flex-shrink-0"
+                                style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
+                              >
+                                {showTagIcons && <IconUser stroke={1.5} className="w-3 h-3 fill-current opacity-40" />}
+                                {clientsById.get(project.clientId)!.name}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-text-secondary truncate mb-3">{project.description}</p>
+                        )}
 
-                        {(() => {
+                        {!project._isOrphaned && (() => {
                           const hasClient = project.clientId && clientsById.get(project.clientId);
                           const hasPayment = project.paymentStatus === 'paid' || project.paymentStatus === 'prepaid';
                           const hasDeadline = project.deadline && project.status !== 'completed' && project.status !== 'archived';
@@ -1664,7 +1691,7 @@ function App() {
                           return (
                             <>
                               {/* Software Icons + Tags (top) row */}
-                              {((project.software && project.software.length > 0) || (showTagsTop && project.tags && project.tags.length > 0)) && (
+                              {!project._isOrphaned && ((project.software && project.software.length > 0) || (showTagsTop && project.tags && project.tags.length > 0)) && (
                                 <div className="flex items-center justify-between gap-2 mb-3">
                                   {/* Left: Software icons */}
                                   <div className="flex gap-2">
@@ -2109,6 +2136,21 @@ function App() {
           menuId="projects"
         >
           <div>
+            {/* Orphaned project (backup only, folder deleted) — only delete option */}
+            {archivedBackups.find(p => p.id === projectMenuData) ? (
+              <ContextMenuItem
+                icon={<IconTrash stroke={1.5} className="w-4 h-4" />}
+                danger
+                onClick={() => {
+                  if (projectMenuData) {
+                    deleteBackup(projectMenuData);
+                    closeContextMenu();
+                  }
+                }}
+              >
+                Delete project
+              </ContextMenuItem>
+            ) : (<>
             <ContextMenuItem
               icon={<IconPin stroke={1.5} className="w-4 h-4" />}
               onClick={() => {
@@ -2362,6 +2404,7 @@ function App() {
             >
               Delete project
             </ContextMenuItem>
+            </>)}
           </div>
         </ContextMenu>
 

@@ -1301,33 +1301,10 @@ async fn launch_software_without_project(executable_path: String, software: Stri
     {
         let software_lower = software.to_lowercase();
 
-        // Special handling for Houdini - launch directly with configured executable
+        // Special handling for Houdini - launch directly with configured executable and env vars
         if software_lower == "houdini" {
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-            // Determine correct extension for this Houdini edition (.hip / .hiplc / .hipnc)
-            let ext = determine_houdini_extension(&executable_path);
-            let temp_dir = std::env::temp_dir();
-            let temp_file = temp_dir.join(format!("houdini_temp_{}{}", Utc::now().timestamp(), ext));
-
-            // Use hython to create empty project file
-            let hython_path = find_hython_path(&executable_path)?;
-            let file_path_str = temp_file.to_str()
-                .ok_or("Invalid file path encoding")?
-                .replace("\\", "\\\\");
-
-            let python_script = format!("import hou; hou.hipFile.save(r'{}')", file_path_str);
-            let output = Command::new(&hython_path)
-                .arg("-c")
-                .arg(&python_script)
-                .output()
-                .map_err(|e| format!("Failed to execute hython: {}", e))?;
-
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(format!("hython failed to create temp project: {}", stderr));
-            }
 
             // Set up environment variables (same as project launch)
             let hfs_path = std::path::Path::new(&*executable_path)
@@ -1355,8 +1332,7 @@ async fn launch_software_without_project(executable_path: String, software: Stri
             let home_docs = format!("{}\\Documents", home);
 
             let mut cmd = Command::new(&executable_path);
-            cmd.arg(temp_file.to_str().ok_or("Invalid temp file path")?)
-               .creation_flags(CREATE_NO_WINDOW)
+            cmd.creation_flags(CREATE_NO_WINDOW)
                .env("HOME", &home_docs);
 
             if !hfs_path.is_empty() {
@@ -1369,7 +1345,7 @@ async fn launch_software_without_project(executable_path: String, software: Stri
             cmd.spawn()
                .map_err(|e| format!("Failed to launch Houdini: {}", e))?;
 
-            println!("[LAUNCH_NO_PROJECT] Successfully launched Houdini directly: {}", executable_path);
+            println!("[LAUNCH_NO_PROJECT] Successfully launched Houdini: {}", executable_path);
             Ok(())
         } else {
             // Default behavior for other software
@@ -4880,6 +4856,80 @@ fn save_window_config(app_handle: tauri::AppHandle, config: WindowStartupConfig)
     Ok(())
 }
 
+// ── Project backup commands ──────────────────────────────────────────────────
+
+#[tauri::command]
+fn backup_project_json(
+    project_id: String,
+    json_data: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let backup_dir = app_handle
+        .path_resolver()
+        .app_data_dir()
+        .ok_or("Failed to get app data dir")?
+        .join("project-backups");
+
+    fs::create_dir_all(&backup_dir)
+        .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+
+    let backup_path = backup_dir.join(format!("{}.json", project_id));
+    fs::write(&backup_path, &json_data)
+        .map_err(|e| format!("Failed to write backup: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn get_archived_backups(app_handle: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+    let backup_dir = app_handle
+        .path_resolver()
+        .app_data_dir()
+        .ok_or("Failed to get app data dir")?
+        .join("project-backups");
+
+    if !backup_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut backups = Vec::new();
+    let entries = fs::read_dir(&backup_dir)
+        .map_err(|e| format!("Failed to read backup directory: {}", e))?;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("json") {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) {
+                    backups.push(value);
+                }
+            }
+        }
+    }
+
+    Ok(backups)
+}
+
+#[tauri::command]
+fn delete_project_backup(
+    project_id: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let backup_path = app_handle
+        .path_resolver()
+        .app_data_dir()
+        .ok_or("Failed to get app data dir")?
+        .join("project-backups")
+        .join(format!("{}.json", project_id));
+
+    if backup_path.exists() {
+        fs::remove_file(&backup_path)
+            .map_err(|e| format!("Failed to delete backup: {}", e))?;
+    }
+
+    Ok(())
+}
+
 // Command to show window after WebView is ready
 #[tauri::command]
 fn show_main_window(window: tauri::Window) {
@@ -5029,6 +5079,9 @@ fn main() {
             save_window_config,
             show_main_window,
             set_window_corners,
+            backup_project_json,
+            get_archived_backups,
+            delete_project_backup,
         ])
 
         .run(tauri::generate_context!())

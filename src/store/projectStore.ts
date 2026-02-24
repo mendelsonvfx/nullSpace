@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, TimeEntry, SoftwareName, Transaction } from '../types/project';
 import { thumbnailCache } from '../utils/thumbnailCache';
+import { indexedDBThumbnailCache } from '../utils/indexedDBCache';
 import { useTimeStatsStore, useTimeTrackingStore } from '../features/time-tracking';
 import { generateProjectColor, generateBrightColor } from '../utils/colorUtils';
 import { findNextAvailableShotNumber, isShotNumberAvailable } from '../utils/shotNumbering';
@@ -129,6 +130,10 @@ interface ProjectStore {
   otherProjectTransactions: Record<string, Transaction[]>;
   addOtherTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => void;
   removeOtherTransaction: (transactionId: string) => void;
+  // Archived project backups (orphaned - folder deleted but backup exists)
+  archivedBackups: Project[];
+  loadArchivedBackups: () => Promise<void>;
+  deleteBackup: (projectId: string) => Promise<void>;
 }
 
 // Private update queue to prevent race conditions
@@ -313,6 +318,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       set({ projects: cleanedProjects, isLoading: false });
       console.log('[ProjectStore] Projects loaded successfully');
+
+      // Load archived backups (orphaned projects whose folders were deleted)
+      get().loadArchivedBackups();
+
       // NOTE: Global statistics are persisted in localStorage via timeStatsStore
       // Stats are incremented in real-time, not recalculated from timeEntries
     } catch (error) {
@@ -467,6 +476,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     try {
       // Clear all thumbnails for this project from cache
       thumbnailCache.clearProject(projectPath);
+      try {
+        await indexedDBThumbnailCache.clearProject(projectPath);
+      } catch (cacheErr) {
+        console.warn('[Cache] Failed to clear IndexedDB cache:', cacheErr);
+      }
 
       await invoke('delete_project', { projectPath });
       set(state => ({
@@ -723,6 +737,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         : project.completedAt;
       const updated = { ...project, status, completedAt };
       get().updateProject(updated);
+
+      // Backup when archiving (raw JSON to preserve all fields)
+      if (status === 'archived') {
+        invoke('backup_project_json', {
+          projectId: project.id,
+          jsonData: JSON.stringify(updated)
+        }).catch(err => console.warn('[Backup] Failed to backup archived project:', err));
+      }
+      // Remove backup when un-archiving
+      else if (project.status === 'archived') {
+        invoke('delete_project_backup', { projectId: project.id })
+          .catch(err => console.warn('[Backup] Failed to remove backup:', err));
+      }
     }
   },
 
@@ -2162,6 +2189,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const migratedProjects = projects.map(project => get().migrateProjectToScenes(project));
 
       set({ projects: migratedProjects, isLoading: false });
+
+      // Load archived backups for this category
+      get().loadArchivedBackups();
     } catch (error) {
       console.error('Failed to load projects from category:', error);
       set({ isLoading: false, error: String(error) });
@@ -2645,6 +2675,49 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       localStorage.setItem('otherProjectTransactionsByPath', JSON.stringify(updated));
       return { otherProjectTransactions: updated };
     });
+  },
+
+  // Archived project backups
+  archivedBackups: [],
+
+  loadArchivedBackups: async () => {
+    try {
+      const backups = await invoke<Project[]>('get_archived_backups');
+      const state = get();
+      const currentProjectIds = new Set(state.projects.map(p => p.id));
+      const selectedCategory = state.selectedCategory;
+
+      // Keep only orphaned backups (folder deleted) for the current category
+      const orphaned = backups
+        .filter(b => !currentProjectIds.has(b.id) && b.category === selectedCategory)
+        .map(b => ({ ...b, _isOrphaned: true }));
+
+      set({ archivedBackups: orphaned });
+    } catch (err) {
+      console.warn('[Backup] Failed to load archived backups:', err);
+    }
+  },
+
+  deleteBackup: async (projectId: string) => {
+    try {
+      // Clear thumbnail caches before deleting backup
+      const backup = get().archivedBackups.find(p => p.id === projectId);
+      if (backup?.path) {
+        thumbnailCache.clearProject(backup.path);
+        try {
+          await indexedDBThumbnailCache.clearProject(backup.path);
+        } catch (cacheErr) {
+          console.warn('[Cache] Failed to clear IndexedDB cache for backup:', cacheErr);
+        }
+      }
+
+      await invoke('delete_project_backup', { projectId });
+      set(state => ({
+        archivedBackups: state.archivedBackups.filter(p => p.id !== projectId)
+      }));
+    } catch (err) {
+      console.error('[Backup] Failed to delete backup:', err);
+    }
   }
 }));
 

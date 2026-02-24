@@ -185,6 +185,7 @@ export interface Project {
   transactions?: Transaction[];      // Manual financial transactions history
   isManualTransaction?: boolean;     // Manually added financial transaction (deprecated - use transactions array)
   sourceProjectId?: string;          // ID of the project this transaction is related to (deprecated)
+  _isOrphaned?: boolean;             // Project folder was deleted, loaded from backup
 }
 
 // Предустановленные шаблоны структуры папок

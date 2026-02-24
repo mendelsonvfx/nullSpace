@@ -5,6 +5,7 @@ interface ProjectCardProps {
   projectPath: string;
   thumbnail?: string;
   isSelected: boolean;
+  isOrphaned?: boolean;
   onClick?: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onPaste?: (e: React.ClipboardEvent) => void;
@@ -15,6 +16,7 @@ export const ProjectCard = memo(function ProjectCard({
   projectPath,
   thumbnail,
   isSelected,
+  isOrphaned,
   onClick,
   onContextMenu,
   onPaste,
@@ -36,7 +38,11 @@ export const ProjectCard = memo(function ProjectCard({
   return (
     <div
       data-project-card
-      className={`w-full text-left rounded-card transition-all relative border group cursor-pointer bg-card-bg overflow-hidden hover:scale-[1.02] ${
+      className={`w-full text-left rounded-card transition-all relative border group bg-card-bg overflow-hidden ${
+        isOrphaned
+          ? 'select-none cursor-default opacity-60'
+          : 'cursor-pointer hover:scale-[1.02]'
+      } ${
         isSelected
           ? 'border-accent shadow-glow-accent'
           : 'hover:border-accent border-border-primary hover:shadow-card-hover'
