@@ -201,6 +201,40 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
   const context = getCurrentContext();
 
+  // Compute breadcrumb parts for reuse in rendering
+  const breadcrumbParts = (() => {
+    const parts: string[] = [];
+    if (project.currentSpecialContextId) {
+      const specialContext = project.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId);
+      if (specialContext) {
+        if (specialContext.sceneId) {
+          const scene = project.scenes?.find((s: any) => s.id === specialContext.sceneId);
+          if (scene) parts.push(scene.name);
+        }
+        parts.push(specialContext.type === 'asset' ? 'Asset Projects' : 'Compose Projects');
+      }
+    } else if (project.hasScenes && project.hasShots) {
+      // Show scene/shot breadcrumb when project uses both
+      if (project.currentSceneId) {
+        const scene = project.scenes?.find((s: any) => s.id === project.currentSceneId);
+        if (scene) parts.push(scene.name);
+      }
+      if (project.currentShotId) {
+        const shot = project.shots?.find((s: any) => s.id === project.currentShotId);
+        if (shot) parts.push(shot.name);
+      }
+    } else if (!project.hasScenes && project.hasShots) {
+      // Shots-only mode: show shot name
+      if (project.currentShotId) {
+        const shot = project.shots?.find((s: any) => s.id === project.currentShotId);
+        if (shot) parts.push(shot.name);
+      }
+    }
+    // hasScenes && !hasShots: scene-only — no breadcrumb (just "Main" is not useful)
+    // !hasScenes && !hasShots: no breadcrumb
+    return parts;
+  })();
+
   const handlePaste = async (e: React.ClipboardEvent) => {
     // Ignore paste in input/textarea fields
     const target = e.target as HTMLElement;
@@ -513,43 +547,63 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           </div>
 
           {/* Context Breadcrumb - shown below title */}
-          {(() => {
-            const parts: string[] = [];
+          {breadcrumbParts.length > 0 ? (
+            <div className="text-xs text-text-dim -mt-3">
+              {breadcrumbParts.join(' / ')}
+            </div>
+          ) : (project.description || isEditingDescription) ? (
+            <div className="group/desc inline-flex items-center gap-1.5 -mt-4">
+              {isEditingDescription ? (
+                <>
+                  <input
+                    type="text"
+                    value={descriptionValue}
+                    onChange={(e) => setDescriptionValue(e.target.value)}
+                    onBlur={() => {
+                      const { updateProject } = useProjectStore.getState();
+                      updateProject({ ...project, description: descriptionValue });
+                      setIsEditingDescription(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setDescriptionValue(project.description || '');
+                        setIsEditingDescription(false);
+                      }
+                      if (e.key === 'Enter') {
+                        const { updateProject } = useProjectStore.getState();
+                        updateProject({ ...project, description: descriptionValue });
+                        setIsEditingDescription(false);
+                      }
+                    }}
+                    autoFocus
+                    className="bg-transparent text-xs text-text-primary focus:outline-none"
+                    placeholder="Add a description..."
+                    style={{ width: `${Math.max(descriptionValue.length || 20, 20)}ch` }}
+                  />
+                  <IconPencil size={14} stroke={1.5} className="text-accent" />
+                </>
+              ) : (
+                <>
+                  <span
+                    className="text-xs text-text-dim cursor-text"
+                    onClick={() => setIsEditingDescription(true)}
+                  >
+                    {project.description}
+                  </span>
+                  <button
+                    onClick={() => setIsEditingDescription(true)}
+                    className="opacity-0 group-hover/desc:opacity-100 transition-opacity p-0.5 hover:bg-hover-bg rounded"
+                    title="Edit description"
+                  >
+                    <IconPencil size={14} stroke={1.5} className="text-text-muted" />
+                  </button>
+                </>
+              )}
+            </div>
+          ) : null}
 
-            // Check for special context (Asset/Compose)
-            if (project.currentSpecialContextId) {
-              const specialContext = project.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId);
-              if (specialContext) {
-                if (specialContext.sceneId) {
-                  const scene = project.scenes?.find((s: any) => s.id === specialContext.sceneId);
-                  if (scene) parts.push(scene.name);
-                }
-                parts.push(specialContext.type === 'asset' ? 'Asset Projects' : 'Compose Projects');
-              }
-            } else {
-              // Regular scene/shot context
-              if (project.currentSceneId) {
-                const scene = project.scenes?.find((s: any) => s.id === project.currentSceneId);
-                if (scene) parts.push(scene.name);
-              }
-              if (project.currentShotId) {
-                const shot = project.shots?.find((s: any) => s.id === project.currentShotId);
-                if (shot) parts.push(shot.name);
-              }
-            }
-
-            if (parts.length > 0) {
-              return (
-                <div className="text-xs text-text-dim -mt-3">
-                  {parts.join(' / ')}
-                </div>
-              );
-            }
-            return null;
-          })()}
-
-          {/* Project Description */}
-          {(project.description || isEditingDescription) && (
+          {/* Project Description - shown only when breadcrumb has content (otherwise description is in breadcrumb position above) */}
+          {(project.description || isEditingDescription) && breadcrumbParts.length > 0 && (
             <div className="group/desc inline-flex items-center gap-1.5 mt-2.5">
               {isEditingDescription ? (
                 <>

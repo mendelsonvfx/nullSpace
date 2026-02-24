@@ -1,7 +1,7 @@
 // src/components/modals/SettingsPanel.tsx
 import { useProjectStore } from '../../store/projectStore';
 import { useState, useEffect, useRef } from 'react';
-import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw } from 'lucide-react';
+import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw, Download, Upload } from 'lucide-react';
 import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../../utils/tauri';
 import type { SoftwareName } from '../../types/project';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
@@ -9,6 +9,8 @@ import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import { clearAllTimeTrackingData } from '../../utils/clearAllData';
+import { exportData, readExportFile, applyImport, type ExportData } from '../../utils/dataExportImport';
+import { open } from '@tauri-apps/api/dialog';
 import { hslStringToHex } from '../../utils/colorUtils';
 import SimpleBar from 'simplebar-react';
 
@@ -44,7 +46,7 @@ function isValidExecutablePath(path: string): boolean {
 }
 
 export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState<'general' | 'software' | 'appearance' | 'clients' | 'finance' | 'categories'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'software' | 'appearance' | 'clients' | 'finance' | 'categories' | 'data'>('general');
   const [softwarePaths, setSoftwarePaths] = useState<SoftwarePathConfig[]>([]);
   const [appVersion, setAppVersion] = useState<string>('');
   const [showTagIcons, setShowTagIcons] = useState(() => {
@@ -163,6 +165,16 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
             >
               Finance
             </button>
+            <button
+              onClick={() => setActiveTab('data')}
+              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                activeTab === 'data'
+                  ? 'bg-accent'
+                  : 'hover:bg-zinc-800'
+              }`}
+            >
+              Data
+            </button>
           </nav>
 
           {/* Version info at bottom */}
@@ -183,6 +195,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
               {activeTab === 'appearance' && 'Appearance'}
                             {activeTab === 'clients' && 'Clients'}
               {activeTab === 'finance' && 'Finance Settings'}
+              {activeTab === 'data' && 'Data'}
             </h3>
             <button
               onClick={onClose}
@@ -200,6 +213,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
               {activeTab === 'appearance' && <AppearanceSettings showTagIcons={showTagIcons} setShowTagIcons={setShowTagIcons} />}
               {activeTab === 'clients' && <ClientsSettings onDeleteClient={onDeleteClient} />}
               {activeTab === 'finance' && <FinanceSettings />}
+              {activeTab === 'data' && <DataSettings />}
             </div>
           </SimpleBar>
 
@@ -220,12 +234,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
 
 function GeneralSettings() {
   const { defaultProjectsPath, setDefaultProjectsPath, loadProjects } = useProjectStore();
-  const { clearAllThumbnails, getCacheSize } = useThumbnailCache();
   const [projectsDir, setProjectsDir] = useState(defaultProjectsPath);
-  const [cacheCleared, setCacheCleared] = useState(false);
-  const [cacheSize, setCacheSize] = useState(0);
-  const [timeDataCleared, setTimeDataCleared] = useState(false);
-  const [showClearTimeConfirm, setShowClearTimeConfirm] = useState(false);
   const [timeTrackingEnabled, setTimeTrackingEnabled] = useState(() => {
     const saved = localStorage.getItem('timeTrackingEnabled');
     return saved !== null ? JSON.parse(saved) : true;
@@ -239,17 +248,11 @@ function GeneralSettings() {
     return saved !== null ? parseInt(saved) : 3;
   });
 
-  // Load cache size on mount
-  useEffect(() => {
-    getCacheSize().then(setCacheSize);
-  }, [getCacheSize]);
-
   const handleBrowseDirectory = async () => {
     const selected = await selectProjectDirectory();
     if (selected) {
       setProjectsDir(selected);
       setDefaultProjectsPath(selected);
-      // Перезагрузить проекты после изменения пути
       setTimeout(() => {
         loadProjects();
       }, 100);
@@ -261,27 +264,6 @@ function GeneralSettings() {
     setTimeout(() => {
       loadProjects();
     }, 100);
-  };
-
-  const handleClearCache = async () => {
-    if (cacheSize === 0) {
-      return;
-    }
-    await clearAllThumbnails();
-    setCacheSize(0);
-    setCacheCleared(true);
-    setTimeout(() => setCacheCleared(false), 3000);
-    // Reload projects to force thumbnails reload
-    loadProjects();
-  };
-
-  const handleClearTimeData = async () => {
-    await clearAllTimeTrackingData();
-    setTimeDataCleared(true);
-    setShowClearTimeConfirm(false);
-    setTimeout(() => setTimeDataCleared(false), 3000);
-    // Reload projects to update UI
-    loadProjects();
   };
 
   return (
@@ -399,8 +381,115 @@ function GeneralSettings() {
         )}
       </div>
 
+    </div>
+  );
+}
+
+function DataSettings() {
+  const { loadProjects } = useProjectStore();
+  const { clearAllThumbnails, getCacheSize } = useThumbnailCache();
+
+  // Thumbnail Cache state
+  const [cacheSize, setCacheSize] = useState(0);
+  const [cacheCleared, setCacheCleared] = useState(false);
+
+  // Clear Time Data state
+  const [timeDataCleared, setTimeDataCleared] = useState(false);
+  const [showClearTimeConfirm, setShowClearTimeConfirm] = useState(false);
+
+  // Export/Import state
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(false);
+  const [importExportError, setImportExportError] = useState<string | null>(null);
+  const [showImportConfirm, setShowImportConfirm] = useState(false);
+  const [pendingImportData, setPendingImportData] = useState<ExportData | null>(null);
+
+  useEffect(() => {
+    getCacheSize().then(setCacheSize);
+  }, [getCacheSize]);
+
+  const handleClearCache = async () => {
+    if (cacheSize === 0) return;
+    await clearAllThumbnails();
+    setCacheSize(0);
+    setCacheCleared(true);
+    setTimeout(() => setCacheCleared(false), 3000);
+    loadProjects();
+  };
+
+  const handleClearTimeData = async () => {
+    await clearAllTimeTrackingData();
+    setTimeDataCleared(true);
+    setShowClearTimeConfirm(false);
+    setTimeout(() => setTimeDataCleared(false), 3000);
+    loadProjects();
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    setExportSuccess(false);
+    setImportExportError(null);
+    try {
+      const success = await exportData();
+      if (success) {
+        setExportSuccess(true);
+        setTimeout(() => setExportSuccess(false), 3000);
+      }
+    } catch (e) {
+      setImportExportError('Export failed: ' + String(e));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportClick = async () => {
+    setImportExportError(null);
+    setImportSuccess(false);
+    try {
+      const filePath = await open({
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        multiple: false,
+      });
+      if (!filePath || Array.isArray(filePath)) return;
+
+      setIsImporting(true);
+      const data = await readExportFile(filePath as string);
+      if (!data) {
+        setImportExportError('Invalid backup file.');
+        setIsImporting(false);
+        return;
+      }
+      setPendingImportData(data);
+      setShowImportConfirm(true);
+      setIsImporting(false);
+    } catch (e) {
+      setImportExportError('Import failed: ' + String(e));
+      setIsImporting(false);
+    }
+  };
+
+  const handleImportConfirm = async () => {
+    if (!pendingImportData) return;
+    setIsImporting(true);
+    try {
+      await applyImport(pendingImportData);
+      setImportSuccess(true);
+      setShowImportConfirm(false);
+      setPendingImportData(null);
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) {
+      setImportExportError('Import failed: ' + String(e));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
       {/* Thumbnail Cache */}
-      <div className="border-t border-zinc-800 pt-6">
+      <div>
         <div className="mb-3">
           <div className="font-medium mb-1">Thumbnail Cache</div>
           <p className="text-sm text-zinc-400">
@@ -425,7 +514,7 @@ function GeneralSettings() {
         </div>
       </div>
 
-      {/* Time Tracking Data */}
+      {/* Clear Time Tracking Data */}
       <div className="border-t border-zinc-800 pt-6">
         <div className="mb-3">
           <div className="font-medium mb-1 text-red-400">Clear Time Tracking Data</div>
@@ -477,6 +566,95 @@ function GeneralSettings() {
               </button>
               <button
                 onClick={() => setShowClearTimeConfirm(false)}
+                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors text-sm font-medium animate-button"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Export & Import */}
+      <div className="border-t border-zinc-800 pt-6">
+        <div className="mb-3">
+          <div className="font-medium mb-1">Export & Import</div>
+          <p className="text-sm text-zinc-400">
+            Export all settings, clients, financial data, time statistics, and archived project backups to a file. Use this to transfer data between devices or before reinstalling.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 text-sm font-medium animate-button"
+          >
+            <Download className="w-4 h-4" />
+            {isExporting ? 'Exporting...' : 'Export Data'}
+          </button>
+          <button
+            onClick={handleImportClick}
+            disabled={isImporting}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 text-sm font-medium animate-button"
+          >
+            <Upload className="w-4 h-4" />
+            {isImporting ? 'Importing...' : 'Import Data'}
+          </button>
+          {exportSuccess && (
+            <div className="flex items-center gap-2 text-green-500 text-sm">
+              <Check className="w-4 h-4" />
+              Data exported
+            </div>
+          )}
+          {importSuccess && (
+            <div className="flex items-center gap-2 text-green-500 text-sm">
+              <Check className="w-4 h-4" />
+              Data imported — reloading...
+            </div>
+          )}
+          {importExportError && (
+            <div className="flex items-center gap-2 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              {importExportError}
+            </div>
+          )}
+        </div>
+
+        {showImportConfirm && (
+          <div className="mt-3 bg-amber-950/30 border border-amber-800 rounded-lg p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-medium text-amber-400 mb-2">Confirm Import</div>
+                <div className="text-sm text-zinc-300 space-y-1">
+                  <p>This will overwrite your current settings with the backup data:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>All app settings and preferences</li>
+                    <li>Client data</li>
+                    <li>Financial data and statistics</li>
+                    <li>Archived project backups</li>
+                  </ul>
+                  <p className="mt-2">
+                    Exported on: {pendingImportData?.exportedAt
+                      ? new Date(pendingImportData.exportedAt).toLocaleDateString()
+                      : 'Unknown'} (v{pendingImportData?.appVersion})
+                  </p>
+                  <p className="mt-2 font-medium text-amber-300">
+                    The page will reload after import.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleImportConfirm}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium animate-button"
+              >
+                <Upload className="w-4 h-4" />
+                Yes, import data
+              </button>
+              <button
+                onClick={() => { setShowImportConfirm(false); setPendingImportData(null); }}
                 className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors text-sm font-medium animate-button"
               >
                 Cancel
