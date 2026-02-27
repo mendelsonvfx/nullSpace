@@ -86,10 +86,6 @@ const STATUS_CYCLE: ProjectStatus[] = ['active', 'paused', 'completed'];
 // ✅ ProjectBreakdownCard now imported from './components/finance/ProjectBreakdownCard'
 
 function App() {
-  const renderCountRef = useRef(0);
-  renderCountRef.current += 1;
-  console.log('[App] RENDER', { renderCount: renderCountRef.current, timestamp: performance.now() });
-
   // Window state management
   const { saveWindowState } = useWindowState();
 
@@ -153,8 +149,18 @@ function App() {
 
   const { activeMenu, setActiveMenu } = useContextMenuStore();
 
-  // Subscribe to sessions changes for proper reactivity
-  const timeTrackingSessions = useTimeTrackingStore(state => state.sessions);
+  // Subscribe only to active session project IDs (not elapsedSeconds) to avoid re-rendering every second
+  const activeSessionProjectIds = useTimeTrackingStore(
+    useShallow((state: { sessions: Map<string, any> }) => {
+      const result: Record<string, boolean> = {};
+      state.sessions.forEach((session: any) => {
+        if (session.isActive) {
+          result[session.projectId] = true;
+        }
+      });
+      return result;
+    })
+  );
 
   //const [view, setView] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1174,17 +1180,14 @@ function App() {
     return map;
   }, [clients]);
 
-  // Memoize active sessions lookup - uses timeTrackingSessions for proper reactivity
+  // Memoize active sessions lookup - derived from activeSessionProjectIds
   const activeSessionsByProject = useMemo(() => {
-    const map = new Map();
-    // Check sessions directly from the subscribed state
-    Array.from(timeTrackingSessions.values()).forEach(session => {
-      if (session.isActive) {
-        map.set(session.projectId, true);
-      }
-    });
+    const map = new Map<string, boolean>();
+    for (const projectId of Object.keys(activeSessionProjectIds)) {
+      map.set(projectId, true);
+    }
     return map;
-  }, [timeTrackingSessions]);
+  }, [activeSessionProjectIds]);
 
   const getDaysRemaining = useCallback((deadline?: string): number | null => {
     if (!deadline) return null;

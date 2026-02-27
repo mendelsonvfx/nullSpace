@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, memo } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { SoftwareIcon } from '../SoftwareIcon';
@@ -31,7 +31,7 @@ interface VersionsOverviewProps {
   showNotification: (type: 'success' | 'error' | 'warning' | 'info', message: string, title?: string, duration?: number) => void;
 }
 
-export function VersionsOverview({ project, currentScene, currentShot, specialContextType, showNotification }: VersionsOverviewProps) {
+export const VersionsOverview = memo(function VersionsOverview({ project, currentScene, currentShot, specialContextType, showNotification }: VersionsOverviewProps) {
   const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSoftware, setSelectedSoftware] = useState<string>('all');
@@ -53,7 +53,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
   const shotSubmenuRef = useRef<HTMLDivElement>(null);
   const submenuCloseTimeoutRef = useRef<number | null>(null);
   const skipFilterSaveRef = useRef(false);
-  const startSession = useTimeTrackingStore(state => state.startSession);
+  // Access startSession via getState() to avoid subscribing to store updates (timer ticks every second)
   const { activeMenu, setActiveMenu } = useContextMenuStore();
 
   // Context menu using centralized hook
@@ -445,7 +445,7 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
       const softwareKey = nameToKey[softwareName] || 'blender';
 
       // Start time tracking
-      await startSession({
+      await useTimeTrackingStore.getState().startSession({
         projectId: project.id,
         projectPath: project.path,
         software: softwareKey,
@@ -1149,4 +1149,4 @@ export function VersionsOverview({ project, currentScene, currentShot, specialCo
       </ContextMenu>
     </div>
   );
-}
+});

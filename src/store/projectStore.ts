@@ -448,6 +448,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           console.log(`[updateProject] 📊 Active entry durationMinutes: ${oldActiveEntry?.durationMinutes} → ${newActiveEntry?.durationMinutes}`);
 
           // First update local state synchronously
+          console.trace('[DEBUG] projectStore set(projects) from updateProject');
           set(state => ({
             projects: state.projects.map(p =>
               p.id === project.id ? project : p
@@ -2749,6 +2750,15 @@ useTimeTrackingStore.subscribe((state) => {
         if (entryIndex >= 0) {
           // Preserve fields that exist only in projectStore (like widgetVisible)
           const existingEntry = updatedEntries[entryIndex];
+          // Skip sync if only elapsedSeconds changed (it ticks every second and is only used by InlineTimer from timeTrackingStore)
+          const onlyElapsedChanged =
+            existingEntry.isActive === session.isActive &&
+            existingEntry.durationMinutes === session.durationMinutes &&
+            existingEntry.widgetVisible === (session.widgetVisible ?? existingEntry.widgetVisible) &&
+            existingEntry.software === session.software &&
+            existingEntry.pid === session.pid;
+          if (onlyElapsedChanged) return;
+
           updatedEntries[entryIndex] = {
             ...existingEntry,
             ...session,

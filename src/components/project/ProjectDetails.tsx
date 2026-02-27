@@ -12,6 +12,7 @@ import { InlineTimer, TimeInfoBar } from '../time';
 import { ManualTimeEntryModal } from '../modals/ManualTimeEntryModal';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import SimpleBar from 'simplebar-react';
@@ -111,7 +112,18 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   // Get fresh project from store for real-time timer updates
   const latestProject = useProjectStore(state => state.projects.find(p => p.id === project.id) || project);
   const timeTrackingEnabled = useTimeTrackingFeature();
-  const timeTrackingSessions = useTimeTrackingStore(state => state.sessions);
+  // Only re-render when active+visible sessions change, not on every elapsedSeconds tick
+  const activeVisibleSessions = useTimeTrackingStore(
+    useShallow((state: { sessions: Map<string, any> }) => {
+      const result: Record<string, boolean> = {};
+      state.sessions.forEach((entry: any, id: string) => {
+        if (entry.isActive && entry.widgetVisible) {
+          result[id] = true;
+        }
+      });
+      return result;
+    })
+  );
 
   // Load cached thumbnail for Project Settings modal
   const thumbnailSrc = useThumbnail(project.path, project.thumbnail);
@@ -870,10 +882,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               // Find active session for this software (compare with softwareKey, not display name)
               // Use live timeTrackingStore state to avoid showing frozen timers during async projectStore updates
               const activeEntry = latestProject.timeEntries?.find((e: any) => {
-                const liveSession = timeTrackingSessions.get(e.id);
                 return e.software === softwareKey &&
-                       liveSession?.isActive === true &&
-                       liveSession?.widgetVisible === true;
+                       activeVisibleSessions[e.id] === true;
               });
 
               // Get software color for gradient
