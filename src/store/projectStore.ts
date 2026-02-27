@@ -802,7 +802,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
     const project = get().projects.find(p => p.id === projectId);
     if (project) {
-      const updated = { ...project, todos: [...(project.todos || []), newTodo] };
+      const updated = { ...project, todos: [newTodo, ...(project.todos || [])] };
       get().updateProject(updated);
     }
   },
@@ -1390,7 +1390,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const updated = {
         ...project,
         scenes: (project.scenes || []).map(s =>
-          s.id === sceneId ? { ...s, todos: [...s.todos, newTodo] } : s
+          s.id === sceneId ? { ...s, todos: [newTodo, ...s.todos] } : s
         )
       };
       get().updateProject(updated);
@@ -1931,7 +1931,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const updated = {
         ...project,
         shots: (project.shots || []).map(s =>
-          s.id === shotId ? { ...s, todos: [...s.todos, newTodo] } : s
+          s.id === shotId ? { ...s, todos: [newTodo, ...s.todos] } : s
         )
       };
       get().updateProject(updated);
@@ -2456,7 +2456,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const updated = {
         ...project,
         specialContexts: project.specialContexts.map(ctx =>
-          ctx.id === contextId ? { ...ctx, todos: [...(ctx.todos || []), newTodo] } : ctx
+          ctx.id === contextId ? { ...ctx, todos: [newTodo, ...(ctx.todos || [])] } : ctx
         )
       };
       get().updateProject(updated);
