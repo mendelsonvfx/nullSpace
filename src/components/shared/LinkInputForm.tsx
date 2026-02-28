@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Link as LinkIcon } from 'lucide-react';
+
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
 
@@ -100,8 +100,8 @@ export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId, sc
 
           // Check if clipboard contains a valid URL
           if (trimmedText.startsWith('https://') ||
-              trimmedText.startsWith('http://') ||
-              trimmedText.startsWith('www.')) {
+            trimmedText.startsWith('http://') ||
+            trimmedText.startsWith('www.')) {
 
             // Prepare the final URL
             const finalUrl = trimmedText.startsWith('www.') ? `https://${trimmedText}` : trimmedText;
@@ -131,8 +131,8 @@ export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId, sc
 
     // Check if pasted text is a valid URL
     if (!pastedText.startsWith('https://') &&
-        !pastedText.startsWith('http://') &&
-        !pastedText.startsWith('www.')) {
+      !pastedText.startsWith('http://') &&
+      !pastedText.startsWith('www.')) {
       e.preventDefault(); // Don't paste if not a URL
       return;
     }
@@ -141,29 +141,19 @@ export const LinkInputForm = memo(function LinkInputForm({ projectId, shotId, sc
   }, []);
 
   return (
-    <div className="flex items-center gap-3 bg-transparent border border-border-secondary border-dashed rounded-med px-3 py-2.5 hover:border-accent transition-all">
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-hover-bg flex-shrink-0">
-        <LinkIcon className="w-4 h-4 text-text-muted" />
-      </div>
+    <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <input
         type="url"
-        placeholder="Paste URL..."
+        placeholder="+ Paste URL..."
         value={url}
         onChange={handleUrlChange}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        className="flex-1 bg-transparent text-sm text-text-primary placeholder-text-muted focus:outline-none"
+        className="w-full px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-card text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:border-solid transition-all"
       />
-      <button
-        onClick={handleAddLink}
-        disabled={!url.trim()}
-        className="px-3 py-1.5 bg-hover-bg hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium text-text-muted"
-        title="Add Link"
-      >
-        Add
-      </button>
     </div>
   );
 });

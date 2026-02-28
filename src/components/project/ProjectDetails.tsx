@@ -45,6 +45,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [newTag, setNewTag] = useState('');
   const [showTopShadow, setShowTopShadow] = useState(false);
   const [tasksExpanded, setTasksExpanded] = useState(false);
+  const [linksExpanded, setLinksExpanded] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState(project.description || '');
   const contentScrollRef = useRef<HTMLElement | null>(null);
@@ -676,11 +677,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         {/* Quick Actions - hidden when only scene is selected (without shot) */}
         {!(context.isScene && !context.isShot) && (
         <div className="mb-7">
-          <h3 className="text-sm font-medium text-text-secondary mb-3.5">Quick Actions</h3>
           <div className="grid grid-cols-3 gap-3">
             <button
               onClick={onOpenFolder}
-              className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
+              className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-[#262626] rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
             >
               <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-blue-500/20 via-blue-600/10 to-blue-700/10">
                 <IconFolderOpen stroke={1.5} className="w-5 h-5 text-blue-400 pointer-events-none" />
@@ -689,7 +689,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             </button>
             <button
               onClick={() => setShowPaymentModal(true)}
-              className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
+              className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-[#262626] rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
             >
               <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-green-500/20 via-green-600/10 to-green-700/10">
                 <IconCreditCard stroke={1.5} className="w-5 h-5 text-green-400 pointer-events-none" />
@@ -699,7 +699,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             {timeTrackingEnabled && (
               <button
                 onClick={() => setShowManualTimeEntry(true)}
-                className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-accent/30 rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
+                className="group p-3 bg-card-bg border border-border-primary hover:bg-hover-bg hover:border-[#262626] rounded-med flex items-center gap-2.5 transition-all hover:-translate-y-0.5 cursor-pointer"
               >
                 <div className="w-9 h-9 rounded-button flex items-center justify-center bg-gradient-to-br from-yellow-500/20 via-yellow-600/10 to-yellow-700/10">
                   <IconClock stroke={1.5} className="w-5 h-5 text-yellow-400 pointer-events-none" />
@@ -799,7 +799,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   }}
                   disabled={status === 'launching' || !executablePath}
                   data-launch-software
-                  className="p-4 border border-zinc-800 rounded-xl flex items-center gap-3 transition-all duration-200 group select-none disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
+                  className="p-4 rounded-xl flex items-center gap-3 transition-all duration-200 group select-none disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
                   onMouseDown={(e) => {
                     // Применяем эффект прожатия только для ЛКМ (левая кнопка мыши)
                     if (e.button === 0) {
@@ -861,10 +861,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
         {/* Todo Section - hidden when only scene is selected (shown at top instead) */}
         {!(context.isScene && !context.isShot) && (
-        <div className="mb-7">
-          <div className="bg-card-bg border border-border-primary rounded-card p-4">
+        <div className="mb-6">
+          <div className="bg-card-bg border border-border-primary rounded-card p-4 transition-[border-color] duration-200 hover:border-[#262626]">
             {/* Header */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 h-7">
               <span className="text-sm font-medium text-text-secondary">Tasks</span>
               {context.todos.length > 3 && (
                 <button
@@ -880,7 +880,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
             {/* Task list */}
             <div className="space-y-1.5 mb-3">
-              {(tasksExpanded ? context.todos : context.todos.slice(0, 3)).map((todo: any) => (
+              {context.todos.slice(0, 3).map((todo: any) => (
                 <div
                   key={todo.id}
                   onClick={() => {
@@ -935,6 +935,74 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   </button>
                 </div>
               ))}
+
+              {/* Expandable overflow tasks */}
+              {context.todos.length > 3 && (
+                <div
+                  className="grid transition-[grid-template-rows] duration-200 ease-out"
+                  style={{ gridTemplateRows: tasksExpanded ? '1fr' : '0fr' }}
+                >
+                  <div className="overflow-hidden">
+                    <div className="space-y-1.5">
+                      {context.todos.slice(3).map((todo: any) => (
+                        <div
+                          key={todo.id}
+                          onClick={() => {
+                            if (context.isShot && context.shotId) {
+                              const { toggleShotTodo } = useProjectStore.getState();
+                              toggleShotTodo(project.id, context.shotId, todo.id);
+                            } else if (context.isSpecialContext && context.specialContextId) {
+                              const { toggleSpecialContextTodo } = useProjectStore.getState();
+                              toggleSpecialContextTodo(project.id, context.specialContextId, todo.id);
+                            } else if (context.isScene && context.sceneId) {
+                              const { toggleSceneTodo } = useProjectStore.getState();
+                              toggleSceneTodo(project.id, context.sceneId, todo.id);
+                            } else {
+                              const { toggleTodo } = useProjectStore.getState();
+                              toggleTodo(project.id, todo.id);
+                            }
+                          }}
+                          className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
+                        >
+                          <div className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all duration-200 ${
+                            todo.completed
+                              ? 'bg-zinc-500 border-zinc-500'
+                              : 'border-zinc-600 group-hover:border-zinc-400'
+                          }`}>
+                            {todo.completed && <IconCheck stroke={3} className="w-2.5 h-2.5 text-white" />}
+                          </div>
+                          <span className={`flex-1 text-[13px] transition-all duration-200 ${
+                            todo.completed ? 'text-text-muted line-through' : 'text-text-primary'
+                          }`}>
+                            {todo.text}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (context.isShot && context.shotId) {
+                                const { removeShotTodo } = useProjectStore.getState();
+                                removeShotTodo(project.id, context.shotId, todo.id);
+                              } else if (context.isSpecialContext && context.specialContextId) {
+                                const { removeSpecialContextTodo } = useProjectStore.getState();
+                                removeSpecialContextTodo(project.id, context.specialContextId, todo.id);
+                              } else if (context.isScene && context.sceneId) {
+                                const { removeSceneTodo } = useProjectStore.getState();
+                                removeSceneTodo(project.id, context.sceneId, todo.id);
+                              } else {
+                                const { removeTodo } = useProjectStore.getState();
+                                removeTodo(project.id, todo.id);
+                              }
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+                          >
+                            <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Add task input */}
@@ -1005,22 +1073,54 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         )}
 
         {/* Links Section */}
-        <div className="mb-7">
-          <h3 className="text-sm font-medium text-text-secondary mb-3.5">Links</h3>
-          <div className="space-y-2">
-            {context.links.map((link: any) => (
-              <LinkItem key={link.id} link={link} projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
-            ))}
+        <div className="mb-6">
+          <div className="bg-card-bg border border-border-primary rounded-card p-4 transition-[border-color] duration-200 hover:border-[#262626]">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-3 h-7">
+              <span className="text-sm font-medium text-text-secondary">Links</span>
+              {context.links.length > 5 && (
+                <button
+                  onClick={() => setLinksExpanded(!linksExpanded)}
+                  className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:bg-accent/10 px-2 h-7 rounded-button transition-all cursor-pointer"
+                >
+                  <IconChevronRight stroke={2} className={`w-3.5 h-3.5 transition-transform duration-200 ${linksExpanded ? 'rotate-90' : ''}`} />
+                  <span>{linksExpanded ? 'Collapse' : 'View All Links'}</span>
+                  <span className="bg-[#1e1e1e] text-text-secondary text-[11px] min-w-5 h-5 rounded grid place-items-center">{context.links.length}</span>
+                </button>
+              )}
+            </div>
+            {/* Links List */}
+            <div className="space-y-1.5 mb-3">
+              {context.links.slice(0, 5).map((link: any) => (
+                <LinkItem key={link.id} link={link} projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
+              ))}
+
+              {/* Expandable overflow links */}
+              {context.links.length > 5 && (
+                <div
+                  className="grid transition-[grid-template-rows] duration-200 ease-out"
+                  style={{ gridTemplateRows: linksExpanded ? '1fr' : '0fr' }}
+                >
+                  <div className="overflow-hidden">
+                    <div className="space-y-1.5">
+                      {context.links.slice(5).map((link: any) => (
+                        <LinkItem key={link.id} link={link} projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             <LinkInputForm projectId={project.id} shotId={context.shotId} sceneId={context.sceneId || null} specialContextId={context.specialContextId || null} />
           </div>
         </div>
 
         {/* Tasks Section - shown when only scene is selected (after links) */}
         {(context.isScene && !context.isShot) && (
-        <div className="mb-7">
-          <div className="bg-card-bg border border-border-primary rounded-card p-4">
+        <div className="mb-6">
+          <div className="bg-card-bg border border-border-primary rounded-card p-4 transition-[border-color] duration-200 hover:border-[#262626]">
             {/* Header */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 h-7">
               <span className="text-sm font-medium text-text-secondary">Tasks</span>
               {context.todos.length > 3 && (
                 <button
@@ -1036,7 +1136,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
             {/* Task list */}
             <div className="space-y-1.5 mb-3">
-              {(tasksExpanded ? context.todos : context.todos.slice(0, 3)).map((todo: any) => (
+              {context.todos.slice(0, 3).map((todo: any) => (
                 <div
                   key={todo.id}
                   onClick={() => {
@@ -1091,6 +1191,74 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   </button>
                 </div>
               ))}
+
+              {/* Expandable overflow tasks */}
+              {context.todos.length > 3 && (
+                <div
+                  className="grid transition-[grid-template-rows] duration-200 ease-out"
+                  style={{ gridTemplateRows: tasksExpanded ? '1fr' : '0fr' }}
+                >
+                  <div className="overflow-hidden">
+                    <div className="space-y-1.5">
+                      {context.todos.slice(3).map((todo: any) => (
+                        <div
+                          key={todo.id}
+                          onClick={() => {
+                            if (context.isShot && context.shotId) {
+                              const { toggleShotTodo } = useProjectStore.getState();
+                              toggleShotTodo(project.id, context.shotId, todo.id);
+                            } else if (context.isSpecialContext && context.specialContextId) {
+                              const { toggleSpecialContextTodo } = useProjectStore.getState();
+                              toggleSpecialContextTodo(project.id, context.specialContextId, todo.id);
+                            } else if (context.isScene && context.sceneId) {
+                              const { toggleSceneTodo } = useProjectStore.getState();
+                              toggleSceneTodo(project.id, context.sceneId, todo.id);
+                            } else {
+                              const { toggleTodo } = useProjectStore.getState();
+                              toggleTodo(project.id, todo.id);
+                            }
+                          }}
+                          className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
+                        >
+                          <div className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all duration-200 ${
+                            todo.completed
+                              ? 'bg-zinc-500 border-zinc-500'
+                              : 'border-zinc-600 group-hover:border-zinc-400'
+                          }`}>
+                            {todo.completed && <IconCheck stroke={3} className="w-2.5 h-2.5 text-white" />}
+                          </div>
+                          <span className={`flex-1 text-[13px] transition-all duration-200 ${
+                            todo.completed ? 'text-text-muted line-through' : 'text-text-primary'
+                          }`}>
+                            {todo.text}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (context.isShot && context.shotId) {
+                                const { removeShotTodo } = useProjectStore.getState();
+                                removeShotTodo(project.id, context.shotId, todo.id);
+                              } else if (context.isSpecialContext && context.specialContextId) {
+                                const { removeSpecialContextTodo } = useProjectStore.getState();
+                                removeSpecialContextTodo(project.id, context.specialContextId, todo.id);
+                              } else if (context.isScene && context.sceneId) {
+                                const { removeSceneTodo } = useProjectStore.getState();
+                                removeSceneTodo(project.id, context.sceneId, todo.id);
+                              } else {
+                                const { removeTodo } = useProjectStore.getState();
+                                removeTodo(project.id, todo.id);
+                              }
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+                          >
+                            <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Add task input */}

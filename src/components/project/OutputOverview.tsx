@@ -576,48 +576,54 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   if (loading) {
     return (
       <div className="mb-6">
-        {/* Header with title and refresh button placeholder */}
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-text-secondary">Output Overview</h3>
-          <div className="w-7 h-7 bg-zinc-800/50 rounded-lg" />
-        </div>
-        <div data-output-overview className="bg-card-bg border border-border-primary rounded-med overflow-hidden">
-          {/* Skeleton header mimicking software header */}
-          <div className="bg-zinc-800/50 px-4 py-2 flex items-center gap-2 border-b border-zinc-700/50">
-            <div className="w-4 h-4 bg-zinc-700/50 rounded animate-pulse" />
-            <div className="h-4 bg-zinc-700/50 rounded animate-pulse w-16" />
-            <div className="h-3 bg-zinc-700/30 rounded animate-pulse w-12 ml-auto" />
+        <div data-output-overview className="bg-card-bg border border-border-primary rounded-card p-4">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm font-medium text-text-secondary">Output Overview</span>
+            <div className="flex items-center gap-3">
+              <div className="w-[90px] h-8 bg-[#1a1a1a] border border-[#262626] rounded-[6px]" />
+              <div className="w-[90px] h-8 bg-[#1a1a1a] border border-[#262626] rounded-[6px]" />
+              <div className="w-8 h-8 bg-[#1a1a1a] border border-[#262626] rounded-[6px]" />
+            </div>
           </div>
 
-          {/* Skeleton two-column layout mimicking Preview/Final */}
+          {/* Skeleton software header */}
+          <div className="bg-zinc-800/50 px-4 py-2 flex items-center gap-2 border-b border-zinc-700/50 rounded-t-[10px]">
+            <div className="w-4 h-4 bg-[#1a1a1a] rounded" />
+            <div className="h-4 bg-[#1a1a1a] rounded w-16" />
+            <div className="h-3 bg-[#1a1a1a] rounded w-[70px] ml-auto" />
+          </div>
+
+          {/* Skeleton two-column layout */}
           <div className="grid grid-cols-2 divide-x divide-border-secondary">
-            {/* Preview column skeleton */}
+            {/* Preview column */}
             <div className="flex flex-col">
-              {/* Preview Header */}
               <div className="flex items-center gap-2 px-5 pt-3 pb-2">
-                <div className="w-3.5 h-3.5 bg-zinc-700/30 rounded animate-pulse" />
-                <div className="h-3 bg-zinc-700/30 rounded animate-pulse w-16" />
+                <div className="w-[13px] h-[13px] bg-[#1a1a1a] rounded" />
+                <div className="h-3 bg-[#1a1a1a] rounded w-20" />
               </div>
-              {/* Preview Content */}
               <div className="px-3 pb-3 space-y-2">
-                <div className="h-10 bg-zinc-800/50 rounded animate-pulse" />
-                <div className="h-10 bg-zinc-800/50 rounded animate-pulse" />
-                <div className="h-10 bg-zinc-800/50 rounded animate-pulse w-3/4" />
+                {[1, 2].map(i => (
+                  <div key={i} className="bg-[#0f0f0f] border border-border-primary rounded-lg p-3 flex flex-col gap-2">
+                    <div className="w-[75%] h-3.5 bg-[#1a1a1a] rounded" />
+                    <div className="flex gap-3">
+                      <div className="w-[60px] h-[11px] bg-[#1a1a1a] rounded" />
+                      <div className="w-[60px] h-[11px] bg-[#1a1a1a] rounded" />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-            {/* Final column skeleton */}
+            {/* Final column */}
             <div className="flex flex-col">
-              {/* Final Header */}
               <div className="flex items-center gap-2 px-5 pt-3 pb-2">
-                <div className="w-3.5 h-3.5 bg-zinc-700/30 rounded animate-pulse" />
-                <div className="h-3 bg-zinc-700/30 rounded animate-pulse w-12" />
+                <div className="w-[13px] h-[13px] bg-[#1a1a1a] rounded" />
+                <div className="h-3 bg-[#1a1a1a] rounded w-16" />
               </div>
-              {/* Final Content */}
-              <div className="px-3 pb-3 space-y-2">
-                <div className="h-10 bg-zinc-800/50 rounded animate-pulse" />
-                <div className="h-10 bg-zinc-800/50 rounded animate-pulse" />
-                <div className="h-10 bg-zinc-800/50 rounded animate-pulse" />
-                <div className="h-10 bg-zinc-800/50 rounded animate-pulse w-2/3" />
+              <div className="px-3 pb-3">
+                <div className="bg-[#0f0f0f] border border-border-primary rounded-lg p-8 flex justify-center">
+                  <div className="w-[120px] h-3.5 bg-[#1a1a1a] rounded" />
+                </div>
               </div>
             </div>
           </div>
@@ -630,9 +636,11 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   if (error) {
     return (
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-text-secondary mb-3">Output Overview</h3>
-        <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
-          <p className="text-xs text-red-400 text-center">Error: {error}</p>
+        <div data-output-overview className="bg-card-bg border border-border-primary rounded-card p-4">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm font-medium text-text-secondary">Output Overview</span>
+          </div>
+          <p className="text-xs text-red-400 text-center py-4">Error: {error}</p>
         </div>
       </div>
     );
@@ -641,26 +649,27 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   if (outputs.length === 0) {
     return (
       <div className="mb-6">
-        {/* Header with title and refresh button */}
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-text-secondary">Output Overview</h3>
-          <button
-            onClick={handleRefreshAll}
-            className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors group"
-            title="Refresh all (Tree, Versions, Outputs)"
-            disabled={isRefreshing}
-          >
-            <RefreshCw
-              className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
-              style={{
-                transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
-              }}
-            />
-          </button>
-        </div>
-        <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
-          <p className="text-xs text-text-muted text-center">No outputs found</p>
+        <div data-output-overview className="bg-card-bg border border-border-primary rounded-card p-4">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm font-medium text-text-secondary">Output Overview</span>
+            <button
+              onClick={handleRefreshAll}
+              className="w-7 h-7 flex items-center justify-center flex-shrink-0 border border-[#262626] rounded-[6px] hover:bg-[#1a1a1a] hover:border-[#3f3f46] transition-colors"
+              title="Refresh all (Tree, Versions, Outputs)"
+              disabled={isRefreshing}
+            >
+              <RefreshCw
+                className="w-[15px] h-[15px] text-zinc-500"
+                style={{
+                  transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+                }}
+              />
+            </button>
+          </div>
+          <div className="bg-[#0f0f0f] rounded-lg p-4">
+            <p className="text-xs text-text-muted text-center py-4">No outputs found</p>
+          </div>
         </div>
       </div>
     );
@@ -668,63 +677,62 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
   return (
     <div className="mb-6">
-      {/* Header with title and refresh button */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-text-secondary">Output Overview</h3>
-        <button
-          onClick={handleRefreshAll}
-          className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors group"
-          title="Refresh all (Tree, Versions, Outputs)"
-          disabled={isRefreshing}
-        >
-          <RefreshCw
-            className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
-            style={{
-              transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
-            }}
-          />
-        </button>
-      </div>
-
-      {/* Filters */}
-      {availableSoftware.length > 1 && (
-        <div className="flex gap-2 mb-3 items-stretch">
-          {/* Software Filter - only show if more than one software */}
-          <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1 flex-shrink-0">
+      <div className="bg-card-bg border border-border-primary rounded-card p-4 transition-[border-color] duration-200 hover:border-[#262626]">
+        {/* Module Header */}
+        <div className="flex justify-between items-center mb-3">
+          <span className="text-sm font-medium text-text-secondary">Output Overview</span>
+          <div className="flex items-center gap-3">
+            {/* Software Tabs */}
             {availableSoftware.map(software => (
               <button
                 key={software}
                 onClick={() => updateSelectedSoftware(software)}
-                className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 ${!isRestoringStateRef.current ? 'transition-colors' : ''
+                className={`px-2.5 py-[5px] rounded-[6px] text-[11px] font-medium flex items-center gap-1.5 whitespace-nowrap border ${!isRestoringStateRef.current ? 'transition-colors' : ''
                   } ${selectedSoftware === software
-                    ? 'bg-zinc-700 text-white'
-                    : 'text-text-secondary hover:text-white'
+                    ? 'bg-[#1a1a1a] border-[#3f3f46] text-text-primary'
+                    : 'border-[#262626] text-zinc-500 hover:bg-[#1a1a1a] hover:border-[#3f3f46]'
                   }`}
               >
                 <SoftwareIcon name={software} className="w-3.5 h-3.5" />
                 <span>{formatSoftwareName(software)}</span>
               </button>
             ))}
+            <button
+              onClick={handleRefreshAll}
+              className="w-7 h-7 flex items-center justify-center flex-shrink-0 border border-[#262626] rounded-[6px] hover:bg-[#1a1a1a] hover:border-[#3f3f46] transition-colors"
+              title="Refresh all (Tree, Versions, Outputs)"
+              disabled={isRefreshing}
+            >
+              <RefreshCw
+                className="w-[15px] h-[15px] text-zinc-500"
+                style={{
+                  transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+                }}
+              />
+            </button>
           </div>
         </div>
-      )}
 
-      {/* Outputs Grid */}
-      <div className="space-y-4">
-        {Object.entries(groupedOutputs).map(([software, types]) => (
-          <div data-output-overview key={software} className="bg-card-bg border border-border-primary rounded-med overflow-hidden">
-            {/* Software Header */}
-            <div className="bg-zinc-800/50 px-4 py-2 flex items-center gap-2 border-b border-zinc-700/50">
-              <SoftwareIcon name={software} className="w-4 h-4" />
-              <span className="text-sm font-medium text-text-primary">{formatSoftwareName(software)}</span>
-              <span className="text-xs text-text-muted ml-auto">
-                {types.preview.length + types.final.length} outputs
-              </span>
-            </div>
+        {/* Outputs Grid */}
+        <div className="space-y-4">
+          {Object.entries(groupedOutputs).map(([software, types]) => (
+            <div data-output-overview key={software}>
+              {/* Software Section Header - hide when only 1 software */}
+              {Object.keys(groupedOutputs).length > 1 && (
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2 text-[13px] font-semibold text-text-primary">
+                  <SoftwareIcon name={software} className="w-4 h-4" />
+                  {formatSoftwareName(software)}
+                </div>
+                <span className="px-2 py-0.5 bg-[#1e1e1e] rounded text-[11px] font-medium text-text-secondary">
+                  {types.preview.length + types.final.length} outputs
+                </span>
+              </div>
+              )}
 
             {/* Two Column Layout with Divider (Headers + Content) */}
-            <div className="grid grid-cols-2 divide-x divide-border-secondary">
+            <div className="grid grid-cols-2 divide-x divide-border-secondary bg-[#0f0f0f] rounded-lg">
               {/* Preview Column */}
               <div className="flex flex-col">
                 {/* Preview Header */}
@@ -742,7 +750,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                         key={output.path}
                         onDoubleClick={() => handleOutputClick(output)}
                         onContextMenu={(e) => handleContextMenu(e, output)}
-                        className="w-full text-left px-3 py-2 rounded bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors group"
+                        className="w-full text-left px-3 py-3 rounded-lg bg-[#181818] hover:bg-[#1e1e1e] transition-colors group"
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex-1 min-w-0">
@@ -788,12 +796,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                         {grouped.map(group => {
                           const isExpanded = expandedGroups.has(group.path);
                           return (
-                            <div key={group.path} className="space-y-1">
+                            <div key={group.path}>
                               {/* Group header */}
                               <button
                                 onClick={() => toggleGroup(group.path)}
                                 onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'preview')}
-                                className="w-full text-left px-3 py-2 rounded bg-zinc-700/30 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
+                                className="w-full text-left px-3 py-2 rounded bg-[#181818] hover:bg-[#1e1e1e] transition-colors flex items-center gap-2"
                               >
                                 <ChevronDown
                                   className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
@@ -807,7 +815,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                                 className={`overflow-hidden transition-[max-height] duration-200 ease-in-out ${isExpanded ? 'max-h-[2000px]' : 'max-h-0'
                                   }`}
                               >
-                                <div className="pl-6 space-y-1 pt-1">
+                                <div className="pl-6 space-y-2 pt-2">
                                   {group.files.map(output => renderOutputButton(output, group.path))}
                                 </div>
                               </div>
@@ -843,7 +851,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                         key={output.path}
                         onDoubleClick={() => handleOutputClick(output)}
                         onContextMenu={(e) => handleContextMenu(e, output)}
-                        className="w-full text-left px-3 py-2 rounded bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors group"
+                        className="w-full text-left px-3 py-3 rounded-lg bg-[#181818] hover:bg-[#1e1e1e] transition-colors group"
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex-1 min-w-0">
@@ -889,12 +897,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                         {grouped.map(group => {
                           const isExpanded = expandedGroups.has(group.path);
                           return (
-                            <div key={group.path} className="space-y-1">
+                            <div key={group.path}>
                               {/* Group header */}
                               <button
                                 onClick={() => toggleGroup(group.path)}
                                 onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'final')}
-                                className="w-full text-left px-3 py-2 rounded bg-zinc-700/30 hover:bg-zinc-700/50 transition-colors flex items-center gap-2"
+                                className="w-full text-left px-3 py-2 rounded bg-[#181818] hover:bg-[#1e1e1e] transition-colors flex items-center gap-2"
                               >
                                 <ChevronDown
                                   className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
@@ -908,7 +916,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                                 className={`overflow-hidden transition-[max-height] duration-200 ease-in-out ${isExpanded ? 'max-h-[2000px]' : 'max-h-0'
                                   }`}
                               >
-                                <div className="pl-6 space-y-1 pt-1">
+                                <div className="pl-6 space-y-2 pt-2">
                                   {group.files.map(output => renderOutputButton(output, group.path))}
                                 </div>
                               </div>
@@ -931,11 +939,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         ))}
       </div>
 
-      {!loading && !isRefreshing && filteredOutputs.length === 0 && (
-        <div data-output-overview className="bg-card-bg border border-border-primary rounded-med p-4">
-          <p className="text-xs text-text-muted text-center">No outputs match the selected filters.</p>
-        </div>
-      )}
+        {!loading && !isRefreshing && filteredOutputs.length === 0 && (
+          <div className="py-4">
+            <p className="text-xs text-text-muted text-center">No outputs match the selected filters.</p>
+          </div>
+        )}
+      </div>
 
       {/* File Context Menu */}
       <ContextMenu

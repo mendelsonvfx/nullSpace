@@ -99,8 +99,10 @@ export const NotesSection = memo(function NotesSection({ project, context }: Not
     : project.id;
 
   return (
-    <div>
-      <h3 className="text-sm font-medium text-text-secondary mb-3">Notes</h3>
+    <div className="bg-card-bg border border-border-primary rounded-card p-4 transition-[border-color] duration-200 hover:border-[#262626]">
+      <div className="flex justify-between items-center mb-3">
+        <span className="text-sm font-medium text-text-secondary">Notes</span>
+      </div>
       <div className="markdown-editor-container" onClick={handleContainerClick}>
         <MDXEditor
           key={editorKey}

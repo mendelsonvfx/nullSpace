@@ -586,14 +586,23 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
   if (loading && versions.length === 0) {
     return (
       <div className="mb-6">
-        <h3 className="text-sm font-medium text-text-secondary mb-3">Versions Overview</h3>
-        <div className="bg-card-bg border border-border-primary rounded-med p-4">
-          {/* Skeleton placeholders mimicking version cards */}
-          <div className="flex gap-3 overflow-hidden">
+        <div className="bg-card-bg border border-border-primary rounded-card p-4">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm font-medium text-text-secondary">Versions Overview</span>
+            <div className="flex items-center gap-3">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="w-[90px] h-8 bg-[#1a1a1a] border border-[#262626] rounded-[6px]" />
+              ))}
+              <div className="w-8 h-8 bg-[#1a1a1a] border border-[#262626] rounded-[6px]" />
+            </div>
+          </div>
+          {/* Skeleton version cards */}
+          <div className="grid grid-cols-4 gap-3.5">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="flex-shrink-0 w-32 flex flex-col items-center">
-                <div className="w-6 h-6 bg-zinc-700/50 rounded animate-pulse mb-2" />
-                <div className="h-3 bg-zinc-700/30 rounded animate-pulse w-16" />
+              <div key={i} className="aspect-square bg-[#0f0f0f] border border-border-primary rounded-[10px] p-3.5 flex flex-col gap-3">
+                <div className="flex-1 bg-[#1a1a1a] rounded-[6px]" />
+                <div className="w-[60%] h-3.5 bg-[#1a1a1a] rounded mx-auto" />
               </div>
             ))}
           </div>
@@ -606,26 +615,28 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
   if (!loading && versions.length === 0) {
     return (
       <div className="mb-6">
-        {/* Header with title and refresh button */}
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-text-secondary">Versions Overview</h3>
-          <button
-            onClick={handleRefreshAll}
-            className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors group"
-            title="Refresh all (Tree, Versions, Outputs)"
-            disabled={isRefreshing}
-          >
-            <RefreshCw
-              className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
-              style={{
-                transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
-              }}
-            />
-          </button>
-        </div>
-        <div data-versions-overview className="bg-card-bg border border-border-primary rounded-med p-4">
-          <p className="text-xs text-text-muted text-center">No versions found</p>
+        <div data-versions-overview className="bg-card-bg border border-border-primary rounded-card p-4">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-sm font-medium text-text-secondary">Versions Overview</span>
+            <button
+              onClick={handleRefreshAll}
+              className="w-7 h-7 flex items-center justify-center border border-[#262626] rounded-[6px] hover:bg-[#1a1a1a] hover:border-[#3f3f46] transition-colors"
+              title="Refresh all (Tree, Versions, Outputs)"
+              disabled={isRefreshing}
+            >
+              <RefreshCw
+                className="w-[15px] h-[15px] text-zinc-500"
+                style={{
+                  transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+                }}
+              />
+            </button>
+          </div>
+          <div className="bg-[#0f0f0f] rounded-lg p-4">
+            <p className="text-xs text-text-muted text-center py-4">No versions found</p>
+          </div>
         </div>
       </div>
     );
@@ -779,104 +790,98 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
 
   return (
     <div className="mb-6 overflow-hidden">
-      {/* Header with title and refresh button */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-text-secondary">Versions Overview</h3>
-        {uniqueSoftware.length > 0 && (
-          <button
-            onClick={handleRefreshAll}
-            className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors group"
-            title="Refresh all (Tree, Versions, Outputs)"
-            disabled={isRefreshing}
-          >
-            <RefreshCw
-              className="w-4 h-4 text-text-secondary group-hover:text-white transition-colors"
-              style={{
-                transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
-              }}
-            />
-          </button>
-        )}
-      </div>
-
-      {/* Software Tabs */}
-      {uniqueSoftware.length > 0 && (
-        <div className="flex gap-2 mb-3 items-stretch">
-          {/* Software Filter - only show if more than one software */}
-          {uniqueSoftware.length > 1 && (
-            <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1 flex-shrink-0">
-              {uniqueSoftware.map((software) => (
+      <div data-versions-overview className="bg-card-bg border border-border-primary rounded-card p-4 transition-[border-color] duration-200 hover:border-[#262626]">
+        {/* Module Header */}
+        <div className="flex justify-between items-center mb-3">
+          <span className="text-sm font-medium text-text-secondary">Versions Overview</span>
+          <div className="flex items-center gap-3">
+            {/* Software Tabs */}
+            {uniqueSoftware.length > 0 && (
+              <>
+                {uniqueSoftware.length > 1 && uniqueSoftware.map((software) => (
+                  <button
+                    key={software}
+                    onClick={() => {
+                      setSelectedSoftware(software);
+                      setShowOnlyUnversioned(false);
+                    }}
+                    className={`px-2.5 py-[5px] rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 border ${selectedSoftware === software && !showOnlyUnversioned
+                      ? 'bg-[#1a1a1a] border-[#3f3f46] text-text-primary'
+                      : 'border-[#262626] text-zinc-500 hover:bg-[#1a1a1a] hover:border-[#3f3f46]'
+                      }`}
+                  >
+                    <SoftwareIcon name={software} className="w-3.5 h-3.5" />
+                    {software}
+                  </button>
+                ))}
                 <button
-                  key={software}
                   onClick={() => {
-                    setSelectedSoftware(software);
+                    setSelectedSoftware('all');
                     setShowOnlyUnversioned(false);
                   }}
-                  className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap flex items-center gap-1.5 ${selectedSoftware === software && !showOnlyUnversioned
-                    ? 'bg-zinc-700 text-white'
-                    : 'text-text-secondary hover:text-white'
+                  className={`px-2.5 py-[5px] rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap border ${selectedSoftware === 'all' && !showOnlyUnversioned
+                    ? 'bg-[#1a1a1a] border-[#3f3f46] text-text-primary'
+                    : 'border-[#262626] text-zinc-500 hover:bg-[#1a1a1a] hover:border-[#3f3f46]'
                     }`}
                 >
-                  <SoftwareIcon name={software} className="w-3.5 h-3.5" />
-                  {software}
+                  All
                 </button>
-              ))}
-            </div>
-          )}
-          <div className="flex gap-1 bg-zinc-800/50 border border-border-primary rounded-button p-1">
-            <button
-              onClick={() => {
-                setSelectedSoftware('all');
-                setShowOnlyUnversioned(false);
-              }}
-              className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${selectedSoftware === 'all' && !showOnlyUnversioned
-                ? 'bg-zinc-700 text-white'
-                : 'text-text-secondary hover:text-white'
-                }`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => {
-                setShowOnlyUnversioned(!showOnlyUnversioned);
-                setSelectedSoftware('all');
-              }}
-              className={`px-3 py-1.5 rounded text-xs transition-colors whitespace-nowrap ${showOnlyUnversioned
-                ? 'bg-zinc-700 text-white'
-                : 'text-text-secondary hover:text-white'
-                }`}
-            >
-              Other
-            </button>
+                <button
+                  onClick={() => {
+                    setShowOnlyUnversioned(!showOnlyUnversioned);
+                    setSelectedSoftware('all');
+                  }}
+                  className={`px-2.5 py-[5px] rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap border ${showOnlyUnversioned
+                    ? 'bg-[#1a1a1a] border-[#3f3f46] text-text-primary'
+                    : 'border-[#262626] text-zinc-500 hover:bg-[#1a1a1a] hover:border-[#3f3f46]'
+                    }`}
+                >
+                  Other
+                </button>
+                <button
+                  onClick={handleRefreshAll}
+                  className="w-7 h-7 flex items-center justify-center flex-shrink-0 border border-[#262626] rounded-[6px] hover:bg-[#1a1a1a] hover:border-[#3f3f46] transition-colors"
+                  title="Refresh all (Tree, Versions, Outputs)"
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw
+                    className="w-[15px] h-[15px] text-zinc-500"
+                    style={{
+                      transform: isRefreshing ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: isRefreshing ? 'transform 0.3s ease-in-out' : 'none'
+                    }}
+                  />
+                </button>
+              </>
+            )}
           </div>
         </div>
-      )}
 
-      <div
-        ref={scrollContainerRef}
-        onWheel={handleWheel}
-        data-versions-overview
-        className="versions-scroll-container bg-card-bg border border-border-primary rounded-med p-4 overflow-x-auto">
-        {filteredVersions.length === 0 ? (
-          <p className="text-xs text-text-muted text-center">No versions found for {selectedSoftware}</p>
-        ) : (
-          <div className="flex gap-3 w-max">
-            {filteredVersions.map((version) => {
-              const isBlendFile = version.software.includes('Blender');
-              return (
-                <VersionCard
-                  key={version.path}
-                  version={version}
-                  isBlendFile={isBlendFile}
-                  versionMark={versionMarks[version.path]}
-                  onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
-                  onContextMenu={(e) => handleContextMenu(e, version)}
-                />
-              );
-            })}
-          </div>
-        )}
+        {/* Version Cards */}
+        <div
+          ref={scrollContainerRef}
+          onWheel={handleWheel}
+          className="versions-scroll-container overflow-x-auto bg-[#0f0f0f] rounded-lg p-4">
+          {filteredVersions.length === 0 ? (
+            <p className="text-xs text-text-muted text-center py-8">No versions found for {selectedSoftware}</p>
+          ) : (
+            <div className="flex gap-3 w-max">
+              {filteredVersions.map((version) => {
+                const isBlendFile = version.software.includes('Blender');
+                return (
+                  <VersionCard
+                    key={version.path}
+                    version={version}
+                    isBlendFile={isBlendFile}
+                    versionMark={versionMarks[version.path]}
+                    onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
+                    onContextMenu={(e) => handleContextMenu(e, version)}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Context Menu */}

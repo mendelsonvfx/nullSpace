@@ -539,10 +539,10 @@ input[type="number"] {
 }
 
 .markdown-editor-container [class*='_rootContentEditableWrapper'] {
-  background: #141414;
+  background: #0f0f0f;
   border: 1px solid #1a1a1a;
-  border-radius: 0 0 10px 10px;
-  border-top: 1px solid #1a1a1a;
+  border-radius: 0 0 8px 8px;
+  border-top: none;
   min-height: 200px;
   max-height: 500px;
   overflow-y: auto;
@@ -564,97 +564,101 @@ input[type="number"] {
 
 /* Placeholder styling */
 .markdown-editor-container [class*='_contentEditable'][data-placeholder]::before {
-  color: #3f3f46 !important;
+  color: #71717a !important;
   opacity: 1 !important;
 }
 
 .markdown-editor-container [class*='_contentEditable']::placeholder {
-  color: #3f3f46 !important;
+  color: #71717a !important;
   opacity: 1 !important;
 }
 
 .markdown-editor-container [class*='_contentEditable'][contenteditable='true']:empty::before {
   content: attr(placeholder);
-  color: #3f3f46 !important;
+  color: #71717a !important;
   opacity: 1 !important;
   pointer-events: none;
 }
 
 /* Toolbar styling */
 .markdown-editor-container [class*='_toolbarRoot'] {
-  background: #141414;
+  background: #0f0f0f;
   border: 1px solid #1a1a1a;
-  border-radius: 10px 10px 0 0;
+  border-radius: 8px 8px 0 0;
   border-bottom: none;
   margin-bottom: 0;
-  padding: 6px;
+  padding: 8px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .markdown-editor-container [class*='_toolbarButtonGroupRoot'] {
-  gap: 4px;
+  gap: 2px;
+  padding-right: 8px;
+  border-right: 1px solid #1a1a1a;
 }
 
 .markdown-editor-container button[class*='_toolbarButton'] {
   background: transparent;
-  color: #a1a1aa !important;
+  color: #71717a !important;
   border: none;
-  padding: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border-radius: 4px;
   transition: all 0.2s;
-  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .markdown-editor-container button[class*='_toolbarButton'] svg {
-  color: #a1a1aa !important;
-  fill: #a1a1aa !important;
-  stroke: #a1a1aa !important;
-  width: 70% !important;
-  height: 70% !important;
+  color: #71717a !important;
+  fill: #71717a !important;
+  stroke: #71717a !important;
+  width: 16px !important;
+  height: 16px !important;
 }
 
 .markdown-editor-container button[class*='_toolbarButton'] svg path {
-  fill: #a1a1aa !important;
-  stroke: #a1a1aa !important;
+  fill: #71717a !important;
+  stroke: #71717a !important;
 }
 
 .markdown-editor-container button[class*='_toolbarButton']:hover {
-  background: #27272a;
-  color: #a1a1aa !important;
-  opacity: 1;
+  background: #1a1a1a;
 }
 
 .markdown-editor-container button[class*='_toolbarButton']:hover svg {
-  color: #a1a1aa !important;
-  fill: #a1a1aa !important;
-  stroke: #a1a1aa !important;
+  color: #e4e4e7 !important;
+  fill: #e4e4e7 !important;
+  stroke: #e4e4e7 !important;
 }
 
 .markdown-editor-container button[class*='_toolbarButton'][data-active='true'] {
-  background: #3f3f46 !important;
-  color: #a855f7 !important;
-  opacity: 1 !important;
+  background: #1a1a1a !important;
+  color: #8b5cf6 !important;
 }
 
 .markdown-editor-container button[class*='_toolbarButton'][data-active='true'] svg {
-  color: #a855f7 !important;
-  fill: #a855f7 !important;
-  stroke: #a855f7 !important;
+  color: #e4e4e7 !important;
+  fill: #e4e4e7 !important;
+  stroke: #e4e4e7 !important;
 }
 
 .markdown-editor-container button[class*='_toolbarButton'][data-active='true'] svg path {
-  fill: #a855f7 !important;
-  stroke: #a855f7 !important;
+  fill: #e4e4e7 !important;
+  stroke: #e4e4e7 !important;
 }
 
-/* Force all toolbar icons to be 70% white */
+/* Force all toolbar icons */
 .markdown-editor-container [class*='_toolbarRoot'] svg {
-  color: #a1a1aa !important;
+  color: #71717a !important;
   fill: currentColor !important;
-  opacity: 0.7;
 }
 
 .markdown-editor-container [class*='_toolbarRoot'] button:not([data-active='true']) svg {
-  color: #a1a1aa !important;
+  color: #71717a !important;
 }
 
 /* Select dropdown */
@@ -666,17 +670,18 @@ input[type="number"] {
   padding: 4px 8px;
 }
 
-/* Block type select button - compact size */
+/* Block type select button */
 .markdown-editor-container button[class*='_selectTrigger'],
 .markdown-editor-container [role='combobox'] {
   background: transparent !important;
-  color: #a1a1aa !important;
-  border: none !important;
-  padding: 4px 4px 4px 6px !important;
+  color: #e4e4e7 !important;
+  border: 1px solid #262626 !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
   gap: 4px !important;
   min-width: auto !important;
   max-width: fit-content !important;
-  opacity: 0.8 !important;
+  font-size: 12px !important;
   transition: all 0.2s !important;
 }
 
@@ -694,9 +699,8 @@ input[type="number"] {
 /* Block type select button hover */
 .markdown-editor-container button[class*='_selectTrigger']:hover,
 .markdown-editor-container [role='combobox']:hover {
-  background: #27272a !important;
-  color: #a1a1aa !important;
-  opacity: 1 !important;
+  background: #1a1a1a !important;
+  border-color: #3f3f46 !important;
 }
 
 /* Dropdown menu/popover - aggressive override */
@@ -942,16 +946,16 @@ div[data-radix-popper-content-wrapper]>div {
   font-weight: 500 !important;
 }
 
-/* Override active/selected button state - force gray background */
+/* Override active/selected button state */
 .markdown-editor-container [class*='_toolbarRoot'] button[data-active='true'],
 .markdown-editor-container [class*='_toolbarRoot'] button[aria-pressed='true'],
 .markdown-editor-container [class*='_toolbarRoot'] button[data-state='on'] {
-  background: #52525b !important;
-  background-color: #52525b !important;
+  background: #1a1a1a !important;
+  background-color: #1a1a1a !important;
 }
 
 /* Override hover state for toolbar buttons */
 .markdown-editor-container [class*='_toolbarRoot'] button:hover {
-  background: #3f3f46 !important;
-  background-color: #3f3f46 !important;
+  background: #1a1a1a !important;
+  background-color: #1a1a1a !important;
 }

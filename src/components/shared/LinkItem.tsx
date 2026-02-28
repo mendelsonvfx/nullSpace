@@ -68,7 +68,8 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId, sceneI
     }
   }, [link.url]);
 
-  const handleRemove = useCallback(() => {
+  const handleRemove = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
     if (shotId) {
       const { removeShotLink } = useProjectStore.getState();
       removeShotLink(projectId, shotId, link.id);
@@ -84,10 +85,15 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId, sceneI
     }
   }, [shotId, specialContextId, sceneId, projectId, link.id]);
 
+  const handleEditClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEditing(true);
+  }, []);
+
   if (isEditing) {
     return (
-      <div className="flex items-center gap-3 bg-card-bg border border-border-primary rounded-med px-3 py-2.5">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-hover-bg flex-shrink-0 overflow-hidden">
+      <div className="flex items-center gap-2.5 px-3 py-2 rounded-button border border-zinc-600 transition-all">
+        <div className="w-4 h-4 flex-shrink-0 overflow-hidden">
           {faviconUrl && !faviconError ? (
             <img
               src={faviconUrl}
@@ -110,7 +116,7 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId, sceneI
         />
         <button
           onClick={handleSave}
-          className="p-1.5 hover:bg-hover-bg rounded-lg transition-colors"
+          className="p-1 hover:bg-hover-bg rounded transition-colors"
         >
           <Check className="w-3.5 h-3.5 text-green-500" />
         </button>
@@ -119,36 +125,34 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId, sceneI
   }
 
   return (
-    <div className="flex items-center gap-3 group bg-card-bg hover:border-accent border border-border-primary rounded-med px-3 py-2.5 transition-all">
+    <div
+      onClick={handleOpenUrl}
+      title={link.url}
+      className="flex items-center gap-2.5 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
+    >
+      <div className="w-4 h-4 flex-shrink-0 overflow-hidden">
+        {faviconUrl && !faviconError ? (
+          <img
+            src={faviconUrl}
+            alt=""
+            className="w-4 h-4 object-contain"
+            onError={() => setFaviconError(true)}
+          />
+        ) : (
+          <LinkIcon className="w-4 h-4 text-text-muted" />
+        )}
+      </div>
+      <span className="text-sm text-text-primary truncate flex-1">{link.title}</span>
       <button
-        onClick={handleOpenUrl}
-        className="flex items-center gap-3 flex-1 text-left min-w-0"
-        title={link.url}
-      >
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-hover-bg group-hover:bg-accent/10 transition-colors flex-shrink-0 overflow-hidden">
-          {faviconUrl && !faviconError ? (
-            <img
-              src={faviconUrl}
-              alt=""
-              className="w-4 h-4 object-contain"
-              onError={() => setFaviconError(true)}
-            />
-          ) : (
-            <LinkIcon className="w-4 h-4 text-text-muted group-hover:text-accent transition-colors" />
-          )}
-        </div>
-        <span className="text-sm text-text-primary truncate block">{link.title}</span>
-      </button>
-      <button
-        onClick={() => setIsEditing(true)}
-        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-hover-bg rounded-lg transition-opacity"
+        onClick={handleEditClick}
+        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded transition-opacity"
         title="Edit title"
       >
         <Pencil className="w-3.5 h-3.5 text-text-muted" />
       </button>
       <button
         onClick={handleRemove}
-        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-hover-bg rounded-lg transition-opacity"
+        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded transition-opacity"
         title="Remove link"
       >
         <X className="w-3.5 h-3.5 text-text-muted" />
