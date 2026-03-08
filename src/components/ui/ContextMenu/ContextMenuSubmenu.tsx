@@ -96,8 +96,8 @@ export function ContextMenuSubmenu({
         onMouseLeave={handleMouseLeave}
         disabled={disabled}
         className={`
-          w-full px-4 py-2 text-left text-sm flex items-center justify-between
-          ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-zinc-700 cursor-pointer'}
+          w-full px-3 py-1.5 text-left text-sm flex items-center justify-between rounded-md transition-colors
+          ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-hover-bg cursor-pointer'}
           text-text-primary
           ${className}
         `}
@@ -106,13 +106,13 @@ export function ContextMenuSubmenu({
           {icon && <span className="w-4 h-4 flex items-center justify-center">{icon}</span>}
           <span>{label}</span>
         </span>
-        <ChevronRight className="w-4 h-4 text-zinc-500" />
+        <ChevronRight className="w-4 h-4 text-text-muted" />
       </button>
 
       {isOpen && !disabled && (
         <div
           ref={submenuRef}
-          className="absolute bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[140px] max-w-[180px] z-[100] animate-context-menu"
+          className="absolute bg-card-bg/25 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[200px] z-[110] overflow-visible animate-context-menu"
           style={getSubmenuStyle()}
           onMouseEnter={clearCloseTimeout}
           onMouseLeave={handleMouseLeave}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import * as React from 'react';
-import { Filter, Plus, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import { Plus, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import { CustomSelect } from '../ui/CustomSelect';
 import { useProjectStore } from '../../store/projectStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { ProjectBreakdownCard } from './ProjectBreakdownCard';
@@ -96,7 +97,6 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'unpaid'>('all');
   const [sortBy, setSortBy] = useState<'amount' | 'name' | 'client' | 'date'>('date');
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showManualTransactionModal, setShowManualTransactionModal] = useState(false);
   const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; amount: number } | null>(null);
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
@@ -237,23 +237,6 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     loadRates();
   }, [baseCurrency]);
 
-  // Close filter menu on click outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (showFilterMenu && !target.closest('.filter-menu-container')) {
-        setShowFilterMenu(false);
-      }
-    };
-
-    if (showFilterMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showFilterMenu]);
 
   // Listen for storage changes
   useEffect(() => {
@@ -688,104 +671,60 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                 <div className="bg-card-bg rounded-b-xl p-6 border border-t-0 border-border-primary">
                   {/* Фильтры */}
                   <div className="flex flex-wrap gap-3 mb-6 pb-4 border-b border-zinc-800">
-                    <div className="flex gap-1 bg-zinc-800/50 rounded-lg p-1">
+                    <div className="flex gap-0.5 bg-sidebar-bg border border-border-primary rounded-button p-0.5">
                       <button
                         onClick={() => setFilterStatus('all')}
-                        className={`px-3 py-1 rounded text-sm transition-colors font-medium ${
+                        className={`px-3 py-1.5 rounded-badge text-xs transition-colors font-medium ${
                           filterStatus === 'all'
-                            ? 'bg-zinc-700 text-white'
-                            : 'text-zinc-400 hover:text-white'
+                            ? 'bg-card-bg text-text-primary shadow-sm'
+                            : 'text-text-dim hover:text-text-muted hover:bg-hover-bg'
                         }`}
                       >
                         All
                       </button>
                       <button
                         onClick={() => setFilterStatus('paid')}
-                        className={`px-3 py-1 rounded text-sm transition-colors font-medium ${
+                        className={`px-3 py-1.5 rounded-badge text-xs transition-colors font-medium ${
                           filterStatus === 'paid'
-                            ? 'bg-zinc-700 text-green-400'
-                            : 'text-zinc-400 hover:text-white'
+                            ? 'bg-card-bg text-status-active shadow-sm'
+                            : 'text-text-dim hover:text-text-muted hover:bg-hover-bg'
                         }`}
                       >
                         Paid
                       </button>
                       <button
                         onClick={() => setFilterStatus('unpaid')}
-                        className={`px-3 py-1 rounded text-sm transition-colors font-medium ${
+                        className={`px-3 py-1.5 rounded-badge text-xs transition-colors font-medium ${
                           filterStatus === 'unpaid'
-                            ? 'bg-zinc-700 text-yellow-400'
-                            : 'text-zinc-400 hover:text-white'
+                            ? 'bg-card-bg text-status-paused shadow-sm'
+                            : 'text-text-dim hover:text-text-muted hover:bg-hover-bg'
                         }`}
                       >
                         Pending
                       </button>
                     </div>
 
-                    <div className="flex gap-2 ml-auto relative filter-menu-container">
+                    <div className="flex gap-2 ml-auto items-center">
                       <button
                         onClick={() => setShowManualTransactionModal(true)}
-                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors group flex items-center gap-2"
+                        className="px-3 py-[7px] bg-sidebar-bg border border-border-primary text-text-muted text-xs font-semibold rounded-button cursor-pointer flex items-center gap-1.5 transition-colors hover:border-border-secondary hover:text-text-primary"
                         title="Add manual transaction"
                       >
-                        <Plus className="w-4 h-4 text-white" />
-                        <span className="text-sm text-zinc-400 group-hover:text-zinc-200 font-medium">Add Payment</span>
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Payment</span>
                       </button>
-                      <button
-                        onClick={() => setShowFilterMenu(!showFilterMenu)}
-                        className="px-3 py-1.5 text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-md transition-all flex items-center gap-2 font-medium"
-                      >
-                        <Filter className="w-4 h-4" />
-                        <span>Sort by: {sortBy === 'amount' ? 'Cost' : sortBy === 'name' ? 'Name' : sortBy === 'client' ? 'Client' : 'Date'}</span>
-                      </button>
-
-                      {showFilterMenu && (
-                        <div className="absolute top-full mt-2 right-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-0 z-50 w-[120px] animate-modal">
-                          <button
-                            onClick={() => {
-                              setSortBy('amount');
-                              setShowFilterMenu(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left text-sm transition-colors rounded-t-lg ${
-                              sortBy === 'amount' ? 'bg-accent text-white' : 'text-zinc-300 hover:bg-zinc-700'
-                            }`}
-                          >
-                            Cost
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSortBy('name');
-                              setShowFilterMenu(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left text-sm transition-colors ${
-                              sortBy === 'name' ? 'bg-accent text-white' : 'text-zinc-300 hover:bg-zinc-700'
-                            }`}
-                          >
-                            Name
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSortBy('client');
-                              setShowFilterMenu(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left text-sm transition-colors ${
-                              sortBy === 'client' ? 'bg-accent text-white' : 'text-zinc-300 hover:bg-zinc-700'
-                            }`}
-                          >
-                            Client
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSortBy('date');
-                              setShowFilterMenu(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left text-sm transition-colors rounded-b-lg ${
-                              sortBy === 'date' ? 'bg-accent text-white' : 'text-zinc-300 hover:bg-zinc-700'
-                            }`}
-                          >
-                            Date
-                          </button>
-                        </div>
-                      )}
+                      <CustomSelect
+                        value={sortBy}
+                        onChange={(v) => setSortBy(v as typeof sortBy)}
+                        options={[
+                          { value: 'date', label: 'Date' },
+                          { value: 'amount', label: 'Cost' },
+                          { value: 'name', label: 'Name' },
+                          { value: 'client', label: 'Client' },
+                        ]}
+                        className="w-[110px]"
+                        compact
+                      />
                     </div>
                   </div>
 

@@ -7,6 +7,7 @@ import { SoftwareIcon } from '../SoftwareIcon';
 import { generateBrightColor, SOFTWARE_OPTIONS } from '../../utils';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import SimpleBar from 'simplebar-react';
+import { CustomSelect } from '../ui/CustomSelect';
 
 interface CreateProjectModalProps {
   onClose: () => void;
@@ -341,19 +342,17 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium mb-1.5">Client</label>
-              <select
+              <CustomSelect
                 value={formData.clientId}
-                onChange={(e) => {
-                  console.log('Select changed to:', e.target.value);
-                  setFormData(prev => ({ ...prev, clientId: e.target.value }));
+                onChange={(v) => {
+                  console.log('Select changed to:', v);
+                  setFormData(prev => ({ ...prev, clientId: v }));
                 }}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
-              >
-                <option value="">No client</option>
-                {clients.map(client => (
-                  <option key={client.id} value={client.id}>{client.name}</option>
-                ))}
-              </select>
+                options={[
+                  { value: '', label: 'No client' },
+                  ...clients.map(c => ({ value: c.id, label: c.name })),
+                ]}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5">Or Add New</label>

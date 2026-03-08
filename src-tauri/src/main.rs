@@ -1470,37 +1470,13 @@ async fn reveal_in_explorer(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn open_file(file_path: String) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        // Use cmd /c start to open file with default application
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-        Command::new("cmd")
-            .creation_flags(CREATE_NO_WINDOW)
-            .args(&["/c", "start", "", &file_path])
-            .spawn()
-            .map_err(|e| format!("Failed to open file: {}", e))?;
+async fn open_file(app_handle: tauri::AppHandle, file_path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&file_path);
+    if !p.exists() {
+        return Err(format!("File does not exist: {}", file_path));
     }
-
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg(&file_path)
-            .spawn()
-            .map_err(|e| format!("Failed to open file: {}", e))?;
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        Command::new("xdg-open")
-            .arg(&file_path)
-            .spawn()
-            .map_err(|e| format!("Failed to open file: {}", e))?;
-    }
-
-    Ok(())
+    tauri::api::shell::open(&app_handle.shell_scope(), file_path, None)
+        .map_err(|e| format!("Failed to open file: {}", e))
 }
 
 #[derive(Serialize)]
@@ -1569,6 +1545,13 @@ struct FileNode {
 
 #[tauri::command]
 fn get_folder_structure(path: String) -> Result<Vec<FileNode>, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("Path does not exist".to_string());
+    }
+    if !p.is_dir() {
+        return Err("Path is not a directory".to_string());
+    }
     read_dir_recursive(&path, 3) // Display up to 3 levels of folder depth
 }
 
@@ -1985,6 +1968,10 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
 
 #[tauri::command]
 async fn extract_blend_thumbnail(path: String) -> Result<Option<String>, String> {
+    let p = std::path::Path::new(&path);
+    if p.extension().and_then(|e| e.to_str()) != Some("blend") {
+        return Err("File must be a .blend file".to_string());
+    }
     blend_thumbnail::extract_blend_thumbnail(&path)
 }
 

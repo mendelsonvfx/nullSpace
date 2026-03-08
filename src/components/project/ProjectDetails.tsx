@@ -17,6 +17,7 @@ import { useThumbnail } from '../../hooks/useThumbnail';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import SimpleBar from 'simplebar-react';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
+import { CustomSelect } from '../ui/CustomSelect';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { getPaymentStatusUpdate } from '../../utils/financeService';
 
@@ -451,7 +452,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-4 flex-wrap">
-              <h1 className="text-project-title font-bold">{project.name}</h1>
+              <h1 className="text-project-title font-bold select-text">{project.name}</h1>
               <span className={`px-2.5 py-1 rounded-badge text-xs font-medium ${
               project.status === 'active' ? 'bg-status-active/15 text-status-active border border-status-active/30' :
               project.status === 'completed' ? 'bg-status-completed/15 text-status-completed border border-status-completed/30' :
@@ -594,7 +595,6 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     placeholder="Add a description..."
                     style={{ width: `${Math.max(descriptionValue.length || 20, 20)}ch` }}
                   />
-                  <IconPencil size={14} stroke={1.5} className="text-accent" />
                 </>
               ) : (
                 <>
@@ -646,7 +646,6 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     placeholder="Add a description..."
                     style={{ width: `${Math.max(descriptionValue.length || 20, 20)}ch` }}
                   />
-                  <IconPencil size={16} stroke={1.5} className="text-accent" />
                 </>
               ) : (
                 <>
@@ -908,7 +907,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     {todo.completed && <IconCheck stroke={3} className="w-2.5 h-2.5 text-white" />}
                   </div>
                   <span className={`flex-1 text-[13px] transition-all duration-200 ${
-                    todo.completed ? 'text-text-muted line-through' : 'text-text-primary'
+                    todo.completed ? 'text-text-muted' : 'text-text-primary'
                   }`}>
                     {todo.text}
                   </span>
@@ -972,7 +971,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             {todo.completed && <IconCheck stroke={3} className="w-2.5 h-2.5 text-white" />}
                           </div>
                           <span className={`flex-1 text-[13px] transition-all duration-200 ${
-                            todo.completed ? 'text-text-muted line-through' : 'text-text-primary'
+                            todo.completed ? 'text-text-muted' : 'text-text-primary'
                           }`}>
                             {todo.text}
                           </span>
@@ -1164,7 +1163,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     {todo.completed && <IconCheck stroke={3} className="w-2.5 h-2.5 text-white" />}
                   </div>
                   <span className={`flex-1 text-[13px] transition-all duration-200 ${
-                    todo.completed ? 'text-text-muted line-through' : 'text-text-primary'
+                    todo.completed ? 'text-text-muted' : 'text-text-primary'
                   }`}>
                     {todo.text}
                   </span>
@@ -1228,7 +1227,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             {todo.completed && <IconCheck stroke={3} className="w-2.5 h-2.5 text-white" />}
                           </div>
                           <span className={`flex-1 text-[13px] transition-all duration-200 ${
-                            todo.completed ? 'text-text-muted line-through' : 'text-text-primary'
+                            todo.completed ? 'text-text-muted' : 'text-text-primary'
                           }`}>
                             {todo.text}
                           </span>
@@ -1574,22 +1573,17 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1.5">Client</label>
-                  <select
+                  <CustomSelect
                     value={project.clientId || ''}
-                    onChange={(e) => {
+                    onChange={(v) => {
                       const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, clientId: e.target.value || undefined });
+                      updateProject({ ...project, clientId: v || undefined });
                     }}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
-                  >
-                    <option value="">No client</option>
-                    {(() => {
-                      const { clients } = useProjectStore.getState();
-                      return clients.map(client => (
-                        <option key={client.id} value={client.id}>{client.name}</option>
-                      ));
-                    })()}
-                  </select>
+                    options={[
+                      { value: '', label: 'No client' },
+                      ...useProjectStore.getState().clients.map(c => ({ value: c.id, label: c.name })),
+                    ]}
+                  />
                 </div>
               </div>
 

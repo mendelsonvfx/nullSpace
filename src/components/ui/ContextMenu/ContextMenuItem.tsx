@@ -22,8 +22,8 @@ export function ContextMenuItem({
       disabled={disabled}
       className={`
         w-full px-3 py-1.5 text-left text-sm flex items-center gap-2.5 rounded-md transition-colors
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}
-        ${danger ? 'text-red-400 hover:text-red-300 hover:bg-red-500/10' : 'text-text-primary'}
+        ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-hover-bg cursor-pointer'}
+        ${danger ? 'text-red-400 hover:text-red-300 hover:bg-[rgba(239,68,68,0.15)]' : 'text-text-primary'}
         ${className}
       `}
     >

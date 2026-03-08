@@ -1314,7 +1314,7 @@ function App() {
         <div
           className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-1 pointer-events-none"
         >
-          <span className="text-sm font-bold">nullSpace</span>
+          <span className="text-sm font-bold text-text-primary">nullSpace</span>
         </div>
 
         <div className="titlebar-button flex items-center gap-1 pr-2">
@@ -1475,13 +1475,13 @@ function App() {
                   <IconFilter stroke={1.5} className="w-3.5 h-3.5" />
                 </button>
                 {showFilterMenu && (
-                  <div className="absolute top-full mt-1 right-0 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 z-50 min-w-[160px] space-y-0.5">
+                  <div className="absolute top-full mt-1 right-0 bg-card-bg/80 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl p-1.5 z-[100] min-w-[180px] animate-context-menu">
                     <button
                       onClick={() => {
                         setSortBy('createdAt');
                         setShowFilterMenu(false);
                       }}
-                      className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${sortBy === 'createdAt' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                      className={`w-full px-3 py-1.5 text-left text-sm rounded-md transition-colors hover:bg-hover-bg flex items-center gap-2 ${sortBy === 'createdAt' ? 'bg-hover-bg text-text-primary' : 'text-text-primary'
                         }`}
                     >
                       <IconClockHour3 size={14} />
@@ -1492,7 +1492,7 @@ function App() {
                         setSortBy('deadline');
                         setShowFilterMenu(false);
                       }}
-                      className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${sortBy === 'deadline' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                      className={`w-full px-3 py-1.5 text-left text-sm rounded-md transition-colors hover:bg-hover-bg flex items-center gap-2 ${sortBy === 'deadline' ? 'bg-hover-bg text-text-primary' : 'text-text-primary'
                         }`}
                     >
                       <IconCalendarEvent size={14} />
@@ -1503,7 +1503,7 @@ function App() {
                         setSortBy('name');
                         setShowFilterMenu(false);
                       }}
-                      className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${sortBy === 'name' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                      className={`w-full px-3 py-1.5 text-left text-sm rounded-md transition-colors hover:bg-hover-bg flex items-center gap-2 ${sortBy === 'name' ? 'bg-hover-bg text-text-primary' : 'text-text-primary'
                         }`}
                     >
                       <IconSortAscendingLetters size={14} />
@@ -1514,13 +1514,13 @@ function App() {
                         setSortBy('cost');
                         setShowFilterMenu(false);
                       }}
-                      className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${sortBy === 'cost' ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                      className={`w-full px-3 py-1.5 text-left text-sm rounded-md transition-colors hover:bg-hover-bg flex items-center gap-2 ${sortBy === 'cost' ? 'bg-hover-bg text-text-primary' : 'text-text-primary'
                         }`}
                     >
                       <IconCurrencyDollar size={14} />
                       By Cost
                     </button>
-                    <div className="h-px bg-zinc-600/50 my-1" />
+                    <div className="h-px bg-border-secondary mx-1 my-1" />
                     <div
                       className="relative"
                       onMouseEnter={() => {
@@ -1535,16 +1535,16 @@ function App() {
                         }, 100);
                       }}
                     >
-                      <button className="w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 text-text-primary flex items-center justify-between">
+                      <button className="w-full px-3 py-1.5 text-left text-sm rounded-md transition-colors hover:bg-hover-bg text-text-primary flex items-center justify-between">
                         <span className="flex items-center gap-2">
                           <IconUser size={14} />
                           By Client
                         </span>
-                        <IconChevronRight stroke={1.5} className="w-3 h-3" />
+                        <IconChevronRight stroke={1.5} className="w-3 h-3 text-text-muted" />
                       </button>
                       {showClientSubmenu && (
                         <div
-                          className="absolute left-full top-0 ml-2 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 min-w-[160px] space-y-0.5"
+                          className="absolute left-full top-0 ml-2 bg-card-bg border border-border-secondary rounded-xl shadow-2xl p-1.5 min-w-[160px] z-[110] animate-context-menu"
                           onMouseEnter={() => {
                             if (clientSubmenuTimeoutRef.current) {
                               clearTimeout(clientSubmenuTimeoutRef.current);
@@ -1561,7 +1561,7 @@ function App() {
                               setSelectedClientId(null);
                               setShowFilterMenu(false);
                             }}
-                            className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 ${selectedClientId === null ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                            className={`w-full px-3 py-1.5 text-left text-sm rounded-md transition-colors hover:bg-hover-bg ${selectedClientId === null ? 'bg-hover-bg text-text-primary' : 'text-text-primary'
                               }`}
                           >
                             All clients
@@ -1573,7 +1573,7 @@ function App() {
                                 setSelectedClientId(client.id);
                                 setShowFilterMenu(false);
                               }}
-                              className={`w-full px-3 py-1.5 text-left text-xs rounded-md transition-colors hover:bg-white/10 flex items-center gap-2 ${selectedClientId === client.id ? 'bg-white/10 text-text-primary' : 'text-text-primary'
+                              className={`w-full px-3 py-1.5 text-left text-sm rounded-md transition-colors hover:bg-hover-bg flex items-center gap-2 ${selectedClientId === client.id ? 'bg-hover-bg text-text-primary' : 'text-text-primary'
                                 }`}
                             >
                               <div

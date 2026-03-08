@@ -457,15 +457,17 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
     }
   };
 
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (e.cancelable) {
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth) return;
       e.preventDefault();
-    }
-    e.stopPropagation();
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollLeft += e.deltaY;
-    }
-  };
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [versions]);
 
   const handleContextMenu = (e: React.MouseEvent, version: ProjectVersion) => {
     if (e.cancelable) {
@@ -860,7 +862,6 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
         {/* Version Cards */}
         <div
           ref={scrollContainerRef}
-          onWheel={handleWheel}
           className="versions-scroll-container overflow-x-auto bg-[#0f0f0f] rounded-lg p-4">
           {filteredVersions.length === 0 ? (
             <p className="text-xs text-text-muted text-center py-8">No versions found for {selectedSoftware}</p>
@@ -941,15 +942,15 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                   }, 300);
                 }}
               >
-                <button className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md flex items-center justify-between text-text-primary transition-colors">
+                <button className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover-bg rounded-md flex items-center justify-between text-text-primary transition-colors">
                   <span>Move to shot...</span>
-                  <span className="text-zinc-500">›</span>
+                  <span className="text-text-muted">›</span>
                 </button>
                 {/* Shot Submenu - Level 1: Scenes (for Move) */}
                 {showShotSubmenu && submenuAction === 'move' && (
                   <div
                     ref={shotSubmenuRef}
-                    className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] z-[101]"
+                    className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 bg-card-bg border border-border-secondary rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] z-[101]"
                     onMouseEnter={() => {
                       if (submenuCloseTimeoutRef.current) {
                         clearTimeout(submenuCloseTimeoutRef.current);
@@ -965,7 +966,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                           <div key={sceneId} className="relative">
                             <button
                               data-scene-id={sceneId}
-                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md flex items-center justify-between text-text-primary transition-colors"
+                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover-bg rounded-md flex items-center justify-between text-text-primary transition-colors"
                               onMouseEnter={(e) => {
                                 if (submenuCloseTimeoutRef.current) {
                                   clearTimeout(submenuCloseTimeoutRef.current);
@@ -987,7 +988,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                               }}
                             >
                               <span className="truncate">{scene.name}</span>
-                              <span className="text-zinc-500 ml-2">›</span>
+                              <span className="text-text-muted ml-2">›</span>
                             </button>
                           </div>
                         ))
@@ -1012,13 +1013,13 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                         }}
                       >
                         <div
-                          className="bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px]"
+                          className="bg-card-bg border border-border-secondary rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px]"
                           style={{ maxHeight: '300px', overflowY: 'auto' }}
                         >
                           {shotsByScene[activeSceneSubmenu].shots.map((shot: any) => (
                             <button
                               key={shot.id}
-                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md text-text-primary transition-colors"
+                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover-bg rounded-md text-text-primary transition-colors"
                               onMouseEnter={() => {
                                 if (submenuCloseTimeoutRef.current) {
                                   clearTimeout(submenuCloseTimeoutRef.current);
@@ -1053,15 +1054,15 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                   }, 300);
                 }}
               >
-                <button className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md flex items-center justify-between text-text-primary transition-colors">
+                <button className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover-bg rounded-md flex items-center justify-between text-text-primary transition-colors">
                   <span>Copy to shot...</span>
-                  <span className="text-zinc-500">›</span>
+                  <span className="text-text-muted">›</span>
                 </button>
                 {/* Shot Submenu - Level 1: Scenes (for Copy) */}
                 {showShotSubmenu && submenuAction === 'copy' && (
                   <div
                     ref={shotSubmenuRef}
-                    className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] z-[101]"
+                    className="absolute left-full top-1/2 -translate-y-1/2 ml-2.5 bg-card-bg border border-border-secondary rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px] z-[101]"
                     onMouseEnter={() => {
                       if (submenuCloseTimeoutRef.current) {
                         clearTimeout(submenuCloseTimeoutRef.current);
@@ -1077,7 +1078,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                           <div key={sceneId} className="relative">
                             <button
                               data-scene-id={sceneId}
-                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md flex items-center justify-between text-text-primary transition-colors"
+                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover-bg rounded-md flex items-center justify-between text-text-primary transition-colors"
                               onMouseEnter={(e) => {
                                 if (submenuCloseTimeoutRef.current) {
                                   clearTimeout(submenuCloseTimeoutRef.current);
@@ -1099,7 +1100,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                               }}
                             >
                               <span className="truncate">{scene.name}</span>
-                              <span className="text-zinc-500 ml-2">›</span>
+                              <span className="text-text-muted ml-2">›</span>
                             </button>
                           </div>
                         ))
@@ -1124,13 +1125,13 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                         }}
                       >
                         <div
-                          className="bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px]"
+                          className="bg-card-bg border border-border-secondary rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px]"
                           style={{ maxHeight: '300px', overflowY: 'auto' }}
                         >
                           {shotsByScene[activeSceneSubmenu].shots.map((shot: any) => (
                             <button
                               key={shot.id}
-                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-white/10 rounded-md text-text-primary transition-colors"
+                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover-bg rounded-md text-text-primary transition-colors"
                               onMouseEnter={() => {
                                 if (submenuCloseTimeoutRef.current) {
                                   clearTimeout(submenuCloseTimeoutRef.current);

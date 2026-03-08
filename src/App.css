@@ -7,6 +7,8 @@
   /* Original accent color (user customizable) */
   --accent-color: #9103c6;
   --accent-color-hover: #7a02a3;
+  --accent-color-subtle: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  --accent-color-border: color-mix(in srgb, var(--accent-color) 50%, transparent);
 
   /* Animations */
   --animation-duration: 0.3s;
@@ -62,6 +64,18 @@ body.animations-disabled * {
 
 *:focus-visible {
   outline: none !important;
+}
+
+/* Disable text selection globally — desktop app feel */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input, textarea, [contenteditable],
+.select-text {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* Smooth transitions for buttons */
@@ -155,6 +169,24 @@ body.animations-disabled * {
 }
 
 @keyframes contextMenuAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Dropdown appear animation */
+.animate-dropdown {
+  animation: dropdownAppear 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top center;
+}
+
+@keyframes dropdownAppear {
   from {
     opacity: 0;
     transform: scale(0.98) translateY(4px);
@@ -285,10 +317,7 @@ html.fullscreen::after {
 }
 
 
-/* Versions scroll container */
-.versions-scroll-container {
-  overscroll-behavior: contain;
-}
+
 
 /* Status glow effects */
 @keyframes pulse-glow-green {

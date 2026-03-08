@@ -107,7 +107,7 @@ export const ContextMenu = forwardRef<HTMLDivElement, ContextMenuProps>(({
   const menu = (
     <div
       ref={menuRef}
-      className={`fixed bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 z-[100] min-w-[200px] animate-context-menu ${className}`}
+      className={`fixed bg-card-bg/80 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl p-1.5 z-[100] min-w-[180px] animate-context-menu ${className}`}
       style={{
         top: pos.top,
         left: pos.left
