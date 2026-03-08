@@ -6,6 +6,7 @@ import { formatTime, formatSoftwareName } from '../../features/time-tracking';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { invoke } from '@tauri-apps/api';
+import appIcon from '../../appIcon';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -40,7 +41,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
 
     // Load logo image
     const logoImg = new Image();
-    logoImg.src = '/icon.png';
+    logoImg.src = appIcon;
     await new Promise((resolve) => {
       logoImg.onload = resolve;
     });

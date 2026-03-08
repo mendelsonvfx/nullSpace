@@ -46,6 +46,7 @@ import { useWindowState } from './hooks/useWindowState';
 import { CategoryTabs } from './components/CategoryTabs';
 import { WelcomeSetup } from './components/modals/WelcomeSetup';
 import { BreakReminderContainer } from './components/time';
+import appIcon from './appIcon';
 import type { BreakReminder } from './components/time';
 import { useTimeTrackingStore, TimerService } from './features/time-tracking';
 import SimpleBar from 'simplebar-react';
@@ -1307,7 +1308,7 @@ function App() {
             className="p-1 hover:bg-zinc-800 rounded transition-colors"
             title="About"
           >
-            <img src="/icon.png" alt="Logo" className="w-4 h-4 select-none pointer-events-none" />
+            <img src={appIcon} alt="Logo" className="w-4 h-4 select-none pointer-events-none" />
           </button>
         </div>
 

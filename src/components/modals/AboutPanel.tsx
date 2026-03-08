@@ -1,4 +1,5 @@
 import { X, ExternalLink } from 'lucide-react';
+import appIcon from '../../appIcon';
 import { useModalBlur } from '../../hooks/useModalBlur';
 
 interface AboutPanelProps {
@@ -49,7 +50,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-6 border-b border-border-secondary">
           <div className="flex items-center gap-3">
-            <img src="/icon.png" alt="nullSpace Logo" className="w-8 h-8 select-none pointer-events-none" />
+            <img src={appIcon} alt="nullSpace Logo" className="w-8 h-8 select-none pointer-events-none" />
             <div>
               <div className="text-xl font-bold">nullSpace</div>
               <div className="text-[13px] text-text-muted">Project Management Tool</div>

@@ -5,6 +5,7 @@ import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } fro
 import { useProjectStore } from '../../store/projectStore';
 import type { SoftwareName } from '../../types/project';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import appIcon from '../../appIcon';
 import SimpleBar from 'simplebar-react';
 
 interface WelcomeSetupProps {
@@ -150,7 +151,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-3 mb-1">
-                <img src="/icon.png" alt="nullSpace" className="w-7 h-7" />
+                <img src={appIcon} alt="nullSpace" className="w-7 h-7" />
                 <h1 className="text-2xl font-bold">Welcome to nullSpace</h1>
               </div>
               <p className="text-sm text-purple-100">Let's set up your workspace in just a few steps</p>
