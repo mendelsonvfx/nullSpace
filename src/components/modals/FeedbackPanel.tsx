@@ -79,16 +79,16 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl animate-modal"
+        className="bg-card-bg border border-border-secondary rounded-card w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl animate-modal"
         data-feedback-panel
         data-modal-window
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+        <div className="flex items-center justify-between p-4 border-b border-border-secondary">
           <h2 className="text-xl font-semibold">Feedback</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+            className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors"
           >
             <X className="w-5 h-5 close-button-red" />
           </button>
@@ -99,19 +99,19 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
           <div className="p-4 space-y-4">
           {/* New Feedback Input */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-400">
+            <label className="text-sm font-medium text-text-muted">
               Add New Feedback
             </label>
             <textarea
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               placeholder="Enter your feedback here..."
-              className="w-full h-32 bg-zinc-800 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent"
+              className="w-full h-32 bg-sidebar-bg border border-border-primary rounded-button p-3 text-sm resize-none focus:outline-none focus:border-accent"
             />
             <button
               onClick={handleSave}
               disabled={!feedback.trim() || saving}
-              className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg transition-colors animate-button"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 rounded-button transition-colors text-white animate-button"
             >
               <Save className="w-4 h-4" />
               {saving ? 'Saving...' : 'Save'}
@@ -121,12 +121,12 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
           {/* All Feedback Display */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-zinc-400">
+              <label className="text-sm font-medium text-text-muted">
                 All Feedback
               </label>
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm animate-button"
+                className="flex items-center gap-2 px-3 py-1.5 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors text-sm animate-button"
               >
                 {copied ? (
                   <>
@@ -141,14 +141,14 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
                 )}
               </button>
             </div>
-            <SimpleBar className="bg-zinc-800 rounded-lg min-h-[200px] max-h-[300px] custom-scrollbar-fixed" autoHide={false}>
+            <SimpleBar className="bg-sidebar-bg border border-border-primary rounded-button min-h-[200px] max-h-[300px] custom-scrollbar-fixed" autoHide={false}>
               <div className="p-3">
                 {allFeedback ? (
-                  <pre className="text-sm whitespace-pre-wrap break-words text-zinc-300">
+                  <pre className="text-sm whitespace-pre-wrap break-words text-text-primary">
                     {allFeedback}
                   </pre>
                 ) : (
-                  <p className="text-sm text-zinc-500">No feedback yet</p>
+                  <p className="text-sm text-text-muted">No feedback yet</p>
                 )}
               </div>
             </SimpleBar>

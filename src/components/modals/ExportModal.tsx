@@ -595,24 +595,24 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
-      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 w-full max-w-2xl shadow-2xl animate-modal" data-modal-window>
+      <div className="bg-card-bg rounded-card border border-border-secondary w-full max-w-2xl shadow-2xl animate-modal" data-modal-window>
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+        <div className="flex items-center justify-between p-6 border-b border-border-secondary">
           <div>
             <h2 className="text-xl font-semibold text-white">Export Time Report</h2>
-            <p className="text-sm text-zinc-500 mt-1">{project.name}</p>
+            <p className="text-sm text-text-muted mt-1">{project.name}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+            className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors"
           >
-            <X className="w-5 h-5 text-zinc-400" />
+            <X className="w-5 h-5 text-text-muted" />
           </button>
         </div>
 
         {/* Content */}
         <div className="p-6">
-          <p className="text-sm text-zinc-400 mb-4">Select export format:</p>
+          <p className="text-sm text-text-muted mb-4">Select export format:</p>
 
           <div className="grid grid-cols-2 gap-3">
             {formats.map((format) => {
@@ -627,7 +627,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
                     p-4 rounded-xl border-2 transition-all text-left
                     ${isSelected
                       ? 'border-accent shadow-lg shadow-accent/20'
-                      : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700 hover:bg-zinc-800'
+                      : 'border-border-secondary bg-card-bg hover:border-border-hover hover:bg-hover-bg'
                     }
                   `}
                   style={isSelected ? {
@@ -640,7 +640,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
                       <div className="font-medium text-white text-sm mb-1">
                         {format.title}
                       </div>
-                      <div className="text-xs text-zinc-500">
+                      <div className="text-xs text-text-muted">
                         {format.description}
                       </div>
                     </div>
@@ -652,7 +652,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-3 p-6 border-t border-zinc-800">
+        <div className="flex items-center justify-between gap-3 p-6 border-t border-border-secondary">
           {exportSuccess && exportedFilename && (
             <div className="text-sm text-green-400 flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -664,7 +664,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
           <div className={`flex items-center gap-3 ${!exportSuccess ? 'ml-auto' : ''}`}>
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white transition-colors"
+              className="px-4 py-2 rounded-button bg-sidebar-bg hover:bg-hover-bg border border-border-primary text-white transition-colors"
               disabled={isExporting}
             >
               {exportSuccess ? 'Close' : 'Cancel'}
@@ -673,7 +673,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
               <button
                 onClick={handleExport}
                 disabled={isExporting}
-                className="px-6 py-2 rounded-lg bg-accent hover:bg-accent/90 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-medium transition-colors flex items-center gap-2"
+                className="px-6 py-2 rounded-button bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 text-white font-medium transition-colors flex items-center gap-2"
               >
                 {isExporting ? (
                   <>
@@ -693,7 +693,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
             ) : (
               <button
                 onClick={handleOpenFolder}
-                className="px-6 py-2 rounded-lg bg-accent hover:bg-accent/90 text-white font-medium transition-colors flex items-center gap-2"
+                className="px-6 py-2 rounded-button bg-gradient-to-br from-accent to-accent-hover text-white font-medium transition-colors flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />

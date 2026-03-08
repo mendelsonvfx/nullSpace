@@ -227,10 +227,10 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
         delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
       }}
     >
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()} data-modal-window>
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
+      <div className="bg-card-bg border border-border-secondary rounded-card max-w-2xl w-full max-h-[90vh] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()} data-modal-window>
+        <div className="p-4 border-b border-border-secondary flex items-center justify-between flex-shrink-0">
           <h2 className="text-lg font-semibold">Create New Project</h2>
-          <button onClick={onClose} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors">
             <X className="w-5 h-5 close-button-red" />
           </button>
         </div>
@@ -245,18 +245,23 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 placeholder="My Awesome Project"
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent"
               />
             </div>
-            <label className="flex items-center gap-2 cursor-pointer h-[38px] px-3">
+            <div className="flex items-center gap-2 h-[38px] px-3">
               <span className="text-sm whitespace-nowrap">Shot-based</span>
-              <input
-                type="checkbox"
-                checked={formData.shotBased}
-                onChange={(e) => setFormData(prev => ({ ...prev, shotBased: e.target.checked }))}
-                className="w-4 h-4"
-              />
-            </label>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, shotBased: !prev.shotBased }))}
+                className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${
+                  formData.shotBased ? 'bg-accent' : 'bg-border-secondary'
+                }`}
+              >
+                <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${
+                  formData.shotBased ? 'translate-x-[18px]' : 'translate-x-0.5'
+                }`} />
+              </button>
+            </div>
           </div>
 
           <div className="flex gap-3 items-start">
@@ -267,13 +272,13 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                 placeholder="Brief description of your project..."
                 rows={2}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none h-[60px]"
+                className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none h-[60px]"
               />
             </div>
             <div className="w-32">
-              <label className="block text-sm font-medium mb-1.5">Thumbnail <span className="text-xs text-zinc-500">(Ctrl+V)</span></label>
+              <label className="block text-sm font-medium mb-1.5">Thumbnail <span className="text-xs text-text-muted">(Ctrl+V)</span></label>
               {formData.thumbnailPath ? (
-                <div className="relative h-[60px] rounded-lg overflow-hidden border border-zinc-700 bg-zinc-800">
+                <div className="relative h-[60px] rounded-button overflow-hidden border border-border-primary bg-sidebar-bg">
                   {thumbnailPreview && (
                     <img
                       src={thumbnailPreview}
@@ -329,7 +334,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                       }
                     }
                   }}
-                  className="h-[60px] w-full bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm border border-zinc-700 flex items-center justify-center"
+                  className="h-[60px] w-full bg-sidebar-bg hover:bg-hover-bg rounded-button transition-colors text-sm border border-border-primary flex items-center justify-center"
                 >
                   <Plus className="w-5 h-5" />
                 </button>
@@ -337,7 +342,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
             </div>
           </div>
 
-          <div className="border-t border-zinc-800 pt-2"></div>
+          <div className="border-t border-border-primary pt-2"></div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -350,7 +355,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                 }}
                 options={[
                   { value: '', label: 'No client' },
-                  ...clients.map(c => ({ value: c.id, label: c.name })),
+                  ...clients.map(c => ({ value: c.id, label: c.name, color: c.color })),
                 ]}
               />
             </div>
@@ -383,7 +388,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                     console.log('Clients after add:', useProjectStore.getState().clients);
                   }
                 }}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
           </div>
@@ -440,10 +445,10 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                   }
                 }}
                 onChange={() => {}}
-                className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+                className="w-14 bg-sidebar-bg border border-border-primary rounded-button px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
               />
               </div>
-              <span className="text-zinc-500">.</span>
+              <span className="text-text-muted">.</span>
               <div className="relative w-14">
               {(() => {
                 const showAutofill = deadlineFieldsFilled.day && !deadlineFieldsFilled.month;
@@ -514,10 +519,10 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                   }
                 }}
                 onChange={() => {}}
-                className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+                className="w-14 bg-sidebar-bg border border-border-primary rounded-button px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
               />
               </div>
-              <span className="text-zinc-500">.</span>
+              <span className="text-text-muted">.</span>
               <div className="relative w-14">
               {(() => {
                 const showAutofill = deadlineFieldsFilled.day && !deadlineFieldsFilled.year;
@@ -591,7 +596,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                   }
                 }}
                 onChange={() => {}}
-                className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+                className="w-14 bg-sidebar-bg border border-border-primary rounded-button px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
               />
               </div>
               <div className="relative w-8 h-8 flex items-center justify-center calendar-icon-wrapper">
@@ -615,7 +620,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                       setDeadlineFieldsFilled({ day: true, month: true, year: true });
                     }
                   }}
-                  className="absolute opacity-0"
+                  className="absolute opacity-0 [color-scheme:dark]"
                   style={{
                     position: 'absolute',
                     top: 0,
@@ -626,7 +631,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                   }}
                 />
                 <svg
-                  className="w-5 h-5 text-zinc-400"
+                  className="w-5 h-5 text-text-secondary"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -645,12 +650,12 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                   value={formData.cost}
                   onChange={(e) => setFormData(prev => ({ ...prev, cost: e.target.value }))}
                   placeholder="0"
-                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                  className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent"
                 />
                 <select
                   value={formData.currency}
                   onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value as 'USD' | 'RUB' | 'EUR' }))}
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                  className="bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent"
                 >
                   <option value="USD">USD</option>
                   <option value="RUB">RUB</option>
@@ -660,7 +665,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
             </div>
           </div>
 
-          <div className="border-t border-zinc-800 pt-2"></div>
+          <div className="border-t border-border-primary pt-2"></div>
 
           <div>
             <label className="block text-sm font-medium mb-2">Software Tools</label>
@@ -672,7 +677,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                   className={`px-3 py-2 rounded-lg border transition-colors text-sm flex items-center gap-2 ${
                     formData.software.includes(sw)
                       ? 'bg-accent border-accent'
-                      : 'bg-zinc-800 border-zinc-700 hover:border-zinc-600'
+                      : 'bg-sidebar-bg border-border-primary hover:border-border-secondary'
                   }`}
                 >
                   <SoftwareIcon name={sw} />
@@ -682,7 +687,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
             </div>
           </div>
 
-          <div className="border-t border-zinc-800 pt-2"></div>
+          <div className="border-t border-border-primary pt-2"></div>
 
           <div>
             <label className="block text-sm font-medium mb-1.5">Project Path</label>
@@ -696,40 +701,45 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                   }}
                   disabled={useDefaultPath}
                   placeholder="/home/user/projects/my-project"
-                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50"
+                  className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent disabled:opacity-50"
                 />
                 <button
                   onClick={handleBrowse}
                   disabled={useDefaultPath}
-                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-2 bg-sidebar-bg hover:bg-hover-bg rounded-button transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Browse
                 </button>
-                <label className="flex items-center gap-2 cursor-pointer px-3 py-2">
+                <div className="flex items-center gap-2 px-3 py-2">
                   <span className="text-sm whitespace-nowrap">Use default</span>
-                  <input
-                    type="checkbox"
-                    checked={useDefaultPath}
-                    onChange={(e) => setUseDefaultPath(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                </label>
+                  <button
+                    type="button"
+                    onClick={() => setUseDefaultPath(prev => !prev)}
+                    className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${
+                      useDefaultPath ? 'bg-accent' : 'bg-border-secondary'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${
+                      useDefaultPath ? 'translate-x-[18px]' : 'translate-x-0.5'
+                    }`} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </SimpleBar>
 
-        <div className="p-4 border-t border-zinc-800 flex justify-end gap-2 flex-shrink-0">
+        <div className="p-4 border-t border-border-secondary flex justify-end gap-2 flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+            className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg rounded-button transition-colors text-sm border border-border-primary"
           >
             Cancel
           </button>
           <button
             onClick={handleCreate}
             disabled={!formData.name || !formData.path || formData.software.length === 0}
-            className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors font-medium animate-button text-sm"
+            className="px-4 py-2 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-button transition-all font-medium animate-button text-sm text-white"
           >
             Create Project
           </button>

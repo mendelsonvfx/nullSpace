@@ -107,9 +107,9 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
-      <div data-settings-panel className="bg-zinc-900 rounded-xl max-w-4xl w-full h-[80vh] flex overflow-hidden animate-modal" onClick={(e) => e.stopPropagation()}>
+      <div data-settings-panel className="bg-card-bg rounded-card max-w-4xl w-full h-[80vh] flex overflow-hidden animate-modal" onClick={(e) => e.stopPropagation()}>
         {/* Sidebar */}
-        <div className="w-48 border-r border-zinc-800 p-4 flex flex-col">
+        <div className="w-48 border-r border-border-secondary p-4 flex flex-col">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold">Settings</h2>
           </div>
@@ -117,60 +117,60 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
           <nav className="space-y-1 flex-1">
             <button
               onClick={() => setActiveTab('general')}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
                 activeTab === 'general'
                   ? 'bg-accent'
-                  : 'hover:bg-zinc-800'
+                  : 'hover:bg-hover-bg'
               }`}
             >
               General
             </button>
             <button
               onClick={() => setActiveTab('software')}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
                 activeTab === 'software'
                   ? 'bg-accent'
-                  : 'hover:bg-zinc-800'
+                  : 'hover:bg-hover-bg'
               }`}
             >
               Software Paths
             </button>
             <button
               onClick={() => setActiveTab('appearance')}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
                 activeTab === 'appearance'
                   ? 'bg-accent'
-                  : 'hover:bg-zinc-800'
+                  : 'hover:bg-hover-bg'
               }`}
             >
               Appearance
             </button>
             <button
               onClick={() => setActiveTab('clients')}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
                 activeTab === 'clients'
                   ? 'bg-accent'
-                  : 'hover:bg-zinc-800'
+                  : 'hover:bg-hover-bg'
               }`}
             >
               Clients
             </button>
             <button
               onClick={() => setActiveTab('finance')}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
                 activeTab === 'finance'
                   ? 'bg-accent'
-                  : 'hover:bg-zinc-800'
+                  : 'hover:bg-hover-bg'
               }`}
             >
               Finance
             </button>
             <button
               onClick={() => setActiveTab('data')}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
                 activeTab === 'data'
                   ? 'bg-accent'
-                  : 'hover:bg-zinc-800'
+                  : 'hover:bg-hover-bg'
               }`}
             >
               Data
@@ -179,7 +179,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
 
           {/* Version info at bottom */}
           <div className="mt-4">
-            <div className="text-xs text-zinc-500 text-center">
+            <div className="text-xs text-text-muted text-center">
               nullSpace v{appVersion || '0.6.0'}-beta
             </div>
           </div>
@@ -188,7 +188,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
         {/* Content */}
         <div className="flex-1 flex flex-col">
           {/* Header */}
-          <div className="px-6 py-4 flex items-center justify-between flex-shrink-0 border-b border-zinc-800">
+          <div className="px-6 py-4 flex items-center justify-between flex-shrink-0 border-b border-border-secondary">
             <h3 className="text-xl font-semibold">
               {activeTab === 'general' && 'General Settings'}
               {activeTab === 'software' && 'Software Paths'}
@@ -199,7 +199,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
             </h3>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+              className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors"
             >
               <X className="w-5 h-5 close-button-red" />
             </button>
@@ -218,7 +218,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
           </SimpleBar>
 
           {/* Footer */}
-          <div className="border-t border-zinc-800 px-6 py-4 flex justify-end gap-3 flex-shrink-0">
+          <div className="border-t border-border-secondary px-6 py-4 flex justify-end gap-3 flex-shrink-0">
             <button
               onClick={handleSave}
               className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
@@ -271,7 +271,7 @@ function GeneralSettings() {
       {/* Projects Directory */}
       <div>
         <label className="block text-sm font-medium mb-2">Projects Directory</label>
-        <p className="text-sm text-zinc-400 mb-3">
+        <p className="text-sm text-text-muted mb-3">
           Default location where projects are stored and loaded from
         </p>
         <div className="flex gap-2">
@@ -279,11 +279,11 @@ function GeneralSettings() {
             type="text"
             value={projectsDir}
             onChange={(e) => setProjectsDir(e.target.value)}
-            className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+            className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-4 py-2 focus:outline-none focus:border-accent"
           />
           <button
             onClick={handleBrowseDirectory}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-2 animate-button"
+            className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg rounded-button transition-colors flex items-center gap-2 animate-button"
           >
             <FolderOpen className="w-4 h-4" />
             Browse
@@ -298,11 +298,11 @@ function GeneralSettings() {
       </div>
 
       {/* Time Tracking Feature */}
-      <div className="border-t border-zinc-800 pt-6">
+      <div className="border-t border-border-secondary pt-6">
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="font-medium mb-1">Time Tracking & Analytics</div>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-text-muted">
               <span className="text-orange-400 font-semibold">experimental!</span> Enable automatic time tracking when launching software from projects
             </p>
           </div>
@@ -314,7 +314,7 @@ function GeneralSettings() {
               window.dispatchEvent(new Event('storage'));
             }}
             className={`w-12 h-6 rounded-full transition-colors relative ${
-              timeTrackingEnabled ? 'bg-accent' : 'bg-zinc-700'
+              timeTrackingEnabled ? 'bg-accent' : 'bg-border-secondary'
             }`}
           >
             <div
@@ -327,11 +327,11 @@ function GeneralSettings() {
       </div>
 
       {/* Notifications */}
-      <div className="border-t border-zinc-800 pt-6">
+      <div className="border-t border-border-secondary pt-6">
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="font-medium mb-1">Deadline Notifications</div>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-text-muted">
               Show notifications for projects with upcoming deadlines
             </p>
           </div>
@@ -343,7 +343,7 @@ function GeneralSettings() {
               window.dispatchEvent(new Event('storage'));
             }}
             className={`w-12 h-6 rounded-full transition-colors relative ${
-              notifications ? 'bg-accent' : 'bg-zinc-700'
+              notifications ? 'bg-accent' : 'bg-border-secondary'
             }`}
           >
             <div
@@ -359,7 +359,7 @@ function GeneralSettings() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-medium mb-1">Days Before Deadline</div>
-                <p className="text-sm text-zinc-400">
+                <p className="text-sm text-text-muted">
                   Show notifications when deadline is within this many days
                 </p>
               </div>
@@ -374,7 +374,7 @@ function GeneralSettings() {
                   localStorage.setItem('deadlineNotificationDays', newValue.toString());
                   window.dispatchEvent(new Event('storage'));
                 }}
-                className="w-20 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
+                className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
               />
             </div>
           </div>
@@ -492,7 +492,7 @@ function DataSettings() {
       <div>
         <div className="mb-3">
           <div className="font-medium mb-1">Thumbnail Cache</div>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-text-muted">
             Clear cached thumbnails to force reload. Useful if thumbnails appear outdated.
           </p>
         </div>
@@ -500,7 +500,7 @@ function DataSettings() {
           <button
             onClick={handleClearCache}
             disabled={cacheSize === 0}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 text-sm font-medium animate-button"
+            className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors flex items-center gap-2 text-sm font-medium animate-button"
           >
             <RefreshCw className="w-4 h-4" />
             Clear Cache ({cacheSize} thumbnails)
@@ -515,10 +515,10 @@ function DataSettings() {
       </div>
 
       {/* Clear Time Tracking Data */}
-      <div className="border-t border-zinc-800 pt-6">
+      <div className="border-t border-border-secondary pt-6">
         <div className="mb-3">
           <div className="font-medium mb-1 text-red-400">Clear Time Tracking Data</div>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-text-muted">
             Permanently delete all time tracking data from all projects. This includes all time entries, project time statistics, and global software statistics. This action cannot be undone.
           </p>
         </div>
@@ -545,7 +545,7 @@ function DataSettings() {
               <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <div className="font-medium text-red-400 mb-2">Are you sure?</div>
-                <div className="text-sm text-zinc-300 space-y-1">
+                <div className="text-sm text-text-primary space-y-1">
                   <p>This action will delete:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
                     <li>All time entries from all projects</li>
@@ -566,7 +566,7 @@ function DataSettings() {
               </button>
               <button
                 onClick={() => setShowClearTimeConfirm(false)}
-                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors text-sm font-medium animate-button"
+                className="px-4 py-2 bg-border-secondary hover:bg-border-secondary rounded-button transition-colors text-sm font-medium animate-button"
               >
                 Cancel
               </button>
@@ -576,10 +576,10 @@ function DataSettings() {
       </div>
 
       {/* Export & Import */}
-      <div className="border-t border-zinc-800 pt-6">
+      <div className="border-t border-border-secondary pt-6">
         <div className="mb-3">
           <div className="font-medium mb-1">Export & Import</div>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-text-muted">
             Export all settings, clients, financial data, time statistics, and archived project backups to a file. Use this to transfer data between devices or before reinstalling.
           </p>
         </div>
@@ -587,7 +587,7 @@ function DataSettings() {
           <button
             onClick={handleExport}
             disabled={isExporting}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 text-sm font-medium animate-button"
+            className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors flex items-center gap-2 text-sm font-medium animate-button"
           >
             <Download className="w-4 h-4" />
             {isExporting ? 'Exporting...' : 'Export Data'}
@@ -595,7 +595,7 @@ function DataSettings() {
           <button
             onClick={handleImportClick}
             disabled={isImporting}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 disabled:text-zinc-600 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 text-sm font-medium animate-button"
+            className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors flex items-center gap-2 text-sm font-medium animate-button"
           >
             <Upload className="w-4 h-4" />
             {isImporting ? 'Importing...' : 'Import Data'}
@@ -626,7 +626,7 @@ function DataSettings() {
               <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <div className="font-medium text-amber-400 mb-2">Confirm Import</div>
-                <div className="text-sm text-zinc-300 space-y-1">
+                <div className="text-sm text-text-primary space-y-1">
                   <p>This will overwrite your current settings with the backup data:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
                     <li>All app settings and preferences</li>
@@ -655,7 +655,7 @@ function DataSettings() {
               </button>
               <button
                 onClick={() => { setShowImportConfirm(false); setPendingImportData(null); }}
-                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors text-sm font-medium animate-button"
+                className="px-4 py-2 bg-border-secondary hover:bg-border-secondary rounded-button transition-colors text-sm font-medium animate-button"
               >
                 Cancel
               </button>
@@ -725,7 +725,7 @@ function SoftwareSettings({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-text-muted">
           Configure paths to installed 3D software applications
         </p>
         <button
@@ -740,7 +740,7 @@ function SoftwareSettings({
 
       <div className="space-y-3">
         {softwarePaths.map((sw, index) => (
-          <div key={sw.name} className="bg-zinc-800 rounded-lg p-4">
+          <div key={sw.name} className="bg-sidebar-bg rounded-button p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <h4 className="font-medium">{sw.displayName}</h4>
@@ -768,11 +768,11 @@ function SoftwareSettings({
                   });
                 }}
                 placeholder={`Path to ${sw.displayName} executable...`}
-                className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                className="flex-1 bg-app-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent"
               />
               <button
                 onClick={() => handleBrowseExecutable(index)}
-                className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors"
+                className="px-3 py-2 bg-border-secondary hover:bg-border-secondary rounded-button transition-colors"
               >
                 <FolderOpen className="w-4 h-4" />
               </button>
@@ -947,21 +947,21 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     <div className="space-y-6">
       {/* Theme */}
       <div>
-        <label className="block text-sm font-medium mb-3 text-zinc-500">Theme</label>
+        <label className="block text-sm font-medium mb-3 text-text-muted">Theme</label>
         <div className="grid grid-cols-2 gap-3">
           <button
             disabled
-            className="p-4 rounded-lg border-2 border-zinc-700/50 bg-zinc-800/30 cursor-not-allowed opacity-50"
+            className="p-4 rounded-button border-2 border-border-primary/50 bg-sidebar-bg/30 cursor-not-allowed opacity-50"
           >
             <div className="w-full h-20 bg-white/20 rounded mb-2" />
-            <div className="text-sm font-medium text-zinc-500">Light</div>
+            <div className="text-sm font-medium text-text-muted">Light</div>
           </button>
           <button
             disabled
-            className="p-4 rounded-lg border-2 border-accent/50 bg-zinc-800/30 cursor-not-allowed opacity-50"
+            className="p-4 rounded-button border-2 border-accent/50 bg-sidebar-bg/30 cursor-not-allowed opacity-50"
           >
             <div className="w-full h-20 bg-zinc-950/50 rounded mb-2" />
-            <div className="text-sm font-medium text-zinc-500">Dark</div>
+            <div className="text-sm font-medium text-text-muted">Dark</div>
           </button>
         </div>
       </div>
@@ -1013,7 +1013,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
                 setShowCustomColorPicker(true);
                 setTimeout(() => colorInputRef.current?.click(), 0);
               }}
-              className="w-12 h-12 rounded-lg border-2 border-dashed border-zinc-600 hover:border-zinc-500 flex items-center justify-center text-zinc-500 hover:text-zinc-400 transition-colors"
+              className="w-12 h-12 rounded-lg border-2 border-dashed border-border-primary hover:border-border-hover flex items-center justify-center text-text-muted hover:text-text-muted transition-colors"
               title="Add custom color"
             >
               +
@@ -1036,7 +1036,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
                 value={customColor}
                 onChange={(e) => setCustomColor(e.target.value.toUpperCase())}
                 placeholder="#9103C6"
-                className="w-24 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-accent"
+                className="w-24 bg-sidebar-bg border border-border-primary rounded px-2 py-1 text-sm focus:outline-none focus:border-accent"
                 maxLength={7}
               />
               <button
@@ -1050,7 +1050,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
                   setShowCustomColorPicker(false);
                   setCustomColor('#9103C6');
                 }}
-                className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-sm transition-colors"
+                className="px-3 py-1 bg-border-secondary hover:bg-border-secondary rounded text-sm transition-colors"
               >
                 Cancel
               </button>
@@ -1063,7 +1063,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       <div className="flex items-center justify-between">
         <div>
           <div className="font-medium mb-1">Animations</div>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-text-muted">
             Enable smooth transitions and animations
           </p>
         </div>
@@ -1080,7 +1080,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
             window.dispatchEvent(new Event('storage'));
           }}
           className={`w-12 h-6 rounded-full transition-colors relative ${
-            animationsEnabled ? 'bg-accent' : 'bg-zinc-700'
+            animationsEnabled ? 'bg-accent' : 'bg-border-secondary'
           }`}
         >
           <div
@@ -1095,7 +1095,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       <div className="flex items-center justify-between">
         <div>
           <div className="font-medium mb-1">Modal Blur Effect</div>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-text-muted">
             Add subtle blur to background when modals are open
           </p>
         </div>
@@ -1107,7 +1107,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
             window.dispatchEvent(new Event('storage'));
           }}
           className={`w-12 h-6 rounded-full transition-colors relative ${
-            modalBlurEnabled ? 'bg-accent' : 'bg-zinc-700'
+            modalBlurEnabled ? 'bg-accent' : 'bg-border-secondary'
           }`}
         >
           <div
@@ -1121,14 +1121,14 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       {/* Compact Mode */}
       <div className="flex items-center justify-between opacity-50">
         <div>
-          <div className="font-medium mb-1 text-zinc-500">Compact Mode</div>
-          <p className="text-sm text-zinc-500">
+          <div className="font-medium mb-1 text-text-muted">Compact Mode</div>
+          <p className="text-sm text-text-muted">
             Use smaller spacing and UI elements
           </p>
         </div>
         <button
           disabled
-          className="w-12 h-6 rounded-full bg-zinc-700/50 relative cursor-not-allowed"
+          className="w-12 h-6 rounded-full bg-border-secondary/50 relative cursor-not-allowed"
         >
           <div className="w-5 h-5 bg-white/50 rounded-full absolute top-0.5 left-0.5" />
         </button>
@@ -1138,7 +1138,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       <div className="flex items-center justify-between">
         <div>
           <div className="font-medium mb-1">Tag Icons</div>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-text-muted">
             Display icons in client and payment status tags
           </p>
         </div>
@@ -1150,7 +1150,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
             window.dispatchEvent(new Event('storage'));
           }}
           className={`w-12 h-6 rounded-full relative transition-colors ${
-            showTagIcons ? 'bg-accent' : 'bg-zinc-700'
+            showTagIcons ? 'bg-accent' : 'bg-border-secondary'
           }`}
         >
           <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
@@ -1163,7 +1163,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       <div className="flex items-center justify-between">
         <div>
           <div className="font-medium mb-1">Blender File Previews</div>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-text-muted">
             Show thumbnail previews for .blend files in Versions Overview
           </p>
         </div>
@@ -1175,7 +1175,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
             window.dispatchEvent(new Event('storage'));
           }}
           className={`w-12 h-6 rounded-full relative transition-colors ${
-            blendPreviewsEnabled ? 'bg-accent' : 'bg-zinc-700'
+            blendPreviewsEnabled ? 'bg-accent' : 'bg-border-secondary'
           }`}
         >
           <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
@@ -1185,14 +1185,14 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       </div>
 
       {/* Window Settings */}
-      <div className="border-t border-zinc-800 pt-6">
+      <div className="border-t border-border-secondary pt-6">
         <label className="block text-sm font-medium mb-3">Window Settings</label>
 
         {/* Auto-Maximize on Launch */}
         <div className="flex items-center justify-between mb-4">
           <div>
             <div className="font-medium mb-1">Auto-Maximize on Launch</div>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-text-muted">
               Automatically maximize nullSpace window on startup
             </p>
           </div>
@@ -1203,7 +1203,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
               updateWindowSettings({ autoMaximizeOnLaunch: newValue });
             }}
             className={`w-12 h-6 rounded-full transition-colors relative ${
-              autoMaximizeOnLaunch ? 'bg-accent' : 'bg-zinc-700'
+              autoMaximizeOnLaunch ? 'bg-accent' : 'bg-border-secondary'
             }`}
           >
             <div
@@ -1218,7 +1218,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
         {autoMaximizeOnLaunch && monitors.length > 0 && (
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">Preferred Monitor</label>
-            <p className="text-sm text-zinc-400 mb-3">
+            <p className="text-sm text-text-muted mb-3">
               Select monitor for auto-maximized window
             </p>
             <select
@@ -1232,7 +1232,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
                   preferredMonitorName: monitor?.name || '',
                 });
               }}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+              className="w-full bg-app-bg border border-border-primary rounded-button px-4 py-2 focus:outline-none focus:border-accent"
             >
               {monitors.map((monitor) => {
                 // Extract display number from name like "\\.\DISPLAY3" -> "Display 3"
@@ -1253,7 +1253,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
         {autoMaximizeOnLaunch && monitors.length > 1 && (
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">Monitor Layout</label>
-            <div className="bg-zinc-800 rounded-lg p-4 flex items-center justify-center gap-2" style={{ minHeight: '100px' }}>
+            <div className="bg-sidebar-bg rounded-button p-4 flex items-center justify-center gap-2" style={{ minHeight: '100px' }}>
               {monitors.map((monitor) => {
                 const isSelected = monitor.index === preferredMonitor;
                 const scale = 60 / Math.max(...monitors.map(m => m.height));
@@ -1264,18 +1264,18 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
                   <div
                     key={monitor.index}
                     className={`relative rounded border-2 transition-all ${
-                      isSelected ? 'border-accent bg-accent/20' : 'border-zinc-600 bg-zinc-700'
+                      isSelected ? 'border-accent bg-accent/20' : 'border-border-primary bg-hover-bg'
                     }`}
                     style={{ width: `${width}px`, height: `${height}px` }}
                   >
                     {monitor.is_primary && (
                       <div className="absolute -top-2 left-1/2 -translate-x-1/2">
-                        <span className="text-[10px] bg-zinc-900 px-1 rounded text-zinc-400">
+                        <span className="text-[10px] bg-card-bg px-1 rounded text-text-muted">
                           Primary
                         </span>
                       </div>
                     )}
-                    <div className="absolute inset-0 flex items-center justify-center text-xs text-zinc-400">
+                    <div className="absolute inset-0 flex items-center justify-center text-xs text-text-muted">
                       {monitor.index + 1}
                     </div>
                   </div>
@@ -1289,11 +1289,11 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
         <div className="mt-6">
           <button
             onClick={handleResetWindowPosition}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm font-medium"
+            className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg rounded-button transition-colors text-sm font-medium"
           >
             Reset Window Position
           </button>
-          <p className="text-xs text-zinc-500 mt-2">
+          <p className="text-xs text-text-muted mt-2">
             Center window on primary monitor and restore default size (1920x900)
           </p>
         </div>
@@ -1349,7 +1349,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-text-muted">
           Manage your clients and their contact information
         </p>
         <button
@@ -1362,7 +1362,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
       </div>
 
       {showAddClient && (
-        <div className="bg-zinc-800 rounded-lg p-3">
+        <div className="bg-sidebar-bg rounded-button p-3">
           <label className="block text-xs font-medium mb-2">Client Name</label>
           <div className="flex gap-2">
             <input
@@ -1371,7 +1371,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
               onChange={(e) => setNewClientName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddClient()}
               placeholder="Enter client name..."
-              className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
+              className="flex-1 bg-app-bg border border-border-primary rounded-button px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
               autoFocus
             />
             <button
@@ -1385,7 +1385,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
                 setShowAddClient(false);
                 setNewClientName('');
               }}
-              className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors text-sm"
+              className="px-3 py-1.5 bg-border-secondary hover:bg-border-secondary rounded-button transition-colors text-sm"
             >
               Cancel
             </button>
@@ -1397,7 +1397,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
         {clients.map(client => (
           <div
             key={client.id}
-            className="bg-zinc-800 rounded-lg p-3"
+            className="bg-sidebar-bg rounded-button p-3"
           >
             <div className="flex items-center gap-2.5">
               <div
@@ -1407,7 +1407,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
               <span className="text-sm font-medium flex-1">{client.name}</span>
               <button
                 onClick={() => setEditingClient(editingClient === client.id ? null : client.id)}
-                className="p-1.5 hover:bg-zinc-700 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-hover-bg rounded-button transition-colors"
               >
                 <Settings className="w-3.5 h-3.5 animate-settings-icon" />
               </button>
@@ -1439,44 +1439,44 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
                 {/* Form Fields */}
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-medium mb-1.5 text-zinc-400">Description</label>
+                    <label className="block text-xs font-medium mb-1.5 text-text-muted">Description</label>
                     <textarea
                       value={client.description || ''}
                       onChange={(e) => updateClient(client.id, { description: e.target.value })}
                       placeholder="Brief description..."
                       rows={2}
-                      className="w-full text-sm bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2 focus:outline-none focus:border-accent focus:bg-zinc-900 resize-none transition-all placeholder:text-zinc-600"
+                      className="w-full text-sm bg-app-bg/50 border border-border-primary/50 rounded-button px-3 py-2 focus:outline-none focus:border-accent focus:bg-app-bg resize-none transition-all placeholder:text-text-dim"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium mb-1.5 text-zinc-400">Website</label>
+                    <label className="block text-xs font-medium mb-1.5 text-text-muted">Website</label>
                     <input
                       type="url"
                       value={client.website || ''}
                       onChange={(e) => updateClient(client.id, { website: e.target.value })}
                       placeholder="https://..."
-                      className="w-full text-sm bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2 focus:outline-none focus:border-accent focus:bg-zinc-900 transition-all placeholder:text-zinc-600"
+                      className="w-full text-sm bg-app-bg/50 border border-border-primary/50 rounded-button px-3 py-2 focus:outline-none focus:border-accent focus:bg-app-bg transition-all placeholder:text-text-dim"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium mb-1.5 text-zinc-400">Telegram</label>
+                      <label className="block text-xs font-medium mb-1.5 text-text-muted">Telegram</label>
                       <input
                         type="text"
                         value={client.telegram || ''}
                         onChange={(e) => updateClient(client.id, { telegram: e.target.value })}
                         placeholder="@username"
-                        className="w-full text-sm bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2 focus:outline-none focus:border-accent focus:bg-zinc-900 transition-all placeholder:text-zinc-600"
+                        className="w-full text-sm bg-app-bg/50 border border-border-primary/50 rounded-button px-3 py-2 focus:outline-none focus:border-accent focus:bg-app-bg transition-all placeholder:text-text-dim"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1.5 text-zinc-400">Instagram</label>
+                      <label className="block text-xs font-medium mb-1.5 text-text-muted">Instagram</label>
                       <input
                         type="text"
                         value={client.instagram || ''}
                         onChange={(e) => updateClient(client.id, { instagram: e.target.value })}
                         placeholder="@username"
-                        className="w-full text-sm bg-zinc-900/50 border border-zinc-700/50 rounded-lg px-3 py-2 focus:outline-none focus:border-accent focus:bg-zinc-900 transition-all placeholder:text-zinc-600"
+                        className="w-full text-sm bg-app-bg/50 border border-border-primary/50 rounded-button px-3 py-2 focus:outline-none focus:border-accent focus:bg-app-bg transition-all placeholder:text-text-dim"
                       />
                     </div>
                   </div>
@@ -1516,7 +1516,7 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
 
       {clients.length === 0 && !showAddClient && (
         <div className="text-center py-8">
-          <p className="text-zinc-500 mb-4">No clients yet</p>
+          <p className="text-text-muted mb-4">No clients yet</p>
           <button
             onClick={() => setShowAddClient(true)}
             className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium inline-flex items-center gap-2"
@@ -1662,13 +1662,13 @@ function FinanceSettings() {
       {/* Currency Settings */}
       <div>
         <label className="block text-sm font-medium mb-2">Base Currency</label>
-        <p className="text-sm text-zinc-400 mb-3">
+        <p className="text-sm text-text-muted mb-3">
           Select the base currency for financial reports
         </p>
         <select
           value={baseCurrency}
           onChange={(e) => handleBaseCurrencyChange(e.target.value)}
-          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 focus:outline-none focus:border-accent"
+          className="w-full bg-app-bg border border-border-primary rounded-button px-4 py-2 focus:outline-none focus:border-accent"
         >
           <option value="USD">USD ($)</option>
           <option value="RUB">RUB (₽)</option>
@@ -1680,14 +1680,14 @@ function FinanceSettings() {
       <div className="flex items-center justify-between">
         <div>
           <div className="font-medium mb-1">Convert to Base Currency</div>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-text-muted">
             Automatically convert all revenue to the selected currency
           </p>
         </div>
         <button
           onClick={handleConvertToggle}
           className={`w-12 h-6 rounded-full transition-colors relative ${
-            convertToBaseCurrency ? 'bg-accent' : 'bg-zinc-700'
+            convertToBaseCurrency ? 'bg-accent' : 'bg-border-secondary'
           }`}
         >
           <div
@@ -1700,32 +1700,32 @@ function FinanceSettings() {
 
       {/* Exchange Rate Mode */}
       {convertToBaseCurrency && (
-        <div className="border-t border-zinc-800 pt-6">
+        <div className="border-t border-border-secondary pt-6">
           <label className="block text-sm font-medium mb-3">Exchange Rate Source</label>
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => handleRateModeChange('auto')}
-              className={`p-4 rounded-lg border-2 transition-colors text-left ${
+              className={`p-4 rounded-button border-2 transition-colors text-left ${
                 rateMode === 'auto'
                   ? 'border-accent bg-accent/10'
-                  : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
+                  : 'border-border-primary bg-sidebar-bg hover:border-border-hover'
               }`}
             >
               <div className="font-medium mb-1">Automatic</div>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-text-muted">
                 Get real-time rates from the internet
               </p>
             </button>
             <button
               onClick={() => handleRateModeChange('manual')}
-              className={`p-4 rounded-lg border-2 transition-colors text-left ${
+              className={`p-4 rounded-button border-2 transition-colors text-left ${
                 rateMode === 'manual'
                   ? 'border-accent bg-accent/10'
-                  : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
+                  : 'border-border-primary bg-sidebar-bg hover:border-border-hover'
               }`}
             >
               <div className="font-medium mb-1">Manual</div>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-text-muted">
                 Set custom exchange rates
               </p>
             </button>
@@ -1735,14 +1735,14 @@ function FinanceSettings() {
 
       {/* Exchange Rates Display */}
       {convertToBaseCurrency && (
-        <div className="border-t border-zinc-800 pt-6">
+        <div className="border-t border-border-secondary pt-6">
           <div className="flex items-center justify-between mb-3">
             <label className="block text-sm font-medium">Exchange Rates</label>
             {rateMode === 'auto' && (
               <button
                 onClick={() => fetchAutoRates(baseCurrency)}
                 disabled={isLoadingRates}
-                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-800/50 rounded-lg transition-colors text-sm flex items-center gap-2"
+                className="px-3 py-1.5 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 rounded-button transition-colors text-sm flex items-center gap-2"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRates ? 'animate-spin' : ''}`} />
                 {isLoadingRates ? 'Updating...' : 'Update'}
@@ -1771,11 +1771,11 @@ function FinanceSettings() {
               return (
                 <div
                   key={currency}
-                  className={`flex items-center justify-between rounded-lg px-4 py-3 transition-colors ${
-                    isDisabled ? 'bg-zinc-800/50' : 'bg-zinc-800'
+                  className={`flex items-center justify-between rounded-button px-4 py-3 transition-colors ${
+                    isDisabled ? 'bg-sidebar-bg/50' : 'bg-sidebar-bg'
                   }`}
                 >
-                  <span className={`text-sm ${isDisabled ? 'text-zinc-500' : ''}`}>
+                  <span className={`text-sm ${isDisabled ? 'text-text-muted' : ''}`}>
                     1 {currencySymbols[currency]} ({currency})
                   </span>
                   <div className="flex items-center gap-2">
@@ -1790,18 +1790,18 @@ function FinanceSettings() {
                             handleManualRateChange(baseCurrency, currency, parseFloat(e.currentTarget.value) || rate);
                           }
                         }}
-                        className="w-24 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-accent text-right"
+                        className="w-24 bg-app-bg border border-border-primary rounded px-2 py-1 text-sm focus:outline-none focus:border-accent text-right"
                         autoFocus
                       />
                     ) : (
-                      <span className={`text-sm font-medium ${isDisabled ? 'text-zinc-500' : ''}`}>
+                      <span className={`text-sm font-medium ${isDisabled ? 'text-text-muted' : ''}`}>
                         {rate.toFixed(2)} {currencySymbols[baseCurrency]}
                       </span>
                     )}
                     {rateMode === 'manual' && (
                       <button
                         onClick={() => setEditingRate(isEditing ? null : { from: baseCurrency, to: currency })}
-                        className="p-1.5 hover:bg-zinc-700 rounded transition-colors"
+                        className="p-1.5 hover:bg-hover-bg rounded transition-colors"
                       >
                         <Settings className="w-3.5 h-3.5 animate-settings-icon" />
                       </button>
@@ -1813,13 +1813,13 @@ function FinanceSettings() {
           </div>
 
           {lastUpdated && rateMode === 'auto' && (
-            <p className="text-xs text-zinc-500 mt-3">
+            <p className="text-xs text-text-muted mt-3">
               Last updated: {new Date(lastUpdated).toLocaleString()}
             </p>
           )}
 
           {rateMode === 'manual' && (
-            <p className="text-xs text-zinc-500 mt-3">
+            <p className="text-xs text-text-muted mt-3">
               Click the settings icon to edit exchange rates
             </p>
           )}
@@ -1827,13 +1827,13 @@ function FinanceSettings() {
       )}
 
       {/* Revenue Normalization Threshold */}
-      <div className="border-t border-zinc-800 pt-6">
+      <div className="border-t border-border-secondary pt-6">
         <label className="block text-sm font-medium mb-2">Revenue Normalization Threshold</label>
-        <p className="text-sm text-zinc-400 mb-4">
+        <p className="text-sm text-text-muted mb-4">
           Set minimum threshold for revenue chart normalization. Charts will scale to at least this value.
         </p>
 
-        <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-4 py-2.5">
+        <div className="flex items-center justify-between bg-sidebar-bg rounded-button px-4 py-2.5">
           <span className="text-sm">
             {baseCurrency} ({currencySymbols[baseCurrency]})
           </span>
@@ -1849,7 +1849,7 @@ function FinanceSettings() {
               localStorage.setItem('revenueNormalizationThresholds', JSON.stringify(updated));
               window.dispatchEvent(new Event('storage'));
             }}
-            className="w-32 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent text-right"
+            className="w-32 bg-app-bg border border-border-primary rounded-button px-3 py-1.5 text-sm focus:outline-none focus:border-accent text-right"
           />
         </div>
       </div>

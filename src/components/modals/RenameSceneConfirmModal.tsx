@@ -54,11 +54,11 @@ export const RenameSceneConfirmModal: React.FC<RenameSceneConfirmModalProps> = (
       onClick={onClose}
     >
       <div
-        className="bg-zinc-900 border border-orange-600 rounded-lg p-6 max-w-md w-full mx-4"
+        className="bg-card-bg border border-orange-600 rounded-card p-6 max-w-md w-full mx-4"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-lg font-semibold mb-2">Confirm {isShot ? 'Shot' : 'Scene'} Rename</h3>
-        <p className="text-zinc-400 mb-4">
+        <p className="text-text-muted mb-4">
           Renaming {isShot ? 'shot' : 'scene'} <span className="font-semibold text-white">"{sceneName}"</span> will affect:
         </p>
         <ul className="list-disc pl-6 mb-6 text-zinc-400 space-y-1">
@@ -68,13 +68,13 @@ export const RenameSceneConfirmModal: React.FC<RenameSceneConfirmModalProps> = (
         {/* Progress bar - shown when renaming */}
         {isRenaming && progress && (
           <div className="mb-4">
-            <div className="w-full bg-zinc-700 rounded-full h-2 mb-2">
+            <div className="w-full bg-border-secondary rounded-full h-2 mb-2">
               <div
                 className="bg-orange-500 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${percentage}%` }}
               />
             </div>
-            <p className="text-sm text-zinc-400 text-center">
+            <p className="text-sm text-text-muted text-center">
               Renaming files... {progress.current} / {progress.total} ({percentage}%)
             </p>
           </div>
@@ -91,7 +91,7 @@ export const RenameSceneConfirmModal: React.FC<RenameSceneConfirmModalProps> = (
           <button
             onClick={onClose}
             disabled={isRenaming}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors animate-button disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors animate-button disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isRenaming ? 'Please wait...' : 'Cancel'}
           </button>

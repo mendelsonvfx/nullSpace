@@ -836,7 +836,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   </div>
                   <div className="text-left flex-1">
                     <div className="font-medium">{sw.name}</div>
-                    <div className="text-xs text-zinc-500">
+                    <div className="text-xs text-text-muted">
                       {status === 'launching' ? 'Launching...' : status === 'success' ? 'Launched!' : activeEntry ? 'Running...' : executablePath ? 'Click to launch' : 'Path not set'}
                     </div>
                   </div>
@@ -899,12 +899,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   }}
                   className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
                 >
-                  <div className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all duration-200 ${
-                    todo.completed
-                      ? 'bg-zinc-500 border-zinc-500'
-                      : 'border-zinc-600 group-hover:border-zinc-400'
-                  }`}>
-                    {todo.completed && <IconCheck stroke={3} className="w-2.5 h-2.5 text-white" />}
+                  <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                    {todo.completed && <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />}
                   </div>
                   <span className={`flex-1 text-[13px] transition-all duration-200 ${
                     todo.completed ? 'text-text-muted' : 'text-text-primary'
@@ -992,7 +988,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                                 removeTodo(project.id, todo.id);
                               }
                             }}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded transition-opacity"
                           >
                             <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted" />
                           </button>
@@ -1044,7 +1040,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   e.currentTarget.value = '';
                 }
               }}
-              className="w-full px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-card text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:border-solid"
+              className="w-full px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-card text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-border-secondary focus:border-solid"
             />
           </div>
         </div>
@@ -1155,12 +1151,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   }}
                   className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
                 >
-                  <div className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all duration-200 ${
-                    todo.completed
-                      ? 'bg-zinc-500 border-zinc-500'
-                      : 'border-zinc-600 group-hover:border-zinc-400'
-                  }`}>
-                    {todo.completed && <IconCheck stroke={3} className="w-2.5 h-2.5 text-white" />}
+                  <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                    {todo.completed && <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />}
                   </div>
                   <span className={`flex-1 text-[13px] transition-all duration-200 ${
                     todo.completed ? 'text-text-muted' : 'text-text-primary'
@@ -1248,7 +1240,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                                 removeTodo(project.id, todo.id);
                               }
                             }}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded transition-opacity"
                           >
                             <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted" />
                           </button>
@@ -1300,7 +1292,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   e.currentTarget.value = '';
                 }
               }}
-              className="w-full px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-card text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:border-solid"
+              className="w-full px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-card text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-border-secondary focus:border-solid"
             />
           </div>
         </div>
@@ -1340,23 +1332,23 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           }}
         >
           <div
-            className={`bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl w-full max-w-md mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
+            className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-md mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
               isPaymentModalAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
             }`}
             onClick={(e) => e.stopPropagation()}
             data-modal-window
           >
-            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+            <div className="p-4 border-b border-border-secondary flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Payment Settings</h2>
-              <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-                <IconX stroke={1.5} className="w-5 h-5 text-zinc-400" />
+              <button onClick={() => setShowPaymentModal(false)} className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors">
+                <IconX stroke={1.5} className="w-5 h-5 text-text-muted" />
               </button>
             </div>
 
             <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
               <div className="p-4 space-y-3">
               <div>
-                <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Cost *</label>
+                <label className="block text-xs text-text-muted mb-1.5 font-medium">Cost *</label>
                 <div className="flex gap-2">
                   <input
                     type="number"
@@ -1366,51 +1358,45 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       updateProject({ ...project, cost: e.target.value ? parseFloat(e.target.value) : undefined });
                     }}
                     placeholder="0"
-                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent transition-colors"
+                    className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm text-white focus:outline-none focus:border-border-secondary transition-colors"
                   />
-                  <select
+                  <CustomSelect
                     value={project.currency || 'USD'}
-                    onChange={(e) => {
+                    onChange={(val) => {
                       const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, currency: e.target.value as 'USD' | 'RUB' | 'EUR' });
+                      updateProject({ ...project, currency: val as 'USD' | 'RUB' | 'EUR' });
                     }}
-                    className="w-24 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent transition-colors"
-                  >
-                    <option value="USD">USD</option>
-                    <option value="RUB">RUB</option>
-                    <option value="EUR">EUR</option>
-                  </select>
+                    options={[
+                      { value: 'USD', label: 'USD' },
+                      { value: 'RUB', label: 'RUB' },
+                      { value: 'EUR', label: 'EUR' },
+                    ]}
+                    className="w-24"
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-zinc-400 mb-1.5 font-medium">Payment Status</label>
-                <select
+                <label className="block text-xs text-text-muted mb-1.5 font-medium">Payment Status</label>
+                <CustomSelect
                   value={project.paymentStatus || 'unpaid'}
-                  onChange={(e) => {
+                  onChange={(val) => {
                     const { updateProject } = useProjectStore.getState();
-                    const newStatus = e.target.value as 'paid' | 'prepaid' | 'unpaid';
-                    // For prepaid, only update if there's already a prepayment amount or it's switching away
-                    if (newStatus === 'prepaid' && !project.prepaymentAmount) {
-                      // Just update status, user needs to fill prepaymentAmount below
-                      const updates = getPaymentStatusUpdate(project, newStatus);
-                      updateProject({ ...project, ...updates });
-                    } else {
-                      const updates = getPaymentStatusUpdate(project, newStatus);
-                      updateProject({ ...project, ...updates });
-                    }
+                    const newStatus = val as 'paid' | 'prepaid' | 'unpaid';
+                    const updates = getPaymentStatusUpdate(project, newStatus);
+                    updateProject({ ...project, ...updates });
                   }}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent transition-colors"
-                >
-                  <option value="unpaid">Unpaid</option>
-                  <option value="prepaid">Prepaid</option>
-                  <option value="paid">Paid</option>
-                </select>
+                  options={[
+                    { value: 'unpaid', label: 'Unpaid' },
+                    { value: 'prepaid', label: 'Prepaid' },
+                    { value: 'paid', label: 'Paid' },
+                  ]}
+                />
               </div>
 
               {project.paymentStatus === 'prepaid' && (
                 <div>
-                  <label className="block text-xs text-zinc-400 mb-1.5 font-medium">
+                  <label className="block text-xs text-text-muted mb-1.5 font-medium">
                     Prepayment Amount {!project.prepaymentAmount && <span className="text-red-400">*</span>}
                   </label>
                   <input
@@ -1422,10 +1408,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     }}
                     placeholder="0"
                     autoFocus={!project.prepaymentAmount}
-                    className={`w-full bg-zinc-800 border rounded-lg px-3 py-2 text-sm text-white focus:outline-none transition-colors ${
+                    className={`w-full bg-sidebar-bg border rounded-button px-3 py-2 text-sm text-white focus:outline-none transition-colors ${
                       !project.prepaymentAmount
                         ? 'border-red-500 focus:border-red-400'
-                        : 'border-zinc-700 focus:border-accent'
+                        : 'border-border-primary focus:border-border-secondary'
                     }`}
                   />
                   {!project.prepaymentAmount && (
@@ -1436,10 +1422,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               </div>
             </SimpleBar>
 
-            <div className="flex justify-end gap-2 p-4 border-t border-zinc-800">
+            <div className="flex justify-end gap-2 p-4 border-t border-border-secondary">
               <button
                 onClick={() => setShowPaymentModal(false)}
-                className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-lg transition-colors font-medium shadow-sm"
+                className="px-4 py-2 bg-gradient-to-br from-accent to-accent-hover text-white text-sm rounded-button transition-colors font-medium shadow-sm"
               >
                 Save Changes
               </button>
@@ -1464,10 +1450,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
           }}
         >
-          <div className="bg-zinc-900 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
+          <div className="bg-card-bg rounded-card max-w-2xl w-full max-h-[90vh] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-border-secondary flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-semibold">Project Settings</h2>
-              <button onClick={() => setShowProjectSettings(false)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
+              <button onClick={() => setShowProjectSettings(false)} className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors">
                 <IconX stroke={1.5} className="w-5 h-5 close-button-red" />
               </button>
             </div>
@@ -1484,7 +1470,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       const { updateProject } = useProjectStore.getState();
                       updateProject({ ...project, name: e.target.value });
                     }}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                    className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-border-secondary"
                   />
                 </div>
               </div>
@@ -1499,13 +1485,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       updateProject({ ...project, description: e.target.value });
                     }}
                     rows={2}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none h-[60px]"
+                    className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-border-secondary resize-none h-[60px]"
                   />
                 </div>
                 <div className="w-32">
-                  <label className="block text-sm font-medium mb-1.5">Thumbnail <span className="text-xs text-zinc-500">(Ctrl+V)</span></label>
+                  <label className="block text-sm font-medium mb-1.5">Thumbnail <span className="text-xs text-text-muted">(Ctrl+V)</span></label>
                   {project.thumbnail ? (
-                    <div className="relative h-[60px] rounded-lg overflow-hidden border border-zinc-700 bg-zinc-800">
+                    <div className="relative h-[60px] rounded-button overflow-hidden border border-border-primary bg-sidebar-bg">
                       {thumbnailSrc && (
                         <img
                           src={thumbnailSrc}
@@ -1544,7 +1530,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           }
                         }
                       }}
-                      className="h-[60px] w-full bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm border border-zinc-700 flex items-center justify-center"
+                      className="h-[60px] w-full bg-sidebar-bg hover:bg-hover-bg rounded-button transition-colors text-sm border border-border-primary flex items-center justify-center"
                     >
                       <IconPlus stroke={1.5} className="w-5 h-5" />
                     </button>
@@ -1552,24 +1538,24 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 </div>
               </div>
 
-              <div className="border-t border-zinc-800 pt-2"></div>
+              <div className="border-t border-border-secondary pt-2"></div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1.5">Status</label>
-                  <select
+                  <CustomSelect
                     value={project.status}
-                    onChange={(e) => {
+                    onChange={(val) => {
                       const { updateStatus } = useProjectStore.getState();
-                      updateStatus(project.id, e.target.value as ProjectStatus);
+                      updateStatus(project.id, val as ProjectStatus);
                     }}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
-                  >
-                    <option value="active">Active</option>
-                    <option value="paused">Paused</option>
-                    <option value="completed">Completed</option>
-                    <option value="archived">Archived</option>
-                  </select>
+                    options={[
+                      { value: 'active', label: 'Active' },
+                      { value: 'paused', label: 'Paused' },
+                      { value: 'completed', label: 'Completed' },
+                      { value: 'archived', label: 'Archived' },
+                    ]}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1.5">Client</label>
@@ -1581,13 +1567,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     }}
                     options={[
                       { value: '', label: 'No client' },
-                      ...useProjectStore.getState().clients.map(c => ({ value: c.id, label: c.name })),
+                      ...useProjectStore.getState().clients.map(c => ({ value: c.id, label: c.name, color: c.color })),
                     ]}
                   />
                 </div>
               </div>
 
-              <div className="border-t border-zinc-800 pt-2"></div>
+              <div className="border-t border-border-secondary pt-2"></div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1638,10 +1624,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           }
                         }}
                         onChange={() => {}}
-                        className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+                        className="w-14 bg-sidebar-bg border border-border-primary rounded-button px-2 py-2 text-sm text-center focus:outline-none focus:border-border-secondary"
                       />
                     </div>
-                    <span className="text-zinc-500">.</span>
+                    <span className="text-text-muted">.</span>
                     <div className="relative w-14">
                       {(() => {
                         const showAutofill = deadlineFieldsFilled.day && !deadlineFieldsFilled.month;
@@ -1709,10 +1695,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           }
                         }}
                         onChange={() => {}}
-                        className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+                        className="w-14 bg-sidebar-bg border border-border-primary rounded-button px-2 py-2 text-sm text-center focus:outline-none focus:border-border-secondary"
                       />
                     </div>
-                    <span className="text-zinc-500">.</span>
+                    <span className="text-text-muted">.</span>
                     <div className="relative w-14">
                       {(() => {
                         const showAutofill = deadlineFieldsFilled.day && !deadlineFieldsFilled.year;
@@ -1784,7 +1770,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           }
                         }}
                         onChange={() => {}}
-                        className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:border-accent"
+                        className="w-14 bg-sidebar-bg border border-border-primary rounded-button px-2 py-2 text-sm text-center focus:outline-none focus:border-border-secondary"
                       />
                     </div>
                     <div className="relative w-8 h-8 flex items-center justify-center calendar-icon-wrapper">
@@ -1798,7 +1784,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             setDeadlineFieldsFilled({ day: true, month: true, year: true });
                           }
                         }}
-                        className="absolute opacity-0"
+                        className="absolute opacity-0 [color-scheme:dark]"
                         style={{
                           position: 'absolute',
                           top: 0,
@@ -1809,7 +1795,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                         }}
                       />
                       <svg
-                        className="w-5 h-5 text-zinc-400"
+                        className="w-5 h-5 text-text-muted"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -1831,20 +1817,21 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                         updateProject({ ...project, cost: e.target.value ? parseFloat(e.target.value) : undefined });
                       }}
                       placeholder="0"
-                      className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                      className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-border-secondary"
                     />
-                    <select
+                    <CustomSelect
                       value={project.currency || 'USD'}
-                      onChange={(e) => {
+                      onChange={(val) => {
                         const { updateProject } = useProjectStore.getState();
-                        updateProject({ ...project, currency: e.target.value as 'USD' | 'RUB' | 'EUR' });
+                        updateProject({ ...project, currency: val as 'USD' | 'RUB' | 'EUR' });
                       }}
-                      className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
-                    >
-                      <option value="USD">USD</option>
-                      <option value="RUB">RUB</option>
-                      <option value="EUR">EUR</option>
-                    </select>
+                      options={[
+                        { value: 'USD', label: 'USD' },
+                        { value: 'RUB', label: 'RUB' },
+                        { value: 'EUR', label: 'EUR' },
+                      ]}
+                      className="w-20"
+                    />
                   </div>
                 </div>
               </div>
@@ -1852,20 +1839,20 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1.5">Payment Status</label>
-                  <select
+                  <CustomSelect
                     value={project.paymentStatus || 'unpaid'}
-                    onChange={(e) => {
+                    onChange={(val) => {
                       const { updateProject } = useProjectStore.getState();
-                      const newStatus = e.target.value as 'paid' | 'prepaid' | 'unpaid';
+                      const newStatus = val as 'paid' | 'prepaid' | 'unpaid';
                       const updates = getPaymentStatusUpdate(project, newStatus);
                       updateProject({ ...project, ...updates });
                     }}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
-                  >
-                    <option value="unpaid">Unpaid</option>
-                    <option value="prepaid">Prepaid</option>
-                    <option value="paid">Paid</option>
-                  </select>
+                    options={[
+                      { value: 'unpaid', label: 'Unpaid' },
+                      { value: 'prepaid', label: 'Prepaid' },
+                      { value: 'paid', label: 'Paid' },
+                    ]}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1.5">
@@ -1880,10 +1867,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     }}
                     placeholder="0"
                     disabled={project.paymentStatus !== 'prepaid'}
-                    className={`w-full bg-zinc-800 border rounded-lg px-3 py-2 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                    className={`w-full bg-sidebar-bg border rounded-button px-3 py-2 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
                       project.paymentStatus === 'prepaid' && !project.prepaymentAmount
                         ? 'border-red-500 focus:border-red-400'
-                        : 'border-zinc-700 focus:border-accent'
+                        : 'border-border-primary focus:border-border-secondary'
                     }`}
                   />
                   {project.paymentStatus === 'prepaid' && !project.prepaymentAmount && (
@@ -1892,7 +1879,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 </div>
               </div>
 
-              <div className="border-t border-zinc-800 pt-2"></div>
+              <div className="border-t border-border-secondary pt-2"></div>
 
               <div>
                 <label className="block text-sm font-medium mb-1.5">Project Path</label>
@@ -1900,12 +1887,12 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   type="text"
                   value={project.path}
                   readOnly
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent opacity-60"
+                  className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-border-secondary opacity-60"
                 />
               </div>
 
               {/* Tools Section */}
-              <div className="border-t border-zinc-800 pt-4">
+              <div className="border-t border-border-secondary pt-4">
                 <div className="font-medium mb-3">Tools</div>
                 <div className="flex gap-2">
                   {SOFTWARE_OPTIONS.map((sw) => {
@@ -1921,8 +1908,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                         onClick={() => handleToggleSoftware(sw)}
                         className={`flex-1 px-3 py-1.5 rounded text-xs transition-all duration-200 ease-out whitespace-nowrap flex items-center justify-center relative ${
                           isSelected
-                            ? 'bg-zinc-700 text-white'
-                            : 'bg-zinc-800/50 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                            ? 'bg-hover-bg text-white'
+                            : 'bg-sidebar-bg/50 text-text-muted hover:text-white hover:bg-hover-bg'
                         }`}
                       >
                         <div
@@ -1947,7 +1934,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             </SimpleBar>
 
             {/* Footer */}
-            <div className="border-t border-zinc-800 px-4 py-4 flex justify-between items-center gap-3 flex-shrink-0">
+            <div className="border-t border-border-secondary px-4 py-4 flex justify-between items-center gap-3 flex-shrink-0">
               {/* Delete button on the left */}
               <button
                 onClick={() => {
@@ -1964,13 +1951,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowProjectSettings(false)}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm"
+                  className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors text-sm"
                 >
                   Close
                 </button>
                 <button
                   onClick={() => setShowProjectSettings(false)}
-                  className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium text-sm"
+                  className="px-4 py-2 bg-gradient-to-br from-accent to-accent-hover rounded-button transition-colors font-medium text-sm text-white"
                 >
                   Save Changes
                 </button>
@@ -1991,17 +1978,17 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           }}
         >
           <div
-            className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md w-full mx-4"
+            className="bg-card-bg border border-border-primary rounded-card p-6 max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold mb-2">Delete Shot</h3>
-            <p className="text-zinc-400 mb-6">
+            <p className="text-text-muted mb-6">
               Are you sure you want to delete "{shotToDelete.name}"? This action cannot be undone.
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShotToDelete(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+                className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors"
               >
                 Cancel
               </button>
@@ -2038,13 +2025,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           }}
         >
           <div
-            className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-md w-full mx-4"
+            className="bg-card-bg border border-border-primary rounded-card p-6 max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold mb-2">Remove {softwareToRemove}?</h3>
-            <div className="text-zinc-400 mb-6">
+            <div className="text-text-muted mb-6">
               <p className="mb-3">
-                This will permanently remove <span className="font-medium text-zinc-300">{softwareToRemove}</span> from this project.
+                This will permanently remove <span className="font-medium text-text-primary">{softwareToRemove}</span> from this project.
               </p>
               <div className="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-3">
                 <p className="text-sm text-yellow-200/90">
@@ -2055,7 +2042,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setSoftwareToRemove(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+                className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors"
               >
                 Cancel
               </button>

@@ -70,14 +70,14 @@ export const ManualTimeEntryModal: React.FC<ManualTimeEntryModalProps> = ({
       onClick={onClose}
     >
       <div
-        className={`bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
+        className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
           isAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
         }`}
         onClick={handleModalClick}
         data-modal-window
       >
         {/* Two columns */}
-        <div className="grid grid-cols-2 divide-x divide-zinc-800 h-full">
+        <div className="grid grid-cols-2 divide-x divide-border-secondary h-full">
           {/* Left: Add Entry Form */}
           <TimeEntryForm
             project={project}

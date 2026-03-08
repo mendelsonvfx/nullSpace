@@ -69,12 +69,12 @@ export function PrepaymentAmountModal({
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 max-w-sm w-full shadow-2xl animate-modal"
+        className="bg-card-bg border border-border-secondary rounded-card p-5 max-w-sm w-full shadow-2xl animate-modal"
         onClick={(e) => e.stopPropagation()}
         data-modal-window
       >
         <h3 className="text-lg font-semibold mb-1">Set Prepayment Amount</h3>
-        <p className="text-zinc-400 text-sm mb-4">
+        <p className="text-text-muted text-sm mb-4">
           Enter prepayment amount for "<span className="text-white font-medium">{projectName}</span>"
         </p>
 
@@ -91,24 +91,24 @@ export function PrepaymentAmountModal({
             placeholder="0"
             min="0"
             step="any"
-            className={`w-full bg-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 pr-12 transition-colors ${
+            className={`w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm focus:outline-none pr-12 transition-colors ${
               exceedsCost
-                ? 'border-2 border-yellow-500 focus:ring-yellow-500'
-                : 'border border-zinc-700 focus:ring-accent focus:border-transparent'
+                ? 'border-2 border-yellow-500 focus:ring-2 focus:ring-yellow-500'
+                : 'border border-border-primary focus:border-accent'
             }`}
             autoFocus
           />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-sm">
             {currencySymbol}
           </span>
         </div>
 
         {/* Helper text */}
-        <p className={`text-xs mb-3 ${exceedsCost ? 'text-yellow-400' : 'text-zinc-400'}`}>
+        <p className={`text-xs mb-3 ${exceedsCost ? 'text-yellow-400' : 'text-text-muted'}`}>
           {exceedsCost
             ? <>Exceeds project cost (<span className="font-semibold">{projectCost?.toLocaleString()} {currencySymbol}</span>)</>
             : projectCost
-              ? <>Project cost: <span className="font-semibold text-zinc-300">{projectCost.toLocaleString()} {currencySymbol}</span></>
+              ? <>Project cost: <span className="font-semibold text-text-primary">{projectCost.toLocaleString()} {currencySymbol}</span></>
               : 'Enter the prepayment amount received'
           }
         </p>
@@ -116,14 +116,14 @@ export function PrepaymentAmountModal({
         <div className="flex gap-2 justify-end">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm animate-button"
+            className="px-3 py-1.5 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors text-sm animate-button"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={!isValid}
-            className="px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed rounded-lg transition-colors font-medium text-sm animate-button"
+            className="px-3 py-1.5 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors font-medium text-sm text-white animate-button"
           >
             Set Prepaid
           </button>

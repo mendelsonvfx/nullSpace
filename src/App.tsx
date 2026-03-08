@@ -310,6 +310,9 @@ function App() {
     let saveTimeout: ReturnType<typeof setTimeout>;
 
     const updateFullscreenClass = async () => {
+      // Capture sync BEFORE async IPC calls to detect fullscreen→normal transition
+      const wasFullscreen = document.documentElement.classList.contains('fullscreen');
+
       const isMaximized = await appWindow.isMaximized();
       const isFullscreen = await appWindow.isFullscreen();
       const isFullMode = isMaximized || isFullscreen;
@@ -321,6 +324,18 @@ function App() {
       } else {
         document.documentElement.classList.remove('fullscreen');
         document.body.classList.remove('fullscreen');
+
+        // Force WebView2 compositor to repaint transparent corners.
+        // After snap-restore from maximize, WebView2's new surface briefly shows
+        // white in the border-radius clip areas before re-compositing.
+        if (wasFullscreen) {
+          requestAnimationFrame(() => {
+            document.documentElement.style.opacity = '0.9999';
+            requestAnimationFrame(() => {
+              document.documentElement.style.opacity = '';
+            });
+          });
+        }
       }
 
       // Set DWM corners: rounded for normal window, square for maximized/fullscreen

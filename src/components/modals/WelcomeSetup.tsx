@@ -145,39 +145,39 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
 
   return (
     <div className={`fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4 rounded-lg ${blurClass}`}>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-3xl w-full overflow-hidden" data-modal-window>
+      <div className="bg-card-bg border border-border-secondary rounded-card max-w-3xl w-full overflow-hidden" data-modal-window>
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-700 to-zinc-800 px-6 py-4">
+        <div className="bg-gradient-to-r from-accent to-card-bg px-6 py-4">
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-3 mb-1">
                 <img src={appIcon} alt="nullSpace" className="w-7 h-7" />
                 <h1 className="text-2xl font-bold">Welcome to nullSpace</h1>
               </div>
-              <p className="text-sm text-purple-100">Let's set up your workspace in just a few steps</p>
+              <p className="text-sm text-white/80">Let's set up your workspace in just a few steps</p>
             </div>
-            <Rocket className="w-8 h-8 text-purple-200 flex-shrink-0" />
+            <Rocket className="w-8 h-8 text-white/70 flex-shrink-0" />
           </div>
         </div>
 
         {/* Progress indicator */}
-        <div className="px-6 py-3 bg-zinc-800 flex items-center gap-3">
-          <div className={`flex items-center gap-2 ${step >= 1 ? 'text-purple-400' : 'text-zinc-500'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-purple-600' : 'bg-zinc-700'}`}>
+        <div className="px-6 py-3 bg-sidebar-bg border-b border-border-secondary flex items-center gap-3">
+          <div className={`flex items-center gap-2 ${step >= 1 ? 'text-accent' : 'text-text-muted'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-accent' : 'bg-border-secondary'}`}>
               {step > 1 ? <Check className="w-5 h-5" /> : '1'}
             </div>
             <span className="font-medium">Projects</span>
           </div>
-          <div className="flex-1 h-0.5 bg-zinc-700" />
-          <div className={`flex items-center gap-2 ${step >= 2 ? 'text-purple-400' : 'text-zinc-500'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-purple-600' : 'bg-zinc-700'}`}>
+          <div className="flex-1 h-0.5 bg-border-secondary" />
+          <div className={`flex items-center gap-2 ${step >= 2 ? 'text-accent' : 'text-text-muted'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-accent' : 'bg-border-secondary'}`}>
               {step > 2 ? <Check className="w-5 h-5" /> : '2'}
             </div>
             <span className="font-medium">Currency</span>
           </div>
-          <div className="flex-1 h-0.5 bg-zinc-700" />
-          <div className={`flex items-center gap-2 ${step >= 3 ? 'text-purple-400' : 'text-zinc-500'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-purple-600' : 'bg-zinc-700'}`}>
+          <div className="flex-1 h-0.5 bg-border-secondary" />
+          <div className={`flex items-center gap-2 ${step >= 3 ? 'text-accent' : 'text-text-muted'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-accent' : 'bg-border-secondary'}`}>
               3
             </div>
             <span className="font-medium">Software</span>
@@ -191,7 +191,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
             <div className="space-y-4">
               <div>
                 <h2 className="text-xl font-bold mb-1">Projects Directory</h2>
-                <p className="text-sm text-zinc-400 mb-4">
+                <p className="text-sm text-text-muted mb-4">
                   Choose where your projects will be stored. This is where nullSpace will look for your project files.
                 </p>
               </div>
@@ -204,11 +204,11 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                     value={projectsDir}
                     onChange={(e) => setProjectsDir(e.target.value)}
                     placeholder="e.g., C:\Projects or /home/user/Projects"
-                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500"
+                    className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent"
                   />
                   <button
                     onClick={handleBrowseDirectory}
-                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-2 font-medium text-sm"
+                    className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors flex items-center gap-2 font-medium text-sm"
                   >
                     <FolderOpen className="w-4 h-4" />
                     Browse
@@ -221,7 +221,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                   <Check className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
                   <div>
                     <div className="text-sm font-medium text-green-400">Directory Selected</div>
-                    <div className="text-xs text-zinc-400 mt-0.5">{projectsDir}</div>
+                    <div className="text-xs text-text-muted mt-0.5">{projectsDir}</div>
                   </div>
                 </div>
               )}
@@ -232,7 +232,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
             <div className="space-y-4">
               <div>
                 <h2 className="text-xl font-bold mb-1">Base Currency</h2>
-                <p className="text-sm text-zinc-400 mb-4">
+                <p className="text-sm text-text-muted mb-4">
                   Select your preferred currency for financial tracking and reports.
                 </p>
               </div>
@@ -249,8 +249,8 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                       onClick={() => setCurrency(curr.code)}
                       className={`relative p-4 rounded-xl border-2 transition-all group min-h-[120px] flex items-center justify-center ${
                         currency === curr.code
-                          ? 'border-purple-500 bg-purple-600/20 shadow-lg shadow-purple-500/20'
-                          : 'border-zinc-700 bg-zinc-800 hover:border-purple-400/50 hover:bg-zinc-750'
+                          ? 'border-accent bg-accent/10 shadow-lg shadow-accent/20'
+                          : 'border-border-primary bg-sidebar-bg hover:border-border-hover hover:bg-hover-bg'
                       }`}
                     >
                       <div className="flex flex-col items-center justify-center gap-2">
@@ -258,13 +258,13 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                         <div className="text-center">
                           <div className="flex items-center justify-center gap-2 mb-0.5">
                             <span className="text-xl font-bold">{curr.symbol}</span>
-                            <span className="text-base font-semibold text-zinc-300">{curr.code}</span>
+                            <span className="text-base font-semibold text-text-primary">{curr.code}</span>
                           </div>
-                          <div className="text-xs text-zinc-400">{curr.name}</div>
+                          <div className="text-xs text-text-muted">{curr.name}</div>
                         </div>
                       </div>
                       {currency === curr.code && (
-                        <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center">
+                        <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-accent flex items-center justify-center">
                           <Check className="w-3 h-3 text-white" />
                         </div>
                       )}
@@ -274,17 +274,17 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
               </div>
 
               {/* Convert to Base Currency Toggle */}
-              <div className="flex items-center justify-between bg-zinc-800 rounded-lg px-4 py-3 mt-4">
+              <div className="flex items-center justify-between bg-sidebar-bg border border-border-primary rounded-button px-4 py-3 mt-4">
                 <div>
                   <div className="text-sm font-medium mb-0.5">Convert to Base Currency</div>
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-text-muted">
                     Automatically convert all revenue to the selected currency
                   </p>
                 </div>
                 <button
                   onClick={() => setConvertToBaseCurrency(!convertToBaseCurrency)}
                   className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${
-                    convertToBaseCurrency ? 'bg-purple-600' : 'bg-zinc-700'
+                    convertToBaseCurrency ? 'bg-accent' : 'bg-border-secondary'
                   }`}
                 >
                   <div
@@ -302,7 +302,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
             <div className="space-y-4">
               <div>
                 <h2 className="text-xl font-bold mb-1">Software Paths (Optional)</h2>
-                <p className="text-sm text-zinc-400 mb-3">
+                <p className="text-sm text-text-muted mb-3">
                   Configure paths to your 3D software. You can skip this step and configure it later in settings.
                 </p>
               </div>
@@ -311,7 +311,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                 <button
                   onClick={handleAutoDetect}
                   disabled={isDetecting}
-                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-600/50 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                  className="px-3 py-1.5 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-button transition-colors text-sm font-medium flex items-center gap-2 text-white"
                 >
                   {isDetecting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   {isDetecting ? 'Detecting...' : 'Auto-Detect'}
@@ -321,7 +321,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
               <SimpleBar className="max-h-[240px] custom-scrollbar-fixed" autoHide={false}>
                 <div className="space-y-2 pr-2">
                 {softwarePaths.map((sw, index) => (
-                  <div key={sw.name} className="bg-zinc-800 rounded-lg p-3">
+                  <div key={sw.name} className="bg-sidebar-bg border border-border-primary rounded-button p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <h4 className="text-sm font-medium">{sw.displayName}</h4>
                       {isValidExecutablePath(sw.path) && <Check className="w-3 h-3 text-green-500" />}
@@ -345,11 +345,11 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                           });
                         }}
                         placeholder={`Path to ${sw.displayName}...`}
-                        className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-purple-500"
+                        className="flex-1 bg-app-bg border border-border-primary rounded-button px-2 py-1.5 text-xs focus:outline-none focus:border-accent"
                       />
                       <button
                         onClick={() => handleBrowseExecutable(index)}
-                        className="px-2 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors"
+                        className="px-2 py-1.5 bg-hover-bg hover:bg-border-secondary border border-border-primary rounded-button transition-colors"
                       >
                         <FolderOpen className="w-3.5 h-3.5" />
                       </button>
@@ -364,12 +364,12 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
         </SimpleBar>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-zinc-800 flex justify-between items-center border-t border-zinc-700">
+        <div className="px-6 py-4 bg-sidebar-bg flex justify-between items-center border-t border-border-secondary">
           <div>
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
-                className="px-6 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors font-medium"
+                className="px-6 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors font-medium"
               >
                 Back
               </button>
@@ -381,7 +381,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
               <button
                 onClick={() => setStep(step + 1)}
                 disabled={step === 1 && !canProceedFromStep1}
-                className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed rounded-lg transition-colors font-medium"
+                className="px-6 py-2 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors font-medium text-white"
               >
                 Next
               </button>
@@ -389,14 +389,14 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
               <>
                 <button
                   onClick={handleComplete}
-                  className="px-6 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors font-medium"
+                  className="px-6 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors font-medium"
                 >
                   Skip This Step
                 </button>
                 <button
                   onClick={handleComplete}
                   disabled={!hasSoftwarePathsConfigured}
-                  className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed rounded-lg transition-colors font-medium flex items-center gap-2"
+                  className="px-6 py-2 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors font-medium text-white flex items-center gap-2"
                 >
                   <Check className="w-5 h-5" />
                   Complete Setup

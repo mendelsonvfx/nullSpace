@@ -45,7 +45,7 @@ export function AddCategoryModal({ isOpen, onClose, onAdd }: AddCategoryModalPro
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 max-w-sm w-full shadow-2xl animate-modal"
+        className="bg-card-bg border border-border-secondary rounded-card p-5 max-w-sm w-full shadow-2xl animate-modal"
         onClick={(e) => e.stopPropagation()}
         data-modal-window
       >
@@ -59,20 +59,20 @@ export function AddCategoryModal({ isOpen, onClose, onAdd }: AddCategoryModalPro
             if (e.key === 'Escape') onClose();
           }}
           placeholder="Category name..."
-          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 mb-4 text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+          className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 mb-4 text-sm focus:outline-none focus:border-accent"
           autoFocus
         />
         <div className="flex gap-2 justify-end">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-sm animate-button"
+            className="px-3 py-1.5 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors text-sm animate-button"
           >
             Cancel
           </button>
           <button
             onClick={handleAdd}
             disabled={!categoryName.trim()}
-            className="px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg transition-colors font-medium text-sm animate-button"
+            className="px-3 py-1.5 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 rounded-button transition-colors font-medium text-sm text-white animate-button"
           >
             Add
           </button>

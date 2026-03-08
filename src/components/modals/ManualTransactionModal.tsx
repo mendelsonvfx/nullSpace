@@ -167,7 +167,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
       onMouseUp={handleBackdropMouseUp}
     >
       <div
-        className={`bg-zinc-900 rounded-xl border border-zinc-800 shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
+        className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
           isAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
         }`}
         onMouseDown={handleModalMouseDown}
@@ -175,17 +175,17 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
         data-modal-window
       >
         {/* Two columns */}
-        <div className="grid grid-cols-2 divide-x divide-zinc-800 flex-1 overflow-hidden">
+        <div className="grid grid-cols-2 divide-x divide-border-secondary flex-1 overflow-hidden">
           {/* Left: Add Transaction Form with Header and Footer */}
           <div className="flex flex-col overflow-hidden min-h-0">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-zinc-800 flex-shrink-0">
+            <div className="flex items-center justify-between p-4 border-b border-border-secondary flex-shrink-0">
               <h2 className="text-lg font-bold text-white">Add Transaction Manually</h2>
               <button
                 onClick={handleCancel}
-                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors"
               >
-                <X className="w-5 h-5 text-zinc-400" />
+                <X className="w-5 h-5 text-text-muted" />
               </button>
             </div>
 
@@ -194,11 +194,11 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               <div className="p-4 space-y-3">
               {/* Project Selection */}
               <div>
-                <label className="block text-xs text-zinc-400 mb-1.5 font-medium">
+                <label className="block text-xs text-text-muted mb-1.5 font-medium">
                   Project *
                 </label>
                 <select
-                  className="w-full bg-zinc-800 rounded-lg px-3 py-2 text-sm text-white border border-zinc-700 focus:border-accent focus:outline-none transition-colors"
+                  className="w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-accent focus:outline-none transition-colors"
                   value={selectedProjectId}
                   onChange={(e) => setSelectedProjectId(e.target.value)}
                 >
@@ -216,12 +216,12 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
 
               {/* Date Picker */}
               <div>
-                <label className="block text-xs text-zinc-400 mb-1.5 font-medium">
+                <label className="block text-xs text-text-muted mb-1.5 font-medium">
                   Date *
                 </label>
                 <input
                   type="date"
-                  className="w-full bg-zinc-800 rounded-lg px-3 py-2 text-sm text-white border border-zinc-700 focus:border-accent focus:outline-none transition-colors [color-scheme:dark]"
+                  className="w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-accent focus:outline-none transition-colors [color-scheme:dark]"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                   max={new Date().toISOString().split('T')[0]} // Can't add future transactions
@@ -230,7 +230,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
 
               {/* Amount */}
               <div>
-                <label className="block text-xs text-zinc-400 mb-1.5 font-medium">
+                <label className="block text-xs text-text-muted mb-1.5 font-medium">
                   Amount *
                 </label>
                 <div className="flex items-center gap-2">
@@ -239,12 +239,12 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                     min="0"
                     step="0.01"
                     placeholder="0.00"
-                    className="flex-1 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-white border border-zinc-700 focus:border-accent focus:outline-none transition-colors"
+                    className="flex-1 bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-accent focus:outline-none transition-colors"
                     value={amount || ''}
                     onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
                   />
                   <select
-                    className="w-24 bg-zinc-800 rounded-lg px-3 py-2 text-sm text-white border border-zinc-700 focus:border-accent focus:outline-none transition-colors"
+                    className="w-24 bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-accent focus:outline-none transition-colors"
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value)}
                   >
@@ -257,11 +257,11 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
 
               {/* Notes */}
               <div>
-                <label className="block text-xs text-zinc-400 mb-1.5 font-medium">
+                <label className="block text-xs text-text-muted mb-1.5 font-medium">
                   Notes (optional)
                 </label>
                 <textarea
-                  className="w-full bg-zinc-800 rounded-lg px-3 py-2 text-sm text-white border border-zinc-700 focus:border-accent focus:outline-none transition-colors resize-none"
+                  className="w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-accent focus:outline-none transition-colors resize-none"
                   rows={3}
                   placeholder="Add any additional details..."
                   value={notes}
@@ -272,17 +272,17 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
             </SimpleBar>
 
             {/* Footer */}
-            <div className="flex gap-2 p-4 border-t border-zinc-800 flex-shrink-0">
+            <div className="flex gap-2 p-4 border-t border-border-secondary flex-shrink-0">
               <button
                 onClick={handleCancel}
-                className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-sm rounded-lg transition-colors font-medium"
+                className="flex-1 px-4 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary text-white text-sm rounded-button transition-colors font-medium"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={!selectedProjectId || amount <= 0}
-                className="flex-1 px-4 py-2 bg-accent hover:bg-accent-hover disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors font-medium shadow-sm"
+                className="flex-1 px-4 py-2 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm rounded-button transition-colors font-medium"
               >
                 Add Transaction
               </button>
@@ -291,9 +291,9 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
 
           {/* Right: History Journal */}
           <div className="p-4 flex flex-col overflow-hidden min-h-0">
-            <h3 className="text-sm font-medium text-zinc-300 mb-3 flex-shrink-0">Recent Transactions</h3>
+            <h3 className="text-sm font-medium text-text-primary mb-3 flex-shrink-0">Recent Transactions</h3>
             {manualTransactions.length === 0 ? (
-              <p className="text-zinc-600 text-xs text-center py-6">No manual transactions yet</p>
+              <p className="text-text-dim text-xs text-center py-6">No manual transactions yet</p>
             ) : (
               <SimpleBar className="flex-1 custom-scrollbar min-h-0" autoHide={false} style={{ height: 0 }}>
                 <div className="space-y-1.5 pr-1">
@@ -307,29 +307,29 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                   return (
                     <div
                       key={transaction.id}
-                      className="bg-zinc-800/50 rounded-lg hover:bg-zinc-800 transition-colors"
+                      className="bg-sidebar-bg/50 rounded-button hover:bg-hover-bg transition-colors"
                     >
                       <div className="flex items-center gap-2.5 p-2.5 group">
                         {/* Expand button (only if has notes) */}
                         {hasNotes && (
                           <button
                             onClick={() => setExpandedTransactionId(isExpanded ? null : transaction.id)}
-                            className="p-0.5 hover:bg-zinc-700 rounded transition-colors flex-shrink-0"
+                            className="p-0.5 hover:bg-hover-bg rounded transition-colors flex-shrink-0"
                           >
                             {isExpanded ? (
-                              <ChevronDown className="w-4 h-4 text-zinc-400" />
+                              <ChevronDown className="w-4 h-4 text-text-muted" />
                             ) : (
-                              <ChevronRight className="w-4 h-4 text-zinc-400" />
+                              <ChevronRight className="w-4 h-4 text-text-muted" />
                             )}
                           </button>
                         )}
 
                         {/* Info */}
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-zinc-200 truncate">
+                          <div className="text-sm font-medium text-text-primary truncate">
                             {project.name}
                           </div>
-                          <div className="text-xs text-zinc-500">
+                          <div className="text-xs text-text-muted">
                             {transactionDate}
                           </div>
                         </div>
@@ -352,8 +352,8 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                       {/* Expanded notes */}
                       {isExpanded && hasNotes && (
                         <div className="px-2.5 pb-2.5 pt-0">
-                          <div className="bg-zinc-900/50 rounded px-3 py-2 border border-zinc-700/50">
-                            <p className="text-xs text-zinc-400 leading-relaxed">
+                          <div className="bg-app-bg/50 rounded px-3 py-2 border border-border-primary/50">
+                            <p className="text-xs text-text-muted leading-relaxed">
                               {transaction.notes}
                             </p>
                           </div>

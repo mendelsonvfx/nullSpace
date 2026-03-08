@@ -43,7 +43,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
       }}
     >
       <div
-        className="bg-zinc-900 border border-border-secondary rounded-xl w-full max-w-[420px] overflow-hidden animate-modal"
+        className="bg-card-bg border border-border-secondary rounded-card w-full max-w-[420px] overflow-hidden animate-modal"
         onClick={(e) => e.stopPropagation()}
         data-modal-window
       >
@@ -83,8 +83,8 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
                 rel={link.disabled ? undefined : 'noopener noreferrer'}
                 className={`flex items-center justify-between p-3 border rounded-lg transition-colors text-text-primary no-underline ${
                   link.disabled
-                    ? 'border-border-secondary bg-zinc-900 opacity-50 cursor-not-allowed'
-                    : 'border-border-secondary bg-zinc-900 hover:bg-zinc-800 hover:border-border-hover cursor-pointer'
+                    ? 'border-border-secondary bg-card-bg opacity-50 cursor-not-allowed'
+                    : 'border-border-secondary bg-card-bg hover:bg-hover-bg hover:border-border-hover cursor-pointer'
                 }`}
                 onClick={(e) => link.disabled && e.preventDefault()}
               >
@@ -98,7 +98,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
           </div>
 
           <div className="text-center text-[12px] text-text-muted">
-            <p>Version 1.6.1</p>
+            <p>Version 1.6.2</p>
             <p className="mt-1">Made with passion by Vision One</p>
           </div>
         </div>
