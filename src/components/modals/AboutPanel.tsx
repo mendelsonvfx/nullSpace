@@ -9,31 +9,26 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
   const blurClass = useModalBlur();
   const links = [
     {
-      title: 'Telegram',
-      url: 'https://t.me/vision_onee',
-      description: 'Contact me on Telegram'
-    },
-    {
-      title: 'All Links',
-      url: 'https://linktr.ee/vision_onee',
-      description: 'All my social links'
-    },
-    {
       title: 'Portfolio Website',
       url: 'https://mendelsonvfx.framer.website',
       description: 'My VFX portfolio'
     },
     {
+      title: 'Telegram',
+      url: 'https://t.me/vision_onee',
+      description: 'Contact me on Telegram'
+    },
+    {
       title: 'Project Page',
       url: '#',
-      description: 'nullSpace project page (Coming soon)',
+      description: 'Coming soon',
       disabled: true
     }
   ];
 
   return (
     <div
-      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 rounded-lg animate-fade-in ${blurClass}`}
+      className={`fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-fade-in backdrop-blur-[4px] ${blurClass}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
@@ -47,66 +42,62 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
       }}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-lg w-full max-w-md mx-4 overflow-hidden animate-modal-in"
+        className="bg-zinc-900 border border-border-secondary rounded-xl w-full max-w-[420px] overflow-hidden animate-modal"
         onClick={(e) => e.stopPropagation()}
         data-modal-window
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+        <div className="flex items-center justify-between px-6 py-6 border-b border-border-secondary">
           <div className="flex items-center gap-3">
             <img src="/icon.png" alt="nullSpace Logo" className="w-8 h-8 select-none pointer-events-none" />
             <div>
-              <h2 className="text-xl font-bold">nullSpace</h2>
-              <p className="text-sm text-zinc-400">Project Management Tool</p>
+              <div className="text-xl font-bold">nullSpace</div>
+              <div className="text-[13px] text-text-muted">Project Management Tool</div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-hover-bg text-text-muted hover:text-text-primary transition-colors border-0 bg-transparent cursor-pointer"
             title="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6">
-          <div className="mb-6">
-            <p className="text-sm text-zinc-400">
-              nullSpace is a project management tool designed for creative professionals.
-              Organize your projects, track deadlines, manage finances, and more.
-            </p>
+        <div className="px-6 py-6">
+          <p className="text-[13px] text-text-muted leading-relaxed mb-6">
+            nullSpace is a project management tool designed for creative professionals.
+            Organize your projects, track deadlines, manage finances, and more.
+          </p>
+
+          <div className="text-base font-semibold mb-3">Developer</div>
+
+          <div className="flex flex-col gap-2 mb-6">
+            {links.map((link) => (
+              <a
+                key={link.title}
+                href={link.disabled ? undefined : link.url}
+                target={link.disabled ? undefined : '_blank'}
+                rel={link.disabled ? undefined : 'noopener noreferrer'}
+                className={`flex items-center justify-between p-3 border rounded-lg transition-colors text-text-primary no-underline ${
+                  link.disabled
+                    ? 'border-border-secondary bg-zinc-900 opacity-50 cursor-not-allowed'
+                    : 'border-border-secondary bg-zinc-900 hover:bg-zinc-800 hover:border-border-hover cursor-pointer'
+                }`}
+                onClick={(e) => link.disabled && e.preventDefault()}
+              >
+                <div>
+                  <div className="text-[13px] font-medium text-text-primary">{link.title}</div>
+                  <div className="text-[11px] text-text-muted mt-0.5">{link.description}</div>
+                </div>
+                {!link.disabled && <ExternalLink className="w-4 h-4 text-text-muted flex-shrink-0" />}
+              </a>
+            ))}
           </div>
 
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-3">Developer</h3>
-            <div className="space-y-2">
-              {links.map((link) => (
-                <a
-                  key={link.title}
-                  href={link.disabled ? undefined : link.url}
-                  target={link.disabled ? undefined : "_blank"}
-                  rel={link.disabled ? undefined : "noopener noreferrer"}
-                  className={`block p-3 rounded-lg border transition-colors ${link.disabled
-                    ? 'border-zinc-800 bg-zinc-900/50 cursor-not-allowed opacity-50'
-                    : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:border-zinc-700'
-                    }`}
-                  onClick={(e) => link.disabled && e.preventDefault()}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium text-sm">{link.title}</div>
-                      <div className="text-xs text-zinc-500">{link.description}</div>
-                    </div>
-                    {!link.disabled && <ExternalLink className="w-4 h-4 text-zinc-500" />}
-                  </div>
-                </a>
-              ))}
-            </div>
-          </div>
-
-          <div className="text-center text-xs text-zinc-500">
-            <p>Version 1.6.0</p>
+          <div className="text-center text-[12px] text-text-muted">
+            <p>Version 1.6.1</p>
             <p className="mt-1">Made with passion by Vision One</p>
           </div>
         </div>

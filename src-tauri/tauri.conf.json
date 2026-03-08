@@ -7,7 +7,7 @@
   },
   "package": {
     "productName": "nullSpace",
-    "version": "1.6.0"
+    "version": "1.6.1"
   },
   "tauri": {
     "allowlist": {
@@ -17,7 +17,14 @@
         "open": true
       },
       "fs": {
-        "all": true,
+        "all": false,
+        "readFile": true,
+        "writeFile": true,
+        "readDir": true,
+        "createDir": true,
+        "removeFile": true,
+        "removeDir": true,
+        "copyFile": true,
         "scope": [
           "**"
         ]
@@ -73,7 +80,7 @@
       "externalBin": []
     },
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost https://api.exchangerate-api.com; img-src 'self' data: blob: asset: https://asset.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
     },
     "windows": [
       {
