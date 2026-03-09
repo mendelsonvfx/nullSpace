@@ -313,8 +313,10 @@ function App() {
       // Capture sync BEFORE async IPC calls to detect fullscreen→normal transition
       const wasFullscreen = document.documentElement.classList.contains('fullscreen');
 
-      const isMaximized = await appWindow.isMaximized();
-      const isFullscreen = await appWindow.isFullscreen();
+      const [isMaximized, isFullscreen] = await Promise.all([
+        appWindow.isMaximized(),
+        appWindow.isFullscreen(),
+      ]);
       const isFullMode = isMaximized || isFullscreen;
 
       // Toggle fullscreen class for CSS overlays
@@ -1693,9 +1695,41 @@ function App() {
                               </span>
                             )}
                           </div>
-                        ) : (
-                          <p className="text-xs text-text-secondary truncate mb-3">{project.description}</p>
-                        )}
+                        ) : (() => {
+                          const hasScenes = project.hasScenes && (project.scenes?.length ?? 0) > 0;
+                          const hasShots  = project.hasShots  && (project.shots?.length ?? 0) > 0;
+
+                          if (hasScenes || hasShots) {
+                            const currentScene = hasScenes
+                              ? project.scenes?.find((s: any) => s.id === project.currentSceneId)
+                              : null;
+                            const currentShot = hasShots
+                              ? project.shots?.find((s: any) => s.id === project.currentShotId)
+                              : null;
+
+                            const parts: string[] = [];
+                            if (currentScene) parts.push(currentScene.name || `Scene ${currentScene.number}`);
+                            if (currentShot)  parts.push(currentShot.name  || `Shot ${currentShot.number}`);
+
+                            if (parts.length > 0) {
+                              return (
+                                <p className="text-xs text-text-secondary truncate mb-3">
+                                  {parts.join(' / ')}
+                                </p>
+                              );
+                            }
+                          }
+
+                          if (project.description) {
+                            return (
+                              <p className="text-xs text-text-secondary truncate mb-3">
+                                {project.description}
+                              </p>
+                            );
+                          }
+
+                          return null;
+                        })()}
 
                         {!project._isOrphaned && (() => {
                           const hasClient = project.clientId && clientsById.get(project.clientId);
