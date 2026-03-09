@@ -1470,13 +1470,40 @@ async fn reveal_in_explorer(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn open_file(app_handle: tauri::AppHandle, file_path: String) -> Result<(), String> {
+async fn open_file(file_path: String) -> Result<(), String> {
     let p = std::path::Path::new(&file_path);
     if !p.exists() {
         return Err(format!("File does not exist: {}", file_path));
     }
-    tauri::api::shell::open(&app_handle.shell_scope(), file_path, None)
-        .map_err(|e| format!("Failed to open file: {}", e))
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new("explorer.exe")
+            .creation_flags(CREATE_NO_WINDOW)
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -3874,20 +3901,29 @@ struct OutputFile {
 
 // Regex for frame number extraction - compiled once at first use
 lazy_static! {
-    static ref FRAME_NUMBER_REGEX: regex::Regex = 
-        regex::Regex::new(r"^(.*)[\._]?(\d{3,})\.([a-zA-Z0-9]+)$").unwrap();
+    // Pattern 1: name[._]0001.exr — separator required, non-greedy prefix
+    static ref FRAME_SEP_REGEX: regex::Regex =
+        regex::Regex::new(r"^(.*?)[\._](\d{3,})\.([a-zA-Z0-9]+)$").unwrap();
+    // Pattern 2: 0001.exr — pure frame number, no name/separator
+    static ref FRAME_ONLY_REGEX: regex::Regex =
+        regex::Regex::new(r"^(\d{3,})\.([a-zA-Z0-9]+)$").unwrap();
 }
 
 // Helper function to extract frame number from filename
 fn extract_frame_number(filename: &str) -> Option<(String, u32, String)> {
-    // Match patterns like: name.001.exr, name_001.png, 001.exr, etc.
+    // Match patterns like: name.001.exr, name_001.png
     // Requires 3+ digits to avoid grouping files like "1.png", "2.png"
-    if let Some(caps) = FRAME_NUMBER_REGEX.captures(filename) {
+    if let Some(caps) = FRAME_SEP_REGEX.captures(filename) {
         let prefix = caps.get(1).map_or("", |m| m.as_str()).to_string();
-        let frame_str = caps.get(2)?.as_str();
-        let frame_num = frame_str.parse::<u32>().ok()?;
+        let frame_num = caps.get(2)?.as_str().parse::<u32>().ok()?;
         let ext = caps.get(3)?.as_str().to_string();
         return Some((prefix, frame_num, ext));
+    }
+    // Match pure frame number files: 001.exr, 0001.png
+    if let Some(caps) = FRAME_ONLY_REGEX.captures(filename) {
+        let frame_num = caps.get(1)?.as_str().parse::<u32>().ok()?;
+        let ext = caps.get(2)?.as_str().to_string();
+        return Some((String::new(), frame_num, ext));
     }
     None
 }

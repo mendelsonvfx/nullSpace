@@ -567,7 +567,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               {breadcrumbParts.join(' / ')}
             </div>
           ) : (project.description || isEditingDescription) ? (
-            <div className="group/desc inline-flex items-center gap-1.5 -mt-4">
+            <div className="group/desc flex items-center gap-1.5 -mt-3">
               {isEditingDescription ? (
                 <>
                   <input

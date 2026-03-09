@@ -652,15 +652,16 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                   placeholder="0"
                   className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent"
                 />
-                <select
+                <CustomSelect
                   value={formData.currency}
-                  onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value as 'USD' | 'RUB' | 'EUR' }))}
-                  className="bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent"
-                >
-                  <option value="USD">USD</option>
-                  <option value="RUB">RUB</option>
-                  <option value="EUR">EUR</option>
-                </select>
+                  onChange={(val) => setFormData(prev => ({ ...prev, currency: val as 'USD' | 'RUB' | 'EUR' }))}
+                  options={[
+                    { value: 'USD', label: 'USD' },
+                    { value: 'RUB', label: 'RUB' },
+                    { value: 'EUR', label: 'EUR' },
+                  ]}
+                  className="w-24"
+                />
               </div>
             </div>
           </div>

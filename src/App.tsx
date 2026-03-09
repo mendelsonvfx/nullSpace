@@ -1695,41 +1695,11 @@ function App() {
                               </span>
                             )}
                           </div>
-                        ) : (() => {
-                          const hasScenes = project.hasScenes && (project.scenes?.length ?? 0) > 0;
-                          const hasShots  = project.hasShots  && (project.shots?.length ?? 0) > 0;
-
-                          if (hasScenes || hasShots) {
-                            const currentScene = hasScenes
-                              ? project.scenes?.find((s: any) => s.id === project.currentSceneId)
-                              : null;
-                            const currentShot = hasShots
-                              ? project.shots?.find((s: any) => s.id === project.currentShotId)
-                              : null;
-
-                            const parts: string[] = [];
-                            if (currentScene) parts.push(currentScene.name || `Scene ${currentScene.number}`);
-                            if (currentShot)  parts.push(currentShot.name  || `Shot ${currentShot.number}`);
-
-                            if (parts.length > 0) {
-                              return (
-                                <p className="text-xs text-text-secondary truncate mb-3">
-                                  {parts.join(' / ')}
-                                </p>
-                              );
-                            }
-                          }
-
-                          if (project.description) {
-                            return (
-                              <p className="text-xs text-text-secondary truncate mb-3">
-                                {project.description}
-                              </p>
-                            );
-                          }
-
-                          return null;
-                        })()}
+                        ) : (
+                          <p className="text-xs text-text-secondary truncate mb-3">
+                            {project.description || ''}
+                          </p>
+                        )}
 
                         {!project._isOrphaned && (() => {
                           const hasClient = project.clientId && clientsById.get(project.clientId);

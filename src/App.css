@@ -204,7 +204,7 @@ input, textarea, [contenteditable],
 }
 
 button:hover .animate-settings-icon {
-  transform: rotate(60deg);
+  transform: rotate(45deg);
 }
 
 button:not(:hover) .animate-settings-icon {
@@ -254,10 +254,16 @@ button:not(:hover) .animate-settings-icon {
   app-region: no-drag;
 }
 
-/* Windows 11 Style Rounded Corners - only when not fullscreen */
+/* Windows 11 Style Rounded Corners */
 html {
   overflow: hidden;
-  border-radius: 8px;
+  /* No border-radius here — body/root handle the visual clip.
+     background: #141414 covers the entire WebView2 surface so that when
+     WebView2 reallocates its render surface (e.g. on unmaximize-drag) and
+     briefly fills it with white, CSS immediately paints those corner pixels
+     dark instead of leaving them transparent-over-white.
+     DWM DWMWCP_ROUND still applies the true OS-level transparent clip. */
+  background: #141414;
 }
 
 body {
@@ -272,48 +278,14 @@ body {
   overflow: hidden;
 }
 
-/* Fullscreen mode - cover rounded corners with background-colored overlays */
-body.fullscreen::before,
-body.fullscreen::after,
-html.fullscreen::before,
-html.fullscreen::after {
-  content: '';
-  position: fixed;
-  background: var(--bg-sidebar);
-  z-index: -1;
-  pointer-events: none;
+/* Fullscreen mode — remove rounded clips so content fills the screen.
+   #root does not receive the fullscreen class, so use a descendant selector. */
+body.fullscreen {
+  border-radius: 0;
 }
 
-/* Top edge */
-body.fullscreen::before {
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 10px;
-}
-
-/* Bottom edge */
-body.fullscreen::after {
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 10px;
-}
-
-/* Left edge */
-html.fullscreen::before {
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 10px;
-}
-
-/* Right edge */
-html.fullscreen::after {
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: 10px;
+body.fullscreen #root {
+  border-radius: 0;
 }
 
 
