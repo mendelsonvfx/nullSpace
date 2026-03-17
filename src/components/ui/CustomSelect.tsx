@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
@@ -6,6 +7,7 @@ export interface CustomSelectOption {
   value: string;
   label: string;
   color?: string;
+  icon?: React.ReactNode;
 }
 
 interface CustomSelectProps {
@@ -16,6 +18,7 @@ interface CustomSelectProps {
   className?: string;
   disabled?: boolean;
   compact?: boolean;
+  prefix?: string;
 }
 
 export function CustomSelect({
@@ -26,6 +29,7 @@ export function CustomSelect({
   className = '',
   disabled = false,
   compact = false,
+  prefix,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
@@ -100,6 +104,7 @@ export function CustomSelect({
                 ? 'text-text-muted group-hover:text-text-primary transition-colors duration-150 truncate'
                 : 'text-text-muted truncate'
           }>
+            {prefix && <span className="text-text-muted mr-1">{prefix}</span>}
             {selectedOption ? selectedOption.label : placeholder}
           </span>
         </span>
@@ -111,11 +116,12 @@ export function CustomSelect({
       {isOpen && createPortal(
         <div
           ref={dropdownRef}
-          className="fixed z-[9999] flex flex-col gap-0.5 p-1.5 bg-card-bg backdrop-blur-[32px] border border-border-secondary rounded-button shadow-2xl animate-dropdown"
+          className="fixed z-[9999] flex flex-col gap-0.5 p-1.5 bg-card-bg/80 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl animate-context-menu"
           style={{
             top: dropdownPos.top,
             left: dropdownPos.left,
-            width: dropdownPos.width,
+            minWidth: dropdownPos.width,
+            width: 'max-content',
             maxHeight: 'calc(5 * 36px + 12px)',
             overflowY: 'auto',
           }}
@@ -129,7 +135,7 @@ export function CustomSelect({
                 setIsOpen(false);
               }}
               className={[
-                'w-full px-3 py-1.5 text-left text-sm rounded-md transition-colors duration-100 cursor-pointer select-none flex-shrink-0 flex items-center gap-2',
+                `w-full text-left rounded-md transition-colors duration-100 cursor-pointer select-none flex-shrink-0 flex items-center gap-1.5 ${compact ? 'px-2 py-1.5 text-sm' : 'px-3 py-1.5 text-sm'}`,
                 option.value === value
                   ? 'bg-hover-bg text-text-primary'
                   : 'text-text-primary hover:bg-hover-bg',
@@ -141,6 +147,7 @@ export function CustomSelect({
                   style={{ backgroundColor: option.color }}
                 />
               )}
+              {option.icon && <span className="flex-shrink-0">{option.icon}</span>}
               {option.label}
             </button>
           ))}

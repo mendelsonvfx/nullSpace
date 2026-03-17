@@ -79,7 +79,7 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-card-bg border border-border-secondary rounded-card w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl animate-modal"
+        className="bg-card-bg border border-border-secondary rounded-card w-full max-w-2xl max-h-[80vh] min-h-[400px] flex flex-col shadow-xl animate-modal"
         data-feedback-panel
         data-modal-window
       >

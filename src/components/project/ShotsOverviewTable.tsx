@@ -48,24 +48,23 @@ export function ShotsOverviewTable({ projectId, projectPath, currentScene: _curr
 
   return (
     <div className="mb-7">
-      <h3 className="text-sm font-medium text-text-secondary mb-3.5">
-        Shots overview
-      </h3>
-
-      <div className="bg-card-bg border border-border-primary rounded-med overflow-hidden">
+      <div className="bg-card-bg border border-border-primary rounded-xl p-4">
+        <h3 className="text-sm font-medium text-text-secondary mb-5">
+          Shots overview
+        </h3>
         {/* Table Header */}
-        <div className="bg-zinc-800/50 px-4 py-2.5 border-b border-zinc-700/50 grid grid-cols-[140px_120px_150px_1fr_120px] gap-4 text-xs font-medium text-text-secondary">
-          <div className="text-center">Preview</div>
-          <div className="text-left">Number</div>
-          <div className="text-left">Tasks</div>
-          <div className="text-left">Notes</div>
-          <div className="text-center">Status</div>
+        <div className="grid grid-cols-[140px_120px_120px_1fr_120px] gap-4 pb-3 px-4 border-b border-border-primary">
+          <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Preview</div>
+          <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Number</div>
+          <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Tasks</div>
+          <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Notes</div>
+          <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Status</div>
         </div>
 
         {/* Table Body */}
-        <div className="divide-y divide-zinc-800/50">
+        <div className="flex flex-col gap-2 mt-3">
           {sortedShots.length === 0 ? (
-            <div className="px-4 py-8 text-center text-text-muted text-sm">
+            <div className="py-8 text-center text-text-muted text-sm">
               No shots in this scene
             </div>
           ) : (
@@ -93,33 +92,32 @@ interface ShotRowProps {
 }
 
 function ShotRow({ shot, projectId: _projectId, projectPath, onClick }: ShotRowProps) {
-  // Use useThumbnail hook with projectPath and preview
   const previewSrc = useThumbnail(projectPath, shot.preview);
 
-  // Get status info
-  const getStatusInfo = () => {
+  const getStatusBadge = () => {
     if (shot.completed) {
-      return {
-        icon: <IconCircleCheckFilled size={16} className="text-green-500" />,
-        text: 'Completed',
-        color: 'text-green-500'
-      };
+      return (
+        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 text-[10px] font-semibold w-fit">
+          <IconCircleCheckFilled size={10} />
+          Completed
+        </div>
+      );
     }
     if (shot.wip) {
-      return {
-        icon: <IconClock size={16} className="text-yellow-500" />,
-        text: 'In Progress',
-        color: 'text-yellow-500'
-      };
+      return (
+        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400 text-[10px] font-semibold w-fit">
+          <IconClock size={10} />
+          In Progress
+        </div>
+      );
     }
-    return {
-      icon: <IconMoon size={16} className="text-zinc-500" />,
-      text: 'Not Started',
-      color: 'text-zinc-500'
-    };
+    return (
+      <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-400 text-[10px] font-semibold w-fit">
+        <IconMoon size={10} />
+        Not Started
+      </div>
+    );
   };
-
-  const status = getStatusInfo();
 
   // Get last 3 incomplete todos (safe check)
   const incompleteTodos = (shot.todos && Array.isArray(shot.todos))
@@ -135,10 +133,10 @@ function ShotRow({ shot, projectId: _projectId, projectPath, onClick }: ShotRowP
     : '';
 
   return (
-    <div className="grid grid-cols-[140px_120px_150px_1fr_120px] gap-4 px-4 py-3 hover:bg-hover-bg transition-colors">
-      {/* Preview - more horizontal, centered */}
+    <div className="grid grid-cols-[140px_120px_120px_1fr_120px] gap-4 px-4 py-3.5 bg-[#0f0f0f] border border-border-primary rounded-xl hover:border-border-secondary transition-colors cursor-pointer" onClick={onClick}>
+      {/* Preview */}
       <div className="flex items-center justify-center">
-        <div className="w-32 h-20 rounded-button overflow-hidden bg-zinc-900 flex items-center justify-center border border-zinc-800">
+        <div className="w-32 h-20 rounded-lg overflow-hidden bg-zinc-900 flex items-center justify-center border border-zinc-800">
           {previewSrc ? (
             <img
               src={previewSrc}
@@ -152,17 +150,14 @@ function ShotRow({ shot, projectId: _projectId, projectPath, onClick }: ShotRowP
         </div>
       </div>
 
-      {/* Number - Clickable, left aligned */}
+      {/* Number */}
       <div className="flex items-center justify-start">
-        <button
-          onClick={onClick}
-          className="text-sm font-medium text-text-primary hover:text-accent transition-colors"
-        >
+        <span className="text-sm font-semibold text-text-primary">
           {shot.name}
-        </button>
+        </span>
       </div>
 
-      {/* Tasks - left aligned */}
+      {/* Tasks */}
       <div className="flex flex-col justify-center gap-1">
         {incompleteTodos.length > 0 ? (
           incompleteTodos.map((todo) => (
@@ -178,39 +173,34 @@ function ShotRow({ shot, projectId: _projectId, projectPath, onClick }: ShotRowP
         )}
       </div>
 
-      {/* Notes - left aligned, full height and width */}
-      <div className="flex items-start justify-start h-full">
-        <div className="w-full h-full px-3 py-2 bg-zinc-900/50 rounded-button border border-zinc-800 text-xs text-text-secondary overflow-auto cursor-default">
-          {allNotesText ? (
-            <div className="prose prose-invert prose-xs max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-              <ReactMarkdown
-                components={{
-                  p: ({ children }) => <p className="mb-1 last:mb-0 text-xs">{children}</p>,
-                  ul: ({ children }) => <ul className="list-disc list-inside mb-1 last:mb-0 text-xs">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal list-inside mb-1 last:mb-0 text-xs">{children}</ol>,
-                  li: ({ children }) => <li className="mb-0.5 text-xs">{children}</li>,
-                  h1: ({ children }) => <h1 className="text-sm font-bold mb-1">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-sm font-semibold mb-1">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-xs font-semibold mb-1">{children}</h3>,
-                  code: ({ children }) => <code className="bg-zinc-800 px-1 rounded text-xs">{children}</code>,
-                  pre: ({ children }) => <pre className="bg-zinc-800 p-2 rounded mb-1 text-xs overflow-x-auto">{children}</pre>,
-                }}
-              >
-                {allNotesText}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <span className="text-xs text-text-muted">No notes</span>
-          )}
-        </div>
+      {/* Notes */}
+      <div className="flex items-center justify-start">
+        {allNotesText ? (
+          <div className="prose prose-invert prose-xs max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 text-xs text-text-secondary">
+            <ReactMarkdown
+              components={{
+                p: ({ children }) => <p className="mb-1 last:mb-0 text-xs">{children}</p>,
+                ul: ({ children }) => <ul className="list-disc list-inside mb-1 last:mb-0 text-xs">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal list-inside mb-1 last:mb-0 text-xs">{children}</ol>,
+                li: ({ children }) => <li className="mb-0.5 text-xs">{children}</li>,
+                h1: ({ children }) => <h1 className="text-sm font-bold mb-1">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-sm font-semibold mb-1">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-xs font-semibold mb-1">{children}</h3>,
+                code: ({ children }) => <code className="bg-zinc-800 px-1 rounded text-xs">{children}</code>,
+                pre: ({ children }) => <pre className="bg-zinc-800 p-2 rounded mb-1 text-xs overflow-x-auto">{children}</pre>,
+              }}
+            >
+              {allNotesText}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <span className="text-xs text-text-muted">No notes</span>
+        )}
       </div>
 
-      {/* Status - centered */}
-      <div className="flex items-center justify-center gap-2">
-        {status.icon}
-        <span className={`text-xs ${status.color}`}>
-          {status.text}
-        </span>
+      {/* Status */}
+      <div className="flex items-center justify-start">
+        {getStatusBadge()}
       </div>
     </div>
   );

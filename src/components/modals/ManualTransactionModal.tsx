@@ -4,6 +4,7 @@ import { X, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Project } from '../../types/project';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import SimpleBar from 'simplebar-react';
+import { CustomSelect } from '../ui/CustomSelect';
 
 interface ManualTransactionModalProps {
   isOpen: boolean;
@@ -167,7 +168,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
       onMouseUp={handleBackdropMouseUp}
     >
       <div
-        className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
+        className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] min-h-[520px] overflow-hidden flex flex-col transition-all duration-200 ${
           isAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
         }`}
         onMouseDown={handleModalMouseDown}
@@ -197,21 +198,17 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                 <label className="block text-xs text-text-muted mb-1.5 font-medium">
                   Project *
                 </label>
-                <select
-                  className="w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-accent focus:outline-none transition-colors"
+                <CustomSelect
                   value={selectedProjectId}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                >
-                  <option value="" disabled hidden>Select a Project</option>
-                  {projects
-                    .filter(project => project.status === 'active')
-                    .map(project => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  <option value="other">— Other Project —</option>
-                </select>
+                  onChange={setSelectedProjectId}
+                  placeholder="Select a Project"
+                  options={[
+                    ...projects
+                      .filter(project => project.status === 'active')
+                      .map(project => ({ value: project.id, label: project.name })),
+                    { value: 'other', label: '— Other Project —' },
+                  ]}
+                />
               </div>
 
               {/* Date Picker */}
@@ -221,7 +218,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                 </label>
                 <input
                   type="date"
-                  className="w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-accent focus:outline-none transition-colors [color-scheme:dark]"
+                  className="w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-border-secondary focus:outline-none transition-colors [color-scheme:dark]"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                   max={new Date().toISOString().split('T')[0]} // Can't add future transactions
@@ -239,19 +236,20 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                     min="0"
                     step="0.01"
                     placeholder="0.00"
-                    className="flex-1 bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-accent focus:outline-none transition-colors"
+                    className="flex-1 bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-border-secondary focus:outline-none transition-colors"
                     value={amount || ''}
                     onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
                   />
-                  <select
-                    className="w-24 bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-accent focus:outline-none transition-colors"
+                  <CustomSelect
                     value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                  >
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="RUB">RUB</option>
-                  </select>
+                    onChange={setCurrency}
+                    options={[
+                      { value: 'USD', label: 'USD' },
+                      { value: 'EUR', label: 'EUR' },
+                      { value: 'RUB', label: 'RUB' },
+                    ]}
+                    className="w-24"
+                  />
                 </div>
               </div>
 
@@ -261,7 +259,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                   Notes (optional)
                 </label>
                 <textarea
-                  className="w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-accent focus:outline-none transition-colors resize-none"
+                  className="w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm text-white border border-border-primary focus:border-border-secondary focus:outline-none transition-colors resize-none"
                   rows={3}
                   placeholder="Add any additional details..."
                   value={notes}

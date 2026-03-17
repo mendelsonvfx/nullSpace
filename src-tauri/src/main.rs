@@ -2260,26 +2260,25 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
     // Use sanitized scene name instead of SC{number} to match folder creation
     let scene_code = file_naming::sanitize_folder_name(&scene_name);
 
-    let software_configs = vec![
-        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
+    // Delete entire scene folder from each software directory
+    let all_software_folders = vec![
+        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
+        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
     ];
 
-    for (software, folders) in software_configs {
-        let software_path = project_dir.join(software);
-
-        if !software_path.exists() {
-            continue;
+    for software in all_software_folders {
+        let scene_folder = project_dir.join(software).join(&scene_code);
+        if scene_folder.exists() {
+            let _ = fs::remove_dir_all(&scene_folder);
+            deleted_count += 1;
         }
+    }
 
-        for folder in folders {
-            let scene_folder = software_path.join(folder).join(&scene_code);
-
-            if scene_folder.exists() {
-                let _ = fs::remove_dir_all(&scene_folder);
-            }
-        }
+    // Delete scene folder from _GlobalCompose
+    let global_compose_scene = project_dir.join("_GlobalCompose").join(&scene_code);
+    if global_compose_scene.exists() {
+        let _ = fs::remove_dir_all(&global_compose_scene);
+        deleted_count += 1;
     }
 
     Ok(deleted_count)
@@ -3907,6 +3906,9 @@ lazy_static! {
     // Pattern 2: 0001.exr — pure frame number, no name/separator
     static ref FRAME_ONLY_REGEX: regex::Regex =
         regex::Regex::new(r"^(\d{3,})\.([a-zA-Z0-9]+)$").unwrap();
+    // Pattern 3: name0001.ext — digits directly attached, no separator
+    static ref FRAME_NO_SEP_REGEX: regex::Regex =
+        regex::Regex::new(r"^(.*[^0-9._])(\d{3,})\.([a-zA-Z0-9]+)$").unwrap();
 }
 
 // Helper function to extract frame number from filename
@@ -3924,6 +3926,13 @@ fn extract_frame_number(filename: &str) -> Option<(String, u32, String)> {
         let frame_num = caps.get(1)?.as_str().parse::<u32>().ok()?;
         let ext = caps.get(2)?.as_str().to_string();
         return Some((String::new(), frame_num, ext));
+    }
+    // Match no-separator pattern: untitled0185.jpg → prefix="untitled", frame=185
+    if let Some(caps) = FRAME_NO_SEP_REGEX.captures(filename) {
+        let prefix = caps.get(1).map_or("", |m| m.as_str()).to_string();
+        let frame_num = caps.get(2)?.as_str().parse::<u32>().ok()?;
+        let ext = caps.get(3)?.as_str().to_string();
+        return Some((prefix, frame_num, ext));
     }
     None
 }

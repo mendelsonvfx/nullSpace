@@ -900,7 +900,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
                 >
                   <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                    {todo.completed && <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />}
+                    {todo.completed
+                      ? <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />
+                      : <div className="w-1 h-1 rounded-full bg-text-primary" />
+                    }
                   </div>
                   <span className={`flex-1 text-[13px] transition-all duration-200 ${
                     todo.completed ? 'text-text-muted' : 'text-text-primary'
@@ -959,12 +962,11 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           }}
                           className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
                         >
-                          <div className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all duration-200 ${
-                            todo.completed
-                              ? 'bg-zinc-500 border-zinc-500'
-                              : 'border-zinc-600 group-hover:border-zinc-400'
-                          }`}>
-                            {todo.completed && <IconCheck stroke={3} className="w-2.5 h-2.5 text-white" />}
+                          <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                            {todo.completed
+                              ? <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />
+                              : <div className="w-1 h-1 rounded-full bg-text-primary" />
+                            }
                           </div>
                           <span className={`flex-1 text-[13px] transition-all duration-200 ${
                             todo.completed ? 'text-text-muted' : 'text-text-primary'
@@ -1152,7 +1154,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
                 >
                   <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                    {todo.completed && <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />}
+                    {todo.completed
+                      ? <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />
+                      : <div className="w-1 h-1 rounded-full bg-text-primary" />
+                    }
                   </div>
                   <span className={`flex-1 text-[13px] transition-all duration-200 ${
                     todo.completed ? 'text-text-muted' : 'text-text-primary'
@@ -1211,12 +1216,11 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           }}
                           className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
                         >
-                          <div className={`w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all duration-200 ${
-                            todo.completed
-                              ? 'bg-zinc-500 border-zinc-500'
-                              : 'border-zinc-600 group-hover:border-zinc-400'
-                          }`}>
-                            {todo.completed && <IconCheck stroke={3} className="w-2.5 h-2.5 text-white" />}
+                          <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                            {todo.completed
+                              ? <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />
+                              : <div className="w-1 h-1 rounded-full bg-text-primary" />
+                            }
                           </div>
                           <span className={`flex-1 text-[13px] transition-all duration-200 ${
                             todo.completed ? 'text-text-muted' : 'text-text-primary'
@@ -1332,7 +1336,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           }}
         >
           <div
-            className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-md mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
+            className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-md mx-4 max-h-[85vh] min-h-[400px] overflow-hidden flex flex-col transition-all duration-200 ${
               isPaymentModalAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
             }`}
             onClick={(e) => e.stopPropagation()}
@@ -1450,7 +1454,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
           }}
         >
-          <div className="bg-card-bg rounded-card max-w-2xl w-full max-h-[90vh] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-card-bg border border-border-secondary rounded-card max-w-2xl w-full max-h-[90vh] min-h-[780px] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b border-border-secondary flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-semibold">Project Settings</h2>
               <button onClick={() => setShowProjectSettings(false)} className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors">

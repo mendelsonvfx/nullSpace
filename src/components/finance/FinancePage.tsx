@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import * as React from 'react';
 import { Plus, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import { IconClockHour3, IconCurrencyDollar, IconSortAscendingLetters, IconUser } from '@tabler/icons-react';
 import { CustomSelect } from '../ui/CustomSelect';
 import { useProjectStore } from '../../store/projectStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
@@ -480,7 +481,9 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
       value: displayAmount,
       color: getProjectColor(project) // Use saved project color
     };
-  }).filter(item => item.value > 0);
+  }).filter(item => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
 
   // Top 3 clients
   const revenueByClient: Record<string, { amount: number; projectCount: number; client: any }> = {};
@@ -529,7 +532,9 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     name: data.client.name,
     value: data.amount,
     color: data.client.color || '#ffffff'
-  })).filter(item => item.value > 0);
+  })).filter(item => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
 
   const renderEnd = performance.now();
   console.log('[FinancePage] RENDER END', { duration: (renderEnd - renderStart).toFixed(2) + 'ms' });
@@ -717,12 +722,13 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                         value={sortBy}
                         onChange={(v) => setSortBy(v as typeof sortBy)}
                         options={[
-                          { value: 'date', label: 'Date' },
-                          { value: 'amount', label: 'Cost' },
-                          { value: 'name', label: 'Name' },
-                          { value: 'client', label: 'Client' },
+                          { value: 'date', label: 'Date', icon: <IconClockHour3 size={14} /> },
+                          { value: 'amount', label: 'Cost', icon: <IconCurrencyDollar size={14} /> },
+                          { value: 'name', label: 'Name', icon: <IconSortAscendingLetters size={14} /> },
+                          { value: 'client', label: 'Client', icon: <IconUser size={14} /> },
                         ]}
-                        className="w-[110px]"
+                        className="w-[130px]"
+                        prefix="Filter:"
                         compact
                       />
                     </div>

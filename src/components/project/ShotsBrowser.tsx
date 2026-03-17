@@ -1844,11 +1844,11 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
 
             {/* Sort dropdown menu */}
             {showSortMenu && (
-              <div className="absolute top-full right-0 mt-1 bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-lg shadow-xl p-1 z-50 min-w-[140px] space-y-0.5">
+              <div className="absolute top-full right-0 mt-1 bg-card-bg/80 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl p-1.5 z-50 min-w-[140px] flex flex-col gap-0.5 animate-context-menu">
                 <button
                   onClick={() => { setSortBy('number-asc'); setShowSortMenu(false); }}
-                  className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 rounded-md transition-colors ${
-                    sortBy === 'number-asc' ? 'bg-white/10 text-text-primary' : 'hover:bg-white/10 text-text-primary'
+                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${
+                    sortBy === 'number-asc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'
                   }`}
                 >
                   <IconSortAscendingNumbers size={14} />
@@ -1856,8 +1856,8 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                 </button>
                 <button
                   onClick={() => { setSortBy('created-asc'); setShowSortMenu(false); }}
-                  className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 rounded-md transition-colors ${
-                    sortBy === 'created-asc' ? 'bg-white/10 text-text-primary' : 'hover:bg-white/10 text-text-primary'
+                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${
+                    sortBy === 'created-asc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'
                   }`}
                 >
                   <IconClockHour3 size={14} />

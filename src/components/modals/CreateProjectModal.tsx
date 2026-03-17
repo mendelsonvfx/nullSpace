@@ -227,7 +227,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
         delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
       }}
     >
-      <div className="bg-card-bg border border-border-secondary rounded-card max-w-2xl w-full max-h-[90vh] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()} data-modal-window>
+      <div className="bg-card-bg border border-border-secondary rounded-card max-w-2xl w-full max-h-[90vh] min-h-[520px] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()} data-modal-window>
         <div className="p-4 border-b border-border-secondary flex items-center justify-between flex-shrink-0">
           <h2 className="text-lg font-semibold">Create New Project</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors">

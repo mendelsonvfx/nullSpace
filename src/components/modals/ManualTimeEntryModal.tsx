@@ -70,7 +70,7 @@ export const ManualTimeEntryModal: React.FC<ManualTimeEntryModalProps> = ({
       onClick={onClose}
     >
       <div
-        className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
+        className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] min-h-[520px] overflow-hidden flex flex-col transition-all duration-200 ${
           isAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
         }`}
         onClick={handleModalClick}

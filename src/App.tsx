@@ -1493,7 +1493,7 @@ function App() {
                   <IconFilter stroke={1.5} className="w-3.5 h-3.5" />
                 </button>
                 {showFilterMenu && (
-                  <div className="absolute top-full mt-1 right-0 bg-card-bg/80 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl p-1.5 z-[100] min-w-[180px] animate-context-menu">
+                  <div className="absolute top-full mt-1 right-0 bg-card-bg/80 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl p-1.5 z-[100] min-w-[150px] animate-context-menu space-y-0.5">
                     <button
                       onClick={() => {
                         setSortBy('createdAt');
@@ -1503,7 +1503,7 @@ function App() {
                         }`}
                     >
                       <IconClockHour3 size={14} />
-                      By Creation date
+                      Creation date
                     </button>
                     <button
                       onClick={() => {
@@ -1514,7 +1514,7 @@ function App() {
                         }`}
                     >
                       <IconCalendarEvent size={14} />
-                      By Deadline
+                      Deadline
                     </button>
                     <button
                       onClick={() => {
@@ -1525,7 +1525,7 @@ function App() {
                         }`}
                     >
                       <IconSortAscendingLetters size={14} />
-                      By Name
+                      Name
                     </button>
                     <button
                       onClick={() => {
@@ -1536,7 +1536,7 @@ function App() {
                         }`}
                     >
                       <IconCurrencyDollar size={14} />
-                      By Cost
+                      Cost
                     </button>
                     <div className="h-px bg-border-secondary mx-1 my-1" />
                     <div
@@ -1556,7 +1556,7 @@ function App() {
                       <button className="w-full px-3 py-1.5 text-left text-sm rounded-md transition-colors hover:bg-hover-bg text-text-primary flex items-center justify-between">
                         <span className="flex items-center gap-2">
                           <IconUser size={14} />
-                          By Client
+                          Client
                         </span>
                         <IconChevronRight stroke={1.5} className="w-3 h-3 text-text-muted" />
                       </button>

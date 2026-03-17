@@ -1,10 +1,13 @@
 // src/components/modals/SettingsPanel.tsx
 import { useProjectStore } from '../../store/projectStore';
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw, Download, Upload } from 'lucide-react';
 import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../../utils/tauri';
+import { SoftwareIcon } from '../SoftwareIcon';
 import type { SoftwareName } from '../../types/project';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
+import { CustomSelect } from '../ui/CustomSelect';
+import { ColorPickerPopup } from '../ui/ColorPickerPopup';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useModalBlur } from '../../hooks/useModalBlur';
@@ -107,7 +110,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
-      <div data-settings-panel className="bg-card-bg rounded-card max-w-4xl w-full h-[80vh] flex overflow-hidden animate-modal" onClick={(e) => e.stopPropagation()}>
+      <div data-settings-panel className="bg-card-bg border border-border-secondary rounded-card max-w-4xl w-full h-[80vh] min-h-[580px] flex overflow-hidden animate-modal" onClick={(e) => e.stopPropagation()}>
         {/* Sidebar */}
         <div className="w-48 border-r border-border-secondary p-4 flex flex-col">
           <div className="flex items-center justify-between mb-6">
@@ -180,7 +183,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
           {/* Version info at bottom */}
           <div className="mt-4">
             <div className="text-xs text-text-muted text-center">
-              nullSpace v{appVersion || '0.6.0'}-beta
+              nullSpace v{appVersion || '0.6.0'}
             </div>
           </div>
         </div>
@@ -259,42 +262,31 @@ function GeneralSettings() {
     }
   };
 
-  const handleSave = () => {
-    setDefaultProjectsPath(projectsDir);
-    setTimeout(() => {
-      loadProjects();
-    }, 100);
-  };
-
   return (
     <div className="space-y-6">
       {/* Projects Directory */}
       <div>
-        <label className="block text-sm font-medium mb-2">Projects Directory</label>
-        <p className="text-sm text-text-muted mb-3">
-          Default location where projects are stored and loaded from
-        </p>
+        <div className="mb-3">
+          <label className="block font-medium mb-1">Projects Directory</label>
+          <p className="text-sm text-text-muted">
+            Default location where projects are stored and loaded from
+          </p>
+        </div>
         <div className="flex gap-2">
           <input
             type="text"
             value={projectsDir}
             onChange={(e) => setProjectsDir(e.target.value)}
-            className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-4 py-2 focus:outline-none focus:border-accent"
+            className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 min-h-[38px] text-sm focus:outline-none focus:border-accent"
           />
           <button
             onClick={handleBrowseDirectory}
-            className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg rounded-button transition-colors flex items-center gap-2 animate-button"
+            className="px-3 py-2 min-h-[38px] text-sm bg-sidebar-bg border border-border-primary hover:border-border-secondary rounded-button transition-colors flex items-center gap-2 animate-button"
           >
             <FolderOpen className="w-4 h-4" />
             Browse
           </button>
         </div>
-        <button
-          onClick={handleSave}
-          className="mt-3 px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium animate-button"
-        >
-          Apply & Reload Projects
-        </button>
       </div>
 
       {/* Time Tracking Feature */}
@@ -500,7 +492,7 @@ function DataSettings() {
           <button
             onClick={handleClearCache}
             disabled={cacheSize === 0}
-            className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors flex items-center gap-2 text-sm font-medium animate-button"
+            className="px-3 py-1.5 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors flex items-center gap-2 text-sm font-medium animate-button"
           >
             <RefreshCw className="w-4 h-4" />
             Clear Cache ({cacheSize} thumbnails)
@@ -725,13 +717,13 @@ function SoftwareSettings({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-text-muted">
+        <p className="text-xs text-text-muted">
           Configure paths to installed 3D software applications
         </p>
         <button
           onClick={handleAutoDetect}
           disabled={isDetecting}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:bg-accent/50 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-medium animate-button flex items-center gap-2"
+          className="px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:bg-accent/50 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-medium animate-button flex items-center gap-2"
         >
           {isDetecting && <RefreshCw className="w-4 h-4 animate-spin" />}
           {isDetecting ? 'Detecting...' : 'Auto-Detect'}
@@ -743,9 +735,10 @@ function SoftwareSettings({
           <div key={sw.name} className="bg-sidebar-bg rounded-button p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
+                <SoftwareIcon name={sw.name} className="w-5 h-5" />
                 <h4 className="font-medium">{sw.displayName}</h4>
                 {isValidExecutablePath(sw.path) && (
-                  <Check className="w-4 h-4 text-green-500" />
+                  <Check className="w-3 h-3 text-green-500" />
                 )}
               </div>
             </div>
@@ -790,8 +783,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     return saved || '#9103c6';
   });
   const [customColor, setCustomColor] = useState('#9103C6');
+  const pendingColorRef = useRef('#9103C6');
   const [showCustomColorPicker, setShowCustomColorPicker] = useState(false);
-  const colorInputRef = useRef<HTMLInputElement>(null);
+  const pickerTriggerRef = useRef<HTMLButtonElement>(null);
+  const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
   const [animationsEnabled, setAnimationsEnabled] = useState(() => {
     const saved = localStorage.getItem('animationsEnabled');
     return saved !== null ? JSON.parse(saved) : true;
@@ -858,16 +853,19 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
   };
 
   const handleCustomColorAdd = () => {
-    if (customColor && /^#[0-9A-F]{6}$/i.test(customColor)) {
+    const color = pendingColorRef.current;
+    if (color && /^#[0-9A-F]{6}$/i.test(color)) {
       // Добавить кастомный цвет в список, если его там еще нет
-      if (!customColors.includes(customColor.toUpperCase())) {
-        const updatedColors = [...customColors, customColor.toUpperCase()];
+      if (!customColors.includes(color.toUpperCase())) {
+        const updatedColors = [...customColors, color.toUpperCase()];
         setCustomColors(updatedColors);
         localStorage.setItem('customAccentColors', JSON.stringify(updatedColors));
       }
-      handleColorChange(customColor);
+      handleColorChange(color);
       setShowCustomColorPicker(false);
       setCustomColor('#9103C6');
+      pendingColorRef.current = '#9103C6';
+      if (pickerTriggerRef.current) pickerTriggerRef.current.style.backgroundColor = '';
     }
   };
 
@@ -1000,64 +998,56 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
                   e.stopPropagation();
                   handleRemoveCustomColor(color);
                 }}
-                className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Remove custom color"
               >
-                ×
+                <X size={8} strokeWidth={2.5} />
               </button>
             </div>
           ))}
-          {!showCustomColorPicker ? (
-            <button
-              onClick={() => {
-                setShowCustomColorPicker(true);
-                setTimeout(() => colorInputRef.current?.click(), 0);
-              }}
-              className="w-12 h-12 rounded-lg border-2 border-dashed border-border-primary hover:border-border-hover flex items-center justify-center text-text-muted hover:text-text-muted transition-colors"
-              title="Add custom color"
-            >
-              +
-            </button>
-          ) : (
-            <div className="flex gap-2 items-center">
-              <input
-                ref={colorInputRef}
-                type="color"
-                value={customColor}
-                onChange={(e) => setCustomColor(e.target.value.toUpperCase())}
-                className="w-12 h-12 rounded-lg cursor-pointer bg-transparent"
-                style={{
-                  colorScheme: 'dark'
-                }}
-                title="Pick a color"
-              />
-              <input
-                type="text"
-                value={customColor}
-                onChange={(e) => setCustomColor(e.target.value.toUpperCase())}
-                placeholder="#9103C6"
-                className="w-24 bg-sidebar-bg border border-border-primary rounded px-2 py-1 text-sm focus:outline-none focus:border-accent"
-                maxLength={7}
-              />
-              <button
-                onClick={handleCustomColorAdd}
-                className="px-3 py-1 bg-accent hover:bg-accent-hover rounded text-sm transition-colors"
-              >
-                Add
-              </button>
-              <button
-                onClick={() => {
-                  setShowCustomColorPicker(false);
-                  setCustomColor('#9103C6');
-                }}
-                className="px-3 py-1 bg-border-secondary hover:bg-border-secondary rounded text-sm transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
+          <button
+            ref={pickerTriggerRef}
+            onClick={() => {
+              if (!showCustomColorPicker && pickerTriggerRef.current) {
+                const rect = pickerTriggerRef.current.getBoundingClientRect();
+                const popupWidth = 224;
+                const popupHeight = 390;
+                const left = rect.left + popupWidth > window.innerWidth ? window.innerWidth - popupWidth - 8 : rect.left;
+                const top = rect.bottom + 8 + popupHeight > window.innerHeight ? rect.top - popupHeight - 8 : rect.bottom - 8;
+                setPickerPos({ top, left });
+                pendingColorRef.current = customColor;
+                pickerTriggerRef.current.style.backgroundColor = customColor;
+              }
+              setShowCustomColorPicker(v => !v);
+            }}
+            className={`w-12 h-12 rounded-lg border-2 flex items-center justify-center ${
+              showCustomColorPicker ? 'border-white' : 'border-dashed border-border-primary hover:border-border-hover transition-colors'
+            }`}
+            title="Add custom color"
+          >
+            {!showCustomColorPicker && <span className="text-text-muted">+</span>}
+          </button>
         </div>
+
       </div>
+
+      {/* Custom color picker popup (fixed, so not clipped by overflow-hidden on modal) */}
+      <ColorPickerPopup
+        isOpen={showCustomColorPicker}
+        color={customColor}
+        position={pickerPos}
+        triggerRef={pickerTriggerRef as React.RefObject<HTMLElement>}
+        onChange={(hex) => {
+          pendingColorRef.current = hex;
+          if (pickerTriggerRef.current) pickerTriggerRef.current.style.backgroundColor = hex;
+        }}
+        onApply={handleCustomColorAdd}
+        onCancel={() => {
+          setShowCustomColorPicker(false);
+          pendingColorRef.current = '#9103C6';
+          if (pickerTriggerRef.current) pickerTriggerRef.current.style.backgroundColor = '';
+        }}
+      />
 
       {/* Animations */}
       <div className="flex items-center justify-between">
@@ -1216,11 +1206,13 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
 
         {/* Monitor Selection (only shown if auto-maximize is enabled) */}
         {autoMaximizeOnLaunch && monitors.length > 0 && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">Preferred Monitor</label>
-            <p className="text-sm text-text-muted mb-3">
-              Select monitor for auto-maximized window
-            </p>
+          <div className="mb-3">
+            <div className="mb-3">
+              <label className="block font-medium mb-1">Preferred Monitor</label>
+              <p className="text-sm text-text-muted">
+                Select monitor for auto-maximized window
+              </p>
+            </div>
             <select
               value={preferredMonitor}
               onChange={(e) => {
@@ -1307,6 +1299,13 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
   const [showAddClient, setShowAddClient] = useState(false);
   const [editingClient, setEditingClient] = useState<string | null>(null);
   const [newClientName, setNewClientName] = useState('');
+  const [showClientPicker, setShowClientPicker] = useState(false);
+  const [clientPickerPos, setClientPickerPos] = useState({ top: 0, left: 0 });
+  const [clientPickerClientId, setClientPickerClientId] = useState<string | null>(null);
+  const [clientOriginalColor, setClientOriginalColor] = useState('');
+  const [clientPickerColor, setClientPickerColor] = useState('#9103C6');
+  const clientPendingColorRef = useRef('#9103C6');
+  const clientPickerTriggerRef = useRef<HTMLElement | null>(null);
 
   // Generate bright, vibrant color (avoiding brown tones)
   const generateBrightColor = () => {
@@ -1399,42 +1398,44 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
             key={client.id}
             className="bg-sidebar-bg rounded-button p-3"
           >
-            <div className="flex items-center gap-2.5">
+            <div
+              className="flex items-center gap-2.5 cursor-pointer"
+              onClick={() => setEditingClient(editingClient === client.id ? null : client.id)}
+            >
               <div
                 className="w-3 h-3 rounded-full flex-shrink-0"
                 style={{ backgroundColor: client.color || '#ffffff' }}
               />
               <span className="text-sm font-medium flex-1">{client.name}</span>
-              <button
-                onClick={() => setEditingClient(editingClient === client.id ? null : client.id)}
-                className="p-1.5 hover:bg-hover-bg rounded-button transition-colors"
-              >
-                <Settings className="w-3.5 h-3.5 animate-settings-icon" />
-              </button>
+              <div className="p-1.5 rounded-button">
+                <Settings className={`w-3.5 h-3.5 transition-transform duration-300 ${editingClient === client.id ? 'rotate-180' : ''}`} />
+              </div>
             </div>
 
             {editingClient === client.id && (
               <div className="mt-3 space-y-4">
                 {/* Color Picker Section */}
-                <div className="relative overflow-hidden rounded-lg" style={{ backgroundColor: client.color || '#ffffff' }}>
-                  <div className="absolute inset-0 bg-gradient-to-br from-black/20 to-transparent pointer-events-none" />
-                  <div className="relative p-3">
-                    <div className="relative">
-                      <input
-                        type="color"
-                        value={hslStringToHex(client.color || '#ffffff')}
-                        onChange={(e) => updateClient(client.id, { color: e.target.value })}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                      />
-                      <div className="bg-white/10 backdrop-blur-sm border border-white/30 rounded-md px-3 py-2 cursor-pointer hover:bg-white/20 transition-all flex items-center justify-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-white/90 shadow-lg" />
-                        <span className="text-xs font-medium text-white drop-shadow">
-                          Click to change color
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <button
+                  onClick={(e) => {
+                    clientPickerTriggerRef.current = e.currentTarget;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const popupWidth = 224, popupHeight = 390;
+                    const left = rect.left + popupWidth > window.innerWidth ? window.innerWidth - popupWidth - 8 : rect.left;
+                    const top = rect.bottom + 8 + popupHeight > window.innerHeight ? rect.top - popupHeight - 8 : rect.bottom - 8;
+                    const hex = hslStringToHex(client.color || '#9103c6');
+                    setClientOriginalColor(client.color || '#9103c6');
+                    setClientPickerColor(hex);
+                    clientPendingColorRef.current = hex;
+                    setClientPickerClientId(client.id);
+                    setClientPickerPos({ top, left });
+                    setShowClientPicker(true);
+                  }}
+                  className="w-full h-9 rounded-lg border-2 border-white/20 hover:border-white/40 flex items-center justify-center gap-2"
+                  style={{ backgroundColor: client.color || '#9103c6' }}
+                >
+                  <div className="w-2.5 h-2.5 rounded-full bg-white/80" />
+                  <span className="text-xs font-medium text-white/90">Click to change color</span>
+                </button>
 
                 {/* Form Fields */}
                 <div className="space-y-3">
@@ -1526,6 +1527,26 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
           </button>
         </div>
       )}
+
+      <ColorPickerPopup
+        isOpen={showClientPicker}
+        color={clientPickerColor}
+        position={clientPickerPos}
+        triggerRef={clientPickerTriggerRef as React.RefObject<HTMLElement>}
+        onChange={(hex) => {
+          clientPendingColorRef.current = hex;
+          if (clientPickerTriggerRef.current) clientPickerTriggerRef.current.style.backgroundColor = hex;
+        }}
+        onApply={() => {
+          if (clientPickerClientId) updateClient(clientPickerClientId, { color: clientPendingColorRef.current });
+          setShowClientPicker(false);
+        }}
+        onCancel={() => {
+          if (clientPickerClientId) updateClient(clientPickerClientId, { color: clientOriginalColor });
+          if (clientPickerTriggerRef.current) clientPickerTriggerRef.current.style.backgroundColor = clientOriginalColor;
+          setShowClientPicker(false);
+        }}
+      />
     </div>
   );
 }
@@ -1661,19 +1682,21 @@ function FinanceSettings() {
     <div className="space-y-6">
       {/* Currency Settings */}
       <div>
-        <label className="block text-sm font-medium mb-2">Base Currency</label>
-        <p className="text-sm text-text-muted mb-3">
-          Select the base currency for financial reports
-        </p>
-        <select
+        <div className="mb-3">
+          <label className="block font-medium mb-1">Base Currency</label>
+          <p className="text-sm text-text-muted">
+            Select the base currency for financial reports
+          </p>
+        </div>
+        <CustomSelect
           value={baseCurrency}
-          onChange={(e) => handleBaseCurrencyChange(e.target.value)}
-          className="w-full bg-app-bg border border-border-primary rounded-button px-4 py-2 focus:outline-none focus:border-accent"
-        >
-          <option value="USD">USD ($)</option>
-          <option value="RUB">RUB (₽)</option>
-          <option value="EUR">EUR (€)</option>
-        </select>
+          onChange={handleBaseCurrencyChange}
+          options={[
+            { value: 'USD', label: 'USD ($)' },
+            { value: 'RUB', label: 'RUB (₽)' },
+            { value: 'EUR', label: 'EUR (€)' },
+          ]}
+        />
       </div>
 
       {/* Convert to Base Currency */}
@@ -1828,10 +1851,12 @@ function FinanceSettings() {
 
       {/* Revenue Normalization Threshold */}
       <div className="border-t border-border-secondary pt-6">
-        <label className="block text-sm font-medium mb-2">Revenue Normalization Threshold</label>
-        <p className="text-sm text-text-muted mb-4">
-          Set minimum threshold for revenue chart normalization. Charts will scale to at least this value.
-        </p>
+        <div className="mb-3">
+          <label className="block font-medium mb-1">Revenue Normalization Threshold</label>
+          <p className="text-sm text-text-muted">
+            Set minimum threshold for revenue chart normalization. Charts will scale to at least this value.
+          </p>
+        </div>
 
         <div className="flex items-center justify-between bg-sidebar-bg rounded-button px-4 py-2.5">
           <span className="text-sm">
