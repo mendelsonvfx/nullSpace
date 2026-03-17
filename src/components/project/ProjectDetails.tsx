@@ -929,7 +929,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     }}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded-lg transition-opacity cursor-pointer"
                   >
-                    <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted" />
+                    <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted hover:text-red-500 transition-colors" />
                   </button>
                 </div>
               ))}
@@ -992,7 +992,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             }}
                             className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded transition-opacity"
                           >
-                            <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted" />
+                            <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted hover:text-red-500 transition-colors" />
                           </button>
                         </div>
                       ))}
@@ -1183,7 +1183,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     }}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded-lg transition-opacity cursor-pointer"
                   >
-                    <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted" />
+                    <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted hover:text-red-500 transition-colors" />
                   </button>
                 </div>
               ))}
@@ -1246,7 +1246,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             }}
                             className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded transition-opacity"
                           >
-                            <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted" />
+                            <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted hover:text-red-500 transition-colors" />
                           </button>
                         </div>
                       ))}

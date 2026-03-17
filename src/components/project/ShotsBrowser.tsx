@@ -1772,7 +1772,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
               onClick={() => setViewMode('grid')}
               className={`p-1 rounded-badge transition-colors ${
                 viewMode === 'grid'
-                  ? 'bg-accent text-white'
+                  ? 'bg-hover-bg text-white'
                   : 'text-text-secondary hover:text-text-primary hover:bg-hover-bg'
               }`}
               title="Grid view"
@@ -1783,7 +1783,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
               onClick={() => setViewMode('list')}
               className={`p-1 rounded-badge transition-colors ${
                 viewMode === 'list'
-                  ? 'bg-accent text-white'
+                  ? 'bg-hover-bg text-white'
                   : 'text-text-secondary hover:text-text-primary hover:bg-hover-bg'
               }`}
               title="List view"
