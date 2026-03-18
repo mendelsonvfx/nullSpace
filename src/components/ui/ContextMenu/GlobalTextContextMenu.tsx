@@ -37,7 +37,7 @@ export function GlobalTextContextMenu() {
 
   const menu = (
     <div
-      className="fixed bg-zinc-800/80 backdrop-blur-xl border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 z-[200] min-w-[160px] animate-context-menu"
+      className="fixed bg-card-bg/80 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl p-1.5 z-[200] min-w-[160px] animate-context-menu"
       style={{ top, left }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -47,13 +47,13 @@ export function GlobalTextContextMenu() {
         disabled={!hasSelection || isReadOnly}
         className={`
           w-full px-3 py-1.5 text-left text-sm flex items-center gap-2.5 rounded-md transition-colors
-          ${(!hasSelection || isReadOnly) ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}
+          ${(!hasSelection || isReadOnly) ? 'opacity-40 cursor-not-allowed' : 'hover:bg-hover-bg cursor-pointer'}
           text-text-primary
         `}
       >
         <IconCut className="w-4 h-4 opacity-80" stroke={1.5} />
         <span className="flex-1">Cut</span>
-        <span className="text-zinc-500 text-xs">Ctrl+X</span>
+        <span className="text-text-dim text-xs">Ctrl+X</span>
       </button>
 
       {/* Copy */}
@@ -62,13 +62,13 @@ export function GlobalTextContextMenu() {
         disabled={!hasSelection}
         className={`
           w-full px-3 py-1.5 text-left text-sm flex items-center gap-2.5 rounded-md transition-colors
-          ${!hasSelection ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}
+          ${!hasSelection ? 'opacity-40 cursor-not-allowed' : 'hover:bg-hover-bg cursor-pointer'}
           text-text-primary
         `}
       >
         <IconCopy className="w-4 h-4 opacity-80" stroke={1.5} />
         <span className="flex-1">Copy</span>
-        <span className="text-zinc-500 text-xs">Ctrl+C</span>
+        <span className="text-text-dim text-xs">Ctrl+C</span>
       </button>
 
       {/* Paste */}
@@ -77,13 +77,13 @@ export function GlobalTextContextMenu() {
         disabled={!hasClipboard || isReadOnly}
         className={`
           w-full px-3 py-1.5 text-left text-sm flex items-center gap-2.5 rounded-md transition-colors
-          ${(!hasClipboard || isReadOnly) ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}
+          ${(!hasClipboard || isReadOnly) ? 'opacity-40 cursor-not-allowed' : 'hover:bg-hover-bg cursor-pointer'}
           text-text-primary
         `}
       >
         <IconClipboard className="w-4 h-4 opacity-80" stroke={1.5} />
         <span className="flex-1">Paste</span>
-        <span className="text-zinc-500 text-xs">Ctrl+V</span>
+        <span className="text-text-dim text-xs">Ctrl+V</span>
       </button>
 
       <ContextMenuDivider />
@@ -94,13 +94,13 @@ export function GlobalTextContextMenu() {
         disabled={!hasText}
         className={`
           w-full px-3 py-1.5 text-left text-sm flex items-center gap-2.5 rounded-md transition-colors
-          ${!hasText ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}
+          ${!hasText ? 'opacity-40 cursor-not-allowed' : 'hover:bg-hover-bg cursor-pointer'}
           text-text-primary
         `}
       >
         <IconSelectAll className="w-4 h-4 opacity-80" stroke={1.5} />
         <span className="flex-1">Select All</span>
-        <span className="text-zinc-500 text-xs">Ctrl+A</span>
+        <span className="text-text-dim text-xs">Ctrl+A</span>
       </button>
     </div>
   );

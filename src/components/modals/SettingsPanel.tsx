@@ -1213,10 +1213,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
                 Select monitor for auto-maximized window
               </p>
             </div>
-            <select
-              value={preferredMonitor}
-              onChange={(e) => {
-                const index = parseInt(e.target.value);
+            <CustomSelect
+              value={String(preferredMonitor)}
+              onChange={(val) => {
+                const index = parseInt(val);
                 setPreferredMonitor(index);
                 const monitor = monitors[index];
                 updateWindowSettings({
@@ -1224,20 +1224,15 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
                   preferredMonitorName: monitor?.name || '',
                 });
               }}
-              className="w-full bg-app-bg border border-border-primary rounded-button px-4 py-2 focus:outline-none focus:border-accent"
-            >
-              {monitors.map((monitor) => {
-                // Extract display number from name like "\\.\DISPLAY3" -> "Display 3"
+              options={monitors.map((monitor) => {
                 const displayNum = monitor.name.match(/DISPLAY(\d+)/)?.[1] || (monitor.index + 1);
                 const displayName = `Display ${displayNum}`;
-
-                return (
-                  <option key={monitor.index} value={monitor.index}>
-                    {monitor.index + 1}. {displayName} {monitor.is_primary ? '(Primary)' : ''} - {monitor.width}x{monitor.height}
-                  </option>
-                );
+                return {
+                  value: String(monitor.index),
+                  label: `${monitor.index + 1}. ${displayName}${monitor.is_primary ? ' (Primary)' : ''} - ${monitor.width}x${monitor.height}`,
+                };
               })}
-            </select>
+            />
           </div>
         )}
 
