@@ -857,8 +857,16 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
   const [headerMenuPosition, setHeaderMenuPosition] = useState<{ x: number; y: number } | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'number-asc' | 'number-desc' | 'created-asc' | 'created-desc'>('number-asc');
-  const [sceneSortBy, setSceneSortBy] = useState<'number-asc' | 'number-desc' | 'created-asc' | 'created-desc'>('number-asc');
+  type SortOrder = 'created-asc' | 'created-desc';
+  const VALID_SORT: SortOrder[] = ['created-asc', 'created-desc'];
+  const [sortBy, setSortBy] = useState<SortOrder>(() => {
+    const v = localStorage.getItem(`shotsbrowser_sortby_${projectId}`);
+    return VALID_SORT.includes(v as SortOrder) ? (v as SortOrder) : 'created-asc';
+  });
+  const [sceneSortBy, setSceneSortBy] = useState<SortOrder>(() => {
+    const v = localStorage.getItem(`shotsbrowser_scene_sortby_${projectId}`);
+    return VALID_SORT.includes(v as SortOrder) ? (v as SortOrder) : 'created-asc';
+  });
   const [showSortMenu, setShowSortMenu] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const [animatingShotId, setAnimatingShotId] = useState<string | null>(null);
@@ -1613,19 +1621,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
       // Sort shots within scene
       if (sceneShots.length > 0) {
         sceneShots = [...sceneShots];
-        switch (sortBy) {
-          case 'number-asc':
-            sceneShots.sort((a, b) => a.number - b.number);
-            break;
-          case 'number-desc':
-            sceneShots.sort((a, b) => b.number - a.number);
-            break;
-          case 'created-asc':
-            sceneShots.sort((a, b) => a.createdIndex - b.createdIndex);
-            break;
-          case 'created-desc':
-            sceneShots.sort((a, b) => b.createdIndex - a.createdIndex);
-            break;
+        if (sortBy === 'created-desc') {
+          sceneShots.sort((a, b) => b.createdIndex - a.createdIndex);
+        } else {
+          sceneShots.sort((a, b) => a.createdIndex - b.createdIndex);
         }
       }
 
@@ -1659,16 +1658,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
         shots: sceneShots,
       };
     });
-    switch (sceneSortBy) {
-      case 'number-asc':
-        return [...result].sort((a, b) => a.number - b.number);
-      case 'number-desc':
-        return [...result].sort((a, b) => b.number - a.number);
-      case 'created-desc':
-        return [...result].reverse();
-      default:
-        return result;
-    }
+    return sceneSortBy === 'created-desc' ? [...result].reverse() : result;
   }, [project, shotVersions, sortBy, sceneSortBy]);
 
   // Flat shots list for shots-only mode (no scenes)
@@ -1690,19 +1680,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
 
     // Sort based on sortBy
     const sorted = [...shotsWithIndex];
-    switch (sortBy) {
-      case 'number-asc':
-        sorted.sort((a, b) => a.number - b.number);
-        break;
-      case 'number-desc':
-        sorted.sort((a, b) => b.number - a.number);
-        break;
-      case 'created-asc':
-        sorted.sort((a, b) => a.createdIndex - b.createdIndex);
-        break;
-      case 'created-desc':
-        sorted.sort((a, b) => b.createdIndex - a.createdIndex);
-        break;
+    if (sortBy === 'created-desc') {
+      sorted.sort((a, b) => b.createdIndex - a.createdIndex);
+    } else {
+      sorted.sort((a, b) => a.createdIndex - b.createdIndex);
     }
 
     return sorted;
@@ -1855,7 +1836,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
             <button
               onClick={() => setShowSortMenu(!showSortMenu)}
               className={`p-2 rounded-button transition-colors border ${
-                showSortMenu || sortBy !== 'number-asc' || sceneSortBy !== 'number-asc'
+                showSortMenu || sortBy !== 'created-asc' || sceneSortBy !== 'created-asc'
                   ? 'bg-hover-bg border-border-secondary text-text-primary'
                   : 'bg-card-bg border-border-primary text-text-secondary hover:text-text-primary hover:bg-hover-bg hover:border-border-secondary'
               }`}
@@ -1871,14 +1852,14 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                   <>
                     <div className="px-3 py-1 text-xs text-text-muted font-medium">Scenes</div>
                     <button
-                      onClick={() => { setSceneSortBy('created-asc'); setShowSortMenu(false); }}
+                      onClick={() => { setSceneSortBy('created-asc'); localStorage.setItem(`shotsbrowser_scene_sortby_${projectId}`, 'created-asc'); setShowSortMenu(false); }}
                       className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${sceneSortBy === 'created-asc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'}`}
                     >
                       <IconClockHour3 size={14} />
                       <span>Date: Old to New</span>
                     </button>
                     <button
-                      onClick={() => { setSceneSortBy('created-desc'); setShowSortMenu(false); }}
+                      onClick={() => { setSceneSortBy('created-desc'); localStorage.setItem(`shotsbrowser_scene_sortby_${projectId}`, 'created-desc'); setShowSortMenu(false); }}
                       className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${sceneSortBy === 'created-desc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'}`}
                     >
                       <IconClockHour3 size={14} />
@@ -1893,14 +1874,14 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                   <>
                     <div className="px-3 py-1 text-xs text-text-muted font-medium">Shots</div>
                     <button
-                      onClick={() => { setSortBy('created-asc'); setShowSortMenu(false); }}
+                      onClick={() => { setSortBy('created-asc'); localStorage.setItem(`shotsbrowser_sortby_${projectId}`, 'created-asc'); setShowSortMenu(false); }}
                       className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${sortBy === 'created-asc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'}`}
                     >
                       <IconClockHour3 size={14} />
                       <span>Date: Old to New</span>
                     </button>
                     <button
-                      onClick={() => { setSortBy('created-desc'); setShowSortMenu(false); }}
+                      onClick={() => { setSortBy('created-desc'); localStorage.setItem(`shotsbrowser_sortby_${projectId}`, 'created-desc'); setShowSortMenu(false); }}
                       className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${sortBy === 'created-desc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'}`}
                     >
                       <IconClockHour3 size={14} />
