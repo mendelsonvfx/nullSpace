@@ -20,7 +20,6 @@ import {
   IconStack2,
   IconMoon,
   IconFilter,
-  IconSortAscendingNumbers,
   IconClockHour3,
   IconLayoutSidebarRightCollapse,
   IconLayoutSidebarRightExpand,
@@ -842,11 +841,24 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     return saved !== null ? JSON.parse(saved) : true;
   });
 
+  // Sync ShotsBrowser visibility settings from Settings panel
+  useEffect(() => {
+    const handleStorage = () => {
+      const sf = localStorage.getItem('shotsbrowser_showSearchFilter');
+      const sb = localStorage.getItem('shotsbrowser_showSpecialContextButtons');
+      if (sf !== null) setShowSearchFilter(JSON.parse(sf));
+      if (sb !== null) setShowSpecialContextButtons(JSON.parse(sb));
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
   // Header context menu
   const [headerMenuPosition, setHeaderMenuPosition] = useState<{ x: number; y: number } | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'number-asc' | 'number-desc' | 'created-asc' | 'created-desc'>('number-asc');
+  const [sceneSortBy, setSceneSortBy] = useState<'number-asc' | 'number-desc' | 'created-asc' | 'created-desc'>('number-asc');
   const [showSortMenu, setShowSortMenu] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const [animatingShotId, setAnimatingShotId] = useState<string | null>(null);
@@ -1580,7 +1592,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     // Mode check: If no scenes, return empty (we'll handle shots-only mode separately)
     if (!project?.hasScenes || !project.scenes) return [];
 
-    return project.scenes.map(scene => {
+    const result = project.scenes.map(scene => {
       // Get shots for this scene (only if project has shots enabled)
       let sceneShots = project.hasShots && project.shots
         ? project.shots
@@ -1647,7 +1659,17 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
         shots: sceneShots,
       };
     });
-  }, [project, shotVersions, sortBy]);
+    switch (sceneSortBy) {
+      case 'number-asc':
+        return [...result].sort((a, b) => a.number - b.number);
+      case 'number-desc':
+        return [...result].sort((a, b) => b.number - a.number);
+      case 'created-desc':
+        return [...result].reverse();
+      default:
+        return result;
+    }
+  }, [project, shotVersions, sortBy, sceneSortBy]);
 
   // Flat shots list for shots-only mode (no scenes)
   const flatShots = useMemo(() => {
@@ -1833,7 +1855,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
             <button
               onClick={() => setShowSortMenu(!showSortMenu)}
               className={`p-2 rounded-button transition-colors border ${
-                showSortMenu
+                showSortMenu || sortBy !== 'number-asc' || sceneSortBy !== 'number-asc'
                   ? 'bg-hover-bg border-border-secondary text-text-primary'
                   : 'bg-card-bg border-border-primary text-text-secondary hover:text-text-primary hover:bg-hover-bg hover:border-border-secondary'
               }`}
@@ -1844,25 +1866,48 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
 
             {/* Sort dropdown menu */}
             {showSortMenu && (
-              <div className="absolute top-full right-0 mt-1 bg-card-bg/80 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl p-1.5 z-50 min-w-[140px] flex flex-col gap-0.5 animate-context-menu">
-                <button
-                  onClick={() => { setSortBy('number-asc'); setShowSortMenu(false); }}
-                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${
-                    sortBy === 'number-asc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'
-                  }`}
-                >
-                  <IconSortAscendingNumbers size={14} />
-                  <span>By Number</span>
-                </button>
-                <button
-                  onClick={() => { setSortBy('created-asc'); setShowSortMenu(false); }}
-                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${
-                    sortBy === 'created-asc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'
-                  }`}
-                >
-                  <IconClockHour3 size={14} />
-                  <span>By Created</span>
-                </button>
+              <div className="absolute top-full right-0 mt-1 bg-card-bg/80 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl p-1.5 z-50 min-w-[160px] flex flex-col gap-0.5 animate-context-menu whitespace-nowrap">
+                {project?.hasScenes && (
+                  <>
+                    <div className="px-3 py-1 text-xs text-text-muted font-medium">Scenes</div>
+                    <button
+                      onClick={() => { setSceneSortBy('created-asc'); setShowSortMenu(false); }}
+                      className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${sceneSortBy === 'created-asc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'}`}
+                    >
+                      <IconClockHour3 size={14} />
+                      <span>Date: Old to New</span>
+                    </button>
+                    <button
+                      onClick={() => { setSceneSortBy('created-desc'); setShowSortMenu(false); }}
+                      className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${sceneSortBy === 'created-desc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'}`}
+                    >
+                      <IconClockHour3 size={14} />
+                      <span>Date: New to Old</span>
+                    </button>
+                  </>
+                )}
+                {project?.hasScenes && project?.hasShots && (
+                  <div className="h-px bg-border-secondary mx-1 my-1" />
+                )}
+                {project?.hasShots && (
+                  <>
+                    <div className="px-3 py-1 text-xs text-text-muted font-medium">Shots</div>
+                    <button
+                      onClick={() => { setSortBy('created-asc'); setShowSortMenu(false); }}
+                      className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${sortBy === 'created-asc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'}`}
+                    >
+                      <IconClockHour3 size={14} />
+                      <span>Date: Old to New</span>
+                    </button>
+                    <button
+                      onClick={() => { setSortBy('created-desc'); setShowSortMenu(false); }}
+                      className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${sortBy === 'created-desc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'}`}
+                    >
+                      <IconClockHour3 size={14} />
+                      <span>Date: New to Old</span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -2368,7 +2413,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
         menuId="shotsbrowser-header"
       >
         <ContextMenuItem
-          icon={showSearchFilter ? <IconCircleCheck size={16} className="text-text-secondary" /> : <IconCircleFilled size={16} className="text-zinc-600" />}
+          icon={showSearchFilter ? <IconCircleCheck size={16} className="text-text-secondary" /> : <IconCircleFilled size={16} className="text-text-dim" />}
           onClick={() => {
             const newValue = !showSearchFilter;
             setShowSearchFilter(newValue);
@@ -2379,7 +2424,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
           Show Search & Filter
         </ContextMenuItem>
         <ContextMenuItem
-          icon={showSpecialContextButtons ? <IconCircleCheck size={16} className="text-text-secondary" /> : <IconCircleFilled size={16} className="text-zinc-600" />}
+          icon={showSpecialContextButtons ? <IconCircleCheck size={16} className="text-text-secondary" /> : <IconCircleFilled size={16} className="text-text-dim" />}
           onClick={() => {
             const newValue = !showSpecialContextButtons;
             setShowSpecialContextButtons(newValue);

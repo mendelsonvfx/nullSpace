@@ -343,7 +343,6 @@ fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> V
                 subfolders: vec![
                     FolderItem::Simple("Preview".to_string()),
                     FolderItem::Simple("Final".to_string()),
-                    FolderItem::Simple("Passes".to_string()),
                 ],
             },
         ],
@@ -367,8 +366,7 @@ fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> V
                 subfolders: vec![
                     FolderItem::Simple("Temp".to_string()),
                     FolderItem::Simple("Sim".to_string()),
-                    FolderItem::Simple("Render".to_string()),
-                    FolderItem::Simple("Alembic".to_string()),
+                    FolderItem::Simple("Geo".to_string()),
                 ],
             },
             FolderItem::Nested {
@@ -376,17 +374,8 @@ fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> V
                 subfolders: vec![
                     FolderItem::Simple("Preview".to_string()),
                     FolderItem::Simple("Final".to_string()),
-                    FolderItem::Simple("Passes".to_string()),
                 ],
             },
-            FolderItem::Nested {
-                name: "Assets".to_string(),
-                subfolders: vec![
-                    FolderItem::Simple("HDAs".to_string()),
-                    FolderItem::Simple("Presets".to_string()),
-                ],
-            },
-            FolderItem::Simple("Notes".to_string()),
         ],
         "after-effects" | "after effects" => vec![
             FolderItem::Nested {
@@ -415,7 +404,6 @@ fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> V
             FolderItem::Nested {
                 name: "Cache".to_string(),
                 subfolders: vec![
-                    FolderItem::Simple("AE_Cache".to_string()),
                     FolderItem::Simple("Temp".to_string()),
                 ],
             },
@@ -587,19 +575,40 @@ async fn add_software_to_project(project_path: String, software_name: String) ->
     let project: Project = serde_json::from_str(&metadata_content)
         .map_err(|e| format!("Failed to parse project metadata: {}", e))?;
 
-    // Get folder template for the software
-    let software_folders = get_folder_template(
-        &software_name,
-        project.has_scenes.unwrap_or(false),
-        project.has_shots.unwrap_or(false)
-    );
     let folder_name = get_software_folder_name(&software_name);
     let software_path = project_path_buf.join(folder_name);
 
     // Create software folders if they don't exist
     if !software_path.exists() {
-        for folder_item in software_folders {
-            create_folder_item(&software_path, &folder_item)?;
+        fs::create_dir_all(&software_path)
+            .map_err(|e| format!("Failed to create software folder: {}", e))?;
+
+        if project.has_scenes.unwrap_or(false) {
+            // Scene-based project: create folder hierarchy inside each existing scene
+            if let Some(scenes) = &project.scenes {
+                let folders = get_folder_template(
+                    &software_name,
+                    true,
+                    project.has_shots.unwrap_or(false)
+                );
+                for scene in scenes {
+                    let scene_folder = file_naming::sanitize_folder_name(&scene.name);
+                    let scene_path = software_path.join(&scene_folder);
+                    for folder_item in &folders {
+                        create_folder_item(&scene_path, folder_item)?;
+                    }
+                }
+            }
+        } else {
+            // Flat project: create full hierarchy directly in software folder
+            let software_folders = get_folder_template(
+                &software_name,
+                false,
+                project.has_shots.unwrap_or(false)
+            );
+            for folder_item in software_folders {
+                create_folder_item(&software_path, &folder_item)?;
+            }
         }
     }
 

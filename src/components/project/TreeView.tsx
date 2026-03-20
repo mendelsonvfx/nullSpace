@@ -69,6 +69,8 @@ interface TreeViewProps {
   onToggleHidden: () => void;
 }
 
+const AUTO_HIDDEN_NAMES = ['backup'];
+
 export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps) {
   const { activeMenu, setActiveMenu } = useContextMenuStore();
   const [tree, setTree] = useState<FileNode[]>([]);
@@ -90,6 +92,15 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch (error) {
       console.error('Failed to load hidden paths from localStorage:', error);
+      return new Set();
+    }
+  });
+  const [explicitlyShownPaths, setExplicitlyShownPaths] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(`explicitlyShownPaths_${project.path}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch (error) {
+      console.error('Failed to load explicitly shown paths from localStorage:', error);
       return new Set();
     }
   });
@@ -139,6 +150,15 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     }
   }, [hiddenPaths, project.path]);
 
+  // Save explicitly shown paths to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(`explicitlyShownPaths_${project.path}`, JSON.stringify([...explicitlyShownPaths]));
+    } catch (error) {
+      console.error('Failed to save explicitly shown paths to localStorage:', error);
+    }
+  }, [explicitlyShownPaths, project.path]);
+
   // Save folder colors to localStorage whenever they change
   useEffect(() => {
     try {
@@ -166,6 +186,13 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     } catch (error) {
       console.error('Failed to load hidden paths from localStorage:', error);
       setHiddenPaths(new Set());
+    }
+    try {
+      const storedShown = localStorage.getItem(`explicitlyShownPaths_${project.path}`);
+      setExplicitlyShownPaths(storedShown ? new Set(JSON.parse(storedShown)) : new Set());
+    } catch (error) {
+      console.error('Failed to load explicitly shown paths from localStorage:', error);
+      setExplicitlyShownPaths(new Set());
     }
   }, [project.path]);
 
@@ -630,16 +657,24 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     }
   };
 
-  const toggleHidden = (path: string) => {
-    setHiddenPaths(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(path)) {
-        newSet.delete(path);
-      } else {
-        newSet.add(path);
-      }
-      return newSet;
-    });
+  const toggleHidden = (path: string, nodeName: string) => {
+    const isAutoHidden = AUTO_HIDDEN_NAMES.includes(nodeName.toLowerCase());
+    const currentlyHidden = hiddenPaths.has(path) ||
+      (isAutoHidden && !explicitlyShownPaths.has(path));
+
+    if (isAutoHidden) {
+      setExplicitlyShownPaths(prev => {
+        const s = new Set(prev);
+        if (currentlyHidden) s.add(path); else s.delete(path);
+        return s;
+      });
+    } else {
+      setHiddenPaths(prev => {
+        const s = new Set(prev);
+        if (s.has(path)) s.delete(path); else s.add(path);
+        return s;
+      });
+    }
   };
 
   const handleContextMenu = useCallback((e: React.MouseEvent, node: FileNode) => {
@@ -922,7 +957,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     const hasChildren = node.children && node.children.length > 0;
     const fileIcon = !node.is_dir ? getFileIcon(node.name) : null;
     const softwareFolderIcon = node.is_dir ? getSoftwareFolderIcon(node.name) : null;
-    const isHidden = hiddenPaths.has(node.path);
+    const isHidden = hiddenPaths.has(node.path) ||
+      (node.is_dir && AUTO_HIDDEN_NAMES.includes(node.name.toLowerCase()) && !explicitlyShownPaths.has(node.path));
     const folderColor = node.is_dir ? folderColors.get(node.path) : null;
 
     // Format display name
@@ -989,7 +1025,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                toggleHidden(node.path);
+                toggleHidden(node.path, node.name);
               }}
               className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-zinc-700 rounded"
               title={isHidden ? "Show" : "Hide"}

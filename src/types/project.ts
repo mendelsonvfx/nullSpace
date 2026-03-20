@@ -195,11 +195,11 @@ export const FOLDER_TEMPLATES: Record<SoftwareName, FolderTemplate> = {
     subfolders: [
       {
         name: 'Geo',
-        subfolders: ['Exported', 'Imported']
+        subfolders: ['Export', 'Import']
       },
       {
         name: 'Tex',
-        subfolders: ['Exported', 'Imported', 'Plates']
+        subfolders: ['Export', 'Import', 'Plates']
       },
       {
         name: 'Cache',
@@ -207,7 +207,7 @@ export const FOLDER_TEMPLATES: Record<SoftwareName, FolderTemplate> = {
       },
       {
         name: 'Render',
-        subfolders: ['Preview', 'Final', 'Passes']
+        subfolders: ['Preview', 'Final']
       }
     ]
   },
@@ -216,25 +216,20 @@ export const FOLDER_TEMPLATES: Record<SoftwareName, FolderTemplate> = {
     subfolders: [
       {
         name: 'Geo',
-        subfolders: ['Exported', 'Imported']
+        subfolders: ['Export', 'Import']
       },
       {
         name: 'Tex',
-        subfolders: ['Exported', 'Imported']
+        subfolders: ['Export', 'Import']
       },
       {
         name: 'Cache',
-        subfolders: ['Temp', 'Sim', 'Render', 'Alembic']
+        subfolders: ['Temp', 'Sim', 'Geo']
       },
       {
         name: 'Render',
-        subfolders: ['Preview', 'Final', 'Passes']
-      },
-      {
-        name: 'Assets',
-        subfolders: ['HDAs', 'Presets']
-      },
-      'Notes'
+        subfolders: ['Preview', 'Final']
+      }
     ]
   },
   'after-effects': {
@@ -254,7 +249,7 @@ export const FOLDER_TEMPLATES: Record<SoftwareName, FolderTemplate> = {
       },
       {
         name: 'Cache',
-        subfolders: ['AE_Cache', 'Temp']
+        subfolders: ['Temp']
       }
     ]
   },

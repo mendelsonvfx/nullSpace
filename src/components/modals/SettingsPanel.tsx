@@ -799,6 +799,14 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     const saved = localStorage.getItem('blendPreviewsEnabled');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [showShotsBrowserSearch, setShowShotsBrowserSearch] = useState(() => {
+    const saved = localStorage.getItem('shotsbrowser_showSearchFilter');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [showShotsBrowserAssetButtons, setShowShotsBrowserAssetButtons] = useState(() => {
+    const saved = localStorage.getItem('shotsbrowser_showSpecialContextButtons');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
 
   // Window settings
   const [autoMaximizeOnLaunch, setAutoMaximizeOnLaunch] = useState(false);
@@ -1171,6 +1179,43 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
           <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
             blendPreviewsEnabled ? 'translate-x-6' : 'translate-x-0.5'
           }`} />
+        </button>
+      </div>
+
+      {/* Shots Browser */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-medium mb-1">Show Search & Filter</div>
+          <p className="text-sm text-text-muted">Show search bar and filter controls in Shots Browser</p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !showShotsBrowserSearch;
+            setShowShotsBrowserSearch(newValue);
+            localStorage.setItem('shotsbrowser_showSearchFilter', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full relative transition-colors ${showShotsBrowserSearch ? 'bg-accent' : 'bg-border-secondary'}`}
+        >
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showShotsBrowserSearch ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-medium mb-1">Show Asset/Compose Buttons</div>
+          <p className="text-sm text-text-muted">Show Asset Projects and Compose buttons in Shots Browser</p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !showShotsBrowserAssetButtons;
+            setShowShotsBrowserAssetButtons(newValue);
+            localStorage.setItem('shotsbrowser_showSpecialContextButtons', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full relative transition-colors ${showShotsBrowserAssetButtons ? 'bg-accent' : 'bg-border-secondary'}`}
+        >
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showShotsBrowserAssetButtons ? 'translate-x-6' : 'translate-x-0.5'}`} />
         </button>
       </div>
 
