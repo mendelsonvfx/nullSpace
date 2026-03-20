@@ -168,6 +168,51 @@ input, textarea, [contenteditable],
   transform-origin: top left;
 }
 
+@keyframes folderHighlightIn {
+  from { clip-path: inset(0 0 0 100%); }
+  to   { clip-path: inset(0 0 0 0%); }
+}
+
+@keyframes folderHighlightOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.folder-highlighted,
+.folder-highlighted-out {
+  position: relative;
+}
+
+.folder-highlighted-out::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  padding: 1px;
+  background: linear-gradient(to left, var(--accent-color), transparent 60%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: folderHighlightOut 0.35s ease-out forwards;
+}
+
+.folder-highlighted::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  padding: 1px;
+  background: linear-gradient(to left, var(--accent-color), transparent 60%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: folderHighlightIn 0.7s ease-out;
+}
+
 @keyframes contextMenuAppear {
   from {
     opacity: 0;

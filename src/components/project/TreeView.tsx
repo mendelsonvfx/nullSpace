@@ -71,6 +71,35 @@ interface TreeViewProps {
 
 const AUTO_HIDDEN_NAMES = ['backup'];
 
+const sanitizeFolderName = (name: string): string =>
+  name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
+
+const getSoftwareDirName = (software: string): string => {
+  switch (software.toLowerCase()) {
+    case 'blender': return 'Blender';
+    case 'houdini': return 'Houdini';
+    case 'maya': return 'Maya';
+    case 'after-effects':
+    case 'after effects': return 'AfterEffects';
+    case 'photoshop': return 'Photoshop';
+    case 'cinema4d':
+    case 'cinema 4d': return 'Cinema4D';
+    case 'substance':
+    case 'substance painter': return 'Substance';
+    case 'unreal':
+    case 'unreal engine': return 'Unreal';
+    case 'unity': return 'Unity';
+    case 'zbrush': return 'ZBrush';
+    case 'marmoset':
+    case 'marmoset toolbag': return 'Marmoset';
+    default: return software;
+  }
+};
+
+const AE_NAMES = ['after-effects', 'after effects'];
+
+const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+
 export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps) {
   const { activeMenu, setActiveMenu } = useContextMenuStore();
   const [tree, setTree] = useState<FileNode[]>([]);
@@ -208,6 +237,79 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       setShowColorPicker(false);
     }
   }, [activeMenu, isContextMenuOpen, closeContextMenu]);
+
+  // Compute highlighted paths based on selected scene/shot
+  const highlightedPaths = ((): Set<string> => {
+    const paths = new Set<string>();
+    if (!project.software?.length) return paths;
+
+    const base = normPath(project.path.replace(/[/\\]+$/, ''));
+
+    // Scene-level highlight
+    const scene = project.scenes?.find((s: any) => s.id === project.currentSceneId);
+    if (scene) {
+      const sceneFolder = sanitizeFolderName(scene.name).toLowerCase();
+      for (const sw of project.software) {
+        const swDir = getSoftwareDirName(sw.name).toLowerCase();
+        const swPath = `${base}/${swDir}`;
+        paths.add(`${swPath}/${sceneFolder}`);
+      }
+    }
+
+    // Shot-level highlight
+    const shot = project.shots?.find((s: any) => s.id === project.currentShotId);
+    if (shot) {
+      const shotFolder = String(shot.number).padStart(3, '0');
+      for (const sw of project.software) {
+        const swDir = getSoftwareDirName(sw.name).toLowerCase();
+        const swPath = `${base}/${swDir}`;
+        const isAE = AE_NAMES.includes(sw.name.toLowerCase());
+        const renderFolder = isAE ? 'output' : 'render';
+
+        if (scene) {
+          // Scene + shot mode
+          const sceneFolder = sanitizeFolderName(scene.name).toLowerCase();
+          const renderPath = `${swPath}/${sceneFolder}/${renderFolder}`;
+          paths.add(renderPath);
+          paths.add(`${renderPath}/preview`);
+          paths.add(`${renderPath}/preview/${shotFolder}`);
+          paths.add(`${renderPath}/final`);
+          paths.add(`${renderPath}/final/${shotFolder}`);
+        } else {
+          // Shots-only mode (no scenes)
+          const renderPath = `${swPath}/${renderFolder}`;
+          paths.add(renderPath);
+          paths.add(`${renderPath}/preview`);
+          paths.add(`${renderPath}/preview/${shotFolder}`);
+          paths.add(`${renderPath}/final`);
+          paths.add(`${renderPath}/final/${shotFolder}`);
+        }
+      }
+    }
+
+    return paths;
+  })();
+
+  // Fade-out animation for paths that just lost their highlight
+  const [fadingOutPaths, setFadingOutPaths] = useState<Set<string>>(new Set());
+  const prevHighlightedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const prev = prevHighlightedRef.current;
+    const removed = [...prev].filter(p => !highlightedPaths.has(p));
+    prevHighlightedRef.current = highlightedPaths;
+    if (removed.length > 0) {
+      setFadingOutPaths(s => new Set([...s, ...removed]));
+      const timer = setTimeout(() => {
+        setFadingOutPaths(s => {
+          const next = new Set(s);
+          removed.forEach(p => next.delete(p));
+          return next;
+        });
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [project.currentSceneId, project.currentShotId]);
 
   // Group versioned files into stacks
   const groupVersionsInTree = (nodes: FileNode[]): FileNode[] => {
@@ -959,6 +1061,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     const softwareFolderIcon = node.is_dir ? getSoftwareFolderIcon(node.name) : null;
     const isHidden = hiddenPaths.has(node.path) ||
       (node.is_dir && AUTO_HIDDEN_NAMES.includes(node.name.toLowerCase()) && !explicitlyShownPaths.has(node.path));
+    const isHighlighted = node.is_dir && highlightedPaths.has(normPath(node.path));
+    const isFadingOut = node.is_dir && !isHighlighted && fadingOutPaths.has(normPath(node.path));
     const folderColor = node.is_dir ? folderColors.get(node.path) : null;
 
     // Format display name
@@ -987,7 +1091,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       >
         <div
           className={`flex items-center gap-2 px-2.5 py-2 text-xs select-none group transition-all cursor-pointer ${node.is_dir
-              ? `bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary ${isExpanded ? 'bg-hover-bg border-border-secondary' : ''}`
+              ? `bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary ${isExpanded ? 'bg-hover-bg border-border-secondary' : ''} ${isHighlighted ? 'folder-highlighted' : isFadingOut ? 'folder-highlighted-out' : ''}`
               : 'hover:bg-hover-bg/30 rounded'
             }`}
           onDoubleClick={(e) => handleDoubleClick(e, node)}
