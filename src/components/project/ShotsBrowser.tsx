@@ -30,7 +30,8 @@ import { useContextMenuStore } from '../../store/contextMenuStore';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
-import { extractShotNumber, getScenePattern } from '../../utils/fileNaming';
+import { extractShotNumber, getScenePattern, extractVersion } from '../../utils/fileNaming';
+import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
 import { findNextAvailableShotNumber } from '../../utils/shotNumbering';
 
 interface ProjectVersion {
@@ -72,6 +73,7 @@ interface ShotCardProps {
   isSelected: boolean;
   viewMode: 'grid' | 'list';
   projectPath: string;
+  blendPath?: string;
   onClick: () => void;
   onStatusChange: (shotId: string) => void;
   onContextMenu: (e: React.MouseEvent, shotId: string, type: 'preview' | 'name') => void;
@@ -89,6 +91,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
   isSelected,
   viewMode,
   projectPath,
+  blendPath,
   onClick,
   onStatusChange,
   onContextMenu,
@@ -101,6 +104,13 @@ const ShotCard: React.FC<ShotCardProps> = ({
   onEditCancel
 }) => {
   const shotPreviewSrc = useThumbnail(projectPath, shot.preview);
+  const [blendPreviewsEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('blendPreviewsEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const autoBlendSrc = useBlendThumbnail(!shot.preview && blendPreviewsEnabled ? blendPath : undefined);
+  const displaySrc = shotPreviewSrc || autoBlendSrc;
+  const wasImageReadyOnMount = useRef(!!displaySrc);
 
   const handleNameContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -146,18 +156,17 @@ const ShotCard: React.FC<ShotCardProps> = ({
             onMouseEnter={() => onHover(shot.id)}
             onMouseLeave={() => onHover(null)}
           >
-            {shotPreviewSrc ? (
+            <div className="flex flex-col items-center justify-center gap-0.5">
+              <span className="text-2xl font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
+              <span className="text-[10px] text-text-muted">No preview</span>
+            </div>
+            {displaySrc && (
               <img
-                src={shotPreviewSrc}
+                src={displaySrc}
                 alt={shot.name}
-                className="w-full h-full object-cover"
+                className={`absolute inset-0 w-full h-full object-cover${wasImageReadyOnMount.current ? '' : ' animate-fade-in'}`}
                 draggable={false}
               />
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-0.5">
-                <span className="text-2xl font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
-                <span className="text-[10px] text-text-muted">No preview</span>
-              </div>
             )}
             {/* Versions badge in top right corner - only show if versions exist */}
             {shot.versions > 0 && (
@@ -229,20 +238,19 @@ const ShotCard: React.FC<ShotCardProps> = ({
           {/* List view */}
           <div
             data-context-menu="shot"
-            className="w-16 h-10 rounded-badge bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center flex-shrink-0 overflow-hidden"
+            className="relative w-16 h-10 rounded-badge bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center flex-shrink-0 overflow-hidden"
             onContextMenu={handlePreviewContextMenu}
             onMouseEnter={() => onHover(shot.id)}
             onMouseLeave={() => onHover(null)}
           >
-            {shotPreviewSrc ? (
+            <span className="text-sm font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
+            {displaySrc && (
               <img
-                src={shotPreviewSrc}
+                src={displaySrc}
                 alt={shot.name}
-                className="w-full h-full object-cover"
+                className={`absolute inset-0 w-full h-full object-cover${wasImageReadyOnMount.current ? '' : ' animate-fade-in'}`}
                 draggable={false}
               />
-            ) : (
-              <span className="text-sm font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
             )}
           </div>
           <div
@@ -330,6 +338,7 @@ interface SceneCardProps {
   onShotHover: (shotId: string | null) => void;
   onAddShot?: (sceneId: string) => void;
   onShotsAreaHoverChange?: (isHovered: boolean) => void;
+  shotBlendPaths: Map<string, string>;
   animatingShotId: string | null;
   editingItem: { type: 'shot' | 'scene' | 'description'; id: string; value: string } | null;
   onEditChange: (value: string) => void;
@@ -355,6 +364,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onShotHover,
   onAddShot,
   onShotsAreaHoverChange,
+  shotBlendPaths,
   animatingShotId,
   editingItem,
   onEditChange,
@@ -541,6 +551,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                   isSelected={selectedShotId === shot.id}
                   viewMode={viewMode}
                   projectPath={project.path}
+                  blendPath={shotBlendPaths.get(`${shot.sceneId}_${shot.number}`)}
                   onClick={() => onShotSelect(shot.id)}
                   onStatusChange={onShotStatusChange}
                   onContextMenu={onShotContextMenu}
@@ -761,6 +772,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 isSelected={selectedShotId === shot.id}
                 viewMode={viewMode}
                 projectPath={project.path}
+                blendPath={shotBlendPaths.get(`${shot.sceneId}_${shot.number}`)}
                 onClick={() => onShotSelect(shot.id)}
                 onStatusChange={onShotStatusChange}
                 onContextMenu={onShotContextMenu}
@@ -1621,6 +1633,48 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     return versionMap;
   }, [allVersions, project?.shots, project?.scenes, project?.name, project?.path]);
 
+  // Map of latest versioned file path per shot (for auto blend thumbnail fallback)
+  const shotLatestBlendPaths = useMemo(() => {
+    const pathMap = new Map<string, string>();
+    const bestNum  = new Map<string, number>();
+    if (!project?.shots || !allVersions.length) return pathMap;
+
+    allVersions.forEach(version => {
+      if (!version.is_versioned) return;
+      const shotNumber = extractShotNumber(version.name);
+      if (shotNumber === null) return;
+      const versionNum = extractVersion(version.name);
+      if (!versionNum) return;
+
+      const matchingShots = project.shots?.filter((s: any) => s.number === shotNumber) || [];
+
+      if (project.hasScenes) {
+        for (const matchingShot of matchingShots) {
+          const shotScene = project.scenes?.find((sc: any) => sc.id === matchingShot.sceneId);
+          if (!shotScene) continue;
+          if (!version.name.startsWith(getScenePattern(project.name, shotScene.name))) continue;
+          const key = `${matchingShot.sceneId}_${shotNumber}`;
+          if (versionNum > (bestNum.get(key) ?? 0)) {
+            bestNum.set(key, versionNum);
+            pathMap.set(key, version.path);
+          }
+          break;
+        }
+      } else {
+        for (const matchingShot of matchingShots) {
+          const key = `${matchingShot.sceneId || ''}_${shotNumber}`;
+          if (versionNum > (bestNum.get(key) ?? 0)) {
+            bestNum.set(key, versionNum);
+            pathMap.set(key, version.path);
+          }
+          break;
+        }
+      }
+    });
+
+    return pathMap;
+  }, [allVersions, project?.shots, project?.scenes, project?.name, project?.hasScenes]);
+
   // Get scenes and shots from project
   const scenes = useMemo(() => {
     // Mode check: If no scenes, return empty (we'll handle shots-only mode separately)
@@ -2013,6 +2067,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                     onShotHover={setHoveredShotId}
                     onAddShot={project.hasShots ? (sceneId) => addShot(projectId, sceneId) : undefined}
                     onShotsAreaHoverChange={setIsShotsAreaHovered}
+                    shotBlendPaths={shotLatestBlendPaths}
                     hoverDelay={hoverDelay}
                   />
                 ))
@@ -2046,6 +2101,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                       isSelected={project?.currentShotId === shot.id}
                       viewMode={viewMode}
                       projectPath={project.path}
+                      blendPath={shotLatestBlendPaths.get(`${shot.sceneId || ''}_${shot.number}`)}
                       onClick={() => handleShotSelect(shot.id)}
                       onStatusChange={handleShotStatusChange}
                       onContextMenu={handleShotContextMenu}

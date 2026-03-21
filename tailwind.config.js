@@ -157,6 +157,10 @@ export default {
             transform: 'translateY(0)'
           },
         },
+        'fade-in': {
+          '0%':   { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
       },
       animation: {
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
@@ -166,6 +170,7 @@ export default {
         'checkmark-pop': 'checkmark-pop 0.3s ease-out',
         'shot-complete-glow': 'shot-complete-glow 0.6s ease-out',
         'slideDown': 'slideDown 0.15s ease-out',
+        'fade-in': 'fade-in 0.2s ease-out forwards',
       },
     },
   },
