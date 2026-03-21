@@ -96,7 +96,6 @@ const getSoftwareDirName = (software: string): string => {
   }
 };
 
-const AE_NAMES = ['after-effects', 'after effects'];
 
 const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
 
@@ -256,37 +255,6 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       }
     }
 
-    // Shot-level highlight
-    const shot = project.shots?.find((s: any) => s.id === project.currentShotId);
-    if (shot) {
-      const shotFolder = String(shot.number).padStart(3, '0');
-      for (const sw of project.software) {
-        const swDir = getSoftwareDirName(sw.name).toLowerCase();
-        const swPath = `${base}/${swDir}`;
-        const isAE = AE_NAMES.includes(sw.name.toLowerCase());
-        const renderFolder = isAE ? 'output' : 'render';
-
-        if (scene) {
-          // Scene + shot mode
-          const sceneFolder = sanitizeFolderName(scene.name).toLowerCase();
-          const renderPath = `${swPath}/${sceneFolder}/${renderFolder}`;
-          paths.add(renderPath);
-          paths.add(`${renderPath}/preview`);
-          paths.add(`${renderPath}/preview/${shotFolder}`);
-          paths.add(`${renderPath}/final`);
-          paths.add(`${renderPath}/final/${shotFolder}`);
-        } else {
-          // Shots-only mode (no scenes)
-          const renderPath = `${swPath}/${renderFolder}`;
-          paths.add(renderPath);
-          paths.add(`${renderPath}/preview`);
-          paths.add(`${renderPath}/preview/${shotFolder}`);
-          paths.add(`${renderPath}/final`);
-          paths.add(`${renderPath}/final/${shotFolder}`);
-        }
-      }
-    }
-
     return paths;
   })();
 
@@ -309,7 +277,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       }, 350);
       return () => clearTimeout(timer);
     }
-  }, [project.currentSceneId, project.currentShotId]);
+  }, [project.currentSceneId]);
 
   // Group versioned files into stacks
   const groupVersionsInTree = (nodes: FileNode[]): FileNode[] => {

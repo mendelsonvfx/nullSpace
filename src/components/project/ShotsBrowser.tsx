@@ -335,6 +335,7 @@ interface SceneCardProps {
   onEditChange: (value: string) => void;
   onEditSave: () => void;
   onEditCancel: () => void;
+  hoverDelay: number;
 }
 
 const SceneCard: React.FC<SceneCardProps> = ({
@@ -359,9 +360,16 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onEditChange,
   onEditSave,
   onEditCancel,
+  hoverDelay,
 }) => {
   const scenePreviewSrc = useThumbnail(project.path, scene.preview);
   const [isShotsAreaHovered, setIsShotsAreaHovered] = useState(false);
+  const shotsAreaHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (shotsAreaHoverTimerRef.current) clearTimeout(shotsAreaHoverTimerRef.current);
+    };
+  }, []);
 
   // Grid view: large preview card
   if (viewMode === 'grid') {
@@ -508,10 +516,13 @@ const SceneCard: React.FC<SceneCardProps> = ({
         <div
           onMouseEnter={() => {
             onSceneHover(scene.id);
-            setIsShotsAreaHovered(true);
-            onShotsAreaHoverChange?.(true);
+            shotsAreaHoverTimerRef.current = setTimeout(() => {
+              setIsShotsAreaHovered(true);
+              onShotsAreaHoverChange?.(true);
+            }, hoverDelay);
           }}
           onMouseLeave={() => {
+            if (shotsAreaHoverTimerRef.current) clearTimeout(shotsAreaHoverTimerRef.current);
             onSceneHover(null);
             setIsShotsAreaHovered(false);
             onShotsAreaHoverChange?.(false);
@@ -686,10 +697,13 @@ const SceneCard: React.FC<SceneCardProps> = ({
       <div
         onMouseEnter={() => {
           onSceneHover(scene.id);
-          setIsShotsAreaHovered(true);
-          onShotsAreaHoverChange?.(true);
+          shotsAreaHoverTimerRef.current = setTimeout(() => {
+            setIsShotsAreaHovered(true);
+            onShotsAreaHoverChange?.(true);
+          }, 500);
         }}
         onMouseLeave={() => {
+          if (shotsAreaHoverTimerRef.current) clearTimeout(shotsAreaHoverTimerRef.current);
           onSceneHover(null);
           setIsShotsAreaHovered(false);
           onShotsAreaHoverChange?.(false);
@@ -840,14 +854,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     const saved = localStorage.getItem('shotsbrowser_showSearchFilter');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [hoverDelay, setHoverDelay] = useState(() => {
+    const saved = localStorage.getItem('shotsbrowser_hoverDelay');
+    return saved !== null ? (parseInt(saved) || 100) : 100;
+  });
 
   // Sync ShotsBrowser visibility settings from Settings panel
   useEffect(() => {
     const handleStorage = () => {
       const sf = localStorage.getItem('shotsbrowser_showSearchFilter');
       const sb = localStorage.getItem('shotsbrowser_showSpecialContextButtons');
+      const delay = localStorage.getItem('shotsbrowser_hoverDelay');
       if (sf !== null) setShowSearchFilter(JSON.parse(sf));
       if (sb !== null) setShowSpecialContextButtons(JSON.parse(sb));
+      if (delay !== null) setHoverDelay(parseInt(delay) || 100);
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
@@ -879,6 +899,12 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
   const previousProjectPath = useRef<string | undefined>(undefined);
   const cachedVersionsForPath = useRef<Map<string, ProjectVersion[]>>(new Map());
   const scrollRef = useRef<any>(null);
+  const containerHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (containerHoverTimerRef.current) clearTimeout(containerHoverTimerRef.current);
+    };
+  }, []);
   // Context menu data type
   type ContextMenuData = { type: 'shot' | 'scene' | 'container'; id?: string };
   const { isOpen: isContextMenuOpen, position: contextMenuPosition, data: contextMenuData, openMenu: openContextMenu, closeMenu: closeContextMenuHook } = useContextMenu<ContextMenuData>();
@@ -1949,8 +1975,11 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
         ref={scrollRef}
         className="flex-1 custom-scrollbar"
         style={{ paddingBottom: isShotsAreaHovered ? '85px' : '45px', minHeight: 0, transition: 'padding-bottom 0.2s ease-in-out' }}
-        onMouseEnter={() => setIsContainerHovered(true)}
+        onMouseEnter={() => {
+          containerHoverTimerRef.current = setTimeout(() => setIsContainerHovered(true), hoverDelay);
+        }}
         onMouseLeave={() => {
+          if (containerHoverTimerRef.current) clearTimeout(containerHoverTimerRef.current);
           setIsContainerHovered(false);
           setHoveredSceneId(null);
         }}
@@ -1984,6 +2013,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                     onShotHover={setHoveredShotId}
                     onAddShot={project.hasShots ? (sceneId) => addShot(projectId, sceneId) : undefined}
                     onShotsAreaHoverChange={setIsShotsAreaHovered}
+                    hoverDelay={hoverDelay}
                   />
                 ))
               ) : (

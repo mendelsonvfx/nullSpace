@@ -807,6 +807,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     const saved = localStorage.getItem('shotsbrowser_showSpecialContextButtons');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [shotsBrowserHoverDelay, setShotsBrowserHoverDelay] = useState(() => {
+    const saved = localStorage.getItem('shotsbrowser_hoverDelay');
+    return saved !== null ? (parseInt(saved) || 100) : 100;
+  });
 
   // Window settings
   const [autoMaximizeOnLaunch, setAutoMaximizeOnLaunch] = useState(false);
@@ -964,7 +968,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
           </button>
           <button
             disabled
-            className="p-4 rounded-button border-2 border-accent/50 bg-sidebar-bg/30 cursor-not-allowed opacity-50"
+            className="p-4 rounded-button border-2 border-border-primary/50 bg-sidebar-bg/30 cursor-not-allowed opacity-50"
           >
             <div className="w-full h-20 bg-zinc-950/50 rounded mb-2" />
             <div className="text-sm font-medium text-text-muted">Dark</div>
@@ -1116,23 +1120,7 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
         </button>
       </div>
 
-      {/* Compact Mode */}
-      <div className="flex items-center justify-between opacity-50">
-        <div>
-          <div className="font-medium mb-1 text-text-muted">Compact Mode</div>
-          <p className="text-sm text-text-muted">
-            Use smaller spacing and UI elements
-          </p>
-        </div>
-        <button
-          disabled
-          className="w-12 h-6 rounded-full bg-border-secondary/50 relative cursor-not-allowed"
-        >
-          <div className="w-5 h-5 bg-white/50 rounded-full absolute top-0.5 left-0.5" />
-        </button>
-      </div>
-
-      {/* Tag Icons */}
+{/* Tag Icons */}
       <div className="flex items-center justify-between">
         <div>
           <div className="font-medium mb-1">Tag Icons</div>
@@ -1180,6 +1168,32 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
             blendPreviewsEnabled ? 'translate-x-6' : 'translate-x-0.5'
           }`} />
         </button>
+      </div>
+
+      <div className="border-t border-border-secondary">
+        <label className="block text-sm font-medium mb-3 mt-6">Shots Browser Settings</label>
+      </div>
+
+      {/* Button Hover Delay */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-medium mb-1">Button Reveal Delay</div>
+          <p className="text-sm text-text-muted">Delay before Add Shot / Add Scene buttons appear on hover (ms)</p>
+        </div>
+        <input
+          type="number"
+          min="0"
+          max="2000"
+          step="100"
+          value={shotsBrowserHoverDelay}
+          onChange={(e) => {
+            const newValue = Math.min(2000, Math.max(0, parseInt(e.target.value) || 0));
+            setShotsBrowserHoverDelay(newValue);
+            localStorage.setItem('shotsbrowser_hoverDelay', newValue.toString());
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
+        />
       </div>
 
       {/* Shots Browser */}
