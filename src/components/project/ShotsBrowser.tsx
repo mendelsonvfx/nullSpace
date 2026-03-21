@@ -110,7 +110,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
   });
   const autoBlendSrc = useBlendThumbnail(!shot.preview && blendPreviewsEnabled ? blendPath : undefined);
   const displaySrc = shotPreviewSrc || autoBlendSrc;
-  const wasImageReadyOnMount = useRef(!!displaySrc);
+  const wasImageReadyOnMount = useRef(!!shot.preview || !!displaySrc);
 
   const handleNameContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
