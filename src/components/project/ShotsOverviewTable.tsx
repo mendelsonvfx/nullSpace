@@ -1,7 +1,11 @@
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { invoke } from '@tauri-apps/api';
 import { useThumbnail } from '../../hooks/useThumbnail';
+import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
 import { useProjectStore } from '../../store/projectStore';
 import { IconCircleCheckFilled, IconClock, IconMoon, IconCircle } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
+import { extractShotNumber, extractVersion, getScenePattern } from '../../utils/fileNaming';
 
 interface TodoItem {
   id: string;
@@ -32,12 +36,40 @@ interface Shot {
 interface ShotsOverviewTableProps {
   projectId: string;
   projectPath: string;
+  projectName: string;
   currentScene: any;
   shots: Shot[];
 }
 
-export function ShotsOverviewTable({ projectId, projectPath, currentScene: _currentScene, shots }: ShotsOverviewTableProps) {
+export function ShotsOverviewTable({ projectId, projectPath, projectName, currentScene, shots }: ShotsOverviewTableProps) {
   const { setCurrentShot } = useProjectStore();
+
+  const [allVersions, setAllVersions] = useState<any[]>([]);
+  useEffect(() => {
+    invoke<any[]>('get_project_versions', { projectPath })
+      .then(setAllVersions)
+      .catch(() => {});
+  }, [projectId]);
+
+  const shotLatestBlendPaths = useMemo(() => {
+    const bestNum = new Map<string, number>();
+    const pathMap = new Map<string, string>();
+    if (!allVersions.length || !currentScene) return pathMap;
+    allVersions.forEach(version => {
+      if (!version.is_versioned) return;
+      const shotNumber = extractShotNumber(version.name);
+      if (shotNumber === null) return;
+      const versionNum = extractVersion(version.name);
+      if (!versionNum) return;
+      if (!version.name.startsWith(getScenePattern(projectName, currentScene.name))) return;
+      const key = String(shotNumber);
+      if (versionNum > (bestNum.get(key) ?? 0)) {
+        bestNum.set(key, versionNum);
+        pathMap.set(key, version.path);
+      }
+    });
+    return pathMap;
+  }, [allVersions, currentScene, projectName]);
 
   // Sort shots by number
   const sortedShots = [...shots].sort((a, b) => a.number - b.number);
@@ -74,6 +106,7 @@ export function ShotsOverviewTable({ projectId, projectPath, currentScene: _curr
                 shot={shot}
                 projectId={projectId}
                 projectPath={projectPath}
+                blendPath={shotLatestBlendPaths.get(String(shot.number))}
                 onClick={() => handleShotClick(shot.id)}
               />
             ))
@@ -88,11 +121,19 @@ interface ShotRowProps {
   shot: Shot;
   projectId: string;
   projectPath: string;
+  blendPath?: string;
   onClick: () => void;
 }
 
-function ShotRow({ shot, projectId: _projectId, projectPath, onClick }: ShotRowProps) {
+function ShotRow({ shot, projectId: _projectId, projectPath, blendPath, onClick }: ShotRowProps) {
   const previewSrc = useThumbnail(projectPath, shot.preview);
+  const [blendPreviewsEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('blendPreviewsEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const autoBlendSrc = useBlendThumbnail(!shot.preview && blendPreviewsEnabled ? blendPath : undefined);
+  const displaySrc = previewSrc || autoBlendSrc;
+  const wasImageReadyOnMount = useRef(!!displaySrc);
 
   const getStatusBadge = () => {
     if (shot.completed) {
@@ -136,16 +177,15 @@ function ShotRow({ shot, projectId: _projectId, projectPath, onClick }: ShotRowP
     <div className="grid grid-cols-[140px_120px_120px_1fr_120px] gap-4 px-4 py-3.5 bg-[#0f0f0f] border border-border-primary rounded-xl hover:border-border-secondary transition-colors cursor-pointer" onClick={onClick}>
       {/* Preview */}
       <div className="flex items-center justify-center">
-        <div className="w-32 h-20 rounded-lg overflow-hidden bg-zinc-900 flex items-center justify-center border border-zinc-800">
-          {previewSrc ? (
+        <div className="relative w-32 h-20 rounded-lg overflow-hidden bg-zinc-900 flex items-center justify-center border border-zinc-800">
+          <span className="text-[10px] text-zinc-600">No preview</span>
+          {displaySrc && (
             <img
-              src={previewSrc}
+              src={displaySrc}
               alt={shot.name}
-              className="w-full h-full object-cover"
+              className={`absolute inset-0 w-full h-full object-cover${wasImageReadyOnMount.current ? '' : ' animate-fade-in'}`}
               draggable={false}
             />
-          ) : (
-            <span className="text-[10px] text-zinc-600">No preview</span>
           )}
         </div>
       </div>

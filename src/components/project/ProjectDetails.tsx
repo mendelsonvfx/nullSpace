@@ -1307,6 +1307,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           <ShotsOverviewTable
             projectId={project.id}
             projectPath={project.path}
+            projectName={project.name}
             currentScene={project.scenes?.find((s: any) => s.id === context.sceneId)}
             shots={project.shots?.filter((s: any) => s.sceneId === context.sceneId) || []}
           />

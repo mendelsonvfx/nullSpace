@@ -132,7 +132,7 @@ input, textarea, [contenteditable],
 
 /* Fade in animation */
 .animate-fade-in {
-  animation: fadeIn 0.5s var(--animation-timing);
+  animation: fadeIn 0.25s ease-out;
 }
 
 @keyframes fadeIn {

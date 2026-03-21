@@ -84,6 +84,7 @@ interface ShotCardProps {
   onEditChange: (value: string) => void;
   onEditSave: () => void;
   onEditCancel: () => void;
+  versionsLoaded: boolean;
 }
 
 const ShotCard: React.FC<ShotCardProps> = ({
@@ -101,7 +102,8 @@ const ShotCard: React.FC<ShotCardProps> = ({
   editValue,
   onEditChange,
   onEditSave,
-  onEditCancel
+  onEditCancel,
+  versionsLoaded
 }) => {
   const shotPreviewSrc = useThumbnail(projectPath, shot.preview);
   const [blendPreviewsEnabled] = useState<boolean>(() => {
@@ -110,7 +112,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
   });
   const autoBlendSrc = useBlendThumbnail(!shot.preview && blendPreviewsEnabled ? blendPath : undefined);
   const displaySrc = shotPreviewSrc || autoBlendSrc;
-  const wasImageReadyOnMount = useRef(!!shot.preview || !!displaySrc);
+  const wasImageReadyOnMount = useRef(!!displaySrc);
 
   const handleNameContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -307,12 +309,17 @@ const ShotCard: React.FC<ShotCardProps> = ({
                 )}
               </div>
             </div>
-            {shot.versions > 0 && (
+            {!versionsLoaded ? (
+              <div className="flex items-center gap-1 text-text-muted mt-0.5">
+                <IconVersions size={11} />
+                <span className="text-xs">Version</span>
+              </div>
+            ) : shot.versions > 0 ? (
               <div className="flex items-center gap-1 text-text-secondary mt-0.5">
                 <IconVersions size={11} />
                 <span className="text-xs">Version {shot.versions}</span>
               </div>
-            )}
+            ) : null}
           </div>
         </>
       )}
@@ -339,6 +346,7 @@ interface SceneCardProps {
   onAddShot?: (sceneId: string) => void;
   onShotsAreaHoverChange?: (isHovered: boolean) => void;
   shotBlendPaths: Map<string, string>;
+  versionsLoaded: boolean;
   animatingShotId: string | null;
   editingItem: { type: 'shot' | 'scene' | 'description'; id: string; value: string } | null;
   onEditChange: (value: string) => void;
@@ -365,6 +373,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onAddShot,
   onShotsAreaHoverChange,
   shotBlendPaths,
+  versionsLoaded,
   animatingShotId,
   editingItem,
   onEditChange,
@@ -562,6 +571,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                   onEditChange={onEditChange}
                   onEditSave={onEditSave}
                   onEditCancel={onEditCancel}
+                  versionsLoaded={versionsLoaded}
                 />
               ))}
             </div>
@@ -783,6 +793,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 onEditChange={onEditChange}
                 onEditSave={onEditSave}
                 onEditCancel={onEditCancel}
+                versionsLoaded={versionsLoaded}
               />
             </div>
             );
@@ -908,6 +919,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
   const [hoveredSceneId, setHoveredSceneId] = useState<string | null>(null);
   const [hoveredShotId, setHoveredShotId] = useState<string | null>(null);
   const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
+  const [versionsLoaded, setVersionsLoaded] = useState(false);
   const previousProjectPath = useRef<string | undefined>(undefined);
   const cachedVersionsForPath = useRef<Map<string, ProjectVersion[]>>(new Map());
   const scrollRef = useRef<any>(null);
@@ -1478,6 +1490,9 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
       const cached = cachedVersionsForPath.current.get(project.path);
       if (cached) {
         setAllVersions(cached);
+        setVersionsLoaded(true);
+      } else {
+        setVersionsLoaded(false);
       }
       previousProjectPath.current = project.path;
     }
@@ -1490,12 +1505,14 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
 
         setAllVersions(result);
         cachedVersionsForPath.current.set(project.path, result);
+        setVersionsLoaded(true);
       } catch (error) {
         console.error('Failed to load versions:', error);
         const cached = cachedVersionsForPath.current.get(project.path);
         if (!cached) {
           setAllVersions([]);
         }
+        setVersionsLoaded(true);
       }
     };
 
@@ -2068,6 +2085,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                     onAddShot={project.hasShots ? (sceneId) => addShot(projectId, sceneId) : undefined}
                     onShotsAreaHoverChange={setIsShotsAreaHovered}
                     shotBlendPaths={shotLatestBlendPaths}
+                    versionsLoaded={versionsLoaded}
                     hoverDelay={hoverDelay}
                   />
                 ))
@@ -2102,6 +2120,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                       viewMode={viewMode}
                       projectPath={project.path}
                       blendPath={shotLatestBlendPaths.get(`${shot.sceneId || ''}_${shot.number}`)}
+                      versionsLoaded={versionsLoaded}
                       onClick={() => handleShotSelect(shot.id)}
                       onStatusChange={handleShotStatusChange}
                       onContextMenu={handleShotContextMenu}
