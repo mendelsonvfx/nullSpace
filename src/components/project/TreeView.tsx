@@ -938,7 +938,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     // Collapsed: Show stacked visual (3 separate cards)
     const stackOffset = 10; // offset between cards in pixels
     // Use consistent padding for all groups: middle card offset + small buffer (2px for hover)
-    const maxOffset = (topThree[1] || topThree[2]) ? stackOffset * 1.15 + 2 : 0;
+    const maxOffset = (topThree[1] || topThree[2]) ? stackOffset * 0.8 : 0;
 
     return (
       <div
@@ -954,7 +954,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         {/* Card 3 (bottom - oldest of top 3) */}
         {topThree[2] && (
           <div
-            className="absolute left-1/2 -translate-x-1/2 h-[28px] bg-zinc-800/90 rounded border border-zinc-700 pointer-events-none flex items-center px-2.5 gap-2 stack-ghost-card transition-transform duration-200 group-hover:translate-y-1"
+            className="absolute left-1/2 -translate-x-1/2 h-[28px] bg-zinc-800/90 rounded border border-zinc-700 pointer-events-none flex items-center px-2.5 gap-2 stack-ghost-card transition-transform duration-200 group-hover:translate-y-0.5"
             style={{
               top: `${stackOffset * 1.555}px`,
               width: '96%',
@@ -977,7 +977,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         {/* Card 2 (middle) */}
         {topThree[1] && (
           <div
-            className="absolute left-1/2 -translate-x-1/2 h-[28px] bg-zinc-800/95 rounded border border-zinc-600 pointer-events-none flex items-center px-2.5 gap-2 shadow-md stack-ghost-card transition-transform duration-200 group-hover:translate-y-0.5"
+            className="absolute left-1/2 -translate-x-1/2 h-[28px] bg-zinc-800/95 rounded border border-zinc-600 pointer-events-none flex items-center px-2.5 gap-2 shadow-md stack-ghost-card transition-transform duration-200 group-hover:translate-y-px"
             style={{
               top: `${stackOffset * 1.15}px`,
               width: '98%',
@@ -1060,7 +1060,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         <div
           className={`flex items-center gap-2 px-2.5 py-2 text-xs select-none group transition-all cursor-pointer ${node.is_dir
               ? `bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary ${isExpanded ? 'bg-hover-bg border-border-secondary' : ''} ${isHighlighted ? 'folder-highlighted' : isFadingOut ? 'folder-highlighted-out' : ''}`
-              : 'hover:bg-hover-bg/30 rounded'
+              : 'bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary'
             }`}
           onDoubleClick={(e) => handleDoubleClick(e, node)}
           onContextMenu={(e) => handleContextMenu(e, node)}
@@ -1126,7 +1126,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         </div>
         {node.is_dir && node.children && (
           <div
-            className={`overflow-hidden transition-all duration-150 ease-out ${isExpanded ? 'mt-1 max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+            className={`transition-all duration-150 ease-out ${isExpanded ? 'mt-1 max-h-[2000px] opacity-100 overflow-visible' : 'max-h-0 opacity-0 overflow-hidden'
               }`}
           >
             <div className="flex flex-col gap-1">
