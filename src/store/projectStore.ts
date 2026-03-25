@@ -118,6 +118,12 @@ interface ProjectStore {
   addSpecialContextNote: (projectId: string, contextId: string, content: string) => void;
   updateSpecialContextNote: (projectId: string, contextId: string, noteId: string, content: string) => void;
   removeSpecialContextNote: (projectId: string, contextId: string, noteId: string) => void;
+  // Asset tag/icon/color management
+  setAssetTags: (projectId: string, assetName: string, tags: string[]) => void;
+  setAssetIcon: (projectId: string, assetName: string, icon: string | null) => void;
+  setAssetColor: (projectId: string, assetName: string, color: string | null) => void;
+  renameAsset: (projectId: string, oldAssetName: string, newAssetName: string) => Promise<void>;
+  deleteAsset: (projectId: string, assetName: string) => Promise<void>;
   // Preview management
   setScenePreview: (projectId: string, sceneId: string) => Promise<void>;
   setShotPreview: (projectId: string, shotId: string) => Promise<void>;
@@ -2384,6 +2390,161 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     };
 
     get().updateProject(updated);
+  },
+
+  // Asset tag/icon/color management
+  setAssetTags: (projectId: string, assetName: string, tags: string[]) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project) return;
+    const newTags = { ...project.assetTags };
+    if (tags.length > 0) {
+      newTags[assetName] = tags;
+    } else {
+      delete newTags[assetName];
+    }
+    get().updateProject({ ...project, assetTags: newTags });
+  },
+
+  setAssetIcon: (projectId: string, assetName: string, icon: string | null) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project) return;
+    const next = { ...project.assetIcons };
+    if (icon) { next[assetName] = icon; } else { delete next[assetName]; }
+    get().updateProject({ ...project, assetIcons: next });
+  },
+
+  setAssetColor: (projectId: string, assetName: string, color: string | null) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project) return;
+    const next = { ...project.assetColors };
+    if (color) { next[assetName] = color; } else { delete next[assetName]; }
+    get().updateProject({ ...project, assetColors: next });
+  },
+
+  renameAsset: async (projectId: string, oldAssetName: string, newAssetName: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    const newNameUpper = newAssetName.toUpperCase().replace(/\s+/g, '');
+
+    // 1. Count files
+    const fileCount = await invoke<{ versionFiles: number; thumbnails: number }>(
+      'count_asset_files', { projectPath: project.path, assetName: oldAssetName }
+    );
+
+    // 2. Confirmation dialog if files exist
+    if (fileCount.versionFiles > 0 || fileCount.thumbnails > 0) {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        (window as any).confirmSceneRename = {
+          sceneName: oldAssetName,
+          fileCount,
+          onConfirm: () => resolve(true),
+          onCancel: () => resolve(false),
+          isAsset: true,
+        };
+        (window as any).showSceneRenameConfirm = true;
+      });
+      if (!confirmed) return;
+    }
+
+    // 3. Progress tracking
+    set({ isRenaming: true, renameProgress: { current: 0, total: 0 } });
+    const unlisten = await listen<{ current: number; total: number }>('rename-progress', (event) => {
+      set({ renameProgress: event.payload });
+    });
+
+    try {
+      const filesRenamed = await invoke<number>('rename_asset_files', {
+        projectPath: project.path,
+        oldAssetName,
+        newAssetName: newNameUpper,
+      });
+      const thumbnailsRenamed = await invoke<number>('rename_asset_thumbnails', {
+        projectPath: project.path,
+        oldAssetName,
+        newAssetName: newNameUpper,
+      });
+
+      // Migrate assetTags / assetIcons / assetColors keys to new name
+      const newTags = { ...project.assetTags };
+      const newIcons = { ...project.assetIcons };
+      const newColors = { ...project.assetColors };
+      if (project.assetTags?.[oldAssetName]) {
+        newTags[newNameUpper] = newTags[oldAssetName];
+        delete newTags[oldAssetName];
+      }
+      if (project.assetIcons?.[oldAssetName]) {
+        newIcons[newNameUpper] = newIcons[oldAssetName];
+        delete newIcons[oldAssetName];
+      }
+      if (project.assetColors?.[oldAssetName]) {
+        newColors[newNameUpper] = newColors[oldAssetName];
+        delete newColors[oldAssetName];
+      }
+      get().updateProject({ ...project, assetTags: newTags, assetIcons: newIcons, assetColors: newColors });
+
+      if (typeof (window as any).clearAllBlendThumbnailCache === 'function') {
+        (window as any).clearAllBlendThumbnailCache();
+      }
+
+      if (typeof (window as any).showNotification === 'function') {
+        (window as any).showNotification(
+          'success',
+          `Renamed ${filesRenamed} files and ${thumbnailsRenamed} thumbnails`,
+          'Asset renamed successfully'
+        );
+      }
+
+      // Trigger version list reload on success only
+      window.dispatchEvent(new CustomEvent('version-created', { detail: { projectPath: project.path } }));
+
+    } catch (error) {
+      if (typeof (window as any).showNotification === 'function') {
+        (window as any).showNotification('error', String(error), 'Failed to rename asset', 10000);
+      }
+    } finally {
+      unlisten();
+      set({ isRenaming: false, renameProgress: null });
+    }
+  },
+
+  deleteAsset: async (projectId: string, assetName: string) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    try {
+      await invoke('delete_asset_files', { projectPath: project.path, assetName });
+
+      set(state => {
+        const p = state.projects.find(p => p.id === projectId);
+        if (!p) return {};
+        const assetTags = { ...(p.assetTags ?? {}) };
+        const assetIcons = { ...(p.assetIcons ?? {}) };
+        const assetColors = { ...(p.assetColors ?? {}) };
+        delete assetTags[assetName];
+        delete assetIcons[assetName];
+        delete assetColors[assetName];
+        return {
+          projects: state.projects.map(proj =>
+            proj.id === projectId ? { ...proj, assetTags, assetIcons, assetColors } : proj
+          )
+        };
+      });
+
+      if (typeof (window as any).clearAllBlendThumbnailCache === 'function') {
+        (window as any).clearAllBlendThumbnailCache();
+      }
+
+      window.dispatchEvent(new CustomEvent('version-created', { detail: { projectPath: project.path } }));
+
+      if (typeof (window as any).showNotification === 'function') {
+        (window as any).showNotification('success', `Asset "${assetName}" deleted.`);
+      }
+    } catch (error) {
+      if (typeof (window as any).showNotification === 'function') {
+        (window as any).showNotification('error', String(error), 'Failed to delete asset', 10000);
+      }
+    }
   },
 
   // Special context data management

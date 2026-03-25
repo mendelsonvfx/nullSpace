@@ -237,6 +237,7 @@ function App() {
     onConfirm: () => void;
     onCancel: () => void;
     isShot?: boolean;
+    isAsset?: boolean;
   } | null>(null);
 
   // Add general notification
@@ -274,6 +275,7 @@ function App() {
           sceneName: data.sceneName,
           fileCount: data.fileCount,
           isShot: data.isShot || false,
+          isAsset: data.isAsset || false,
           onConfirm: () => {
             data.onConfirm();
             setSceneRenameConfirm(null);
@@ -469,8 +471,9 @@ function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [saveWindowState]);
 
-  // Temporary keybind to show welcome setup (numpad decimal/dot)
+  // Temporary keybind to show welcome setup (numpad decimal/dot) — dev only
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.code === 'NumpadDecimal' || e.key === 'Decimal') {
         e.preventDefault();
@@ -1305,6 +1308,7 @@ function App() {
           isRenaming={isRenaming}
           progress={renameProgress}
           isShot={sceneRenameConfirm.isShot || false}
+          isAsset={sceneRenameConfirm.isAsset || false}
         />
       )}
 
@@ -2349,7 +2353,7 @@ function App() {
             >
               <button
                 ref={categoryButtonRef}
-                className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-white/10 rounded-md flex items-center justify-between gap-2 transition-colors"
+                className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-hover-bg rounded-md flex items-center justify-between gap-2 transition-colors"
               >
                 <div className="flex items-center gap-2.5">
                   <span className="w-4 h-4 flex items-center justify-center opacity-80">
@@ -2364,7 +2368,7 @@ function App() {
               {showCategorySubmenu && (
                 <div
                   ref={categorySubmenuRef}
-                  className="absolute left-full bottom-0 ml-2.5 bg-zinc-800/95 border border-zinc-600/50 rounded-xl shadow-2xl p-1.5 z-[101] w-auto animate-context-menu"
+                  className="absolute left-full bottom-0 ml-2.5 bg-card-bg/80 backdrop-blur-[32px] border border-border-secondary rounded-xl shadow-2xl p-1.5 z-[101] w-auto animate-context-menu"
                   onMouseEnter={() => {
                     if (categorySubmenuTimeoutRef.current) {
                       clearTimeout(categorySubmenuTimeoutRef.current);
@@ -2390,7 +2394,7 @@ function App() {
                           closeContextMenu();
                           setShowCategorySubmenu(false);
                         }}
-                        className={`block w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-white/10 rounded-md whitespace-nowrap transition-colors ${isCurrentCategory ? 'opacity-50 cursor-not-allowed' : ''
+                        className={`block w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-hover-bg rounded-md whitespace-nowrap transition-colors ${isCurrentCategory ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                         disabled={isCurrentCategory}
                       >

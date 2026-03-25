@@ -176,6 +176,9 @@ export interface Project {
   sceneShotPreferences?: Record<string, string>; // sceneId -> shotId mapping
   specialContexts?: SpecialContext[]; // Asset/Compose contexts
   currentSpecialContextId?: string; // Currently selected special context (asset/compose)
+  assetTags?: Record<string, string[]>;
+  assetIcons?: Record<string, string>;   // assetName → icon key (e.g. 'car', 'sword')
+  assetColors?: Record<string, string>;  // assetName → color key (e.g. 'blue', 'red')   // assetName ("WIZARD") → assigned tag names
   category?: string;
   timeEntries?: TimeEntry[];
   totalMinutesSpent?: number;        // Completed sessions total

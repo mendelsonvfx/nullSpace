@@ -581,7 +581,7 @@ function DataSettings() {
             disabled={isExporting}
             className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors flex items-center gap-2 text-sm font-medium animate-button"
           >
-            <Download className="w-4 h-4" />
+            <Upload className="w-4 h-4" />
             {isExporting ? 'Exporting...' : 'Export Data'}
           </button>
           <button
@@ -589,7 +589,7 @@ function DataSettings() {
             disabled={isImporting}
             className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors flex items-center gap-2 text-sm font-medium animate-button"
           >
-            <Upload className="w-4 h-4" />
+            <Download className="w-4 h-4" />
             {isImporting ? 'Importing...' : 'Import Data'}
           </button>
           {exportSuccess && (

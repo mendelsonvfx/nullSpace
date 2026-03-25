@@ -1,28 +1,38 @@
 import { useState, useEffect } from 'react';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import { AlertCircle } from 'lucide-react';
+import { SoftwareIcon } from '../SoftwareIcon';
 
 interface AssetNameModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (assetName: string) => void;
-  softwareName: string;
+  onConfirm: (assetName: string, software?: any) => void;
+  softwareName?: string;
+  softwareList?: any[];
   projectName: string;
+  mode?: 'create' | 'rename';
+  initialName?: string;
 }
 
-// Validate asset name - only letters and numbers allowed
-const isValidAssetName = (name: string) => /^[a-zA-Z0-9]*$/.test(name);
+// Validate asset name - only letters, numbers and spaces allowed
+const isValidAssetName = (name: string) => /^[a-zA-Z0-9 ]*$/.test(name);
 
-export function AssetNameModal({ isOpen, onClose, onConfirm, softwareName, projectName }: AssetNameModalProps) {
+export function AssetNameModal({ isOpen, onClose, onConfirm, softwareName, softwareList, projectName, mode = 'create', initialName }: AssetNameModalProps) {
   const [assetName, setAssetName] = useState('');
   const [hasError, setHasError] = useState(false);
+  const [selectedSoftware, setSelectedSoftware] = useState<any>(null);
   const blurClass = useModalBlur();
+
+  const isRename = mode === 'rename';
+  const hasSoftwareList = !isRename && softwareList && softwareList.length > 0;
+  const activeSoftwareName = selectedSoftware?.displayName ?? selectedSoftware?.name ?? softwareName ?? '';
 
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
-      setAssetName('');
+      setAssetName(isRename ? (initialName ?? '') : '');
       setHasError(false);
+      setSelectedSoftware(hasSoftwareList ? softwareList![0] : null);
     }
   }, [isOpen]);
 
@@ -36,9 +46,9 @@ export function AssetNameModal({ isOpen, onClose, onConfirm, softwareName, proje
 
   const handleConfirm = () => {
     if (hasError) return;
-    // Use "01" as default if empty, otherwise uppercase the input
-    const finalName = assetName.trim() === '' ? '01' : assetName.toUpperCase();
-    onConfirm(finalName);
+    if (hasSoftwareList && !selectedSoftware) return;
+    const finalName = assetName.trim() === '' ? '01' : assetName.trim().replace(/\s+/g, '').toUpperCase();
+    onConfirm(finalName, hasSoftwareList ? selectedSoftware : undefined);
   };
 
   const handleBackdropMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -54,10 +64,7 @@ export function AssetNameModal({ isOpen, onClose, onConfirm, softwareName, proje
     delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
   };
 
-  // Preview file name
-  const previewName = assetName.trim() === ''
-    ? '01'
-    : assetName.toUpperCase();
+  const previewName = assetName.trim() === '' ? '01' : assetName.trim().replace(/\s+/g, '').toUpperCase();
   const projectBase = projectName.replace(/\s+/g, '').toUpperCase();
 
   return (
@@ -71,8 +78,32 @@ export function AssetNameModal({ isOpen, onClose, onConfirm, softwareName, proje
         onClick={(e) => e.stopPropagation()}
         data-modal-window
       >
-        <h3 className="text-lg font-semibold mb-1">Create {softwareName} Asset</h3>
-        <p className="text-text-muted text-sm mb-4">Enter a name for the asset</p>
+        <h3 className="text-lg font-semibold mb-1">
+          {isRename ? 'Rename Asset' : `Create ${activeSoftwareName ? `${activeSoftwareName} ` : ''}Asset`}
+        </h3>
+        <p className="text-text-muted text-sm mb-4">
+          {isRename ? 'Enter a new name for the asset' : 'Enter a name for the asset'}
+        </p>
+
+        {/* Software selector — only for create mode */}
+        {hasSoftwareList && (
+          <div className="flex gap-2 mb-4 flex-wrap">
+            {softwareList!.map((sw: any) => (
+              <button
+                key={sw.name}
+                onClick={() => setSelectedSoftware(sw)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-button text-xs border transition-colors ${
+                  selectedSoftware?.name === sw.name
+                    ? 'bg-hover-bg border-border-hover text-text-primary'
+                    : 'bg-sidebar-bg border-border-primary text-text-muted hover:bg-hover-bg hover:text-text-primary'
+                }`}
+              >
+                <SoftwareIcon name={sw.name} className="w-3.5 h-3.5" />
+                {sw.displayName ?? sw.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Input with validation */}
         <div className="relative mb-1">
@@ -84,10 +115,10 @@ export function AssetNameModal({ isOpen, onClose, onConfirm, softwareName, proje
               if (e.key === 'Enter' && !hasError) handleConfirm();
               if (e.key === 'Escape') onClose();
             }}
-            placeholder="01"
+            placeholder="Name 01"
             className={`w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm focus:outline-none pr-9 transition-colors ${
               hasError
-                ? 'border-2 border-red-500 focus:ring-2 focus:ring-red-500'
+                ? 'border border-red-500'
                 : 'border border-border-primary focus:border-accent'
             }`}
             autoFocus
@@ -99,7 +130,7 @@ export function AssetNameModal({ isOpen, onClose, onConfirm, softwareName, proje
 
         {/* Helper text - always visible */}
         <p className={`text-xs mb-3 ${hasError ? 'text-red-400' : 'text-text-muted'}`}>
-          Only letters and numbers allowed
+          Only letters, numbers allowed
         </p>
 
         {/* Preview */}
@@ -122,7 +153,7 @@ export function AssetNameModal({ isOpen, onClose, onConfirm, softwareName, proje
             disabled={hasError}
             className="px-3 py-1.5 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors font-medium text-sm text-white animate-button"
           >
-            Create
+            {isRename ? 'Rename' : 'Create'}
           </button>
         </div>
       </div>

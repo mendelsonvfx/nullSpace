@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api';
 import { useProjectStore } from '../../store/projectStore';
 import { LinkItem, LinkInputForm, NotesSection } from '../shared';
 import { VersionsOverview } from './VersionsOverview';
+import { AssetsLibrary, type AssetStats } from './AssetsLibrary';
 import { OutputOverview } from './OutputOverview';
 import { ShotsOverviewTable } from './ShotsOverviewTable';
 import { SoftwareIcon } from '../SoftwareIcon';
@@ -23,6 +24,15 @@ import { getPaymentStatusUpdate } from '../../utils/financeService';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
+function fmtAssetDate(ts: number): string {
+  const d = Math.floor((Date.now() - ts * 1000) / 86400000);
+  if (d === 0) return 'Today';
+  if (d === 1) return 'Yesterday';
+  if (d < 7) return `${d}d ago`;
+  if (d < 30) return `${Math.floor(d / 7)}w ago`;
+  return `${Math.floor(d / 30)}mo ago`;
+}
+
 interface ProjectDetailsProps {
   project: any;
   launchingStatus: Record<string, 'idle' | 'launching' | 'success'>;
@@ -41,6 +51,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [isPaymentModalAnimating, setIsPaymentModalAnimating] = useState(false);
   const [isFavoriteAnimating, setIsFavoriteAnimating] = useState(false);
   const [shotToDelete, setShotToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [assetStats, setAssetStats] = useState<AssetStats | null>(null);
   const [softwareToRemove, setSoftwareToRemove] = useState<string | null>(null);
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -671,6 +682,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       </div>
 
       {/* Content */}
+      {context.isSpecialContext && context.specialContextType === 'asset' && !context.specialContextSceneId ? (
+        <AssetsLibrary project={project} showNotification={showNotification} onStatsChange={setAssetStats} />
+      ) : (
       <SimpleBar className="flex-1 custom-page-scrollbar" autoHide={false} scrollableNodeProps={{ ref: contentScrollRef }}>
         <div className="px-7 pb-16 pt-4">
         {/* Quick Actions - hidden when only scene is selected (without shot) */}
@@ -1317,6 +1331,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         <NotesSection project={project} context={context} />
         </div>
       </SimpleBar>
+      )}
 
       {/* Payment Modal */}
       {showPaymentModal && (
@@ -2079,13 +2094,33 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         />
       )}
 
+      {/* Asset Stats Bar — shown when in project-level asset context */}
+      {context.isSpecialContext && context.specialContextType === 'asset' && !context.specialContextSceneId && assetStats && (
+        <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-50">
+          <div className="pointer-events-auto relative z-10 px-7 pb-3">
+            <div className="bg-card-bg border border-border-primary rounded-button px-6 py-2">
+              <div className="flex gap-6 items-center text-xs">
+                <div><span className="text-text-muted">Assets:</span>{' '}<span className="text-text-primary font-medium">{assetStats.totalAssets}</span></div>
+                <div><span className="text-text-muted">Versions:</span>{' '}<span className="text-text-primary font-medium">{assetStats.totalVersions}</span></div>
+                <div><span className="text-text-muted">Software:</span>{' '}<span className="text-text-primary font-medium">{assetStats.softwareCount}</span></div>
+                {assetStats.lastModified != null && (
+                  <div><span className="text-text-muted">Updated:</span>{' '}<span className="text-text-primary font-medium">{fmtAssetDate(assetStats.lastModified)}</span></div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none z-0" style={{
+            background: 'linear-gradient(to bottom, transparent 0%, rgba(10, 10, 10, 0.15) 20%, rgba(10, 10, 10, 0.4) 40%, rgba(10, 10, 10, 0.7) 60%, rgba(10, 10, 10, 0.9) 80%, #0a0a0a 100%)'
+          }} />
+        </div>
+      )}
+
       {/* Project Info Bar */}
-      {timeTrackingEnabled && (
+      {timeTrackingEnabled && !(context.isSpecialContext && context.specialContextType === 'asset' && !context.specialContextSceneId) && (
         <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-50">
           <div className="pointer-events-auto relative z-10">
             <TimeInfoBar project={latestProject} />
           </div>
-          {/* Gradient fade at the bottom edge of screen */}
           <div className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none z-0" style={{
             background: 'linear-gradient(to bottom, transparent 0%, rgba(10, 10, 10, 0.15) 20%, rgba(10, 10, 10, 0.4) 40%, rgba(10, 10, 10, 0.7) 60%, rgba(10, 10, 10, 0.9) 80%, #0a0a0a 100%)'
           }}></div>

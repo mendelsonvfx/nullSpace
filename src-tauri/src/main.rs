@@ -109,6 +109,12 @@ struct Project {
     hourly_rate: Option<f64>,
     #[serde(rename = "targetHourlyRate", alias = "target_hourly_rate")]
     target_hourly_rate: Option<f64>,
+    #[serde(rename = "assetTags", alias = "asset_tags", skip_serializing_if = "Option::is_none")]
+    asset_tags: Option<std::collections::HashMap<String, Vec<String>>>,
+    #[serde(rename = "assetIcons", alias = "asset_icons", skip_serializing_if = "Option::is_none")]
+    asset_icons: Option<std::collections::HashMap<String, String>>,
+    #[serde(rename = "assetColors", alias = "asset_colors", skip_serializing_if = "Option::is_none")]
+    asset_colors: Option<std::collections::HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -548,6 +554,9 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
         total_minutes_spent: Some(0),
         hourly_rate: None,
         target_hourly_rate: None,
+        asset_tags: None,
+        asset_icons: None,
+        asset_colors: None,
     };
 
     let metadata_path = project_path.join(".project-metadata.json");
@@ -1190,8 +1199,8 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
                 let child_id = child.id();
                 println!("Blender setup process started (PID: {})", child_id);
 
-                // Wait for file to be created (max 10 seconds)
-                let timeout = Duration::from_secs(10);
+                // Wait for file to be created (max 30 seconds)
+                let timeout = Duration::from_secs(30);
                 let start = std::time::Instant::now();
 
                 loop {
@@ -1243,7 +1252,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
             // Create Python script to save empty hip file
             let file_path_str = file_path.to_str()
                 .ok_or("Invalid file path encoding")?
-                .replace("\\", "\\\\"); // Escape backslashes for Python
+                .replace("\\", "/"); // Forward slashes — unambiguous in Python/Houdini on Windows
 
             let python_script = format!("import hou; hou.hipFile.save(r'{}')", file_path_str);
 
@@ -1258,6 +1267,27 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 return Err(format!("hython failed to create project: {}", stderr));
             }
+
+            // Wait for file to be visible on disk (Houdini may buffer writes)
+            let timeout = Duration::from_secs(15);
+            let start = std::time::Instant::now();
+            loop {
+                if file_path.exists() {
+                    println!("✓ Houdini file created successfully");
+                    break;
+                }
+                if start.elapsed() > timeout {
+                    println!("⚠ Timeout waiting for Houdini file creation");
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        }
+
+        // If no software-specific creation ran, create an empty placeholder
+        if !file_path.exists() {
+            fs::write(&file_path, b"")
+                .map_err(|e| format!("Failed to create file: {}", e))?;
         }
 
         // Use unified launcher for all software
@@ -3513,6 +3543,216 @@ async fn count_shot_files(
     })
 }
 
+// ==================== Asset File Commands ====================
+
+#[tauri::command]
+async fn count_asset_files(
+    project_path: String,
+    asset_name: String,
+) -> Result<SceneFileCount, String> {
+    let project_dir = Path::new(&project_path);
+    let asset_dir = project_dir.join("_GlobalAssets");
+    let thumbnails_dir = project_dir.join(".thumbnails");
+    let pattern = format!("_ASSET_{}_", asset_name.to_uppercase());
+
+    let mut version_files = 0u32;
+    let mut thumbnails = 0u32;
+
+    // Count version files in _GlobalAssets (flat directory)
+    if asset_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&asset_dir) {
+            for entry in entries.flatten() {
+                if let Ok(ft) = entry.file_type() {
+                    if ft.is_file() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        if name.contains(&pattern) {
+                            version_files += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Count thumbnails (walk .thumbnails subdirectories)
+    if thumbnails_dir.exists() {
+        for entry in WalkDir::new(&thumbnails_dir).into_iter().flatten() {
+            if entry.file_type().is_file() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.contains(&pattern) {
+                    thumbnails += 1;
+                }
+            }
+        }
+    }
+
+    Ok(SceneFileCount { version_files, thumbnails })
+}
+
+#[tauri::command]
+async fn delete_asset_files(
+    project_path: String,
+    asset_name: String,
+) -> Result<u32, String> {
+    let project_dir = Path::new(&project_path);
+    let asset_dir = project_dir.join("_GlobalAssets");
+    let thumbnails_dir = project_dir.join(".thumbnails");
+    let pattern = format!("_ASSET_{}_", asset_name.to_uppercase());
+    let mut deleted_count = 0u32;
+
+    if asset_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&asset_dir) {
+            for entry in entries.flatten() {
+                if let Ok(ft) = entry.file_type() {
+                    if ft.is_file() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        if name.contains(&pattern) {
+                            if fs::remove_file(entry.path()).is_ok() {
+                                deleted_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if thumbnails_dir.exists() {
+        for entry in WalkDir::new(&thumbnails_dir).into_iter().flatten() {
+            if entry.file_type().is_file() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.contains(&pattern) {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
+    Ok(deleted_count)
+}
+
+#[tauri::command]
+async fn rename_asset_files(
+    app_handle: tauri::AppHandle,
+    project_path: String,
+    old_asset_name: String,
+    new_asset_name: String,
+) -> Result<u32, String> {
+    let project_dir = Path::new(&project_path);
+    let asset_dir = project_dir.join("_GlobalAssets");
+    let old_segment = format!("_ASSET_{}_", old_asset_name.to_uppercase());
+    let new_segment = format!("_ASSET_{}_", new_asset_name.to_uppercase());
+
+    if !asset_dir.exists() {
+        return Ok(0);
+    }
+
+    // Collect matching files
+    let mut files: Vec<PathBuf> = Vec::new();
+    if let Ok(entries) = fs::read_dir(&asset_dir) {
+        for entry in entries.flatten() {
+            if let Ok(ft) = entry.file_type() {
+                if ft.is_file() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.contains(&old_segment) {
+                        files.push(entry.path());
+                    }
+                }
+            }
+        }
+    }
+
+    if files.is_empty() {
+        return Ok(0);
+    }
+
+    let mut wal = create_wal(&project_path, "rename_asset")?;
+    let total = files.len();
+    let mut renamed_count = 0u32;
+
+    for (index, file_path) in files.iter().enumerate() {
+        let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
+        let new_name = file_name.replace(&old_segment, &new_segment);
+        let new_path = file_path.with_file_name(&new_name);
+
+        match rename_with_wal(&mut wal, file_path, &new_path) {
+            Ok(_) => {
+                renamed_count += 1;
+                println!("✓ Renamed asset file: {} -> {}", file_name, new_name);
+                emit_progress(&app_handle, index + 1, total);
+            }
+            Err(e) => {
+                println!("❌ Error renaming asset file, rolling back...");
+                rollback_from_wal(&wal)?;
+                delete_wal(&wal)?;
+                return Err(e);
+            }
+        }
+    }
+
+    delete_wal(&wal)?;
+    println!("✅ Successfully renamed {} asset files", renamed_count);
+    Ok(renamed_count)
+}
+
+#[tauri::command]
+async fn rename_asset_thumbnails(
+    app_handle: tauri::AppHandle,
+    project_path: String,
+    old_asset_name: String,
+    new_asset_name: String,
+) -> Result<u32, String> {
+    let project_dir = Path::new(&project_path);
+    let thumbnails_dir = project_dir.join(".thumbnails");
+    let old_segment = format!("_ASSET_{}_", old_asset_name.to_uppercase());
+    let new_segment = format!("_ASSET_{}_", new_asset_name.to_uppercase());
+
+    if !thumbnails_dir.exists() {
+        return Ok(0);
+    }
+
+    let mut files: Vec<PathBuf> = Vec::new();
+    for entry in WalkDir::new(&thumbnails_dir).into_iter().flatten() {
+        if entry.file_type().is_file() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.contains(&old_segment) {
+                files.push(entry.path().to_path_buf());
+            }
+        }
+    }
+
+    if files.is_empty() {
+        return Ok(0);
+    }
+
+    let mut wal = create_wal(&project_path, "rename_asset_thumbnails")?;
+    let total = files.len();
+    let mut renamed_count = 0u32;
+
+    for (index, file_path) in files.iter().enumerate() {
+        let file_name = file_path.file_name().unwrap().to_string_lossy().to_string();
+        let new_name = file_name.replace(&old_segment, &new_segment);
+        let new_path = file_path.with_file_name(&new_name);
+
+        match rename_with_wal(&mut wal, file_path, &new_path) {
+            Ok(_) => {
+                renamed_count += 1;
+                emit_progress(&app_handle, index + 1, total);
+            }
+            Err(e) => {
+                rollback_from_wal(&wal)?;
+                delete_wal(&wal)?;
+                return Err(e);
+            }
+        }
+    }
+
+    delete_wal(&wal)?;
+    Ok(renamed_count)
+}
+
+// ==================== End of Asset File Commands ====================
+
 #[tauri::command]
 async fn count_scene_files(
     project_path: String,
@@ -5087,6 +5327,10 @@ fn main() {
             rename_shot_files,
             rename_shot_thumbnails,
             count_shot_files,
+            count_asset_files,
+            delete_asset_files,
+            rename_asset_files,
+            rename_asset_thumbnails,
             count_scene_files,
             rename_scene_files,
             rename_scene_thumbnails,
