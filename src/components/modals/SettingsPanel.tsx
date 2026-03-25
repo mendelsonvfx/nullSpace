@@ -250,6 +250,35 @@ function GeneralSettings() {
     const saved = localStorage.getItem('deadlineNotificationDays');
     return saved !== null ? parseInt(saved) : 3;
   });
+  const [updateCheckFrequency, setUpdateCheckFrequency] = useState(() => {
+    return localStorage.getItem('updateCheckFrequency') || '24h';
+  });
+  type CheckStatus = 'idle' | 'checking' | 'up-to-date' | 'error';
+  const [checkStatus, setCheckStatus] = useState<CheckStatus>('idle');
+
+  const handleCheckNow = async () => {
+    setCheckStatus('checking');
+    try {
+      const info = await invoke<{
+        version: string;
+        download_url: string;
+        notes: string | null;
+        release_url: string | null;
+        pub_date: string | null;
+      } | null>('check_for_update');
+      localStorage.setItem('lastUpdateCheck', Date.now().toString());
+      if (info) {
+        window.dispatchEvent(new CustomEvent('nullspace:update-available', { detail: info }));
+        setCheckStatus('idle');
+      } else {
+        setCheckStatus('up-to-date');
+        setTimeout(() => setCheckStatus('idle'), 3000);
+      }
+    } catch {
+      setCheckStatus('error');
+      setTimeout(() => setCheckStatus('idle'), 3000);
+    }
+  };
 
   const handleBrowseDirectory = async () => {
     const selected = await selectProjectDirectory();
@@ -371,6 +400,55 @@ function GeneralSettings() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Software Update Check */}
+      <div className="border-t border-border-secondary pt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium mb-1">Software Update Check</div>
+            <p className="text-sm text-text-muted">
+              How often to check for new versions
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCheckNow}
+              disabled={checkStatus !== 'idle'}
+              className="flex items-center gap-2 px-3 py-2 text-sm rounded-button bg-sidebar-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {checkStatus === 'checking' && <RefreshCw className="w-4 h-4 animate-spin" />}
+              {checkStatus === 'idle' && <RefreshCw className="w-4 h-4" />}
+              {checkStatus === 'up-to-date' && <Check className="w-4 h-4 text-green-400" />}
+              {checkStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
+              <span className={
+                checkStatus === 'up-to-date' ? 'text-green-400' :
+                checkStatus === 'error' ? 'text-red-400' : ''
+              }>
+                {checkStatus === 'idle' && 'Check Now'}
+                {checkStatus === 'checking' && 'Checking...'}
+                {checkStatus === 'up-to-date' && 'Up to date'}
+                {checkStatus === 'error' && 'Check failed'}
+              </span>
+            </button>
+            <CustomSelect
+              value={updateCheckFrequency}
+              onChange={(val) => {
+                setUpdateCheckFrequency(val);
+                localStorage.setItem('updateCheckFrequency', val);
+                window.dispatchEvent(new Event('storage'));
+              }}
+              options={[
+                { value: 'launch', label: 'Every launch' },
+                { value: '1h', label: 'Every hour' },
+                { value: '24h', label: 'Every 24 hours' },
+                { value: '7d', label: 'Every week' },
+                { value: 'never', label: 'Never' },
+              ]}
+              className="w-40"
+            />
+          </div>
+        </div>
       </div>
 
     </div>

@@ -41,6 +41,8 @@ import { DeadlineNotification } from './components/DeadlineNotification';
 import { GeneralNotification } from './components/notifications/GeneralNotification';
 import type { GeneralNotification as GeneralNotificationType } from './components/notifications/GeneralNotification';
 import { RenameSceneConfirmModal } from './components/modals/RenameSceneConfirmModal';
+import { UpdateNotification } from './components/UpdateNotification';
+import { useUpdateCheck } from './hooks/useUpdateCheck';
 import { useWindowState } from './hooks/useWindowState';
 // useThumbnail moved to child components
 import { CategoryTabs } from './components/CategoryTabs';
@@ -221,6 +223,7 @@ function App() {
   const [breakReminders, setBreakReminders] = useState<BreakReminder[]>([]);
   const [shownReminders, setShownReminders] = useState<Set<string>>(new Set());
   const [generalNotifications, setGeneralNotifications] = useState<GeneralNotificationType[]>([]);
+  const { updateInfo, dismissUpdate } = useUpdateCheck();
   const [showCategorySubmenu, setShowCategorySubmenu] = useState(false);
   const [accentColor, setAccentColor] = useState(() => {
     return localStorage.getItem('accentColor') || '#8B5CF6';
@@ -1291,6 +1294,18 @@ function App() {
           ))}
         </div>
       </div>
+
+      {/* Update Notification */}
+      {updateInfo && (
+        <UpdateNotification
+          version={updateInfo.version}
+          downloadUrl={updateInfo.downloadUrl}
+          notes={updateInfo.notes}
+          releaseUrl={updateInfo.releaseUrl}
+          pubDate={updateInfo.pubDate}
+          onDismiss={dismissUpdate}
+        />
+      )}
 
       {/* Scene Rename Confirmation Modal */}
       {sceneRenameConfirm && (

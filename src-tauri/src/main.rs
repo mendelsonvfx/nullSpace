@@ -3,6 +3,7 @@
 mod time_tracking;
 mod file_naming;
 mod blend_thumbnail;
+mod updater;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -5367,6 +5368,8 @@ fn main() {
             backup_project_json,
             get_archived_backups,
             delete_project_backup,
+            updater::check_for_update,
+            updater::install_portable_update,
         ])
 
         .run(tauri::generate_context!())
