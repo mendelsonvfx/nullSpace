@@ -27,43 +27,24 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Build
-        run: npx tauri build
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build binary
+        working-directory: src-tauri
+        env:
+          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
+        run: cargo build --release --features custom-protocol
 
       - name: Prepare release files
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
           $exePath = "src-tauri/target/release/nullspace.exe"
           $zipName = "nullSpace-${{ github.ref_name }}.zip"
           $exeName = "nullSpace.exe"
 
-          # Copy exe for direct download (used by auto-updater)
           Copy-Item $exePath $exeName
-
-          # Create zip for manual download
           Compress-Archive -Path $exeName -DestinationPath $zipName
-
-          # Generate latest.json
-          $repo = "${{ github.repository }}"
-          $tag = "${{ github.ref_name }}"
-          $downloadUrl = "https://github.com/$repo/releases/download/$tag/$exeName"
-          $releaseUrl  = "https://github.com/$repo/releases/tag/$tag"
-
-          $latestJson = [ordered]@{
-            version     = $version
-            notes       = ""
-            pub_date    = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            release_url = $releaseUrl
-            platforms   = [ordered]@{
-              "windows-x86_64" = [ordered]@{
-                url       = $downloadUrl
-                signature = ""
-              }
-            }
-          } | ConvertTo-Json -Depth 10
-
-          $latestJson | Out-File -FilePath "latest.json" -Encoding utf8NoBOM
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -71,5 +52,4 @@ jobs:
           files: |
             nullSpace.exe
             nullSpace-*.zip
-            latest.json
           generate_release_notes: true
