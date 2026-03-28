@@ -42,7 +42,7 @@ export function UpdateNotification({ version, downloadUrl, notes, releaseUrl, pu
 
   return (
     <div
-      className={`fixed inset-0 bg-black/50 flex items-center justify-center z-[120] transition-opacity duration-200 ${
+      className={`fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[120] transition-opacity duration-200 ${
         isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
       onClick={phase === 'available' ? dismiss : undefined}
