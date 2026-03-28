@@ -938,7 +938,11 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     // Collapsed: Show stacked visual (3 separate cards)
     const stackOffset = 10; // offset between cards in pixels
     // Use consistent padding for all groups: middle card offset + small buffer (2px for hover)
-    const maxOffset = (topThree[1] || topThree[2]) ? stackOffset * 0.8 : 0;
+    const maxOffset = topThree[2]
+      ? stackOffset * 1.555 + 28 - 36   // ≈ 7.55px
+      : topThree[1]
+        ? stackOffset * 1.15 + 28 - 36  // = 3.5px
+        : 0;
 
     return (
       <div
