@@ -111,7 +111,7 @@ export function FeedbackPanel({ onClose }: FeedbackPanelProps) {
             <button
               onClick={handleSave}
               disabled={!feedback.trim() || saving}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 rounded-button transition-colors text-white animate-button"
+              className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 rounded-button transition-colors text-white animate-button"
             >
               <Save className="w-4 h-4" />
               {saving ? 'Saving...' : 'Save'}

@@ -264,7 +264,7 @@ function AssetRow({ group, isExpanded, onToggleExpand, onOpenVersion, assetTagsF
         <button
           onClick={(e) => { e.stopPropagation(); if (latestVersion) onOpenVersion(latestVersion); }}
           disabled={!latestVersion}
-          className="px-3 py-1.5 bg-gradient-to-br from-accent to-accent-hover rounded-button text-xs text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
+          className="px-3 py-1.5 bg-accent hover:bg-accent-hover rounded-button text-xs text-white font-medium transition-colors disabled:opacity-40"
         >
           Open
         </button>

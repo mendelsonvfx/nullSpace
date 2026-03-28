@@ -1445,7 +1445,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             <div className="flex justify-end gap-2 p-4 border-t border-border-secondary">
               <button
                 onClick={() => setShowPaymentModal(false)}
-                className="px-4 py-2 bg-gradient-to-br from-accent to-accent-hover text-white text-sm rounded-button transition-colors font-medium shadow-sm"
+                className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm rounded-button transition-colors font-medium shadow-sm"
               >
                 Save Changes
               </button>
@@ -1977,7 +1977,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 </button>
                 <button
                   onClick={() => setShowProjectSettings(false)}
-                  className="px-4 py-2 bg-gradient-to-br from-accent to-accent-hover rounded-button transition-colors font-medium text-sm text-white"
+                  className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-button transition-colors font-medium text-sm text-white"
                 >
                   Save Changes
                 </button>

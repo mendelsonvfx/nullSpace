@@ -72,7 +72,7 @@ export function AddCategoryModal({ isOpen, onClose, onAdd }: AddCategoryModalPro
           <button
             onClick={handleAdd}
             disabled={!categoryName.trim()}
-            className="px-3 py-1.5 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 rounded-button transition-colors font-medium text-sm text-white animate-button"
+            className="px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:opacity-40 rounded-button transition-colors font-medium text-sm text-white animate-button"
           >
             Add
           </button>

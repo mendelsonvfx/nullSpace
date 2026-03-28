@@ -280,7 +280,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               <button
                 onClick={handleSubmit}
                 disabled={!selectedProjectId || amount <= 0}
-                className="flex-1 px-4 py-2 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm rounded-button transition-colors font-medium"
+                className="flex-1 px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm rounded-button transition-colors font-medium"
               >
                 Add Transaction
               </button>

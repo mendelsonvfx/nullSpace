@@ -346,7 +346,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                     <button
                       onClick={handleAutoDetect}
                       disabled={isDetecting}
-                      className="px-3 py-1 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-button transition-colors text-xs font-medium flex items-center gap-1.5 text-white flex-shrink-0"
+                      className="px-3 py-1 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-button transition-colors text-xs font-medium flex items-center gap-1.5 text-white flex-shrink-0"
                     >
                       {isDetecting && <RefreshCw className="w-3 h-3 animate-spin" />}
                       {isDetecting ? 'Detecting...' : 'Auto-Detect'}
@@ -451,14 +451,14 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
               <button
                 onClick={() => setStep(step + 1)}
                 disabled={step === 1 && !canProceedFromStep1}
-                className="px-4 py-1.5 text-sm bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors font-medium text-white"
+                className="px-4 py-1.5 text-sm bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors font-medium text-white"
               >
                 Next
               </button>
             ) : (
               <button
                 onClick={handleComplete}
-                className="px-4 py-1.5 text-sm bg-gradient-to-br from-accent to-accent-hover rounded-button transition-colors font-medium text-white flex items-center gap-2"
+                className="px-4 py-1.5 text-sm bg-accent hover:bg-accent-hover rounded-button transition-colors font-medium text-white flex items-center gap-2"
               >
                 <Check className="w-4 h-4" />
                 Get Started

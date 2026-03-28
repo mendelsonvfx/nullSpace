@@ -75,7 +75,7 @@ export function RenameCategoryModal({ isOpen, categoryName, onClose, onRename }:
           <button
             onClick={handleRename}
             disabled={!editedName.trim() || editedName.trim() === categoryName}
-            className="px-3 py-1.5 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-40 rounded-button transition-colors font-medium text-sm text-white animate-button"
+            className="px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:opacity-40 rounded-button transition-colors font-medium text-sm text-white animate-button"
           >
             Rename
           </button>
