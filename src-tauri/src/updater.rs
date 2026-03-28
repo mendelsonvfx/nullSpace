@@ -10,7 +10,8 @@ const GITHUB_TOKEN: Option<&str> = option_env!("UPDATE_TOKEN");
 #[derive(Deserialize)]
 struct GithubAsset {
     name: String,
-    url: String, // GitHub API asset URL — works with auth for private repos
+    url: String,
+    browser_download_url: String, // direct github.com URL — redirects to S3 pre-signed URL
 }
 
 #[derive(Deserialize)]
@@ -74,7 +75,7 @@ pub async fn check_for_update(app_handle: tauri::AppHandle) -> Result<Option<Upd
 
         Ok(Some(UpdateInfo {
             version,
-            download_url: asset.url.clone(), // API URL, not browser_download_url
+            download_url: asset.browser_download_url.clone(), // redirects to S3 pre-signed URL
             notes: release.body,
             release_url: Some(release.html_url),
             pub_date: release.published_at,
@@ -122,7 +123,6 @@ pub async fn install_portable_update(download_url: String) -> Result<(), String>
     let bytes = client
         .get(&download_url)
         .header("Authorization", format!("Bearer {}", token))
-        .header("Accept", "application/octet-stream")
         .send()
         .await
         .map_err(|e| e.to_string())?
@@ -131,6 +131,14 @@ pub async fn install_portable_update(download_url: String) -> Result<(), String>
         .bytes()
         .await
         .map_err(|e| e.to_string())?;
+
+    // Sanity check: verify the downloaded bytes are a Windows PE executable.
+    // If the token is expired, GitHub may redirect to an HTML login page (200 OK)
+    // which error_for_status() would not catch. Writing HTML to disk and running
+    // it as an exe causes a silent failure in the PowerShell replacement step.
+    if bytes.len() < 2 || bytes[0] != 0x4D || bytes[1] != 0x5A {
+        return Err("Downloaded file is not a valid Windows executable (MZ header missing)".to_string());
+    }
 
     std::fs::write(&new_exe, &bytes).map_err(|e| e.to_string())?;
 
