@@ -11,7 +11,6 @@ const GITHUB_TOKEN: Option<&str> = option_env!("UPDATE_TOKEN");
 struct GithubAsset {
     name: String,
     url: String,
-    browser_download_url: String, // direct github.com URL — redirects to S3 pre-signed URL
 }
 
 #[derive(Deserialize)]
@@ -75,7 +74,7 @@ pub async fn check_for_update(app_handle: tauri::AppHandle) -> Result<Option<Upd
 
         Ok(Some(UpdateInfo {
             version,
-            download_url: asset.browser_download_url.clone(), // redirects to S3 pre-signed URL
+            download_url: asset.url.clone(),
             notes: release.body,
             release_url: Some(release.html_url),
             pub_date: release.published_at,
@@ -117,12 +116,15 @@ pub async fn install_portable_update(download_url: String) -> Result<(), String>
     // but the CDN URL is self-authenticated via query params — no auth needed there.
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300))
+        .user_agent("nullSpace-updater/1.0")
         .build()
         .map_err(|e| e.to_string())?;
 
     let bytes = client
         .get(&download_url)
         .header("Authorization", format!("Bearer {}", token))
+        .header("Accept", "application/octet-stream")
+        .header("X-GitHub-Api-Version", "2022-11-28")
         .send()
         .await
         .map_err(|e| e.to_string())?
