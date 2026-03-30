@@ -140,7 +140,7 @@ function ShotRow({ shot, projectId: _projectId, projectPath, blendPath, onClick 
       return (
         <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 text-[10px] font-semibold w-fit">
           <IconCircleCheckFilled size={10} />
-          Completed
+          Done
         </div>
       );
     }
@@ -155,7 +155,7 @@ function ShotRow({ shot, projectId: _projectId, projectPath, blendPath, onClick 
     return (
       <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-400 text-[10px] font-semibold w-fit">
         <IconMoon size={10} />
-        Not Started
+        Idle
       </div>
     );
   };

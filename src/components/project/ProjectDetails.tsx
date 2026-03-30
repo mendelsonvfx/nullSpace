@@ -726,7 +726,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
         {/* Software Launchers - hidden when only scene is selected in scenes+shots mode */}
         {!(context.isScene && !context.isShot && project.hasScenes && project.hasShots) && (
-          <div className="mb-7">
+          <div className="mb-6">
             <h3 className="text-sm font-medium text-text-secondary mb-3.5">Launch Software</h3>
             <div className="grid grid-cols-2 gap-2">
             {project.software.map((sw: any) => {

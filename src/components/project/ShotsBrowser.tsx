@@ -1730,17 +1730,22 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
       let sceneCompleted = scene.completed || false;
 
       if (project.hasShots && sceneShots.length > 0) {
-        // If all shots are completed, scene is completed
-        const allCompleted = sceneShots.every(shot => shot.completed);
-        // If at least one shot is WIP (and not all completed), scene is WIP
-        const hasWip = sceneShots.some(shot => shot.wip && !shot.completed);
+        // Exclude IDLE shots (neither completed nor wip) from status calculation
+        const activeShots = sceneShots.filter(shot => shot.completed || shot.wip);
 
-        if (allCompleted) {
-          sceneCompleted = true;
-          sceneWip = false;
-        } else if (hasWip) {
-          sceneWip = true;
-          sceneCompleted = false;
+        if (activeShots.length > 0) {
+          // If all non-idle shots are completed, scene is completed
+          const allCompleted = activeShots.every(shot => shot.completed);
+          // If at least one non-idle shot is WIP, scene is WIP
+          const hasWip = activeShots.some(shot => shot.wip && !shot.completed);
+
+          if (allCompleted) {
+            sceneCompleted = true;
+            sceneWip = false;
+          } else if (hasWip) {
+            sceneWip = true;
+            sceneCompleted = false;
+          }
         }
       }
 

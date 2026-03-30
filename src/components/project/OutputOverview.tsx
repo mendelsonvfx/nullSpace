@@ -732,7 +732,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
               )}
 
             {/* Two Column Layout with Divider (Headers + Content) */}
-            <div className="grid grid-cols-2 divide-x divide-border-secondary bg-[#0f0f0f] rounded-lg">
+            <div className="grid grid-cols-2 divide-x divide-card-bg bg-[#0f0f0f] rounded-lg">
               {/* Preview Column */}
               <div className="flex flex-col">
                 {/* Preview Header */}
