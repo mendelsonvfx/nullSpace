@@ -105,6 +105,11 @@ export function clearAllBlendThumbnailCache() {
   memoryCache.clear();
 }
 
+// Synchronous check — used to suppress fade-in animation for already-cached thumbnails
+export function isBlendThumbnailCached(blendFilePath: string): boolean {
+  return memoryCache.has(blendFilePath);
+}
+
 // Expose globally for projectStore access
 if (typeof window !== 'undefined') {
   (window as any).clearAllBlendThumbnailCache = clearAllBlendThumbnailCache;

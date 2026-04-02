@@ -373,6 +373,10 @@ body.fullscreen #root {
   }
 }
 
+@keyframes spin-border {
+  to { transform: rotate(360deg); }
+}
+
 .status-glow-green {
   animation: pulse-glow-green 2s ease-in-out infinite !important;
 }

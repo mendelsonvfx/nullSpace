@@ -31,7 +31,7 @@ import { useThumbnail } from '../../hooks/useThumbnail';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { extractShotNumber, getScenePattern, extractVersion } from '../../utils/fileNaming';
-import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
+import { useBlendThumbnail, isBlendThumbnailCached } from '../../hooks/useBlendThumbnail';
 import { findNextAvailableShotNumber } from '../../utils/shotNumbering';
 
 interface ProjectVersion {
@@ -113,6 +113,16 @@ const ShotCard: React.FC<ShotCardProps> = ({
   const autoBlendSrc = useBlendThumbnail(!shot.preview && blendPreviewsEnabled ? blendPath : undefined);
   const displaySrc = shotPreviewSrc || autoBlendSrc;
   const wasImageReadyOnMount = useRef(!!displaySrc);
+
+  // When blendPath first becomes defined, check memory cache synchronously.
+  // If cached, suppress animate-fade-in (avoids replaying animation on project switch).
+  const prevBlendPathRef = useRef<string | undefined>(blendPath);
+  if (blendPath !== prevBlendPathRef.current) {
+    prevBlendPathRef.current = blendPath;
+    if (blendPath && isBlendThumbnailCached(blendPath)) {
+      wasImageReadyOnMount.current = true;
+    }
+  }
 
   const handleNameContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();

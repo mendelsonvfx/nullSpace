@@ -548,6 +548,8 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
         specialContext: 'ASSET',
         assetName,
       });
+      // Restart watcher to pick up _GlobalAssets folder if it was just created
+      invoke('start_watching_project', { projectPath: project.path }).catch(console.error);
       const randomColor = AVATAR_COLOR_OPTIONS[Math.floor(Math.random() * AVATAR_COLOR_OPTIONS.length)].value;
       useProjectStore.getState().setAssetColor(project.id, assetName, randomColor);
     } catch (error) {

@@ -61,7 +61,9 @@ import { ProjectDetails, RightSidebar } from './components/project';
 import ShotsBrowser from './components/project/ShotsBrowser';
 import { CreateProjectModal, PrepaymentAmountModal } from './components/modals';
 import { AssetNameModal } from './components/modals/AssetNameModal';
-import { darkenColor, STATUS_COLORS, STATUS_LABELS, hslStringToHex } from './utils';
+import { darkenColor, STATUS_COLORS, STATUS_LABELS, hslStringToHex, isNewerVersion } from './utils';
+import { getVersion } from '@tauri-apps/api/app';
+import { PostUpdateNotification } from './components/modals/PostUpdateNotification';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, GlobalTextContextMenu } from './components/ui/ContextMenu';
 import { useContextMenu } from './hooks/useContextMenu';
 import { getPaymentStatusUpdate } from './utils/financeService';
@@ -218,6 +220,8 @@ function App() {
     return saved !== null ? JSON.parse(saved) : false;
   });
   const [showWelcomeSetup, setShowWelcomeSetup] = useState(false);
+  const [showPostUpdateModal, setShowPostUpdateModal] = useState(false);
+  const [updatedToVersion, setUpdatedToVersion] = useState('');
   const [, setIsWindowVisible] = useState(true); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [, setForceRenderKey] = useState(0); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [breakReminders, setBreakReminders] = useState<BreakReminder[]>([]);
@@ -308,6 +312,25 @@ function App() {
     if (!completed || !hasDefaultPath) {
       setShowWelcomeSetup(true);
     }
+  }, []);
+
+  // Show post-update modal when app restarts after a successful update
+  useEffect(() => {
+    // Same guard as WelcomeSetup — ensures they are mutually exclusive (WelcomeSetup z-[60] < PostUpdate z-[120])
+    const setupCompleted = localStorage.getItem('setupCompleted');
+    const hasDefaultPath = localStorage.getItem('defaultProjectsPath');
+    if (!setupCompleted || !hasDefaultPath) return;
+
+    getVersion()
+      .then((currentVersion) => {
+        const lastSeen = localStorage.getItem('lastSeenVersion');
+        if (!lastSeen || isNewerVersion(currentVersion, lastSeen)) {
+          localStorage.setItem('lastSeenVersion', currentVersion);
+          setUpdatedToVersion(currentVersion);
+          setShowPostUpdateModal(true);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Handle window resize: save state, update fullscreen class and DWM corners
@@ -570,6 +593,10 @@ function App() {
         if (showWelcomeSetup) {
           return;
         }
+        if (showPostUpdateModal) {
+          setShowPostUpdateModal(false);
+          return;
+        }
 
         if (showCreateModal) {
           e.preventDefault();
@@ -671,7 +698,7 @@ function App() {
 
     window.addEventListener('keydown', handleGlobalHotkeys);
     return () => window.removeEventListener('keydown', handleGlobalHotkeys);
-  }, [viewMode, selectedProjectId, previousProjectId, showCreateModal, showSettings, showFeedback, showAbout, showWelcomeSetup, deleteConfirm, sceneRenameConfirm]);
+  }, [viewMode, selectedProjectId, previousProjectId, showCreateModal, showSettings, showFeedback, showAbout, showWelcomeSetup, showPostUpdateModal, deleteConfirm, sceneRenameConfirm]);
 
   // Break reminders - check active sessions every minute
   useEffect(() => {
@@ -1264,6 +1291,14 @@ function App() {
       {/* Welcome Setup */}
       {showWelcomeSetup && (
         <WelcomeSetup onComplete={() => setShowWelcomeSetup(false)} />
+      )}
+
+      {/* Post-update notification */}
+      {showPostUpdateModal && (
+        <PostUpdateNotification
+          version={updatedToVersion}
+          onClose={() => setShowPostUpdateModal(false)}
+        />
       )}
 
       {/* Deadline Notifications */}

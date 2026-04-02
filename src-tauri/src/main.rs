@@ -1257,10 +1257,13 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
 
             let python_script = format!("import hou; hou.hipFile.save(r'{}')", file_path_str);
 
-            // Execute hython to create the file
+            // Execute hython to create the file (CREATE_NO_WINDOW hides console)
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
             let output = Command::new(&hython_path)
                 .arg("-c")
                 .arg(&python_script)
+                .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .map_err(|e| format!("Failed to execute hython: {}", e))?;
 
@@ -2779,6 +2782,27 @@ async fn start_watching_project(
                             }
                         }
 
+                        // Also clean backup files from _GlobalAssets
+                        if has_version_changes {
+                            let assets_dir = PathBuf::from(&project_path_clone).join("_GlobalAssets");
+                            if assets_dir.exists() {
+                                if let Ok(entries) = fs::read_dir(&assets_dir) {
+                                    for entry in entries.flatten() {
+                                        if let Ok(file_type) = entry.file_type() {
+                                            if file_type.is_file() {
+                                                let file_path = entry.path();
+                                                if let Some(extension) = file_path.extension() {
+                                                    if extension == "blend1" {
+                                                        let _ = fs::remove_file(&file_path);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Emit events without throttling (debounce provides protection)
                         if has_version_changes {
                             let _ = app.emit_all("version-changed", ());
@@ -2804,6 +2828,14 @@ async fn start_watching_project(
             let software_dir = project_dir.join(software_folder);
             if software_dir.exists() {
                 let _ = debouncer.watcher().watch(&software_dir, RecursiveMode::Recursive);
+            }
+        }
+
+        // Watch asset and compose folders
+        for special_folder in &["_GlobalAssets", "_GlobalCompose"] {
+            let special_dir = project_dir.join(special_folder);
+            if special_dir.exists() {
+                let _ = debouncer.watcher().watch(&special_dir, RecursiveMode::Recursive);
             }
         }
 

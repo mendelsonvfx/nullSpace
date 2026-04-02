@@ -71,6 +71,13 @@ interface TreeViewProps {
 
 const AUTO_HIDDEN_NAMES = ['backup'];
 
+const PROJECT_FILE_EXTENSIONS = [
+  'blend', 'hip', 'hiplc', 'hipnc',
+  'ma', 'mb', 'aep', 'psd', 'psb',
+  'c4d', 'spp', 'uproject', 'unity',
+  'zpr', 'tbscene'
+];
+
 const sanitizeFolderName = (name: string): string =>
   name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
 
@@ -131,6 +138,10 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       console.error('Failed to load explicitly shown paths from localStorage:', error);
       return new Set();
     }
+  });
+  const [autoHideProjectFiles, setAutoHideProjectFiles] = useState(() => {
+    const saved = localStorage.getItem('autoHideProjectFiles');
+    return saved !== null ? JSON.parse(saved) : true;
   });
   const [expandedVersionGroups, setExpandedVersionGroups] = useState<Set<string>>(new Set());
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -196,6 +207,16 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       console.error('Failed to save folder colors to localStorage:', error);
     }
   }, [folderColors, project.path]);
+
+  // Sync autoHideProjectFiles setting from SettingsPanel
+  useEffect(() => {
+    const handler = () => {
+      const saved = localStorage.getItem('autoHideProjectFiles');
+      setAutoHideProjectFiles(saved !== null ? JSON.parse(saved) : true);
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, []);
 
   // Reset expanded version groups when project changes (auto-collapse stacks)
   useEffect(() => {
@@ -728,11 +749,19 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   };
 
   const toggleHidden = (path: string, nodeName: string) => {
-    const isAutoHidden = AUTO_HIDDEN_NAMES.includes(nodeName.toLowerCase());
-    const currentlyHidden = hiddenPaths.has(path) ||
-      (isAutoHidden && !explicitlyShownPaths.has(path));
+    const isAutoHiddenDir = AUTO_HIDDEN_NAMES.includes(nodeName.toLowerCase());
+    const ext = nodeName.split('.').pop()?.toLowerCase() ?? '';
+    const isAutoHiddenFile = autoHideProjectFiles && PROJECT_FILE_EXTENSIONS.includes(ext);
+    const isAutoManaged = isAutoHiddenDir || isAutoHiddenFile;
 
-    if (isAutoHidden) {
+    const currentlyHidden = hiddenPaths.has(path) ||
+      (isAutoManaged && !explicitlyShownPaths.has(path));
+
+    if (isAutoManaged) {
+      // Clean up manual hide if exists (edge case: was manually hidden before setting was enabled)
+      if (hiddenPaths.has(path)) {
+        setHiddenPaths(prev => { const s = new Set(prev); s.delete(path); return s; });
+      }
       setExplicitlyShownPaths(prev => {
         const s = new Set(prev);
         if (currentlyHidden) s.add(path); else s.delete(path);
@@ -1024,6 +1053,12 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   const renderNode = (node: FileNode, depth: number = 0) => {
     // Handle version groups
     if (node.isVersionGroup) {
+      const versionExt = node.versions?.[0]?.name.split('.').pop()?.toLowerCase() ?? '';
+      const isVersionGroupHidden = autoHideProjectFiles && PROJECT_FILE_EXTENSIONS.includes(versionExt);
+      if (isVersionGroupHidden && !showHidden) return null;
+      if (isVersionGroupHidden && showHidden) {
+        return <div key={node.path} className="opacity-40">{renderVersionGroup(node, depth)}</div>;
+      }
       return renderVersionGroup(node, depth);
     }
 
@@ -1031,8 +1066,11 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     const hasChildren = node.children && node.children.length > 0;
     const fileIcon = !node.is_dir ? getFileIcon(node.name) : null;
     const softwareFolderIcon = node.is_dir ? getSoftwareFolderIcon(node.name) : null;
+    const fileExt = !node.is_dir ? node.name.split('.').pop()?.toLowerCase() ?? '' : '';
+    const isAutoHiddenFile = !node.is_dir && autoHideProjectFiles && PROJECT_FILE_EXTENSIONS.includes(fileExt);
     const isHidden = hiddenPaths.has(node.path) ||
-      (node.is_dir && AUTO_HIDDEN_NAMES.includes(node.name.toLowerCase()) && !explicitlyShownPaths.has(node.path));
+      (node.is_dir && AUTO_HIDDEN_NAMES.includes(node.name.toLowerCase()) && !explicitlyShownPaths.has(node.path)) ||
+      (isAutoHiddenFile && !explicitlyShownPaths.has(node.path));
     const isHighlighted = node.is_dir && highlightedPaths.has(normPath(node.path));
     const isFadingOut = node.is_dir && !isHighlighted && fadingOutPaths.has(normPath(node.path));
     const folderColor = node.is_dir ? folderColors.get(node.path) : null;

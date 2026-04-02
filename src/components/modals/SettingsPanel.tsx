@@ -889,6 +889,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     const saved = localStorage.getItem('shotsbrowser_hoverDelay');
     return saved !== null ? (parseInt(saved) || 100) : 100;
   });
+  const [autoHideProjectFiles, setAutoHideProjectFiles] = useState(() => {
+    const saved = localStorage.getItem('autoHideProjectFiles');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
 
   // Window settings
   const [autoMaximizeOnLaunch, setAutoMaximizeOnLaunch] = useState(false);
@@ -1055,8 +1059,8 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       </div>
 
       {/* Accent Color */}
-      <div>
-        <label className="block text-sm font-medium mb-3">Accent Color</label>
+      <div className="border-t border-border-secondary pt-6">
+        <label className="block text-sm font-medium mb-3 text-text-muted">Accent Color</label>
         <div className="flex gap-3 flex-wrap items-center">
           {defaultAccentColors.map(color => (
             <button
@@ -1248,72 +1252,94 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
         </button>
       </div>
 
-      <div className="border-t border-border-secondary">
-        <label className="block text-sm font-medium mb-3 mt-6">Shots Browser Settings</label>
+      <div className="border-t border-border-secondary pt-6">
+        <label className="block text-sm font-medium mb-3 text-text-muted">Shots Browser Settings</label>
+
+        {/* Button Hover Delay */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="font-medium mb-1">Button Reveal Delay</div>
+            <p className="text-sm text-text-muted">Delay before Add Shot / Add Scene buttons appear on hover (ms)</p>
+          </div>
+          <input
+            type="number"
+            min="0"
+            max="2000"
+            step="100"
+            value={shotsBrowserHoverDelay}
+            onChange={(e) => {
+              const newValue = Math.min(2000, Math.max(0, parseInt(e.target.value) || 0));
+              setShotsBrowserHoverDelay(newValue);
+              localStorage.setItem('shotsbrowser_hoverDelay', newValue.toString());
+              window.dispatchEvent(new Event('storage'));
+            }}
+            className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
+          />
+        </div>
+
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="font-medium mb-1">Show Search & Filter</div>
+            <p className="text-sm text-text-muted">Show search bar and filter controls in Shots Browser</p>
+          </div>
+          <button
+            onClick={() => {
+              const newValue = !showShotsBrowserSearch;
+              setShowShotsBrowserSearch(newValue);
+              localStorage.setItem('shotsbrowser_showSearchFilter', JSON.stringify(newValue));
+              window.dispatchEvent(new Event('storage'));
+            }}
+            className={`w-12 h-6 rounded-full relative transition-colors ${showShotsBrowserSearch ? 'bg-accent' : 'bg-border-secondary'}`}
+          >
+            <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showShotsBrowserSearch ? 'translate-x-6' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium mb-1">Show Asset/Compose Buttons</div>
+            <p className="text-sm text-text-muted">Show Asset Projects and Compose buttons in Shots Browser</p>
+          </div>
+          <button
+            onClick={() => {
+              const newValue = !showShotsBrowserAssetButtons;
+              setShowShotsBrowserAssetButtons(newValue);
+              localStorage.setItem('shotsbrowser_showSpecialContextButtons', JSON.stringify(newValue));
+              window.dispatchEvent(new Event('storage'));
+            }}
+            className={`w-12 h-6 rounded-full relative transition-colors ${showShotsBrowserAssetButtons ? 'bg-accent' : 'bg-border-secondary'}`}
+          >
+            <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showShotsBrowserAssetButtons ? 'translate-x-6' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
       </div>
 
-      {/* Button Hover Delay */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-medium mb-1">Button Reveal Delay</div>
-          <p className="text-sm text-text-muted">Delay before Add Shot / Add Scene buttons appear on hover (ms)</p>
-        </div>
-        <input
-          type="number"
-          min="0"
-          max="2000"
-          step="100"
-          value={shotsBrowserHoverDelay}
-          onChange={(e) => {
-            const newValue = Math.min(2000, Math.max(0, parseInt(e.target.value) || 0));
-            setShotsBrowserHoverDelay(newValue);
-            localStorage.setItem('shotsbrowser_hoverDelay', newValue.toString());
-            window.dispatchEvent(new Event('storage'));
-          }}
-          className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
-        />
-      </div>
+      {/* Project Structure Settings */}
+      <div className="border-t border-border-secondary pt-6">
+        <label className="block text-sm font-medium mb-3 text-text-muted">Project Structure</label>
 
-      {/* Shots Browser */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-medium mb-1">Show Search & Filter</div>
-          <p className="text-sm text-text-muted">Show search bar and filter controls in Shots Browser</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium mb-1">Auto-hide Project Files</div>
+            <p className="text-sm text-text-muted">Automatically hide project files (.blend, .hip, .ma, etc.) in the project structure</p>
+          </div>
+          <button
+            onClick={() => {
+              const newValue = !autoHideProjectFiles;
+              setAutoHideProjectFiles(newValue);
+              localStorage.setItem('autoHideProjectFiles', JSON.stringify(newValue));
+              window.dispatchEvent(new Event('storage'));
+            }}
+            className={`w-12 h-6 rounded-full relative transition-colors ${autoHideProjectFiles ? 'bg-accent' : 'bg-border-secondary'}`}
+          >
+            <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${autoHideProjectFiles ? 'translate-x-6' : 'translate-x-0.5'}`} />
+          </button>
         </div>
-        <button
-          onClick={() => {
-            const newValue = !showShotsBrowserSearch;
-            setShowShotsBrowserSearch(newValue);
-            localStorage.setItem('shotsbrowser_showSearchFilter', JSON.stringify(newValue));
-            window.dispatchEvent(new Event('storage'));
-          }}
-          className={`w-12 h-6 rounded-full relative transition-colors ${showShotsBrowserSearch ? 'bg-accent' : 'bg-border-secondary'}`}
-        >
-          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showShotsBrowserSearch ? 'translate-x-6' : 'translate-x-0.5'}`} />
-        </button>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-medium mb-1">Show Asset/Compose Buttons</div>
-          <p className="text-sm text-text-muted">Show Asset Projects and Compose buttons in Shots Browser</p>
-        </div>
-        <button
-          onClick={() => {
-            const newValue = !showShotsBrowserAssetButtons;
-            setShowShotsBrowserAssetButtons(newValue);
-            localStorage.setItem('shotsbrowser_showSpecialContextButtons', JSON.stringify(newValue));
-            window.dispatchEvent(new Event('storage'));
-          }}
-          className={`w-12 h-6 rounded-full relative transition-colors ${showShotsBrowserAssetButtons ? 'bg-accent' : 'bg-border-secondary'}`}
-        >
-          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showShotsBrowserAssetButtons ? 'translate-x-6' : 'translate-x-0.5'}`} />
-        </button>
       </div>
 
       {/* Window Settings */}
       <div className="border-t border-border-secondary pt-6">
-        <label className="block text-sm font-medium mb-3">Window Settings</label>
+        <label className="block text-sm font-medium mb-3 text-text-muted">Window Settings</label>
 
         {/* Auto-Maximize on Launch */}
         <div className="flex items-center justify-between mb-4">
