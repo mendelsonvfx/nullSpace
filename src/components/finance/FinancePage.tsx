@@ -153,7 +153,6 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
       transactions: [...(project.transactions || []), newTransaction],
       // Update total cost
       cost: (project.cost || 0) + amount,
-      currency: currency as Currency,
       updatedAt: new Date().toISOString()
     };
 
@@ -385,13 +384,20 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
       return true;
     });
   }
+  const getLatestPaymentDate = (project: any): number => {
+    const baseDateMs = new Date(project.paidAt || project.completedAt || project.createdAt || 0).getTime();
+    const latestTransactionMs = (project.transactions || []).reduce(
+      (max: number, t: any) => t.date ? Math.max(max, new Date(t.date + 'T12:00:00').getTime()) : max,
+      0
+    );
+    return Math.max(baseDateMs, latestTransactionMs);
+  };
+
   const sortedFilteredProjects = [...filtered].sort((a, b) => {
     if (sortBy === 'amount') {
       return ((b.displayAmount || b.cost) || 0) - ((a.displayAmount || a.cost) || 0);
     } else if (sortBy === 'date') {
-      const dateA = new Date(a.completedAt || a.createdAt || 0).getTime();
-      const dateB = new Date(b.completedAt || b.createdAt || 0).getTime();
-      return dateB - dateA; // Newest first
+      return getLatestPaymentDate(b) - getLatestPaymentDate(a);
     } else if (sortBy === 'client') {
       return (a.client || '').localeCompare(b.client || '');
     } else {
@@ -580,11 +586,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                     <div className="text-xs text-zinc-500 uppercase tracking-wide mb-4">Project Breakdown:</div>
                     <div className="space-y-2">
                       {[...paidProjects]
-                      .sort((a, b) => {
-                        const dateA = new Date(a.paidAt || a.completedAt || a.createdAt || 0).getTime();
-                        const dateB = new Date(b.paidAt || b.completedAt || b.createdAt || 0).getTime();
-                        return dateB - dateA;
-                      })
+                      .sort((a, b) => getLatestPaymentDate(b) - getLatestPaymentDate(a))
                       .slice(0, 3)
                       .map((project: any) => {
                         const originalCurrency = project.currency || 'USD';

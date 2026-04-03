@@ -16,9 +16,6 @@ const getLocalDateString = (date: Date): string => {
  * For active: uses elapsedSeconds, for completed: uses durationMinutes
  */
 const getEntryMinutes = (entry: TimeEntry): number => {
-  if (entry.isActive) {
-    return Math.floor((entry.elapsedSeconds || 0) / 60);
-  }
   return entry.durationMinutes;
 };
 

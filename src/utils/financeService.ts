@@ -84,12 +84,14 @@ export const getChartDataPoints = (
         ? convertCurrency(amount, currency, baseCurrency)
         : amount;
 
+    const transactions = project.transactions || [];
+    const transactionTotal = transactions.reduce((sum, t) => sum + t.amount, 0);
+    const baseCost = Math.max(0, project.cost - transactionTotal);
+
     if (project.paymentStatus === 'paid') {
       // Check if this was a prepaid->paid transition (has both prepaymentAmount and paidAt)
       if (project.prepaymentAmount && project.paidAt && project.completedAt &&
           project.paidAt !== project.completedAt) {
-        // Two points: prepayment + remaining
-
         // Point 1: prepayment on completedAt
         points.push({
           date: new Date(project.completedAt),
@@ -99,30 +101,51 @@ export const getChartDataPoints = (
           projectId: project.id
         });
 
-        // Point 2: remaining on paidAt
-        const remaining = project.cost - project.prepaymentAmount;
-        points.push({
-          date: new Date(project.paidAt),
-          amount: convert(remaining),
-          name: project.name,
-          type: 'paid',
-          projectId: project.id
-        });
+        // Point 2: remaining base cost (without transactions) on paidAt
+        const originalRemaining = baseCost - project.prepaymentAmount;
+        if (originalRemaining > 0) {
+          points.push({
+            date: new Date(project.paidAt),
+            amount: convert(originalRemaining),
+            name: project.name,
+            type: 'paid',
+            projectId: project.id
+          });
+        }
       } else {
-        // Direct paid or old project (no paidAt) - one point
+        // Direct paid or old project (no paidAt) - one base point
         const payDate = project.paidAt || project.completedAt;
-        if (payDate) {
+        if (payDate && baseCost > 0) {
           points.push({
             date: new Date(payDate),
-            amount: convert(project.cost),
+            amount: convert(baseCost),
             name: project.name,
             type: 'full',
             projectId: project.id
           });
         }
       }
+
+      // Separate point for each transaction on its actual date
+      transactions.forEach(t => {
+        if (!t.date || t.amount <= 0) return;
+        const tConvert = (amount: number) =>
+          convertToBase && t.currency !== baseCurrency
+            ? convertCurrency(amount, t.currency, baseCurrency)
+            : amount;
+        // date-only strings "YYYY-MM-DD" → noon local time to avoid UTC day shift
+        const tDate = t.date.includes('T') ? new Date(t.date) : new Date(t.date + 'T12:00:00');
+        points.push({
+          date: tDate,
+          amount: tConvert(t.amount),
+          name: project.name,
+          type: 'transaction',
+          projectId: project.id
+        });
+      });
+
     } else if (project.paymentStatus === 'prepaid' && project.prepaymentAmount) {
-      // Only prepaid - one point with prepayment amount
+      // Only prepaid - one point with prepayment amount (transactions not counted for prepaid)
       if (project.completedAt) {
         points.push({
           date: new Date(project.completedAt),

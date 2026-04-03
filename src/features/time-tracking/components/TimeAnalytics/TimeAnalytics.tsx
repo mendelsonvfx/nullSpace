@@ -51,8 +51,7 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
           if (liveEntry) {
             entriesMap.set(entry.id, {
               ...entry,
-              elapsedSeconds: liveEntry.elapsedSeconds,
-              durationMinutes: Math.floor(liveEntry.elapsedSeconds / 60)
+              elapsedSeconds: liveEntry.elapsedSeconds
             });
             return;
           }
