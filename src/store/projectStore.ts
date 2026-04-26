@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, TimeEntry, SoftwareName, Transaction } from '../types/project';
 import { thumbnailCache } from '../utils/thumbnailCache';
+import { versionsCache } from '../utils/versionsCache';
 import { indexedDBThumbnailCache } from '../utils/indexedDBCache';
 import { useTimeStatsStore, useTimeTrackingStore } from '../features/time-tracking';
 import { generateProjectColor, generateBrightColor } from '../utils/colorUtils';
@@ -33,6 +34,7 @@ interface ProjectStore {
   loadProjects: () => Promise<void>;
   createProject: (input: CreateProjectCommand) => Promise<void>;
   updateProject: (project: Project) => Promise<void>;
+  renameProject: (project: Project, newName: string) => Promise<void>;
   deleteProject: (projectPath: string) => Promise<void>;
   selectProject: (project: Project | null) => void;
   launchSoftware: (input: LaunchSoftwareCommand) => Promise<void>;
@@ -475,6 +477,32 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
     // Wait for the queued update to complete
     return updateQueue;
+  },
+
+  // Rename project and its folder on disk
+  renameProject: async (project: Project, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === project.name) return;
+
+    const parentDir = project.path.substring(0, project.path.lastIndexOf('\\'));
+    const folderName = trimmed.replace(/\s+/g, '');
+    const newPath = `${parentDir}\\${folderName}`;
+
+    try {
+      // Clear thumbnail caches before rename (old-path keys become orphaned anyway)
+      thumbnailCache.clearProject(project.path);
+      try { await indexedDBThumbnailCache.clearProject(project.path); } catch { /* ignore */ }
+
+      // Rename the folder on disk
+      await invoke('rename_project_folder', { oldPath: project.path, newPath });
+
+      // Persist updated name + path through the normal queue
+      const { updateProject } = get();
+      await updateProject({ ...project, name: trimmed, path: newPath });
+    } catch (error) {
+      set({ error: String(error) });
+      throw error;
+    }
   },
 
   // Delete project
@@ -1733,6 +1761,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               oldShotFolderName: oldShotFolderName,
               newShotFolderName: newShotFolderName
             });
+          } else if (!project.hasScenes) {
+            await invoke('rename_shot_folders', {
+              projectPath: project.path,
+              sceneFolderName: '',
+              oldShotFolderName: oldShotFolderName,
+              newShotFolderName: newShotFolderName
+            });
           }
 
           // 2. Rename version files with WAL and progress
@@ -1755,6 +1790,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           if (typeof (window as any).clearAllBlendThumbnailCache === 'function') {
             (window as any).clearAllBlendThumbnailCache();
           }
+
+          // Invalidate versions cache so VersionsOverview re-fetches renamed files
+          versionsCache.invalidate(project.path);
+          window.dispatchEvent(new CustomEvent('version-created', { detail: { projectPath: project.path } }));
 
           // Show success notification only if files were renamed
           if ((filesRenamed > 0 || thumbnailsRenamed > 0) && typeof (window as any).showNotification === 'function') {

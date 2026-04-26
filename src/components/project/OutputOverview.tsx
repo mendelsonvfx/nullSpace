@@ -137,7 +137,8 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
       const result = await invoke<OutputFile[]>('get_project_outputs', {
         projectPath: project.path,
         sceneFilter: requestSceneFilter,
-        shotFilter: requestShotFilter
+        shotFilter: requestShotFilter,
+        specialContext: requestSpecialContext ?? null
       });
 
       // Check if this request is stale (newer request was made)
@@ -147,15 +148,17 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
       let outputsArray = Array.isArray(result) ? result : [];
 
-      // Apply client-side filtering for special contexts (ASSET/COMP)
-      if (requestSpecialContext) {
-        const contextSuffix = requestSpecialContext === 'asset' ? 'ASSET' : 'COMP';
+      // Apply client-side filtering for special contexts
+      if (requestSpecialContext === 'asset') {
         outputsArray = outputsArray.filter(output => {
-          // Check if the output filename contains the special context suffix
-          // Format: PROJECT_SCENE_*_ASSET_* or PROJECT_SCENE_*_COMP_*
           const nameUpper = output.name.toUpperCase();
-          return nameUpper.includes(`_${contextSuffix}_`);
+          return nameUpper.includes('_ASSET_');
         });
+      } else if (requestSpecialContext === 'compose') {
+        // Keep only files physically inside _GlobalCompose (backend returns all outputs)
+        outputsArray = outputsArray.filter(output =>
+          output.path.includes('_GlobalCompose')
+        );
       }
 
       setOutputs(outputsArray);

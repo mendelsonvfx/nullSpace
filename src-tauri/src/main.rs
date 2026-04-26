@@ -700,6 +700,21 @@ async fn update_project(project: Project) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn rename_project_folder(old_path: String, new_path: String) -> Result<String, String> {
+    let old = PathBuf::from(&old_path);
+    let new_p = PathBuf::from(&new_path);
+
+    if new_p.exists() {
+        return Err(format!("Folder already exists: {}", new_path));
+    }
+
+    fs::rename(&old, &new_p)
+        .map_err(|e| format!("Failed to rename project folder: {}", e))?;
+
+    Ok(new_path)
+}
+
+#[tauri::command]
 async fn delete_project(project_path: String) -> Result<(), String> {
     let path = PathBuf::from(&project_path);
     fs::remove_dir_all(&path)
@@ -4191,30 +4206,45 @@ lazy_static! {
     // Pattern 3: name0001.ext — digits directly attached, no separator
     static ref FRAME_NO_SEP_REGEX: regex::Regex =
         regex::Regex::new(r"^(.*[^0-9._])(\d{3,})\.([a-zA-Z0-9]+)$").unwrap();
+    // Pattern 4: prefix0001_suffix.ext — frame number in the middle, followed by separator + text suffix
+    // e.g. [OctaneExport]1091_Beauty.exr, render0001_Diffuse.exr
+    static ref FRAME_MID_REGEX: regex::Regex =
+        regex::Regex::new(r"^(.*?)(\d{3,})[._]([a-zA-Z][a-zA-Z0-9_]*)\.([a-zA-Z0-9]+)$").unwrap();
 }
 
 // Helper function to extract frame number from filename
-fn extract_frame_number(filename: &str) -> Option<(String, u32, String)> {
+// Returns (prefix, frame_number, suffix, extension)
+// suffix is non-empty only for Pattern 4 (mid-name frame numbers like [OctaneExport]1091_Beauty.exr)
+fn extract_frame_number(filename: &str) -> Option<(String, u32, String, String)> {
     // Match patterns like: name.001.exr, name_001.png
     // Requires 3+ digits to avoid grouping files like "1.png", "2.png"
     if let Some(caps) = FRAME_SEP_REGEX.captures(filename) {
         let prefix = caps.get(1).map_or("", |m| m.as_str()).to_string();
         let frame_num = caps.get(2)?.as_str().parse::<u32>().ok()?;
         let ext = caps.get(3)?.as_str().to_string();
-        return Some((prefix, frame_num, ext));
+        return Some((prefix, frame_num, String::new(), ext));
     }
     // Match pure frame number files: 001.exr, 0001.png
     if let Some(caps) = FRAME_ONLY_REGEX.captures(filename) {
         let frame_num = caps.get(1)?.as_str().parse::<u32>().ok()?;
         let ext = caps.get(2)?.as_str().to_string();
-        return Some((String::new(), frame_num, ext));
+        return Some((String::new(), frame_num, String::new(), ext));
+    }
+    // Pattern 4: [OctaneExport]1091_Beauty.exr — frame number in the middle with suffix
+    // Must be checked BEFORE Pattern 3 to correctly handle mid-name frame numbers
+    if let Some(caps) = FRAME_MID_REGEX.captures(filename) {
+        let prefix = caps.get(1).map_or("", |m| m.as_str()).to_string();
+        let frame_num = caps.get(2)?.as_str().parse::<u32>().ok()?;
+        let suffix = caps.get(3).map_or("", |m| m.as_str()).to_string();
+        let ext = caps.get(4)?.as_str().to_string();
+        return Some((prefix, frame_num, suffix, ext));
     }
     // Match no-separator pattern: untitled0185.jpg → prefix="untitled", frame=185
     if let Some(caps) = FRAME_NO_SEP_REGEX.captures(filename) {
         let prefix = caps.get(1).map_or("", |m| m.as_str()).to_string();
         let frame_num = caps.get(2)?.as_str().parse::<u32>().ok()?;
         let ext = caps.get(3)?.as_str().to_string();
-        return Some((prefix, frame_num, ext));
+        return Some((prefix, frame_num, String::new(), ext));
     }
     None
 }
@@ -4280,7 +4310,7 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
 
     // Group files by prefix, extension, software, and render_type (to keep Preview and Final separate)
     for file in files {
-        if let Some((prefix, _frame_num, ext)) = extract_frame_number(&file.name) {
+        if let Some((prefix, _frame_num, suffix, ext)) = extract_frame_number(&file.name) {
             // Only group image formats into sequences
             if is_image_format(&ext) {
                 // Include parent directory in key to separate sequences from different folders
@@ -4288,7 +4318,7 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
                     .parent()
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();
-                let key = format!("{}_{}_{}_{}_{}", prefix, ext, file.software, file.render_type, parent_dir);
+                let key = format!("{}_{}_{}_{}_{}_{}", prefix, suffix, ext, file.software, file.render_type, parent_dir);
                 sequences.entry(key).or_insert_with(Vec::new).push(file);
             } else {
                 // Non-image files are treated as standalone
@@ -4306,16 +4336,16 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
         if seq_files.len() > 1 {
             // Sort by frame number
             seq_files.sort_by(|a, b| {
-                let frame_a = extract_frame_number(&a.name).map(|(_, n, _)| n).unwrap_or(0);
-                let frame_b = extract_frame_number(&b.name).map(|(_, n, _)| n).unwrap_or(0);
+                let frame_a = extract_frame_number(&a.name).map(|(_, n, _, _)| n).unwrap_or(0);
+                let frame_b = extract_frame_number(&b.name).map(|(_, n, _, _)| n).unwrap_or(0);
                 frame_a.cmp(&frame_b)
             });
 
             let first = seq_files.first().unwrap();
             let last = seq_files.last().unwrap();
 
-            let first_frame = extract_frame_number(&first.name).map(|(_, n, _)| n).unwrap_or(0);
-            let last_frame = extract_frame_number(&last.name).map(|(_, n, _)| n).unwrap_or(0);
+            let first_frame = extract_frame_number(&first.name).map(|(_, n, _, _)| n).unwrap_or(0);
+            let last_frame = extract_frame_number(&last.name).map(|(_, n, _, _)| n).unwrap_or(0);
 
             // Get the directory path
             let dir_path = std::path::Path::new(&first.path)
@@ -4324,16 +4354,18 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
                 .unwrap_or_default();
 
             // Extract prefix and extension directly from the first file's name
-            let (prefix, _, ext) = extract_frame_number(&first.name)
-                .unwrap_or((String::new(), 0, String::new()));
+            let (prefix, _, suffix, ext) = extract_frame_number(&first.name)
+                .unwrap_or((String::new(), 0, String::new(), String::new()));
 
-            // Create display name with frame range (only prefix + frame range + ext, no render_type)
+            // Create display name with frame range (only prefix + frame range + suffix + ext)
             // Ignore prefix if it's empty or consists only of digits (e.g., "0" from "0002.exr")
             let use_prefix = !prefix.is_empty() && !prefix.chars().all(|c| c.is_ascii_digit());
-            let display_name = if use_prefix {
-                format!("{}.{:04}-{:04}.{}", &prefix, first_frame, last_frame, &ext)
-            } else {
-                format!("{:04}-{:04}.{}", first_frame, last_frame, &ext)
+            let has_suffix = !suffix.is_empty();
+            let display_name = match (use_prefix, has_suffix) {
+                (true, true) => format!("{}.{:04}-{:04}_{}.{}", &prefix, first_frame, last_frame, &suffix, &ext),
+                (true, false) => format!("{}.{:04}-{:04}.{}", &prefix, first_frame, last_frame, &ext),
+                (false, true) => format!("{:04}-{:04}_{}.{}", first_frame, last_frame, &suffix, &ext),
+                (false, false) => format!("{:04}-{:04}.{}", first_frame, last_frame, &ext),
             };
 
             // Sum up total size
@@ -4341,7 +4373,7 @@ fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
 
             // Detect missing frames
             let existing_frames: Vec<u32> = seq_files.iter()
-                .filter_map(|f| extract_frame_number(&f.name).map(|(_, n, _)| n))
+                .filter_map(|f| extract_frame_number(&f.name).map(|(_, n, _, _)| n))
                 .collect();
             let missing = detect_missing_frames(&existing_frames, first_frame, last_frame);
 
@@ -4521,7 +4553,8 @@ fn scan_output_dir_recursive(
 async fn get_project_outputs(
     project_path: String,
     scene_filter: Option<String>,
-    shot_filter: Option<String>
+    shot_filter: Option<String>,
+    special_context: Option<String>
 ) -> Result<Vec<OutputFile>, String> {
     let project_dir = PathBuf::from(&project_path);
     let mut outputs = Vec::new();
@@ -4593,6 +4626,32 @@ async fn get_project_outputs(
             let final_dir = software_dir.join(render_folder).join("Final");
             if final_dir.exists() {
                 scan_output_dir_recursive(&final_dir, software, "final", &mut outputs, 0, &scene_filter, &shot_filter);
+            }
+        }
+    }
+
+    // Scan _GlobalCompose scene folders — only in compose special context
+    let is_compose_context = special_context.as_deref() == Some("compose");
+    let global_compose_dir = project_dir.join("_GlobalCompose");
+    if !is_compose_context { return Ok(group_sequences(outputs)); }
+    if global_compose_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&global_compose_dir) {
+            for entry in entries.flatten() {
+                let entry_path = entry.path();
+                if !entry_path.is_dir() { continue; }
+
+                let scene_name = entry.file_name().to_string_lossy().to_string();
+                if scene_name.starts_with('.') || scene_name.starts_with('_') { continue; }
+
+                let preview_dir = entry_path.join("Output").join("Preview");
+                if preview_dir.exists() {
+                    scan_output_dir_recursive(&preview_dir, "AfterEffects", "preview", &mut outputs, 0, &None, &None);
+                }
+
+                let final_dir = entry_path.join("Output").join("Final");
+                if final_dir.exists() {
+                    scan_output_dir_recursive(&final_dir, "AfterEffects", "final", &mut outputs, 0, &None, &None);
+                }
             }
         }
     }
@@ -4790,9 +4849,13 @@ fn rename_shot_folders(
         let software_path = project_path.join(software);
         if software_path.exists() {
             for folder in folders {
-                let scene_folder = software_path.join(folder).join(&scene_folder_name);
-                let old_shot_folder = scene_folder.join(&old_shot_folder_name);
-                let new_shot_folder = scene_folder.join(&new_shot_folder_name);
+                let render_folder_path = if scene_folder_name.is_empty() {
+                    software_path.join(folder)
+                } else {
+                    software_path.join(&scene_folder_name).join(folder)
+                };
+                let old_shot_folder = render_folder_path.join(&old_shot_folder_name);
+                let new_shot_folder = render_folder_path.join(&new_shot_folder_name);
 
                 // Only rename if old folder exists and new folder doesn't exist
                 if old_shot_folder.exists() {
@@ -5328,6 +5391,7 @@ fn main() {
             remove_software_from_project,
             load_projects,
             update_project,
+            rename_project_folder,
             delete_project,
             launch_software,
             launch_software_without_project,

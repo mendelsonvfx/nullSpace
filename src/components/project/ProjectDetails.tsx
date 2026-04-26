@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconPencil, IconPlayerPlay, IconAppWindow, IconChevronRight } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api';
+import { selectExecutable } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import { LinkItem, LinkInputForm, NotesSection } from '../shared';
 import { VersionsOverview } from './VersionsOverview';
@@ -48,6 +49,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showManualTimeEntry, setShowManualTimeEntry] = useState(false);
+  const [isToolsEditMode, setIsToolsEditMode] = useState(false);
+  const [editingToolKey, setEditingToolKey] = useState<string | null>(null);
+  const [toolPathInputValue, setToolPathInputValue] = useState('');
+  const [toolPathsSnapshot, setToolPathsSnapshot] = useState<Record<string, string> | null>(null);
   const [isPaymentModalAnimating, setIsPaymentModalAnimating] = useState(false);
   const [isFavoriteAnimating, setIsFavoriteAnimating] = useState(false);
   const [shotToDelete, setShotToDelete] = useState<{ id: string; name: string } | null>(null);
@@ -60,6 +65,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [linksExpanded, setLinksExpanded] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState(project.description || '');
+  const [nameInput, setNameInput] = useState(project.name);
+  useEffect(() => { setNameInput(project.name); }, [project.id]);
   const contentScrollRef = useRef<HTMLElement | null>(null);
 
   // Context menu using centralized hook
@@ -370,6 +377,20 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
     'ZBrush': 'zbrush',
     'Photoshop': 'photoshop',
     'Marmoset': 'marmoset'
+  };
+
+  const handleSaveToolPath = () => {
+    if (!editingToolKey) return;
+    const key = `projectSoftwarePaths_${project.id}`;
+    const map: Record<string, string> = JSON.parse(localStorage.getItem(key) || '{}');
+    map[editingToolKey] = toolPathInputValue;
+    localStorage.setItem(key, JSON.stringify(map));
+    setEditingToolKey(null);
+  };
+
+  const handleBrowseToolPath = async () => {
+    const path = await selectExecutable();
+    if (path) setToolPathInputValue(path);
   };
 
   const handleToggleSoftware = async (softwareName: string) => {
@@ -749,7 +770,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               };
 
               const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
-              const executablePath = pathsMap[softwareKey] || sw.executablePath;
+              const projectPathsMap: Record<string, string> = JSON.parse(
+                localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
+              );
+              const executablePath = projectPathsMap[softwareKey] || pathsMap[softwareKey] || sw.executablePath;
 
               // Get launch status for this software
               const statusKey = `${project.path}-${sw.name}`;
@@ -1485,10 +1509,16 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   <label className="block text-sm font-medium mb-1.5">Project Name</label>
                   <input
                     type="text"
-                    value={project.name}
-                    onChange={(e) => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, name: e.target.value });
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = nameInput.trim();
+                      if (trimmed && trimmed !== project.name) {
+                        const { renameProject } = useProjectStore.getState();
+                        renameProject(project, trimmed).catch(() => setNameInput(project.name));
+                      } else {
+                        setNameInput(project.name);
+                      }
                     }}
                     className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-border-secondary"
                   />
@@ -1913,41 +1943,174 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
               {/* Tools Section */}
               <div className="border-t border-border-secondary pt-4">
-                <div className="font-medium mb-3">Tools</div>
-                <div className="flex gap-2">
-                  {SOFTWARE_OPTIONS.map((sw) => {
-                    const softwareKey = nameToKey[sw] || sw.toLowerCase().replace(/\s+/g, '-');
-                    const isSelected = latestProject.software.some((pSw: any) => {
-                      const existingKey = nameToKey[pSw.name] || pSw.name.toLowerCase().replace(/\s+/g, '-');
-                      return existingKey === softwareKey;
-                    });
-
-                    return (
+                <div className="flex items-center justify-between mb-3">
+                  <div className="font-medium">Tools</div>
+                  {!isToolsEditMode ? (
+                    <button
+                      onClick={() => {
+                        const snapshot: Record<string, string> = JSON.parse(
+                          localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
+                        );
+                        setToolPathsSnapshot(snapshot);
+                        setIsToolsEditMode(true);
+                        setEditingToolKey(null);
+                      }}
+                      title="Edit local software paths"
+                      className="p-1 rounded transition-colors text-text-muted hover:text-white"
+                    >
+                      <IconPencil stroke={1.5} className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2">
                       <button
-                        key={sw}
-                        onClick={() => handleToggleSoftware(sw)}
-                        className={`flex-1 px-3 py-1.5 rounded text-xs transition-all duration-200 ease-out whitespace-nowrap flex items-center justify-center relative ${
-                          isSelected
-                            ? 'bg-hover-bg text-white'
-                            : 'bg-sidebar-bg/50 text-text-muted hover:text-white hover:bg-hover-bg'
-                        }`}
+                        onClick={() => {
+                          localStorage.removeItem(`projectSoftwarePaths_${project.id}`);
+                          setToolPathsSnapshot(null);
+                          setIsToolsEditMode(false);
+                          setEditingToolKey(null);
+                        }}
+                        className="text-xs text-text-muted hover:text-white transition-colors mr-2"
                       >
-                        <div
-                          className="flex items-center gap-1.5 transition-transform duration-200 ease-out"
-                          style={{ transform: isSelected ? 'translateX(-8px)' : 'translateX(0)' }}
-                        >
-                          <SoftwareIcon name={sw} className="w-3.5 h-3.5" />
-                          {sw}
-                        </div>
-                        <IconCheck
-                          stroke={1.5}
-                          className={`w-3.5 h-3.5 text-green-500 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out ${
-                            isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-50'
-                          }`}
-                        />
+                        Reset to default
                       </button>
-                    );
-                  })}
+                      <button
+                        onClick={() => {
+                          setToolPathsSnapshot(null);
+                          setIsToolsEditMode(false);
+                          setEditingToolKey(null);
+                        }}
+                        title="Apply changes"
+                        className="p-1 rounded transition-colors text-green-500 hover:text-green-400"
+                      >
+                        <IconCheck stroke={2} className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (toolPathsSnapshot !== null) {
+                            localStorage.setItem(
+                              `projectSoftwarePaths_${project.id}`,
+                              JSON.stringify(toolPathsSnapshot)
+                            );
+                          }
+                          setToolPathsSnapshot(null);
+                          setIsToolsEditMode(false);
+                          setEditingToolKey(null);
+                        }}
+                        title="Cancel"
+                        className="p-1 rounded transition-colors text-red-500 hover:text-red-400"
+                      >
+                        <IconX stroke={2} className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  {(() => {
+                    const projectPathsMap: Record<string, string> =
+                      JSON.parse(localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}');
+
+                    return SOFTWARE_OPTIONS.map((sw) => {
+                      const softwareKey = nameToKey[sw] || sw.toLowerCase().replace(/\s+/g, '-');
+                      const isSelected = latestProject.software.some((pSw: any) => {
+                        const existingKey = nameToKey[pSw.name] || pSw.name.toLowerCase().replace(/\s+/g, '-');
+                        return existingKey === softwareKey;
+                      });
+                      const isThisEditing = editingToolKey === softwareKey;
+                      const hasLocalPath = !!projectPathsMap[softwareKey];
+
+                      return (
+                        <button
+                          key={sw}
+                          onClick={() => {
+                            if (isToolsEditMode && isSelected) {
+                              if (isThisEditing) {
+                                setEditingToolKey(null);
+                              } else {
+                                const globalPaths: Record<string, string> =
+                                  JSON.parse(localStorage.getItem('softwarePaths') || '{}');
+                                setToolPathInputValue(projectPathsMap[softwareKey] || globalPaths[softwareKey] || '');
+                                setEditingToolKey(softwareKey);
+                              }
+                            } else {
+                              handleToggleSoftware(sw);
+                            }
+                          }}
+                          className={`flex-1 px-3 py-1.5 rounded text-xs transition-all duration-200 ease-out whitespace-nowrap flex items-center justify-center relative ${
+                            isSelected
+                              ? isThisEditing
+                                ? 'bg-accent/20 text-white ring-1 ring-accent'
+                                : 'bg-hover-bg text-white'
+                              : 'bg-sidebar-bg/50 text-text-muted hover:text-white hover:bg-hover-bg'
+                          }`}
+                        >
+                          <div
+                            className="flex items-center gap-1.5 transition-transform duration-200 ease-out"
+                            style={{ transform: isSelected ? 'translateX(-8px)' : 'translateX(0)' }}
+                          >
+                            <SoftwareIcon name={sw} className="w-3.5 h-3.5" />
+                            {sw}
+                          </div>
+                          {/* Normal mode: green checkmark */}
+                          {!isToolsEditMode && (
+                            <IconCheck
+                              stroke={1.5}
+                              className={`w-3.5 h-3.5 text-green-500 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out ${
+                                isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-50'
+                              }`}
+                            />
+                          )}
+                          {/* Edit mode: folder icon on selected badges */}
+                          {isToolsEditMode && isSelected && (
+                            <IconFolderOpen
+                              stroke={1.5}
+                              className={`w-3.5 h-3.5 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out ${
+                                hasLocalPath ? 'text-accent' : 'text-text-muted'
+                              }`}
+                            />
+                          )}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {/* Slide-down path editor */}
+                <div
+                  className="overflow-hidden transition-all duration-300 ease-out"
+                  style={{
+                    maxHeight: editingToolKey ? '52px' : '0px',
+                    opacity: editingToolKey ? 1 : 0,
+                    marginTop: editingToolKey ? '8px' : '0px'
+                  }}
+                >
+                  {editingToolKey && (
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={toolPathInputValue}
+                        onChange={(e) => setToolPathInputValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveToolPath();
+                          if (e.key === 'Escape') setEditingToolKey(null);
+                        }}
+                        placeholder="Path to executable..."
+                        autoFocus
+                        className="flex-1 bg-sidebar-bg border border-border-primary rounded px-3 py-1.5 text-xs focus:outline-none focus:border-border-secondary"
+                      />
+                      <button
+                        onClick={handleBrowseToolPath}
+                        className="px-2.5 py-1.5 bg-sidebar-bg border border-border-primary hover:bg-hover-bg rounded-button text-xs transition-colors whitespace-nowrap"
+                      >
+                        Browse
+                      </button>
+                      <button
+                        onClick={handleSaveToolPath}
+                        className="px-2.5 py-1.5 bg-accent hover:bg-accent-hover rounded-button text-xs font-bold text-white transition-colors"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
               </div>
@@ -1970,13 +2133,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               {/* Close and Save buttons on the right */}
               <div className="flex gap-3">
                 <button
-                  onClick={() => setShowProjectSettings(false)}
+                  onClick={() => { setShowProjectSettings(false); setIsToolsEditMode(false); setEditingToolKey(null); setToolPathsSnapshot(null); }}
                   className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors text-sm"
                 >
                   Close
                 </button>
                 <button
-                  onClick={() => setShowProjectSettings(false)}
+                  onClick={() => { setShowProjectSettings(false); setIsToolsEditMode(false); setEditingToolKey(null); setToolPathsSnapshot(null); }}
                   className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-button transition-colors font-medium text-sm text-white"
                 >
                   Save Changes

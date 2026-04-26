@@ -6,7 +6,7 @@ import { versionsCache } from '../../utils/versionsCache';
 import { versionMarksCache, type MarkColor } from '../../utils/versionMarksCache';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
 import { useContextMenuStore } from '../../store/contextMenuStore';
-import { FolderOpen, Copy, RefreshCw } from 'lucide-react';
+import { FolderOpen, Copy, RefreshCw, Check } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import type { SoftwareName } from '../../types/project';
 import { getScenePattern, getShotPattern, parseFileName, hasSuffix } from '../../utils/fileNaming';
@@ -40,6 +40,8 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
   const [submenuAction, setSubmenuAction] = useState<'move' | 'copy' | null>(null);
   const [activeSceneSubmenu, setActiveSceneSubmenu] = useState<string | null>(null);
   const [activeSceneTop, setActiveSceneTop] = useState<number>(0);
+  const [lastActionResult, setLastActionResult] = useState<'copied' | 'moved' | null>(null);
+  const actionResultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [versionMarks, setVersionMarks] = useState<Record<string, MarkColor>>({});
   const [blendPreviewsEnabled, setBlendPreviewsEnabled] = useState(() => {
@@ -149,6 +151,12 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
       });
     };
   }, [project.path]);
+
+  useEffect(() => {
+    return () => {
+      if (actionResultTimeoutRef.current) clearTimeout(actionResultTimeoutRef.current);
+    };
+  }, []);
 
   // Load version marks when project changes
   useEffect(() => {
@@ -475,6 +483,11 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
     }
     e.stopPropagation();
 
+    if (actionResultTimeoutRef.current) {
+      clearTimeout(actionResultTimeoutRef.current);
+      actionResultTimeoutRef.current = null;
+    }
+    setLastActionResult(null);
     openContextMenu(e, version);
     setShowShotSubmenu(false);
     setSubmenuAction(null);
@@ -519,10 +532,16 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
       versionsCache.invalidate(project.path);
       await loadVersions(false, true);
 
-      closeContextMenuHook();
       setShowShotSubmenu(false);
+      setActiveSceneSubmenu(null);
       setSubmenuAction(null);
-      setActiveMenu(null);
+      setLastActionResult('moved');
+      actionResultTimeoutRef.current = setTimeout(() => {
+        closeContextMenuHook();
+        setActiveMenu(null);
+        setLastActionResult(null);
+        actionResultTimeoutRef.current = null;
+      }, 700);
     } catch (error) {
       console.error('Failed to move version to shot:', error);
       showNotification('error', `Failed to move version: ${error}`);
@@ -543,10 +562,16 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
       versionsCache.invalidate(project.path);
       await loadVersions(false, true);
 
-      closeContextMenuHook();
       setShowShotSubmenu(false);
+      setActiveSceneSubmenu(null);
       setSubmenuAction(null);
-      setActiveMenu(null);
+      setLastActionResult('copied');
+      actionResultTimeoutRef.current = setTimeout(() => {
+        closeContextMenuHook();
+        setActiveMenu(null);
+        setLastActionResult(null);
+        actionResultTimeoutRef.current = null;
+      }, 700);
     } catch (error) {
       console.error('Failed to copy version to shot:', error);
       showNotification('error', `Failed to copy version: ${error}`);
@@ -943,7 +968,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                 }}
               >
                 <button className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover-bg rounded-md flex items-center justify-between text-text-primary transition-colors">
-                  <span>Move to shot...</span>
+                  {lastActionResult === 'moved' ? <span className="flex items-center gap-1.5 text-green-500"><Check size={14} />Moved</span> : <span>Move to shot...</span>}
                   <span className="text-text-muted">›</span>
                 </button>
                 {/* Shot Submenu - Level 1: Scenes (for Move) */}
@@ -1055,7 +1080,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                 }}
               >
                 <button className="w-full px-3 py-1.5 text-left text-sm hover:bg-hover-bg rounded-md flex items-center justify-between text-text-primary transition-colors">
-                  <span>Copy to shot...</span>
+                  {lastActionResult === 'copied' ? <span className="flex items-center gap-1.5 text-green-500"><Check size={14} />Copied</span> : <span>Copy to shot...</span>}
                   <span className="text-text-muted">›</span>
                 </button>
                 {/* Shot Submenu - Level 1: Scenes (for Copy) */}

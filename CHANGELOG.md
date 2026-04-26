@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.8.1] - 2026-04-26
+
+### Added
+- Output: support for mid-name frame sequences (e.g. `[OctaneExport]1091_Beauty.exr`)
+- Output: `_GlobalCompose` scene folder scanning in compose context
+- Projects: rename project folder command (renames folder on disk when project name changes)
+
+### Fixed
+- Output: frame sequence grouping now correctly separates sequences with different suffixes
+
 ## [1.8.0] - 2026-04-03
 
 ### Fixed

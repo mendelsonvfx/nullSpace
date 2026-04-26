@@ -168,10 +168,12 @@ const ShotCard: React.FC<ShotCardProps> = ({
             onMouseEnter={() => onHover(shot.id)}
             onMouseLeave={() => onHover(null)}
           >
-            <div className="flex flex-col items-center justify-center gap-0.5">
-              <span className="text-2xl font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
-              <span className="text-[10px] text-text-muted">No preview</span>
-            </div>
+            {!displaySrc && (
+              <div className="flex flex-col items-center justify-center gap-0.5">
+                <span className="text-2xl font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
+                <span className="text-[10px] text-text-muted">No preview</span>
+              </div>
+            )}
             {displaySrc && (
               <img
                 src={displaySrc}
@@ -255,7 +257,9 @@ const ShotCard: React.FC<ShotCardProps> = ({
             onMouseEnter={() => onHover(shot.id)}
             onMouseLeave={() => onHover(null)}
           >
-            <span className="text-sm font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
+            {!displaySrc && (
+              <span className="text-sm font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
+            )}
             {displaySrc && (
               <img
                 src={displaySrc}
