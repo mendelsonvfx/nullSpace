@@ -2338,9 +2338,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     };
 
     const updatedEntries = [...(project.timeEntries || []), newEntry];
-    const totalMinutesSpent = updatedEntries
-      .filter(e => !e.isActive)
-      .reduce((sum, e) => sum + e.durationMinutes, 0);
+    const totalMinutesSpent = (project.totalMinutesSpent || 0) + durationMinutes;
 
     const hourlyRate = project.cost && totalMinutesSpent > 0
       ? (project.cost / (totalMinutesSpent / 60))
@@ -2374,9 +2372,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const entryToRemove = (project.timeEntries || []).find(entry => entry.id === entryId);
 
     const updatedEntries = (project.timeEntries || []).filter(entry => entry.id !== entryId);
-    const totalMinutesSpent = updatedEntries
-      .filter(e => !e.isActive)
-      .reduce((sum, e) => sum + e.durationMinutes, 0);
+    const totalMinutesSpent = Math.max(0, (project.totalMinutesSpent || 0) - (entryToRemove?.durationMinutes || 0));
 
     const hourlyRate = project.cost && totalMinutesSpent > 0
       ? (project.cost / (totalMinutesSpent / 60))

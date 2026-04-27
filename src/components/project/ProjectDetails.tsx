@@ -751,7 +751,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             <h3 className="text-sm font-medium text-text-secondary mb-3.5">Launch Software</h3>
             <div className="grid grid-cols-2 gap-2">
             {((context.isSpecialContext && context.specialContextType === 'compose')
-              ? project.software.filter((sw: any) => (project.composeSoftware || []).includes(sw.name))
+              ? project.software.filter((sw: any) => {
+                  const key = sw.name.toLowerCase().replace(/\s+/g, '-');
+                  return (project.composeSoftware || []).some((cs: string) => cs === key || cs === sw.name);
+                })
               : project.software
             ).map((sw: any) => {
               // Get executable path from localStorage
@@ -823,9 +826,17 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       ? latestProject.shots?.find((s: any) => s.id === latestProject.currentShotId)
                       : null;
 
+                    // Re-read paths at click time to ensure freshness (avoid stale closure)
+                    const clickSavedPaths = localStorage.getItem('softwarePaths');
+                    const clickPathsMap: Record<string, string> = clickSavedPaths ? JSON.parse(clickSavedPaths) : {};
+                    const clickProjectPathsMap: Record<string, string> = JSON.parse(
+                      localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
+                    );
+                    const resolvedPath = clickProjectPathsMap[softwareKey] || clickPathsMap[softwareKey] || sw.executablePath;
+
                     onLaunchSoftware({
                       ...sw,
-                      executablePath,
+                      executablePath: resolvedPath,
                       sceneNumber: currentScene?.number,
                       shotNumber: currentShot?.number
                     });
@@ -2066,10 +2077,14 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           {isToolsEditMode && isSelected && (
                             <IconFolderOpen
                               stroke={1.5}
-                              className={`w-3.5 h-3.5 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out ${
-                                hasLocalPath ? 'text-accent' : 'text-text-muted'
-                              }`}
+                              className="w-3.5 h-3.5 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out text-text-muted"
                             />
+                          )}
+                          {/* Star badge in top-right corner when a project-local path is saved */}
+                          {hasLocalPath && (
+                            <span className="absolute -top-1 -right-1 w-3 h-3 flex items-center justify-center">
+                              <IconStarFilled className="w-2.5 h-2.5 text-accent" />
+                            </span>
                           )}
                         </button>
                       );

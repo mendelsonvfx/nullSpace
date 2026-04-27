@@ -126,9 +126,9 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
   const manualTransactions = useMemo(() => {
     const allTransactions: Array<{ transaction: any; project: Project | { id: string; name: string } }> = [];
 
-    // Add transactions from active projects
+    // Add transactions from all projects (any status, including archived)
     projects
-      .filter(p => p.status === 'active' && p.transactions && p.transactions.length > 0)
+      .filter(p => p.transactions && p.transactions.length > 0)
       .forEach(project => {
         project.transactions!.forEach(transaction => {
           allTransactions.push({ transaction, project });
@@ -204,7 +204,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                   placeholder="Select a Project"
                   options={[
                     ...projects
-                      .filter(project => project.status === 'active')
+                      .filter(project => project.status !== 'archived' && !project._isOrphaned)
                       .map(project => ({ value: project.id, label: project.name })),
                     { value: 'other', label: '— Other Project —' },
                   ]}

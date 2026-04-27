@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.8.3] - 2026-04-28
+
+### Added
+- Software Tools: star badge on tool button when a project-local executable path is saved
+
+### Fixed
+- Finance: manual transaction list and project selector now include non-archived projects (not only active)
+- Software Tools: executable path re-read from localStorage at click time to avoid stale closure
+- Software Tools: compose software filter matches by key slug or display name
+- Time Tracking: total minutes recalculated incrementally on add/remove instead of re-summing all entries
+
 ## [1.8.2] - 2026-04-27
 
 ### Added
