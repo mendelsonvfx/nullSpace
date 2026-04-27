@@ -1013,6 +1013,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       };
     }
 
+    // Normalize composeSoftware from legacy string to string[]
+    if (project.composeSoftware !== undefined && !Array.isArray(project.composeSoftware)) {
+      return { ...project, composeSoftware: [project.composeSoftware as unknown as string] };
+    }
+
     return project;
   },
 
@@ -1072,13 +1077,23 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         try {
           await invoke('create_shot_folders', {
             input: {
-              project_path: project.path,
-              scene_code: sceneCode,
-              shot_code: '001'
+              projectPath: project.path,
+              sceneCode,
+              shotCode: '001'
             }
           });
         } catch (error) {
           console.error('Failed to create main shot folders:', error);
+        }
+
+        if (project.composeSoftware?.length) {
+          try {
+            await invoke('create_global_compose_shot_folders', {
+              projectPath: project.path,
+              sceneCode,
+              shotCode: '001',
+            });
+          } catch (e) { console.error('Failed to create GlobalCompose folders for scene shot:', e); }
         }
       }
 
@@ -1119,6 +1134,24 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         } catch (error) {
           console.error('Failed to delete scene files:', error);
         }
+
+        if (project.composeSoftware?.length) {
+          const sceneCode = sanitizeFolderName(scene.name);
+          const shotsInScene = (project.shots || []).filter(s => s.sceneId === sceneId);
+          if (shotsInScene.length > 0) {
+            try {
+              const { invoke: invokeCmd } = await import('@tauri-apps/api/tauri');
+              for (const shot of shotsInScene) {
+                const shotCode = shot.number.toString().padStart(3, '0');
+                await invokeCmd('delete_global_compose_shot_folders', {
+                  projectPath: project.path,
+                  sceneCode,
+                  shotCode,
+                });
+              }
+            } catch (e) { console.error('Failed to delete GlobalCompose shot folders:', e); }
+          }
+        }
       }
 
       const updated = {
@@ -1127,6 +1160,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         currentSceneId: project.currentSceneId === sceneId ? (project.scenes?.[0]?.id || undefined) : project.currentSceneId
       };
       get().updateProject(updated);
+      window.dispatchEvent(new CustomEvent('tree-refresh'));
     }
   },
 
@@ -1599,6 +1633,16 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         } catch (error) {
           console.error('Failed to create shot folders:', error);
         }
+
+        if (project.hasScenes && project.composeSoftware?.length) {
+          try {
+            await invoke('create_global_compose_shot_folders', {
+              projectPath: project.path,
+              sceneCode,
+              shotCode,
+            });
+          } catch (e) { console.error('Failed to create GlobalCompose shot folders:', e); }
+        }
       } else if (!project.hasScenes) {
         // Shots-only mode: create folders without scene hierarchy
         const shotCode = shotNumber.toString().padStart(3, '0');
@@ -1662,6 +1706,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         console.log(`Deleted ${deletedCount} files for shot ${shotToRemove.number}`);
       } catch (error) {
         console.error('Failed to delete shot files:', error);
+      }
+
+      if (project.hasScenes && project.composeSoftware?.length && scene) {
+        try {
+          const { invoke: invokeCmd } = await import('@tauri-apps/api/tauri');
+          const sceneCode = sanitizeFolderName(scene.name);
+          const shotCode = shotToRemove.number.toString().padStart(3, '0');
+          await invokeCmd('delete_global_compose_shot_folders', {
+            projectPath: project.path,
+            sceneCode,
+            shotCode,
+          });
+        } catch (e) { console.error('Failed to delete GlobalCompose shot folders:', e); }
       }
 
       const updated = {
@@ -1749,8 +1806,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
         try {
           // 1. Rename folders
-          const oldShotFolderName = `SH${oldNumber.toString().padStart(3, '0')}`;
-          const newShotFolderName = `SH${finalNumber.toString().padStart(3, '0')}`;
+          const oldShotFolderName = oldNumber.toString().padStart(3, '0');
+          const newShotFolderName = finalNumber.toString().padStart(3, '0');
 
           const scene = (project.scenes || []).find(s => s.id === shot.sceneId);
           if (scene) {

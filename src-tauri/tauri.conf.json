@@ -7,7 +7,7 @@
   },
   "package": {
     "productName": "nullSpace",
-    "version": "1.8.1"
+    "version": "1.8.2"
   },
   "tauri": {
     "allowlist": {
@@ -80,7 +80,7 @@
       "externalBin": []
     },
     "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost https://api.exchangerate-api.com; img-src 'self' data: blob: asset: https://asset.localhost https://www.google.com https://*.gstatic.com; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost https://api.exchangerate-api.com; img-src 'self' data: blob: asset: https://asset.localhost https://www.google.com https://*.gstatic.com https: http:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
     },
     "windows": [
       {

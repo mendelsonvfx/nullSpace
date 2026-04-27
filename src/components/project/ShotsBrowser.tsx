@@ -26,6 +26,7 @@ import {
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
+import { ComposeSoftwareModal } from '../modals/ComposeSoftwareModal';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
@@ -33,6 +34,9 @@ import { useContextMenu } from '../../hooks/useContextMenu';
 import { extractShotNumber, getScenePattern, extractVersion } from '../../utils/fileNaming';
 import { useBlendThumbnail, isBlendThumbnailCached } from '../../hooks/useBlendThumbnail';
 import { findNextAvailableShotNumber } from '../../utils/shotNumbering';
+
+const sanitizeFolderName = (name: string) =>
+  name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
 
 interface ProjectVersion {
   name: string;
@@ -861,7 +865,9 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
   const addShot = useProjectStore(state => state.addShot);
   const addScene = useProjectStore(state => state.addScene);
   const setSpecialContext = useProjectStore(state => state.setSpecialContext);
+  const updateProject = useProjectStore(state => state.updateProject);
   const { setActiveMenu } = useContextMenuStore();
+  const [showComposeSoftwareModal, setShowComposeSoftwareModal] = useState(false);
 
   // Load expanded scenes from localStorage
   const [expandedScenes, setExpandedScenes] = useState<Set<string>>(() => {
@@ -2033,7 +2039,11 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
           </button>
           <button
             onClick={() => {
-              setSpecialContext(projectId, 'compose');
+              if (!project?.composeSoftware?.length) {
+                setShowComposeSoftwareModal(true);
+              } else {
+                setSpecialContext(projectId, 'compose');
+              }
             }}
             className={`flex items-center justify-center gap-1.5 px-2 py-2 text-xs select-none transition-all cursor-pointer rounded-badge ${
               project?.currentSpecialContextId &&
@@ -2540,6 +2550,36 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
           Show Asset/Compose Buttons
         </ContextMenuItem>
       </ContextMenu>
+
+      {showComposeSoftwareModal && (
+        <ComposeSoftwareModal
+          onConfirm={async (softwareKeys) => {
+            const current = useProjectStore.getState().projects.find(p => p.id === projectId);
+            if (current) {
+              await updateProject({ ...current, composeSoftware: softwareKeys });
+              if (current.hasScenes && current.shots && current.scenes) {
+                for (const shot of current.shots) {
+                  const scene = current.scenes.find(s => s.id === shot.sceneId);
+                  if (scene) {
+                    const sceneCode = sanitizeFolderName(scene.name);
+                    const shotCode = shot.number.toString().padStart(3, '0');
+                    try {
+                      await invoke('create_global_compose_shot_folders', {
+                        projectPath: current.path,
+                        sceneCode,
+                        shotCode,
+                      });
+                    } catch (e) { console.error('GlobalCompose init failed:', e); }
+                  }
+                }
+              }
+            }
+            setShowComposeSoftwareModal(false);
+            setSpecialContext(projectId, 'compose');
+          }}
+          onClose={() => setShowComposeSoftwareModal(false)}
+        />
+      )}
     </div>
   );
 };

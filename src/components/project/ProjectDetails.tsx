@@ -750,7 +750,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           <div className="mb-6">
             <h3 className="text-sm font-medium text-text-secondary mb-3.5">Launch Software</h3>
             <div className="grid grid-cols-2 gap-2">
-            {project.software.map((sw: any) => {
+            {((context.isSpecialContext && context.specialContextType === 'compose')
+              ? project.software.filter((sw: any) => (project.composeSoftware || []).includes(sw.name))
+              : project.software
+            ).map((sw: any) => {
               // Get executable path from localStorage
               const savedPaths = localStorage.getItem('softwarePaths');
               const pathsMap: Record<string, string> = savedPaths ? JSON.parse(savedPaths) : {};

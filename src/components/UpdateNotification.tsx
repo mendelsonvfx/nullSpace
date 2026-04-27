@@ -55,8 +55,8 @@ export function UpdateNotification({ version, downloadUrl, notes, releaseUrl, pu
       >
         {/* Header */}
         <div className="flex items-start gap-4 px-6 py-5 border-b border-border-primary">
-          <div className="flex-shrink-0 flex items-center justify-center">
-            <Download className="w-5 h-5 text-accent" />
+          <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-hover-bg flex items-center justify-center">
+            <Download className="w-6 h-6 text-text-secondary" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm">Update Available</div>

@@ -116,6 +116,8 @@ struct Project {
     asset_icons: Option<std::collections::HashMap<String, String>>,
     #[serde(rename = "assetColors", alias = "asset_colors", skip_serializing_if = "Option::is_none")]
     asset_colors: Option<std::collections::HashMap<String, String>>,
+    #[serde(rename = "composeSoftware", alias = "compose_software", skip_serializing_if = "Option::is_none")]
+    compose_software: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -558,6 +560,7 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
         asset_tags: None,
         asset_icons: None,
         asset_colors: None,
+        compose_software: None,
     };
 
     let metadata_path = project_path.join(".project-metadata.json");
@@ -4760,6 +4763,38 @@ fn create_shot_folders(input: CreateShotFoldersInput) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn create_global_compose_shot_folders(
+    project_path: String,
+    scene_code: String,
+    shot_code: String,
+) -> Result<(), String> {
+    let base = PathBuf::from(&project_path)
+        .join("_GlobalCompose")
+        .join(file_naming::sanitize_folder_name(&scene_code))
+        .join("Output");
+    fs::create_dir_all(base.join("Preview").join(file_naming::sanitize_folder_name(&shot_code)))
+        .map_err(|e| format!("Failed to create Preview folder: {}", e))?;
+    fs::create_dir_all(base.join("Final").join(file_naming::sanitize_folder_name(&shot_code)))
+        .map_err(|e| format!("Failed to create Final folder: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_global_compose_shot_folders(
+    project_path: String,
+    scene_code: String,
+    shot_code: String,
+) -> Result<(), String> {
+    let base = PathBuf::from(&project_path)
+        .join("_GlobalCompose")
+        .join(file_naming::sanitize_folder_name(&scene_code))
+        .join("Output");
+    let _ = fs::remove_dir_all(base.join("Preview").join(file_naming::sanitize_folder_name(&shot_code)));
+    let _ = fs::remove_dir_all(base.join("Final").join(file_naming::sanitize_folder_name(&shot_code)));
+    Ok(())
+}
+
+#[tauri::command]
 fn rename_scene_folders(
     project_path: String,
     old_folder_name: String,
@@ -4876,6 +4911,29 @@ fn rename_shot_folders(
                             )
                         })?;
 
+                    renamed_count += 1;
+                }
+            }
+        }
+    }
+
+    // Also rename shot folders inside _GlobalCompose
+    if !scene_folder_name.is_empty() {
+        let global_compose_dir = project_path.join("_GlobalCompose").join(&scene_folder_name);
+        if global_compose_dir.exists() {
+            for folder in &["Output/Preview", "Output/Final"] {
+                let render_path = global_compose_dir.join(folder);
+                let old_f = render_path.join(&old_shot_folder_name);
+                let new_f = render_path.join(&new_shot_folder_name);
+                if old_f.exists() {
+                    if new_f.exists() {
+                        return Err(format!(
+                            "Cannot rename: destination folder already exists: {}",
+                            new_f.display()
+                        ));
+                    }
+                    fs::rename(&old_f, &new_f)
+                        .map_err(|e| format!("Failed to rename GlobalCompose shot folder: {}", e))?;
                     renamed_count += 1;
                 }
             }
@@ -5433,6 +5491,8 @@ fn main() {
             rename_scene_thumbnails,
             create_scene_folders,
             create_shot_folders,
+            create_global_compose_shot_folders,
+            delete_global_compose_shot_folders,
             rename_scene_folders,
             rename_shot_folders,
             time_tracking::start_time_tracking,

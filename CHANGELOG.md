@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.8.2] - 2026-04-27
+
+### Added
+- Shots: `ComposeSoftware` modal — select compose software on first Compose context activation
+- Shots: GlobalCompose folders auto-created/deleted when adding or removing scenes and shots
+- Shots: shot rename propagates to `_GlobalCompose` folder structure on disk
+
+### Fixed
+- Store: legacy `composeSoftware` string value normalized to array on load
+
 ## [1.8.1] - 2026-04-26
 
 ### Added

@@ -189,6 +189,7 @@ export interface Project {
   isManualTransaction?: boolean;     // Manually added financial transaction (deprecated - use transactions array)
   sourceProjectId?: string;          // ID of the project this transaction is related to (deprecated)
   _isOrphaned?: boolean;             // Project folder was deleted, loaded from backup
+  composeSoftware?: string[];         // e.g. ['after-effects'], set on first compose visit
 }
 
 // Предустановленные шаблоны структуры папок

@@ -21,3 +21,5 @@ export const SOFTWARE_OPTIONS = [
   // 'Maya',
   // 'Cinema 4D', 'Substance', 'Unreal', 'Unity', 'ZBrush', 'Marmoset'
 ] as const;
+
+export const COMPOSE_SOFTWARE_OPTIONS = ['After Effects'] as const;
