@@ -1039,7 +1039,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                       >
                         <div
                           className="bg-card-bg border border-border-secondary rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px]"
-                          style={{ maxHeight: '300px', overflowY: 'auto' }}
+                          style={{ maxHeight: '300px', overflowY: 'hidden' }}
                         >
                           {shotsByScene[activeSceneSubmenu].shots.map((shot: any) => (
                             <button
@@ -1151,7 +1151,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                       >
                         <div
                           className="bg-card-bg border border-border-secondary rounded-xl shadow-2xl p-1.5 min-w-[140px] max-w-[160px]"
-                          style={{ maxHeight: '300px', overflowY: 'auto' }}
+                          style={{ maxHeight: '300px', overflowY: 'hidden' }}
                         >
                           {shotsByScene[activeSceneSubmenu].shots.map((shot: any) => (
                             <button

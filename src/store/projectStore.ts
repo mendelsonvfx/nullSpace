@@ -3004,9 +3004,12 @@ useTimeTrackingStore.subscribe((state) => {
           // Preserve fields that exist only in projectStore (like widgetVisible)
           const existingEntry = updatedEntries[entryIndex];
           // Skip sync if only elapsedSeconds changed (it ticks every second and is only used by InlineTimer from timeTrackingStore)
+          // NOTE: durationMinutes is NOT checked here — it's managed exclusively by incrementMinute()
+          // in workSessionStore which writes directly to projectStore. timeTrackingStore.sessions.durationMinutes
+          // is frozen at creation/restore time and must NOT override the accumulated projectStore value.
           const onlyElapsedChanged =
             existingEntry.isActive === session.isActive &&
-            existingEntry.durationMinutes === session.durationMinutes &&
+            existingEntry.softwareMinutes === session.softwareMinutes &&
             existingEntry.widgetVisible === (session.widgetVisible ?? existingEntry.widgetVisible) &&
             existingEntry.software === session.software &&
             existingEntry.pid === session.pid;
@@ -3015,6 +3018,9 @@ useTimeTrackingStore.subscribe((state) => {
           updatedEntries[entryIndex] = {
             ...existingEntry,
             ...session,
+            // durationMinutes is authoritative in projectStore (incremented by incrementMinute()).
+            // timeTrackingStore.sessions.durationMinutes is stale (frozen at 0 or last disk value).
+            durationMinutes: existingEntry.durationMinutes,
             widgetVisible: session.widgetVisible ?? existingEntry.widgetVisible // Prioritize timeTrackingStore
           };
           hasChanges = true;
@@ -3022,8 +3028,10 @@ useTimeTrackingStore.subscribe((state) => {
       });
 
       if (hasChanges) {
-        // Calculate currentProjectTime as sum of all active session durations
-        const currentProjectTime = sessions.reduce((sum, s) => sum + s.durationMinutes, 0);
+        // Use durationMinutes from updatedEntries (preserved from projectStore, NOT stale timeTrackingStore value)
+        const currentProjectTime = updatedEntries
+          .filter(e => e.isActive)
+          .reduce((sum, e) => sum + e.durationMinutes, 0);
 
         const updatedProject = {
           ...project,

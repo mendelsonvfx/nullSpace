@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.5] - 2026-04-28
+
+### Fixed
+- Time Tracking: `durationMinutes` preserved from projectStore during sync — prevents stale timeTrackingStore value from overwriting accumulated time
+- Time Tracking: active session time uses projectStore entries instead of stale session data
+- Versions: shot submenu scroll hidden to avoid scrollbar flicker
+
 ## [1.8.4] - 2026-04-28
 
 ### Fixed
