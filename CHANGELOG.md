@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.4] - 2026-04-28
+
+### Fixed
+- Software Tools: project settings modal z-index raised to render above other panels
+- Software Tools: folder icon tinted by path state; local-path dot badge shown only in edit mode
+- Software Tools: remove confirmation dialog border styled red for clarity
+
 ## [1.8.3] - 2026-04-28
 
 ### Added

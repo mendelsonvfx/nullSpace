@@ -1495,7 +1495,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       {/* Project Settings Modal */}
       {showProjectSettings && (
         <div
-          className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 rounded-lg ${blurClass}`}
+          className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4 rounded-lg ${blurClass}`}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               (e.currentTarget as HTMLDivElement).dataset.mousedownTarget = 'backdrop';
@@ -2077,14 +2077,14 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                           {isToolsEditMode && isSelected && (
                             <IconFolderOpen
                               stroke={1.5}
-                              className="w-3.5 h-3.5 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out text-text-muted"
+                              className={`w-3.5 h-3.5 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out ${
+                                hasLocalPath ? 'text-text-primary' : 'text-text-primary/70'
+                              }`}
                             />
                           )}
-                          {/* Star badge in top-right corner when a project-local path is saved */}
-                          {hasLocalPath && (
-                            <span className="absolute -top-1 -right-1 w-3 h-3 flex items-center justify-center">
-                              <IconStarFilled className="w-2.5 h-2.5 text-accent" />
-                            </span>
+                          {/* Dot badge: top-right corner of button when a project-local path is saved */}
+                          {isToolsEditMode && isSelected && hasLocalPath && (
+                            <span className="absolute -top-0.5 -right-0.5 w-1 h-1 rounded-full bg-text-primary/80 pointer-events-none" />
                           )}
                         </button>
                       );
@@ -2226,7 +2226,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           }}
         >
           <div
-            className="bg-card-bg border border-border-primary rounded-card p-6 max-w-md w-full mx-4"
+            className="bg-card-bg border border-red-700 rounded-card p-6 max-w-md w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold mb-2">Remove {softwareToRemove}?</h3>
