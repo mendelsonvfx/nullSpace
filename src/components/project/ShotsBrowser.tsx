@@ -1158,20 +1158,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
       const arrayBuffer = await blob.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      const { writeBinaryFile, createDir, BaseDirectory } = await import('@tauri-apps/api/fs');
+      const { writeBinaryFile, createDir, removeFile, BaseDirectory } = await import('@tauri-apps/api/fs');
       const { join, appDataDir } = await import('@tauri-apps/api/path');
       const tempFileName = `temp_scene_preview_${Date.now()}.png`;
 
       try {
-        await createDir('', { dir: BaseDirectory.AppData, recursive: true });
+        await createDir('preview', { dir: BaseDirectory.AppData, recursive: true });
       } catch (e) {
         // Directory might already exist
       }
 
-      await writeBinaryFile(tempFileName, uint8Array, { dir: BaseDirectory.AppData });
+      await writeBinaryFile(`preview/${tempFileName}`, uint8Array, { dir: BaseDirectory.AppData });
 
       const appDir = await appDataDir();
-      const tempPath = await join(appDir, tempFileName);
+      const tempPath = await join(appDir, 'preview', tempFileName);
 
       const { invoke } = await import('@tauri-apps/api/tauri');
       const previewPath = await invoke<string>('set_scene_preview', {
@@ -1179,6 +1179,8 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
         sceneNumber: scene.number,
         imagePath: tempPath
       });
+
+      await removeFile(tempPath).catch(() => {});
 
       // Clear cache for old preview if it exists
       if (scene.preview) {
@@ -1215,20 +1217,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
       const arrayBuffer = await blob.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      const { writeBinaryFile, createDir, BaseDirectory } = await import('@tauri-apps/api/fs');
+      const { writeBinaryFile, createDir, removeFile, BaseDirectory } = await import('@tauri-apps/api/fs');
       const { join, appDataDir } = await import('@tauri-apps/api/path');
       const tempFileName = `temp_shot_preview_${Date.now()}.png`;
 
       try {
-        await createDir('', { dir: BaseDirectory.AppData, recursive: true });
+        await createDir('preview', { dir: BaseDirectory.AppData, recursive: true });
       } catch (e) {
         // Directory might already exist
       }
 
-      await writeBinaryFile(tempFileName, uint8Array, { dir: BaseDirectory.AppData });
+      await writeBinaryFile(`preview/${tempFileName}`, uint8Array, { dir: BaseDirectory.AppData });
 
       const appDir = await appDataDir();
-      const tempPath = await join(appDir, tempFileName);
+      const tempPath = await join(appDir, 'preview', tempFileName);
 
       const { invoke } = await import('@tauri-apps/api/tauri');
       const previewPath = await invoke<string>('set_shot_preview', {
@@ -1237,6 +1239,8 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
         shotNumber: shot.number,
         imagePath: tempPath
       });
+
+      await removeFile(tempPath).catch(() => {});
 
       // Clear cache for old preview if it exists
       if (shot.preview) {

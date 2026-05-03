@@ -335,17 +335,17 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
       // Ensure AppData directory exists
       try {
-        await createDir('', { dir: BaseDirectory.AppData, recursive: true });
+        await createDir('preview', { dir: BaseDirectory.AppData, recursive: true });
       } catch (e) {
         // Directory might already exist, ignore error
       }
 
       // Write binary file to AppData directory
-      await writeBinaryFile(tempFileName, uint8Array, { dir: BaseDirectory.AppData });
+      await writeBinaryFile(`preview/${tempFileName}`, uint8Array, { dir: BaseDirectory.AppData });
 
       // Get full path using join
       const appDir = await appDataDir();
-      const tempPath = await join(appDir, tempFileName);
+      const tempPath = await join(appDir, 'preview', tempFileName);
 
       // Set thumbnail
       const thumbnailName = await invoke<string>('set_project_thumbnail', {

@@ -839,15 +839,15 @@ function App() {
       const tempFileName = `temp_thumbnail_${Date.now()}.png`;
 
       try {
-        await createDir('', { dir: BaseDirectory.AppData, recursive: true });
+        await createDir('preview', { dir: BaseDirectory.AppData, recursive: true });
       } catch (e) {
         // Directory might already exist
       }
 
-      await writeBinaryFile(tempFileName, uint8Array, { dir: BaseDirectory.AppData });
+      await writeBinaryFile(`preview/${tempFileName}`, uint8Array, { dir: BaseDirectory.AppData });
 
       const appDir = await appDataDir();
-      const tempPath = await join(appDir, tempFileName);
+      const tempPath = await join(appDir, 'preview', tempFileName);
 
       const thumbnailName = await invoke<string>('set_project_thumbnail', {
         projectPath: project.path,

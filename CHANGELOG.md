@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.6] - 2026-04-28
+
+### Fixed
+- Thumbnails: temp preview files written to `AppData/preview/` subfolder instead of AppData root
+- Thumbnails: temp files deleted after processing (scene and shot previews)
+- Thumbnails: `CreateProjectModal` uses same `preview/` subfolder for clipboard paste thumbnails
+
 ## [1.8.5] - 2026-04-28
 
 ### Fixed

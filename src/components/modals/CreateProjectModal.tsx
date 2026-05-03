@@ -85,12 +85,19 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
               // Save to temp file using Tauri
               const { writeBinaryFile, BaseDirectory } = await import('@tauri-apps/api/fs');
               const { appDataDir } = await import('@tauri-apps/api/path');
+              const { createDir } = await import('@tauri-apps/api/fs');
               const appDir = await appDataDir();
               const tempFileName = `temp_thumbnail_${Date.now()}.png`;
-              const tempPath = `${appDir}\\${tempFileName}`;
+              const tempPath = `${appDir}\\preview\\${tempFileName}`;
+
+              try {
+                await createDir('preview', { dir: BaseDirectory.AppData, recursive: true });
+              } catch (e) {
+                // Directory might already exist
+              }
 
               // Write binary file
-              await writeBinaryFile(tempFileName, uint8Array, { dir: BaseDirectory.AppData });
+              await writeBinaryFile(`preview/${tempFileName}`, uint8Array, { dir: BaseDirectory.AppData });
 
               setFormData(prev => ({ ...prev, thumbnailPath: tempPath }));
               console.log('Image pasted from clipboard:', tempPath);
