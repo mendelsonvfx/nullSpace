@@ -15,20 +15,51 @@ interface LinkItemProps {
   specialContextId?: string | null;
 }
 
+type FaviconState = { url: string | null; fallbackUrl: string | null; loaded: boolean; error: boolean };
+
+// Persists for the app session — avoids re-fetching favicons on component remount.
+// string = URL that successfully loaded, null = both DDG and direct favicon.ico failed.
+const faviconCache = new Map<string, string | null>();
+
+function computeFaviconState(linkUrl: string): FaviconState {
+  try {
+    const { hostname, protocol, origin } = new URL(linkUrl);
+    if (!protocol.startsWith('http') || !hostname)
+      return { url: null, fallbackUrl: null, loaded: false, error: false };
+    const isLocal = hostname === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(hostname);
+    if (isLocal)
+      return { url: `${origin}/favicon.ico`, fallbackUrl: null, loaded: false, error: false };
+    return {
+      url: `https://icons.duckduckgo.com/ip3/${hostname}.ico`,
+      fallbackUrl: `${origin}/favicon.ico`,
+      loaded: false,
+      error: false,
+    };
+  } catch {
+    return { url: null, fallbackUrl: null, loaded: false, error: false };
+  }
+}
+
+function getFaviconState(linkUrl: string): FaviconState {
+  try {
+    const { hostname } = new URL(linkUrl);
+    if (faviconCache.has(hostname)) {
+      const cached = faviconCache.get(hostname)!;
+      return cached
+        ? { url: cached, fallbackUrl: null, loaded: true, error: false }
+        : { url: null, fallbackUrl: null, loaded: false, error: true };
+    }
+  } catch {}
+  return computeFaviconState(linkUrl);
+}
+
 export const LinkItem = memo(function LinkItem({ link, projectId, shotId, sceneId, specialContextId }: LinkItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(link.title);
-  const [favicon, setFavicon] = useState<{ url: string | null; loaded: boolean; error: boolean }>(
-    { url: null, loaded: false, error: false }
-  );
+  const [favicon, setFavicon] = useState<FaviconState>(() => getFaviconState(link.url));
 
   useEffect(() => {
-    try {
-      const { origin } = new URL(link.url);
-      setFavicon({ url: `${origin}/favicon.ico`, loaded: false, error: false });
-    } catch {
-      setFavicon({ url: null, loaded: false, error: false });
-    }
+    setFavicon(getFaviconState(link.url));
   }, [link.url]);
 
   const handleSave = useCallback(() => {
@@ -89,23 +120,48 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId, sceneI
     setIsEditing(true);
   }, []);
 
+  const handleFaviconLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    try {
+      const { hostname } = new URL(link.url);
+      faviconCache.set(hostname, e.currentTarget.src);
+    } catch {}
+    setFavicon(f => ({ ...f, loaded: true }));
+  }, [link.url]);
+
+  const handleFaviconError = useCallback(() => {
+    setFavicon(f => {
+      if (f.fallbackUrl && f.url !== f.fallbackUrl) {
+        return { ...f, url: f.fallbackUrl };
+      }
+      try {
+        const { hostname } = new URL(link.url);
+        faviconCache.set(hostname, null);
+      } catch {}
+      return { ...f, error: true };
+    });
+  }, [link.url]);
+
+  const faviconImg = (
+    <div className="w-4 h-4 flex-shrink-0 overflow-hidden">
+      {favicon.url && (
+        <img
+          src={favicon.url}
+          alt=""
+          className={favicon.loaded && !favicon.error ? 'w-4 h-4 object-contain' : 'hidden'}
+          onLoad={handleFaviconLoad}
+          onError={handleFaviconError}
+        />
+      )}
+      {(favicon.error || !favicon.url) && (
+        <LinkIcon className="w-4 h-4 text-text-muted" />
+      )}
+    </div>
+  );
+
   if (isEditing) {
     return (
       <div className="flex items-center gap-2.5 px-3 py-2 rounded-button border border-zinc-600 transition-all">
-        <div className="w-4 h-4 flex-shrink-0 overflow-hidden">
-          {favicon.url && (
-            <img
-              src={favicon.url}
-              alt=""
-              className={favicon.loaded && !favicon.error ? 'w-4 h-4 object-contain' : 'hidden'}
-              onLoad={() => setFavicon(f => ({ ...f, loaded: true }))}
-              onError={() => setFavicon(f => ({ ...f, error: true }))}
-            />
-          )}
-          {(!favicon.loaded || favicon.error || !favicon.url) && (
-            <LinkIcon className="w-4 h-4 text-text-muted" />
-          )}
-        </div>
+        {faviconImg}
         <input
           type="text"
           value={editedTitle}
@@ -131,20 +187,7 @@ export const LinkItem = memo(function LinkItem({ link, projectId, shotId, sceneI
       title={link.url}
       className="flex items-center gap-2.5 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
     >
-      <div className="w-4 h-4 flex-shrink-0 overflow-hidden">
-        {favicon.url && (
-          <img
-            src={favicon.url}
-            alt=""
-            className={favicon.loaded && !favicon.error ? 'w-4 h-4 object-contain' : 'hidden'}
-            onLoad={() => setFavicon(f => ({ ...f, loaded: true }))}
-            onError={() => setFavicon(f => ({ ...f, error: true }))}
-          />
-        )}
-        {(!favicon.loaded || favicon.error || !favicon.url) && (
-          <LinkIcon className="w-4 h-4 text-text-muted" />
-        )}
-      </div>
+      {faviconImg}
       <span className="text-sm text-text-primary truncate flex-1">{link.title}</span>
       <button
         onClick={handleEditClick}

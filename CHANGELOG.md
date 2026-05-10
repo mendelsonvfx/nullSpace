@@ -1,11 +1,15 @@
 # Changelog
 
-## [1.8.6] - 2026-04-28
+## [1.8.7] - 2026-04-28
+
+### Added
+- Links: favicons fetched via DuckDuckGo CDN with direct `favicon.ico` fallback; session-level cache avoids re-fetching on remount
+- Settings: configurable button hide delay for Add Shot / Add Scene buttons
 
 ### Fixed
 - Thumbnails: temp preview files written to `AppData/preview/` subfolder instead of AppData root
 - Thumbnails: temp files deleted after processing (scene and shot previews)
-- Thumbnails: `CreateProjectModal` uses same `preview/` subfolder for clipboard paste thumbnails
+- Blend thumbnails: support for Blender 5.x new file format (17-byte header, 32-byte block headers)
 
 ## [1.8.5] - 2026-04-28
 

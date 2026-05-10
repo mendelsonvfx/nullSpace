@@ -21,6 +21,7 @@ import {
   IconMoon,
   IconFilter,
   IconClockHour3,
+  IconHash,
   IconLayoutSidebarRightCollapse,
   IconLayoutSidebarRightExpand,
 } from '@tabler/icons-react';
@@ -89,6 +90,7 @@ interface ShotCardProps {
   onEditSave: () => void;
   onEditCancel: () => void;
   versionsLoaded: boolean;
+  pendingNumber?: string;
 }
 
 const ShotCard: React.FC<ShotCardProps> = ({
@@ -107,7 +109,8 @@ const ShotCard: React.FC<ShotCardProps> = ({
   onEditChange,
   onEditSave,
   onEditCancel,
-  versionsLoaded
+  versionsLoaded,
+  pendingNumber,
 }) => {
   const shotPreviewSrc = useThumbnail(projectPath, shot.preview);
   const [blendPreviewsEnabled] = useState<boolean>(() => {
@@ -174,7 +177,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
           >
             {!displaySrc && (
               <div className="flex flex-col items-center justify-center gap-0.5">
-                <span className="text-2xl font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
+                <span className="text-2xl font-bold text-text-primary">{pendingNumber ?? String(shot.number).padStart(3, '0')}</span>
                 <span className="text-[10px] text-text-muted">No preview</span>
               </div>
             )}
@@ -228,7 +231,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
                   />
                 </div>
               ) : (
-                <span className="text-xs font-semibold text-text-primary truncate">{shot.name}</span>
+                <span className="text-xs font-semibold text-text-primary truncate">{pendingNumber ? shot.name.replace(/\d+$/, '') + pendingNumber : shot.name}</span>
               )}
               <div className="flex items-center gap-1 flex-shrink-0">
                 {shot.wip ? (
@@ -262,7 +265,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
             onMouseLeave={() => onHover(null)}
           >
             {!displaySrc && (
-              <span className="text-sm font-bold text-text-primary">{String(shot.number).padStart(3, '0')}</span>
+              <span className="text-sm font-bold text-text-primary">{pendingNumber ?? String(shot.number).padStart(3, '0')}</span>
             )}
             {displaySrc && (
               <img
@@ -306,7 +309,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
                   />
                 </div>
               ) : (
-                <div className="text-xs font-medium text-text-primary truncate">{shot.name}</div>
+                <div className="text-xs font-medium text-text-primary truncate">{pendingNumber ? shot.name.replace(/\d+$/, '') + pendingNumber : shot.name}</div>
               )}
               <div className="flex items-center gap-1 flex-shrink-0">
                 {shot.wip ? (
@@ -371,6 +374,8 @@ interface SceneCardProps {
   onEditSave: () => void;
   onEditCancel: () => void;
   hoverDelay: number;
+  hideDelay: number;
+  pendingRenames: Map<string, string>;
 }
 
 const SceneCard: React.FC<SceneCardProps> = ({
@@ -398,6 +403,8 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onEditSave,
   onEditCancel,
   hoverDelay,
+  hideDelay,
+  pendingRenames,
 }) => {
   const scenePreviewSrc = useThumbnail(project.path, scene.preview);
   const [isShotsAreaHovered, setIsShotsAreaHovered] = useState(false);
@@ -525,7 +532,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 className="text-sm font-semibold text-white bg-transparent border-none p-0 w-full focus:outline-none focus:ring-0"
               />
             ) : (
-              <div className="text-sm font-semibold text-white truncate">{scene.name}</div>
+              <div className="text-sm font-semibold text-white truncate">{pendingRenames.get(scene.id) ?? scene.name}</div>
             )}
             {editingItem?.type === 'description' && editingItem.id === scene.id ? (
               <input
@@ -590,6 +597,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                   onEditSave={onEditSave}
                   onEditCancel={onEditCancel}
                   versionsLoaded={versionsLoaded}
+                  pendingNumber={pendingRenames.get(shot.id)}
                 />
               ))}
             </div>
@@ -600,6 +608,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 className={`transition-all duration-200 ease-in-out overflow-hidden ${
                   isShotsAreaHovered ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'
                 }`}
+                style={{ transitionDelay: isShotsAreaHovered ? '0ms' : `${hideDelay}ms` }}
               >
                 <button
                   onClick={(e) => {
@@ -703,7 +712,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                   className="text-xs font-semibold text-text-primary bg-transparent border-none p-0 flex-1 focus:outline-none focus:ring-0"
                 />
               ) : (
-                <div className="text-xs font-semibold text-text-primary truncate">{scene.name}</div>
+                <div className="text-xs font-semibold text-text-primary truncate">{pendingRenames.get(scene.id) ?? scene.name}</div>
               )}
               {(scene.wip || scene.completed) && (
                 <div className="flex items-center gap-1 flex-shrink-0 ml-2">
@@ -812,6 +821,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 onEditSave={onEditSave}
                 onEditCancel={onEditCancel}
                 versionsLoaded={versionsLoaded}
+                pendingNumber={pendingRenames.get(shot.id)}
               />
             </div>
             );
@@ -823,6 +833,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
               className={`transition-all duration-200 ease-in-out overflow-hidden ${
                 isShotsAreaHovered ? 'max-h-8 opacity-100 mt-2' : 'max-h-0 opacity-0 mt-0'
               }`}
+              style={{ transitionDelay: isShotsAreaHovered ? '0ms' : `${hideDelay}ms` }}
             >
               <button
                 onClick={(e) => {
@@ -901,6 +912,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     const saved = localStorage.getItem('shotsbrowser_hoverDelay');
     return saved !== null ? (parseInt(saved) || 100) : 100;
   });
+  const [hideDelay, setHideDelay] = useState(() => {
+    const saved = localStorage.getItem('shotsbrowser_hideDelay');
+    return saved !== null ? (parseInt(saved) || 250) : 250;
+  });
 
   // Sync ShotsBrowser visibility settings from Settings panel
   useEffect(() => {
@@ -908,9 +923,11 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
       const sf = localStorage.getItem('shotsbrowser_showSearchFilter');
       const sb = localStorage.getItem('shotsbrowser_showSpecialContextButtons');
       const delay = localStorage.getItem('shotsbrowser_hoverDelay');
+      const delay2 = localStorage.getItem('shotsbrowser_hideDelay');
       if (sf !== null) setShowSearchFilter(JSON.parse(sf));
       if (sb !== null) setShowSpecialContextButtons(JSON.parse(sb));
       if (delay !== null) setHoverDelay(parseInt(delay) || 100);
+      if (delay2 !== null) setHideDelay(parseInt(delay2) || 250);
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
@@ -920,8 +937,8 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
   const [headerMenuPosition, setHeaderMenuPosition] = useState<{ x: number; y: number } | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  type SortOrder = 'created-asc' | 'created-desc';
-  const VALID_SORT: SortOrder[] = ['created-asc', 'created-desc'];
+  type SortOrder = 'created-asc' | 'created-desc' | 'number-asc' | 'number-desc';
+  const VALID_SORT: SortOrder[] = ['created-asc', 'created-desc', 'number-asc', 'number-desc'];
   const [sortBy, setSortBy] = useState<SortOrder>(() => {
     const v = localStorage.getItem(`shotsbrowser_sortby_${projectId}`);
     return VALID_SORT.includes(v as SortOrder) ? (v as SortOrder) : 'created-asc';
@@ -957,6 +974,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     id: string;
     value: string;
   } | null>(null);
+  const [pendingRenames, setPendingRenames] = useState<Map<string, string>>(new Map());
   const [deleteConfirm, setDeleteConfirm] = useState<{
     type: 'shot' | 'scene';
     name: string;
@@ -1050,6 +1068,24 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     if (!editingItem) return;
 
     const currentEditingItem = editingItem;
+
+    // Set optimistic display value before going async
+    if (currentEditingItem.type === 'shot') {
+      const shot = project?.shots?.find(s => s.id === currentEditingItem.id);
+      if (shot) {
+        let pendingNumber = currentEditingItem.value;
+        if (!pendingNumber || pendingNumber.trim() === '') {
+          const next = findNextAvailableShotNumber(shot.sceneId, project?.shots || []);
+          pendingNumber = String(next).padStart(3, '0');
+        } else {
+          pendingNumber = pendingNumber.padStart(3, '0');
+        }
+        setPendingRenames(prev => new Map(prev).set(currentEditingItem.id, pendingNumber));
+      }
+    } else if (currentEditingItem.type === 'scene') {
+      setPendingRenames(prev => new Map(prev).set(currentEditingItem.id, currentEditingItem.value));
+    }
+
     setEditingItem(null); // Clear immediately to prevent UI issues during confirmation
 
     try {
@@ -1080,6 +1116,13 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     } catch (error) {
       console.error('Failed to save rename:', error);
       // Error notification is already handled in projectStore
+    } finally {
+      // Always clear — store now has the real value (or unchanged on cancel/error)
+      setPendingRenames(prev => {
+        const next = new Map(prev);
+        next.delete(currentEditingItem.id);
+        return next;
+      });
     }
   };
 
@@ -1744,6 +1787,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
         sceneShots = [...sceneShots];
         if (sortBy === 'created-desc') {
           sceneShots.sort((a, b) => b.createdIndex - a.createdIndex);
+        } else if (sortBy === 'number-asc') {
+          sceneShots.sort((a, b) => a.number - b.number);
+        } else if (sortBy === 'number-desc') {
+          sceneShots.sort((a, b) => b.number - a.number);
         } else {
           sceneShots.sort((a, b) => a.createdIndex - b.createdIndex);
         }
@@ -1808,6 +1855,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     const sorted = [...shotsWithIndex];
     if (sortBy === 'created-desc') {
       sorted.sort((a, b) => b.createdIndex - a.createdIndex);
+    } else if (sortBy === 'number-asc') {
+      sorted.sort((a, b) => a.number - b.number);
+    } else if (sortBy === 'number-desc') {
+      sorted.sort((a, b) => b.number - a.number);
     } else {
       sorted.sort((a, b) => a.createdIndex - b.createdIndex);
     }
@@ -2013,6 +2064,20 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                       <IconClockHour3 size={14} />
                       <span>Date: New to Old</span>
                     </button>
+                    <button
+                      onClick={() => { setSortBy('number-asc'); localStorage.setItem(`shotsbrowser_sortby_${projectId}`, 'number-asc'); setShowSortMenu(false); }}
+                      className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${sortBy === 'number-asc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'}`}
+                    >
+                      <IconHash size={14} />
+                      <span>Number: Low to High</span>
+                    </button>
+                    <button
+                      onClick={() => { setSortBy('number-desc'); localStorage.setItem(`shotsbrowser_sortby_${projectId}`, 'number-desc'); setShowSortMenu(false); }}
+                      className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 rounded-md transition-colors ${sortBy === 'number-desc' ? 'bg-hover-bg text-text-primary' : 'text-text-primary hover:bg-hover-bg'}`}
+                    >
+                      <IconHash size={14} />
+                      <span>Number: High to Low</span>
+                    </button>
                   </>
                 )}
               </div>
@@ -2120,6 +2185,8 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                     shotBlendPaths={shotLatestBlendPaths}
                     versionsLoaded={versionsLoaded}
                     hoverDelay={hoverDelay}
+                    hideDelay={hideDelay}
+                    pendingRenames={pendingRenames}
                   />
                 ))
               ) : (
@@ -2131,9 +2198,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
               {/* Add Scene button - hide when hovering over a scene */}
               <button
                 onClick={() => addScene(projectId)}
-                className={`w-full mt-2 px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-button text-xs text-text-muted hover:border-accent hover:text-accent transition-all ${
+                className={`w-full mt-2 px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-button text-xs text-text-muted hover:border-border-hover hover:text-text-primary transition-all ${
                   isContainerHovered && !hoveredSceneId ? 'opacity-100' : 'opacity-0 pointer-events-none'
                 }`}
+                style={{ transitionDelay: isContainerHovered && !hoveredSceneId ? '0ms' : `${hideDelay}ms` }}
               >
                 + Add Scene...
               </button>
@@ -2164,6 +2232,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                       onEditChange={(value) => setEditingItem(editingItem ? { ...editingItem, value } : null)}
                       onEditSave={handleSaveRename}
                       onEditCancel={handleCancelRename}
+                      pendingNumber={pendingRenames.get(shot.id)}
                     />
                   ))}
                 </div>
@@ -2184,6 +2253,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                 className={`w-full mt-2 px-3 py-2 bg-transparent border border-border-secondary border-dashed rounded-button text-xs text-text-muted hover:border-accent hover:text-accent transition-all ${
                   isContainerHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'
                 }`}
+                style={{ transitionDelay: isContainerHovered ? '0ms' : `${hideDelay}ms` }}
               >
                 + Add Shot...
               </button>

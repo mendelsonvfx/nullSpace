@@ -889,6 +889,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     const saved = localStorage.getItem('shotsbrowser_hoverDelay');
     return saved !== null ? (parseInt(saved) || 100) : 100;
   });
+  const [shotsBrowserHideDelay, setShotsBrowserHideDelay] = useState(() => {
+    const saved = localStorage.getItem('shotsbrowser_hideDelay');
+    return saved !== null ? (parseInt(saved) || 250) : 250;
+  });
   const [autoHideProjectFiles, setAutoHideProjectFiles] = useState(() => {
     const saved = localStorage.getItem('autoHideProjectFiles');
     return saved !== null ? JSON.parse(saved) : true;
@@ -1271,6 +1275,28 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
               const newValue = Math.min(2000, Math.max(0, parseInt(e.target.value) || 0));
               setShotsBrowserHoverDelay(newValue);
               localStorage.setItem('shotsbrowser_hoverDelay', newValue.toString());
+              window.dispatchEvent(new Event('storage'));
+            }}
+            className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
+          />
+        </div>
+
+        {/* Button Hide Delay */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="font-medium mb-1">Button Hide Delay</div>
+            <p className="text-sm text-text-muted">Delay before Add Shot / Add Scene buttons disappear (ms)</p>
+          </div>
+          <input
+            type="number"
+            min="0"
+            max="2000"
+            step="50"
+            value={shotsBrowserHideDelay}
+            onChange={(e) => {
+              const newValue = Math.min(2000, Math.max(0, parseInt(e.target.value) || 0));
+              setShotsBrowserHideDelay(newValue);
+              localStorage.setItem('shotsbrowser_hideDelay', newValue.toString());
               window.dispatchEvent(new Event('storage'));
             }}
             className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
