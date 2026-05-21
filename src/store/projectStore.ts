@@ -265,8 +265,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               }
 
               try {
-                // Check if process is alive
-                const isAlive = await invoke<boolean>('check_process_alive', { pid: entry.pid });
+                // Check if process is alive and belongs to the correct software (prevents PID reuse false positives)
+                const isAlive = await invoke<boolean>('check_process_alive_for_software', { pid: entry.pid, software: entry.software });
 
                 if (!isAlive) {
                   // Keep saved durationMinutes from disk (already accurate from periodic saves)

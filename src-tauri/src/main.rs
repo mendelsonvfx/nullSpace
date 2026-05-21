@@ -5503,6 +5503,7 @@ fn main() {
             time_tracking::is_session_focused,
             time_tracking::increment_software_stats,
             time_tracking::check_process_alive,
+            time_tracking::check_process_alive_for_software,
             time_tracking::get_session_status,
             time_tracking::update_session_pid,
             time_tracking::migrate_to_child_process,

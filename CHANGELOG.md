@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.8.8] - 2026-04-28
+
+### Added
+- Time Tracking: `check_process_alive_for_software` command validates PID belongs to expected software, preventing false positives from PID reuse after system restart
+
+### Fixed
+- Time Tracking: process alive check on session restore and periodic poll now uses software-aware validation
+- Time Tracking: `get_active_sessions` filters out dead sessions before returning
+- UI: duplicate border removed from RightSidebar
+
 ## [1.8.7] - 2026-04-28
 
 ### Added

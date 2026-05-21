@@ -181,7 +181,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
 
         // Fallback: use simple process check if backend communication fails
         try {
-          const isAlive = await SessionService.checkProcessAlive(session.pid);
+          const isAlive = await SessionService.checkProcessAliveForSoftware(session.pid, session.software);
           if (!isAlive) {
             await get().stopSession(id);
           }
@@ -482,7 +482,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
           console.log(`[TimeTrackingStore] Restoring ${existingEntry.software} for project ${project.name}: ${existingEntry.durationMinutes}m total, ${existingEntry.softwareMinutes}m focused`);
 
           // Check if process is still alive before restoring
-          const isProcessAlive = await SessionService.checkProcessAlive(existingEntry.pid!);
+          const isProcessAlive = await SessionService.checkProcessAliveForSoftware(existingEntry.pid!, existingEntry.software);
           console.log(`[TimeTrackingStore] 🔍 Pre-restore check: PID ${existingEntry.pid} alive? ${isProcessAlive}`);
 
           if (!isProcessAlive) {
@@ -565,8 +565,8 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
               return false;
             }
 
-            // Check the actual PID directly
-            const isAlive = await SessionService.checkProcessAlive(session.pid);
+            // Check PID belongs to the correct software (prevents false positives from PID reuse after restart)
+            const isAlive = await SessionService.checkProcessAliveForSoftware(session.pid, session.software);
             console.log(`[TimeTrackingStore] 🔍 Process check for ${session.software} (PID: ${session.pid}): ${isAlive ? '✅ ALIVE' : '❌ DEAD'}`);
 
             if (!isAlive) {

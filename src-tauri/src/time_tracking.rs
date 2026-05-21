@@ -330,7 +330,9 @@ pub fn resume_time_tracking(entry_id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn get_active_sessions() -> Vec<ActiveSession> {
     let sessions = ACTIVE_SESSIONS.lock();
-    let result: Vec<ActiveSession> = sessions.values().cloned().collect();
+    let result: Vec<ActiveSession> = sessions.values()
+        .filter(|s| s.process_alive)
+        .cloned().collect();
     // Only log when there are active sessions
     if !result.is_empty() {
         println!("[TimeTracking] get_active_sessions returning {} sessions:", result.len());
@@ -557,6 +559,27 @@ fn start_background_task_if_needed() {
 #[tauri::command]
 pub fn check_process_alive(pid: u32) -> bool {
     is_process_alive(pid)
+}
+
+/// Tauri command to check if a process is alive AND belongs to the expected software.
+/// Prevents false positives from PID reuse after system restart.
+#[tauri::command]
+pub fn check_process_alive_for_software(pid: u32, software: String) -> bool {
+    if software.is_empty() {
+        return is_process_alive(pid);
+    }
+    let mut system = SYSTEM.lock();
+    system.refresh_processes();
+    if let Some(process) = system.process(Pid::from_u32(pid)) {
+        let process_name = process.name().to_lowercase();
+        let software_lower = software.to_lowercase();
+        let base_name = software_lower.trim_end_matches(".exe");
+        process_name == base_name
+            || process_name == format!("{}.exe", base_name)
+            || process_name.contains(base_name)
+    } else {
+        false
+    }
 }
 
 /// Tauri command to get full session status from backend (includes window detection)

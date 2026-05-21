@@ -108,6 +108,21 @@ export class SessionService {
   }
 
   /**
+   * Check if a process with given PID is alive AND belongs to the expected software.
+   * Prevents false positives from PID reuse after system restart.
+   */
+  static async checkProcessAliveForSoftware(pid: number, software: string): Promise<boolean> {
+    try {
+      const isAlive = await invoke<boolean>('check_process_alive_for_software', { pid, software });
+      console.log(`[SessionService] Process ${pid} (${software}): ${isAlive ? '✅ ALIVE' : '❌ DEAD'}`);
+      return isAlive;
+    } catch (error) {
+      console.error('[SessionService] ❌ check_process_alive_for_software failed:', error);
+      return false;
+    }
+  }
+
+  /**
    * Attempt to migrate to a child process when parent process dies
    * This handles launcher-based applications (Blender, Adobe apps, etc.)
    * @param oldPid - The dead parent process PID

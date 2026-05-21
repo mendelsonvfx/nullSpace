@@ -12,7 +12,7 @@ export function RightSidebar({ project, shotsBrowserDocked = false, onToggleDock
   const [showHidden, setShowHidden] = useState(false);
 
   return (
-    <div className="w-80 bg-sidebar-bg border-l border-border-primary border-t border-border-primary flex flex-col">
+    <div className="w-80 bg-sidebar-bg border-l border-t border-border-primary flex flex-col">
       {shotsBrowserDocked && (
         <div className="flex-1 min-h-0 flex flex-col">
           <ShotsBrowser
