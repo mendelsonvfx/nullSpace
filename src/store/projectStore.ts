@@ -324,7 +324,26 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         })
       );
 
-      set({ projects: cleanedProjects, isLoading: false });
+      // Normalize currentShotId: if it's missing or points to a non-existent shot, default to first shot
+      const normalizedProjects = cleanedProjects.map(project => {
+        if (!project.hasShots || !project.shots?.length) return project;
+        const shots = project.shots;
+        const shotExists = shots.some((s: any) => s.id === project.currentShotId);
+        if (!shotExists) {
+          const firstShot = shots[0];
+          return { ...project, currentShotId: firstShot.id, currentSceneId: firstShot.sceneId ?? project.currentSceneId };
+        }
+        return project;
+      });
+
+      // Persist only the projects that changed
+      normalizedProjects.forEach((p: any, i: number) => {
+        if (p !== cleanedProjects[i]) {
+          invoke('update_project', { project: p }).catch(console.error);
+        }
+      });
+
+      set({ projects: normalizedProjects, isLoading: false });
       console.log('[ProjectStore] Projects loaded successfully');
 
       // Load archived backups (orphaned projects whose folders were deleted)

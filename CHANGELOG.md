@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.8.9] - 2026-04-28
+
+### Added
+- Tree: colored extension icons for images, video, archives, scripts, PDF and text files
+- Shots: F2 shortcut to rename the currently selected shot or scene
+
+### Fixed
+- Output: group expand state now scoped per tab (`preview` / `final`) — no cross-tab collapse conflicts
+- Output: grouping always uses top-level folder; state restore waits for outputs to load
+- Assets: "Create New Asset" button shows spinner and disables while software is launching
+- Export: logo loaded as base64 DataURL to avoid CORS errors in Tauri webview
+- Store: stale `currentShotId` on load auto-corrected to first available shot
+
 ## [1.8.8] - 2026-04-28
 
 ### Added

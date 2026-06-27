@@ -39,12 +39,20 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     const entries = project.timeEntries?.filter(e => !e.isActive && e.durationMinutes > 0) || [];
     const currencySymbol = getCurrencySymbol(project.currency);
 
-    // Load logo image
-    const logoImg = new Image();
-    logoImg.src = appIcon;
-    await new Promise((resolve) => {
-      logoImg.onload = resolve;
-    });
+    // Load logo as base64 Data URL to avoid canvas CORS restrictions in Tauri webview
+    let logoDataUrl: string | null = null;
+    try {
+      const res = await fetch(appIcon);
+      const blob = await res.blob();
+      logoDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      // Logo unavailable — continue without it
+    }
 
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
@@ -106,7 +114,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     const logoSize = 4; 
     const logoX = brandTextX + brandTextWidth + 1; // 1mm gap after text
     const logoY = 24.3 - (logoSize / 2) - (textHeight * 0.35); // Vertically centered with text
-    doc.addImage(logoImg, 'PNG', logoX, logoY, logoSize, logoSize);
+    if (logoDataUrl) {
+      doc.addImage(logoDataUrl, 'PNG', logoX, logoY, logoSize, logoSize);
+    }
 
     // Summary Cards
     let yPos = 40;

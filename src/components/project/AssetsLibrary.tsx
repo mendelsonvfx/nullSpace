@@ -27,6 +27,7 @@ import {
   IconCopy,
   IconCircleCheck,
   IconTrash,
+  IconLoader2,
 } from '@tabler/icons-react';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { versionsCache, type ProjectVersion } from '../../utils/versionsCache';
@@ -348,6 +349,7 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
     }
   });
   const [showAssetNameModal, setShowAssetNameModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     assetName: string;
@@ -539,6 +541,7 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
     }
 
     setShowAssetNameModal(false);
+    setIsCreating(true);
     try {
       await useProjectStore.getState().launchSoftware({
         projectPath: project.path,
@@ -555,6 +558,8 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
     } catch (error) {
       console.error('Failed to launch software for asset creation:', error);
       showNotification('error', 'Failed to create asset. Check your software path in Settings.');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -627,12 +632,17 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
             {/* Create New Asset Row */}
             <button
               onClick={() => setShowAssetNameModal(true)}
-              className="w-full border border-dashed border-border-secondary rounded-card px-4 py-2.5 flex items-center gap-3 hover:bg-hover-bg transition-colors"
+              disabled={isCreating}
+              className="w-full border border-dashed border-border-secondary rounded-card px-4 py-2.5 flex items-center gap-3 hover:bg-hover-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="w-8 h-8 rounded-button flex items-center justify-center flex-shrink-0">
-                <IconPlus size={15} className="text-text-muted" />
+                {isCreating
+                  ? <IconLoader2 size={15} className="text-text-muted animate-spin" />
+                  : <IconPlus size={15} className="text-text-muted" />}
               </div>
-              <span className="text-sm text-text-muted">Create New Asset</span>
+              <span className="text-sm text-text-muted">
+                {isCreating ? 'Creating...' : 'Create New Asset'}
+              </span>
             </button>
 
             {/* Loading */}

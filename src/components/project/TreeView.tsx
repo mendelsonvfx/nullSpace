@@ -8,7 +8,16 @@ import {
   IconCircleCheck,
   IconFolderOpen,
   IconPalette,
-  IconFolder
+  IconFolder,
+  IconBrandPython,
+  IconBrandReact,
+  IconTerminal2,
+  IconPackage,
+  IconPhoto,
+  IconMovie,
+  IconFileZip,
+  IconFileText,
+  IconPdf
 } from '@tabler/icons-react';
 import { RefreshCw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
@@ -105,6 +114,45 @@ const getSoftwareDirName = (software: string): string => {
 
 
 const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+
+const EXTENSION_ICONS: Record<string, React.ReactNode> = {
+  py:   <IconBrandPython className="w-4 h-4 text-blue-400 flex-shrink-0" stroke={1.5} />,
+  jsx:  <IconBrandReact  className="w-4 h-4 text-cyan-400 flex-shrink-0" stroke={1.5} />,
+  tsx:  <IconBrandReact  className="w-4 h-4 text-cyan-400 flex-shrink-0" stroke={1.5} />,
+  bat:  <IconTerminal2   className="w-4 h-4 text-yellow-400 flex-shrink-0" stroke={1.5} />,
+  sh:   <IconTerminal2   className="w-4 h-4 text-yellow-400 flex-shrink-0" stroke={1.5} />,
+  exe:  <IconPackage     className="w-4 h-4 text-zinc-400 flex-shrink-0" stroke={1.5} />,
+  zip:  <IconFileZip     className="w-4 h-4 text-amber-400 flex-shrink-0" stroke={1.5} />,
+  rar:  <IconFileZip     className="w-4 h-4 text-amber-400 flex-shrink-0" stroke={1.5} />,
+  '7z': <IconFileZip     className="w-4 h-4 text-amber-400 flex-shrink-0" stroke={1.5} />,
+  tar:  <IconFileZip     className="w-4 h-4 text-amber-400 flex-shrink-0" stroke={1.5} />,
+  gz:   <IconFileZip     className="w-4 h-4 text-amber-400 flex-shrink-0" stroke={1.5} />,
+  txt:  <IconFileText    className="w-4 h-4 text-zinc-400 flex-shrink-0" stroke={1.5} />,
+  pdf:  <IconPdf         className="w-4 h-4 text-red-400 flex-shrink-0" stroke={1.5} />,
+  jpg:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
+  jpeg: <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
+  png:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
+  gif:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
+  webp: <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
+  bmp:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
+  svg:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
+  tiff: <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
+  tif:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
+  ico:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
+  mp4:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
+  mov:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
+  avi:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
+  mkv:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
+  webm: <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
+  flv:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
+  wmv:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
+  m4v:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
+};
+
+function getExtensionIcon(fileName: string): React.ReactNode | null {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+  return EXTENSION_ICONS[ext] ?? null;
+}
 
 export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps) {
   const { activeMenu, setActiveMenu } = useContextMenuStore();
@@ -938,7 +986,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
                   {getFileIcon(version.name) ? (
                     <SoftwareIcon name={getFileIcon(version.name)!} className="w-4 h-4 flex-shrink-0" />
                   ) : (
-                    <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
+                    getExtensionIcon(version.name) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
                   )}
                 </div>
                 <span className="text-text-primary font-medium flex-1">
@@ -998,7 +1046,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
               {getFileIcon(topThree[2].name) ? (
                 <SoftwareIcon name={getFileIcon(topThree[2].name)!} className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
               ) : (
-                <IconFile className="w-3.5 h-3.5 text-text-secondary flex-shrink-0 opacity-50" stroke={1.5} />
+                getExtensionIcon(topThree[2].name) ?? <IconFile className="w-3.5 h-3.5 text-text-secondary flex-shrink-0 opacity-50" stroke={1.5} />
               )}
             </div>
             <span className="text-[11px] text-text-secondary opacity-70">
@@ -1021,7 +1069,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
               {getFileIcon(topThree[1].name) ? (
                 <SoftwareIcon name={getFileIcon(topThree[1].name)!} className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
               ) : (
-                <IconFile className="w-3.5 h-3.5 text-text-secondary flex-shrink-0 opacity-70" stroke={1.5} />
+                getExtensionIcon(topThree[1].name) ?? <IconFile className="w-3.5 h-3.5 text-text-secondary flex-shrink-0 opacity-70" stroke={1.5} />
               )}
             </div>
             <span className="text-[11px] text-text-secondary opacity-80">
@@ -1036,7 +1084,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             {topThree[0] && getFileIcon(topThree[0].name) ? (
               <SoftwareIcon name={getFileIcon(topThree[0].name)!} className="w-4 h-4 flex-shrink-0" />
             ) : (
-              <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
+              (topThree[0] && getExtensionIcon(topThree[0].name)) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
             )}
           </div>
           <span className="text-text-primary font-medium flex-1">
@@ -1126,7 +1174,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
               {fileIcon ? (
                 <SoftwareIcon name={fileIcon} className="w-4 h-4 flex-shrink-0" />
               ) : (
-                <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
+                getExtensionIcon(node.name) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
               )}
             </div>
           )}

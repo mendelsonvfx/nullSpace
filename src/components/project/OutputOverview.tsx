@@ -92,13 +92,6 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     outputsCache.setOutputState(cacheKey, software, selectedOutputType);
   };
 
-  // Save selected output type and persist to cache
-  // const updateSelectedOutputType = (type: 'preview' | 'final') => {
-  //   setSelectedOutputType(type);
-  //   if (selectedSoftware) {
-  //     outputsCache.setOutputState(cacheKey, selectedSoftware, type);
-  //   }
-  // };
 
   const loadOutputs = async (forceReload = false) => {
     // Increment request ID to invalidate previous requests
@@ -218,6 +211,9 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
   // Restore filter state BEFORE paint (prevents visual flicker)
   useLayoutEffect(() => {
+    // Wait until outputs have loaded — avoids premature reset when availableSoftware is still empty
+    if (availableSoftware.length === 0) return;
+
     isRestoringStateRef.current = true; // Mark that we're restoring state programmatically
 
     const savedState = outputsCache.getOutputState(cacheKey);
@@ -231,11 +227,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
       setSelectedOutputType(savedState.selectedOutputType);
     } else {
       // No saved state OR saved software doesn't exist - pick from available outputs
-      if (availableSoftware.length > 0) {
-        setSelectedSoftware(availableSoftware[0]);
-      } else {
-        setSelectedSoftware('');
-      }
+      setSelectedSoftware(availableSoftware[0]);
       setSelectedOutputType('preview');
     }
 
@@ -382,13 +374,14 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   };
 
   // Toggle group expanded/collapsed state
-  const toggleGroup = useCallback((groupPath: string) => {
+  const toggleGroup = useCallback((groupPath: string, renderType: 'preview' | 'final') => {
+    const key = `${renderType}:${groupPath}`;
     setExpandedGroups(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(groupPath)) {
-        newSet.delete(groupPath);
+      if (newSet.has(key)) {
+        newSet.delete(key);
       } else {
-        newSet.add(groupPath);
+        newSet.add(key);
       }
       // Save to cache
       outputsCache.setExpandedGroups(project.path, newSet);
@@ -404,24 +397,22 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     const pathMap = new Map<string, OutputFile[]>();
 
     outputs.forEach(output => {
+      // getPathParts with output.is_sequence correctly returns folder parts for both types:
+      // - sequence: output.path is the directory (no filename) → returns directory parts
+      // - standalone: output.path is the file path → strips filename, returns parent parts
+      // Group by top-level folder (depth=1). Files in TEST/sub/ and sequences in TEST/
+      // both map to 'TEST', so they always appear in the same group.
       const pathParts = getPathParts(output.path, output.is_sequence);
 
-      // Try different grouping levels (from 1 to 5)
-      if (pathParts.length === 0 || pathParts.length === 1) {
-        // No path parts or single level - don't group, add to ungrouped
-        const key = '__ungrouped__';
-        if (!pathMap.has(key)) pathMap.set(key, []);
-        pathMap.get(key)!.push(output);
-      } else {
-        // Multiple path levels - try to find the optimal grouping level
-        // Start from pathParts.length - 1 to avoid grouping by the deepest folder
-        for (let depth = Math.min(pathParts.length - 1, 5); depth >= 1; depth--) {
-          const prefix = pathParts.slice(0, depth).join(' / ');
-          if (!pathMap.has(prefix)) pathMap.set(prefix, []);
-          pathMap.get(prefix)!.push(output);
-          break;
-        }
+      if (pathParts.length === 0) {
+        if (!pathMap.has('__ungrouped__')) pathMap.set('__ungrouped__', []);
+        pathMap.get('__ungrouped__')!.push(output);
+        return;
       }
+
+      const folderKey = pathParts[0];
+      if (!pathMap.has(folderKey)) pathMap.set(folderKey, []);
+      pathMap.get(folderKey)!.push(output);
     });
 
     // Separate grouped and ungrouped
@@ -797,12 +788,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                       <div className="space-y-2">
                         {/* Grouped files */}
                         {grouped.map(group => {
-                          const isExpanded = expandedGroups.has(group.path);
+                          const isExpanded = expandedGroups.has(`preview:${group.path}`);
                           return (
                             <div key={group.path}>
                               {/* Group header */}
                               <button
-                                onClick={() => toggleGroup(group.path)}
+                                onClick={() => toggleGroup(group.path, 'preview')}
                                 onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'preview')}
                                 className="w-full text-left px-3 py-2 rounded bg-[#181818] hover:bg-[#1e1e1e] transition-colors flex items-center gap-2"
                               >
@@ -898,12 +889,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                       <div className="space-y-2">
                         {/* Grouped files */}
                         {grouped.map(group => {
-                          const isExpanded = expandedGroups.has(group.path);
+                          const isExpanded = expandedGroups.has(`final:${group.path}`);
                           return (
                             <div key={group.path}>
                               {/* Group header */}
                               <button
-                                onClick={() => toggleGroup(group.path)}
+                                onClick={() => toggleGroup(group.path, 'final')}
                                 onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'final')}
                                 className="w-full text-left px-3 py-2 rounded bg-[#181818] hover:bg-[#1e1e1e] transition-colors flex items-center gap-2"
                               >

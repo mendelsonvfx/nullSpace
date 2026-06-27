@@ -1638,6 +1638,34 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     }
   }, [deleteConfirm, projectId, removeShot, removeScene]);
 
+  useEffect(() => {
+    const handleF2 = (e: KeyboardEvent) => {
+      if (e.key !== 'F2') return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (editingItem) return;
+
+      e.preventDefault();
+      const shotId = project?.currentShotId;
+      const sceneId = project?.currentSceneId;
+      if (shotId) {
+        const shot = project?.shots?.find(s => s.id === shotId);
+        if (shot) {
+          const match = shot.name.match(/\d+$/);
+          setEditingItem({ type: 'shot', id: shotId, value: match ? match[0] : shot.name });
+        }
+      } else if (sceneId) {
+        const scene = project?.scenes?.find(s => s.id === sceneId);
+        if (scene) {
+          setEditingItem({ type: 'scene', id: sceneId, value: scene.name });
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleF2);
+    return () => document.removeEventListener('keydown', handleF2);
+  }, [editingItem, project?.currentShotId, project?.currentSceneId, project?.shots, project?.scenes, setEditingItem]);
+
   // Handle scroll for top shadow
   useEffect(() => {
     const scrollElement = scrollRef.current?.getScrollElement();
