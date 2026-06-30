@@ -246,6 +246,10 @@ function GeneralSettings() {
     const saved = localStorage.getItem('deadlineNotifications');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [autoDeleteBlend1, setAutoDeleteBlend1] = useState(() => {
+    const saved = localStorage.getItem('autoDeleteBlend1Backups');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
   const [deadlineDays, setDeadlineDays] = useState(() => {
     const saved = localStorage.getItem('deadlineNotificationDays');
     return saved !== null ? parseInt(saved) : 3;
@@ -341,6 +345,35 @@ function GeneralSettings() {
             <div
               className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
                 timeTrackingEnabled ? 'translate-x-6' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Auto-delete .blend1 backups */}
+      <div className="border-t border-border-secondary pt-6">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="font-medium mb-1">Auto-delete .blend1 backups</div>
+            <p className="text-sm text-text-muted">
+              Automatically delete Blender backup files (.blend1) when a new version is saved
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              const newValue = !autoDeleteBlend1;
+              setAutoDeleteBlend1(newValue);
+              localStorage.setItem('autoDeleteBlend1Backups', JSON.stringify(newValue));
+              window.dispatchEvent(new Event('storage'));
+            }}
+            className={`w-12 h-6 rounded-full transition-colors relative ${
+              autoDeleteBlend1 ? 'bg-accent' : 'bg-border-secondary'
+            }`}
+          >
+            <div
+              className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+                autoDeleteBlend1 ? 'translate-x-6' : 'translate-x-0.5'
               }`}
             />
           </button>

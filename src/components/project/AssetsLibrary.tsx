@@ -392,8 +392,9 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
       }, 200);
     }
 
+    const autoDelete = localStorage.getItem('autoDeleteBlend1Backups') === 'true';
     try {
-      if (!skipCleanup) {
+      if (!skipCleanup && autoDelete) {
         await invoke<number>('cleanup_backup_files', { projectPath: project.path });
       }
       const result = await invoke<ProjectVersion[]>('get_project_versions', { projectPath: project.path });
@@ -418,7 +419,10 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
   useEffect(() => {
     isFirstLoadRef.current = true;
     loadVersions();
-    invoke('start_watching_project', { projectPath: project.path }).catch(console.error);
+    invoke('start_watching_project', {
+      projectPath: project.path,
+      autoDeleteBackups: localStorage.getItem('autoDeleteBlend1Backups') === 'true'
+    }).catch(console.error);
     return () => {
       invoke('stop_watching_project').catch(console.error);
     };
@@ -552,7 +556,10 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
         assetName,
       });
       // Restart watcher to pick up _GlobalAssets folder if it was just created
-      invoke('start_watching_project', { projectPath: project.path }).catch(console.error);
+      invoke('start_watching_project', {
+        projectPath: project.path,
+        autoDeleteBackups: localStorage.getItem('autoDeleteBlend1Backups') === 'true'
+      }).catch(console.error);
       const randomColor = AVATAR_COLOR_OPTIONS[Math.floor(Math.random() * AVATAR_COLOR_OPTIONS.length)].value;
       useProjectStore.getState().setAssetColor(project.id, assetName, randomColor);
     } catch (error) {

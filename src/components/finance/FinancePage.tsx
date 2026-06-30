@@ -36,6 +36,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   renderCountRef.current += 1;
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const timelineContainerRef = React.useRef<HTMLDivElement>(null);
+  const lockedFolderPathRef = React.useRef<string>('');
   const [timelineContainerWidth, setTimelineContainerWidth] = useState(1000);
 
   // Context menu using centralized hook
@@ -129,7 +130,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
         currency: currency as Currency,
         date,
         notes
-      });
+      }, lockedFolderPathRef.current || currentFolderPath);
       return;
     }
 
@@ -713,7 +714,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
                     <div className="flex gap-2 ml-auto items-center">
                       <button
-                        onClick={() => setShowManualTransactionModal(true)}
+                        onClick={() => { lockedFolderPathRef.current = currentFolderPath; setShowManualTransactionModal(true); }}
                         className="px-3 py-[7px] bg-sidebar-bg border border-border-primary text-text-muted text-xs font-semibold rounded-button cursor-pointer flex items-center gap-1.5 transition-colors hover:border-border-secondary hover:text-text-primary"
                         title="Add manual transaction"
                       >
@@ -909,7 +910,9 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary">
               <p className="text-sm text-zinc-500 mb-3">Revenue per Day</p>
               <p className="text-4xl font-bold text-pink-400 tracking-tight">
-                {statistics.dailyRate.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} {currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}
+                {statistics.dailyRate > 0
+                  ? `${statistics.dailyRate.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[convertToBaseCurrency ? baseCurrency : 'USD']}`
+                  : '—'}
               </p>
             </div>
           </div>

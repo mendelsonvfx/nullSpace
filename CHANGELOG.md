@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.9.0] - 2026-04-28
+
+### Added
+- Settings: toggle to auto-delete `.blend1` backup files when a new version is saved
+- Tree: hide/show version groups via eye button on hover; hidden groups dim and respect the global hidden toggle
+
+### Fixed
+- Finance: orphaned projects excluded from pending revenue and daily rate calculations
+- Finance: daily rate now based on tracked hours (12 h = 1 working day) instead of calendar days; shows `—` when no data
+- Finance: manual transaction folder path locked at modal open time to prevent stale state
+- Shots: context menu accessible from shot name text area
+- Project: Quick Actions always visible regardless of scene/shot selection state
+- Blender backups: `start_watching_project` respects the auto-delete setting; `WalkDir` scan replaces recursive helper
+
 ## [1.8.9] - 2026-04-28
 
 ### Added

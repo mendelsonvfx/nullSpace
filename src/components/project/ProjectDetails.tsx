@@ -708,8 +708,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       ) : (
       <SimpleBar className="flex-1 custom-page-scrollbar" autoHide={false} scrollableNodeProps={{ ref: contentScrollRef }}>
         <div className="px-7 pb-16 pt-4">
-        {/* Quick Actions - hidden when only scene is selected (without shot) */}
-        {!(context.isScene && !context.isShot) && (
+        {/* Quick Actions */}
         <div className="mb-7">
           <div className="grid grid-cols-3 gap-3">
             <button
@@ -743,7 +742,6 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             )}
           </div>
         </div>
-        )}
 
         {/* Software Launchers - hidden when only scene is selected in scenes+shots mode */}
         {!(context.isScene && !context.isShot && project.hasScenes && project.hasShots) && (

@@ -136,7 +136,7 @@ interface ProjectStore {
   updateTargetHourlyRate: (projectId: string, rate: number) => void;
   // Other Project transactions (finance) - stored per category
   otherProjectTransactions: Record<string, Transaction[]>;
-  addOtherTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => void;
+  addOtherTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>, explicitFolderPath?: string) => void;
   removeOtherTransaction: (transactionId: string) => void;
   // Archived project backups (orphaned - folder deleted but backup exists)
   archivedBackups: Project[];
@@ -2919,9 +2919,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   // Other Project transactions (finance) - stored per folder path
-  addOtherTransaction: (transaction) => {
+  addOtherTransaction: (transaction, explicitFolderPath) => {
     const state = get();
-    const folderPath = `${state.defaultProjectsPath}\\${state.selectedCategory}`;
+    const folderPath = explicitFolderPath ?? `${state.defaultProjectsPath}\\${state.selectedCategory}`;
     const newTransaction: Transaction = {
       ...transaction,
       id: `other_${Date.now()}`,

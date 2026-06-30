@@ -232,27 +232,30 @@ export const calculateRevenue = (
       paidProjects.push({
         ...project,
         displayAmount: project.prepaymentAmount,
-        remainingAmount: project.cost - project.prepaymentAmount,
+        remainingAmount: project._isOrphaned ? 0 : (project.cost - project.prepaymentAmount),
         isPrepaidProject: true
       });
 
-      // Remaining goes to pendingRevenue
-      const remainingAmount = project.cost - project.prepaymentAmount;
-      if (convertToBase) {
-        const convertedAmount = convertCurrency(remainingAmount, currency, baseCurrency);
-        pendingRevenue[baseCurrency] = (pendingRevenue[baseCurrency] || 0) + convertedAmount;
-      } else {
-        pendingRevenue[currency] = (pendingRevenue[currency] || 0) + remainingAmount;
-      }
+      // Remaining goes to pendingRevenue (only if folder still exists)
+      if (!project._isOrphaned) {
+        const remainingAmount = project.cost - project.prepaymentAmount;
+        if (convertToBase) {
+          const convertedAmount = convertCurrency(remainingAmount, currency, baseCurrency);
+          pendingRevenue[baseCurrency] = (pendingRevenue[baseCurrency] || 0) + convertedAmount;
+        } else {
+          pendingRevenue[currency] = (pendingRevenue[currency] || 0) + remainingAmount;
+        }
 
-      pendingProjects.push({
-        ...project,
-        displayAmount: remainingAmount,
-        prepaidAmount: project.prepaymentAmount,
-        isPrepaidProject: true,
-        showRemainingFirst: true
-      });
+        pendingProjects.push({
+          ...project,
+          displayAmount: remainingAmount,
+          prepaidAmount: project.prepaymentAmount,
+          isPrepaidProject: true,
+          showRemainingFirst: true
+        });
+      }
     } else if (project.paymentStatus === 'unpaid' && project.cost) {
+      if (project._isOrphaned) return;
       const currency = project.currency || 'USD';
 
       if (convertToBase) {
@@ -304,19 +307,14 @@ export const calculateStatistics = (
   const displayCurrency = convertToBase ? baseCurrency : (paidProjects[0]?.currency || 'USD');
   const avgValue = paidProjects.length > 0 ? totalPaid / paidProjects.length : 0;
 
-  // Calculate daily rate
-  let totalDaysWorked = 0;
+  // Calculate daily rate using tracked hours (12 tracked hours = 1 working day)
+  let totalHoursWorked = 0;
   paidProjects.forEach((project) => {
-    if (project.createdAt && !project.isPrepaidProject) {
-      const createdDate = new Date(project.createdAt);
-      const completedDate = new Date();
-      const daysWorked = Math.max(1, Math.ceil(
-        (completedDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)
-      ));
-      totalDaysWorked += daysWorked;
+    if (!project.isPrepaidProject && (project.totalMinutesSpent ?? 0) > 0) {
+      totalHoursWorked += project.totalMinutesSpent! / 60;
     }
   });
-  const dailyRate = totalDaysWorked > 0 ? totalPaid / totalDaysWorked : 0;
+  const dailyRate = totalHoursWorked >= 1 ? totalPaid / (totalHoursWorked / 12) : 0;
 
   return {
     totalPaid,

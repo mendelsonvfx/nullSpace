@@ -93,9 +93,10 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
       }, 200);
     }
 
+    const autoDelete = localStorage.getItem('autoDeleteBlend1Backups') === 'true';
     try {
-      // Clean up backup files only if not skipped
-      if (!skipCleanup) {
+      // Clean up backup files only if not skipped and setting is enabled
+      if (!skipCleanup && autoDelete) {
         await invoke<number>('cleanup_backup_files', {
           projectPath: project.path
         });
@@ -138,8 +139,10 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
 
     // ✅ RE-ENABLED: File watcher now has proper shutdown mechanism
     // Start watching the project directory
+    const autoDeleteWatcher = localStorage.getItem('autoDeleteBlend1Backups') === 'true';
     invoke('start_watching_project', {
-      projectPath: project.path
+      projectPath: project.path,
+      autoDeleteBackups: autoDeleteWatcher
     }).catch((err) => {
       console.error('Failed to start watching project:', err);
     });

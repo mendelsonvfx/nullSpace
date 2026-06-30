@@ -939,6 +939,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   const renderVersionGroup = (node: FileNode, depth: number = 0) => {
     const isExpanded = expandedVersionGroups.has(node.path);
     const topThree = (node.versions || []).slice(0, 3);
+    const isGroupHidden = hiddenPaths.has(node.path);
+    if (isGroupHidden && !showHidden) return null;
 
     // Calculate version range
     const getVersionRange = () => {
@@ -972,6 +974,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         <div
           key={node.path}
           style={{ marginLeft: depth > 0 ? '12px' : '0' }}
+          className={isGroupHidden ? 'opacity-40' : ''}
         >
           {/* All versions as cards */}
           <div className="space-y-1">
@@ -1007,6 +1010,15 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
               <IconChevronRight className="w-3 h-3 -rotate-90 transition-transform duration-200" stroke={1.5} />
               <span>Collapse ({node.versionCount})</span>
             </button>
+            {isGroupHidden && (
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleHidden(node.path, node.name); }}
+                className="ml-auto p-1 hover:bg-zinc-700 rounded"
+                title="Show"
+              >
+                <IconEye className="w-3 h-3 text-zinc-400" stroke={1.5} />
+              </button>
+            )}
           </div>
         </div>
       );
@@ -1028,7 +1040,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           marginLeft: depth > 0 ? '12px' : '0',
           paddingBottom: maxOffset > 0 ? `${maxOffset}px` : '0'
         }}
-        className="relative cursor-pointer version-stack group"
+        className={`relative cursor-pointer version-stack group ${isGroupHidden ? 'opacity-40' : ''}`}
         onClick={() => toggleVersionGroup(node.path)}
         onContextMenu={(e) => handleContextMenu(e, topThree[0])}
       >
@@ -1090,8 +1102,24 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           <span className="text-text-primary font-medium flex-1">
             {getVersionRange()}
           </span>
-          <div className="bg-zinc-800 text-zinc-400 text-[9px] font-bold rounded-full w-[18px] h-[18px] flex items-center justify-center flex-shrink-0">
-            {node.versionCount}
+          <div className="relative w-[18px] h-[18px] flex-shrink-0">
+            <div className="absolute inset-0 bg-zinc-800 text-zinc-400 text-[9px] font-bold rounded-full flex items-center justify-center transition-opacity duration-150 group-hover:opacity-0">
+              {node.versionCount}
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleHidden(node.path, node.name);
+              }}
+              className="absolute inset-0 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-150 hover:bg-zinc-700 rounded-full flex items-center justify-center"
+              title={isGroupHidden ? "Show" : "Hide"}
+            >
+              {isGroupHidden ? (
+                <IconEye className="w-3 h-3 text-zinc-400" stroke={1.5} />
+              ) : (
+                <IconEyeOff className="w-3 h-3 text-zinc-400" stroke={1.5} />
+              )}
+            </button>
           </div>
         </div>
       </div>

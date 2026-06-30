@@ -1169,8 +1169,13 @@ function App() {
 
   // ✅ OPTIMIZATION: Memoize event handlers to maintain stable function references
   const handleOpenProject = useCallback((project: any) => {
-    // Don't open orphaned projects (folder deleted)
-    if (project._isOrphaned) return;
+    if (project._isOrphaned) {
+      // Finance view doesn't need the folder — allow opening FinanceProjectDetails
+      if (viewMode === 'finance') {
+        setSelectedProjectId(project.id);
+      }
+      return;
+    }
 
     setSelectedProjectId(project.id);
     selectProject(project);
@@ -1182,7 +1187,7 @@ function App() {
         detail: { projectPath: project.path }
       }));
     }, 100);
-  }, [selectProject]);
+  }, [selectProject, viewMode]);
 
   const selectedProject = useMemo(() =>
     projects.find(p => p.id === selectedProjectId),

@@ -2068,49 +2068,28 @@ async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
     let project_dir = PathBuf::from(&project_path);
     let mut deleted_count = 0u32;
 
-    // Helper function to recursively scan directory for .blend1 files
-    fn scan_for_blend1(dir: &PathBuf, deleted_count: &mut u32) {
-        if let Ok(entries) = fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    let path = entry.path();
-                    if file_type.is_dir() {
-                        // Skip hidden and special folders
-                        let dir_name = entry.file_name().to_string_lossy().to_string();
-                        if !dir_name.starts_with('.') && !dir_name.starts_with('_')
-                            && dir_name != "Render" && dir_name != "Output" && dir_name != "Cache" {
-                            scan_for_blend1(&path, deleted_count);
-                        }
-                    } else if file_type.is_file() {
-                        let extension = path.extension()
-                            .and_then(|e| e.to_str())
-                            .unwrap_or("")
-                            .to_lowercase();
-
-                        // Delete .blend1 backup files
-                        if extension == "blend1" {
-                            if fs::remove_file(&path).is_ok() {
-                                *deleted_count += 1;
-                                println!("Deleted backup file: {:?}", path);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // List of software folders to search
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
         "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
     ];
 
-    // Search in each software folder (recursively including scene subfolders)
     for software_folder in software_folders {
         let software_dir = project_dir.join(software_folder);
         if software_dir.exists() {
-            scan_for_blend1(&software_dir, &mut deleted_count);
+            for entry in WalkDir::new(&software_dir).max_depth(2).into_iter().flatten() {
+                if entry.file_type().is_file() {
+                    let file_path = entry.path();
+                    let is_blend1 = file_path.extension()
+                        .and_then(|e| e.to_str())
+                        .map_or(false, |e| e.eq_ignore_ascii_case("blend1"));
+                    if is_blend1 {
+                        if fs::remove_file(file_path).is_ok() {
+                            deleted_count += 1;
+                            println!("Deleted backup file: {:?}", file_path);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -2726,6 +2705,7 @@ fn extract_domain_name(url: &str) -> Result<String, String> {
 async fn start_watching_project(
     app_handle: tauri::AppHandle,
     project_path: String,
+    auto_delete_backups: bool,
 ) -> Result<(), String> {
     // Stop old watcher if exists
     stop_watching_project().await?;
@@ -2779,19 +2759,18 @@ async fn start_watching_project(
                                 "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
                             ];
 
-                            for software_folder in &software_folders {
-                                let software_dir = project_dir.join(software_folder);
-                                if software_dir.exists() {
-                                    if let Ok(entries) = fs::read_dir(&software_dir) {
-                                        for entry in entries.flatten() {
-                                            if let Ok(file_type) = entry.file_type() {
-                                                if file_type.is_file() {
-                                                    let file_path = entry.path();
-                                                    if let Some(extension) = file_path.extension() {
-                                                        if extension == "blend1" {
-                                                            let _ = fs::remove_file(&file_path);
-                                                        }
-                                                    }
+                            if auto_delete_backups {
+                                for software_folder in &software_folders {
+                                    let software_dir = project_dir.join(software_folder);
+                                    if software_dir.exists() {
+                                        for entry in WalkDir::new(&software_dir).max_depth(2).into_iter().flatten() {
+                                            if entry.file_type().is_file() {
+                                                let file_path = entry.path();
+                                                let is_blend1 = file_path.extension()
+                                                    .and_then(|e| e.to_str())
+                                                    .map_or(false, |e| e.eq_ignore_ascii_case("blend1"));
+                                                if is_blend1 {
+                                                    let _ = fs::remove_file(file_path);
                                                 }
                                             }
                                         }
@@ -2801,20 +2780,17 @@ async fn start_watching_project(
                         }
 
                         // Also clean backup files from _GlobalAssets
-                        if has_version_changes {
+                        if has_version_changes && auto_delete_backups {
                             let assets_dir = PathBuf::from(&project_path_clone).join("_GlobalAssets");
                             if assets_dir.exists() {
-                                if let Ok(entries) = fs::read_dir(&assets_dir) {
-                                    for entry in entries.flatten() {
-                                        if let Ok(file_type) = entry.file_type() {
-                                            if file_type.is_file() {
-                                                let file_path = entry.path();
-                                                if let Some(extension) = file_path.extension() {
-                                                    if extension == "blend1" {
-                                                        let _ = fs::remove_file(&file_path);
-                                                    }
-                                                }
-                                            }
+                                for entry in WalkDir::new(&assets_dir).max_depth(2).into_iter().flatten() {
+                                    if entry.file_type().is_file() {
+                                        let file_path = entry.path();
+                                        let is_blend1 = file_path.extension()
+                                            .and_then(|e| e.to_str())
+                                            .map_or(false, |e| e.eq_ignore_ascii_case("blend1"));
+                                        if is_blend1 {
+                                            let _ = fs::remove_file(file_path);
                                         }
                                     }
                                 }
@@ -3198,19 +3174,15 @@ fn find_shot_files(project_path: &PathBuf, project_name: &str, scene_name: &str,
             continue;
         }
 
-        if let Ok(entries) = fs::read_dir(&software_dir) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        let file_name = entry.file_name();
-                        let file_name_str = file_name.to_string_lossy();
+        for entry in WalkDir::new(&software_dir).max_depth(2).into_iter().flatten() {
+            if entry.file_type().is_file() {
+                let file_name = entry.file_name();
+                let file_name_str = file_name.to_string_lossy();
 
-                        // Check if file matches shot pattern and is versioned
-                        if file_name_str.contains(&shot_pattern) && file_naming::FileNameComponents::is_versioned(&file_name_str) {
-                            println!("✓ Found matching file: {}", file_name_str);
-                            found_files.push(entry.path());
-                        }
-                    }
+                // Check if file matches shot pattern and is versioned
+                if file_name_str.contains(&shot_pattern) && file_naming::FileNameComponents::is_versioned(&file_name_str) {
+                    println!("✓ Found matching file: {}", file_name_str);
+                    found_files.push(entry.path().to_path_buf());
                 }
             }
         }

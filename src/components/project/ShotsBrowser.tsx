@@ -143,6 +143,12 @@ const ShotCard: React.FC<ShotCardProps> = ({
     onContextMenu(e, shot.id, 'preview');
   };
 
+  const handleNumberContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onContextMenu(e, shot.id, 'preview');
+  };
+
   return (
     <div
       onClick={onClick}
@@ -231,7 +237,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
                   />
                 </div>
               ) : (
-                <span className="text-xs font-semibold text-text-primary truncate">{pendingNumber ? shot.name.replace(/\d+$/, '') + pendingNumber : shot.name}</span>
+                <span className="text-xs font-semibold text-text-primary truncate" onContextMenu={handleNumberContextMenu}>{pendingNumber ? shot.name.replace(/\d+$/, '') + pendingNumber : shot.name}</span>
               )}
               <div className="flex items-center gap-1 flex-shrink-0">
                 {shot.wip ? (
@@ -309,7 +315,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
                   />
                 </div>
               ) : (
-                <div className="text-xs font-medium text-text-primary truncate">{pendingNumber ? shot.name.replace(/\d+$/, '') + pendingNumber : shot.name}</div>
+                <div className="text-xs font-medium text-text-primary truncate" onContextMenu={handleNumberContextMenu}>{pendingNumber ? shot.name.replace(/\d+$/, '') + pendingNumber : shot.name}</div>
               )}
               <div className="flex items-center gap-1 flex-shrink-0">
                 {shot.wip ? (

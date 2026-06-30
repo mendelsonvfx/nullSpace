@@ -11,7 +11,6 @@
 | # | Задача | Файл(ы) |
 |---|--------|---------|
 | ~~1~~ | ~~Переименовать «Weekly Timeline (Last 12 Months)» → «Weekly Timeline»~~ ✅ | `src/components/finance/` TimeAnalytics.tsx |
-| 4 | Убрать надпись «No Preview» в Shots Overview, если превью уже загружена из Blender (альфа-канал) | `src/components/project/ShotsBrowser.tsx` |
 | ~~5~~ | ~~Добавить спиннер/индикатор загрузки при создании ассета~~ ✅ | `src/components/project/AssetsLibrary.tsx` |
 | ~~6~~ | ~~Добавить F2 для переименования шотов, сцен, проектов~~ ✅ | `src/App.tsx` + `ShotsBrowser.tsx` + обработчики keyboard events |
 | ~~7~~ | ~~Добавить иконки в Project Structure для .bat, .py, .jsx, .exe~~ ✅ | `src/components/project/TreeView.tsx` |
@@ -27,13 +26,13 @@
 | ~~11~~ | ~~Preview/Final в Output Overview — одноимённые папки раскрываются одновременно~~ ✅ | `src/components/project/OutputOverview.tsx` — разделить expand-стейт по категориям |
 | ~~12+13~~ | ~~**Version Overview / File Overview показывают лишнее**~~ ✅ | `src/store/projectStore.ts` + `VersionsOverview.tsx` + `TreeView.tsx`/`OutputOverview.tsx` |
 | 14 | Два одинаковых Full HD монитора: при смене цели с Monitor 2 на 3 выбирается один и тот же. **Замечание: в последнее время софт стал открываться правильно — баг нестабильный. Сначала нужно воспроизвести и разобраться в условиях появления, прежде чем фиксить.** | `src-tauri/src/main.rs` `get_monitors_internal()` — различать по позиции (x,y), не только по размеру |
-| 15 | В проекте GDN не удаляются .blend1 файлы и не сработало перенумерование шота | `src-tauri/src/main.rs` — команды удаления .blend1 и renumber shot |
-| 16 | Когда добавляешь деньги через Add — они засчитываются во все категории включая Personal. **Должно засчитываться в ту категорию, из которой была нажата кнопка добавления.** | `src/components/finance/` ManualTransactionModal.tsx + financeService.ts |
-| 17 | Если папка проекта пропадает — убирать оставшуюся сумму из Pending | `src/utils/financeService.ts` — проверка существования папки при расчёте Pending |
-| 18 | На проектах без папки нельзя зайти в фин-стату — вернуть доступ | `src/components/finance/` — убрать guard на существование папки |
+| ~~15~~ | ~~В проекте GDN не удаляются .blend1 файлы и не сработало перенумерование шота~~ ✅ | `src-tauri/src/main.rs` — WalkDir max_depth(2) + Settings toggle |
+| ~~16~~ | ~~Когда добавляешь деньги через Add — они засчитываются во все категории включая Personal. Должно засчитываться в ту категорию, из которой была нажата кнопка добавления.~~ ✅ | `src/components/finance/` ManualTransactionModal.tsx + financeService.ts |
+| ~~17~~ | ~~Если папка проекта пропадает — убирать оставшуюся сумму из Pending~~ ✅ | `src/utils/financeService.ts` — проверка существования папки при расчёте Pending |
+| ~~18~~ | ~~На проектах без папки нельзя зайти в фин-стату — вернуть доступ~~ ✅ | `src/components/finance/` — убрать guard на существование папки |
 | ~~19~~ | ~~PDF из статистики не выводится, выдаёт ошибку~~ ✅ | `src/components/finance/` ExportModal.tsx или PDF-логика |
-| 20 | Проверить расчёт Revenue Per Day. **День должен рассчитываться как количество рабочих часов, делённое на 24.** | `src/utils/financeService.ts` `getChartDataPoints()` |
-| 21 | Перенести ПКМ-зону перенумерования шота в более удобное место. **Нужно отдельно обсудить, куда именно переносить.** | `src/components/project/ShotsBrowser.tsx` — контекстное меню шота |
+| ~~20~~ | ~~Проверить расчёт Revenue Per Day. День должен рассчитываться как количество рабочих часов, делённое на 24.~~ ✅ | `src/utils/financeService.ts` `calculateStatistics()` |
+| ~~21~~ | ~~Перенести ПКМ-зону перенумерования шота в более удобное место.~~ ✅ | `src/components/project/ShotsBrowser.tsx` — контекстное меню шота |
 
 ---
 
@@ -41,8 +40,8 @@
 
 | # | Задача | Файл(ы) |
 |---|--------|---------|
-| 22 | Скопировать Quick Actions на страницу сцены | `src/components/project/` ScenePage или RightSidebar — переиспользовать существующий компонент |
-| 23 | Хайдить группу объектов в Project Structure. **Возможность скрывать группы нужно добавить по аналогии с тем, как скрываются отдельные файлы и папки — такого функционала сейчас нет вообще.** | `src/components/project/TreeView.tsx` + localStorage для состояния |
+| ~~22~~ | ~~Скопировать Quick Actions на страницу сцены~~ ✅ | `src/components/project/ProjectDetails.tsx` — убрать условие скрытия |
+| ~~23~~ | ~~Хайдить группу объектов в Project Structure~~ ✅ | `src/components/project/TreeView.tsx` — eye button на version stack + hiddenPaths |
 | 24 | При выборе контекста Assets/Compose подсвечивать папки Global Assets / Global Compose в Project Structure | `src/components/project/TreeView.tsx` — аналог подсветки сцены |
 
 ---
@@ -74,6 +73,7 @@
 |---|--------|
 | 2 | Добавить кнопку Cancel во всех модалах |
 | 3 | Уменьшить размер текста внутри кнопок в модалах |
+| 4 | Убрать надпись «No Preview» в Shots Overview, если превью уже загружена из Blender (альфа-канал) | `src/components/project/ShotsBrowser.tsx` |
 | 8 | ПКМ-меню 3-го уровня уходит за границы экрана |
 | 25 | Взять оформление пунктов меню из nullRef |
 | 26 | Output Overview под контекст Compose: добавить выбор сцены и шота |
