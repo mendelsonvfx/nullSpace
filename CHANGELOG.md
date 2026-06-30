@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1] - 2026-04-28
+
+### Fixed
+- Tree: `_GlobalAssets` and `_GlobalCompose` folders highlighted when Asset/Compose context is active
+- Tree: auto-scroll triggers on special context change as well as scene change
+- Monitors: sorted primary-first then left-to-right for stable index across sessions
+
 ## [1.9.0] - 2026-04-28
 
 ### Added

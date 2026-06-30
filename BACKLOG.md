@@ -25,7 +25,7 @@
 | ~~10~~ | ~~Папка в Output Overview: если в UI визуально создалась папка — в неё должны переноситься **все** файлы, что реально лежат в этой папке, а не только часть.~~ ✅ | `src/components/project/OutputOverview.tsx` |
 | ~~11~~ | ~~Preview/Final в Output Overview — одноимённые папки раскрываются одновременно~~ ✅ | `src/components/project/OutputOverview.tsx` — разделить expand-стейт по категориям |
 | ~~12+13~~ | ~~**Version Overview / File Overview показывают лишнее**~~ ✅ | `src/store/projectStore.ts` + `VersionsOverview.tsx` + `TreeView.tsx`/`OutputOverview.tsx` |
-| 14 | Два одинаковых Full HD монитора: при смене цели с Monitor 2 на 3 выбирается один и тот же. **Замечание: в последнее время софт стал открываться правильно — баг нестабильный. Сначала нужно воспроизвести и разобраться в условиях появления, прежде чем фиксить.** | `src-tauri/src/main.rs` `get_monitors_internal()` — различать по позиции (x,y), не только по размеру |
+| ~~14~~ | ~~Два одинаковых Full HD монитора: при смене цели с Monitor 2 на 3 выбирается один и тот же.~~ ✅ Баг кода не подтверждён (Windows API даёт уникальные device names). Добавлена сортировка primary-first + по x/y для стабильного порядка между сессиями. | `src-tauri/src/main.rs` `get_monitors_internal()` |
 | ~~15~~ | ~~В проекте GDN не удаляются .blend1 файлы и не сработало перенумерование шота~~ ✅ | `src-tauri/src/main.rs` — WalkDir max_depth(2) + Settings toggle |
 | ~~16~~ | ~~Когда добавляешь деньги через Add — они засчитываются во все категории включая Personal. Должно засчитываться в ту категорию, из которой была нажата кнопка добавления.~~ ✅ | `src/components/finance/` ManualTransactionModal.tsx + financeService.ts |
 | ~~17~~ | ~~Если папка проекта пропадает — убирать оставшуюся сумму из Pending~~ ✅ | `src/utils/financeService.ts` — проверка существования папки при расчёте Pending |
@@ -42,7 +42,7 @@
 |---|--------|---------|
 | ~~22~~ | ~~Скопировать Quick Actions на страницу сцены~~ ✅ | `src/components/project/ProjectDetails.tsx` — убрать условие скрытия |
 | ~~23~~ | ~~Хайдить группу объектов в Project Structure~~ ✅ | `src/components/project/TreeView.tsx` — eye button на version stack + hiddenPaths |
-| 24 | При выборе контекста Assets/Compose подсвечивать папки Global Assets / Global Compose в Project Structure | `src/components/project/TreeView.tsx` — аналог подсветки сцены |
+| ~~24~~ | ~~При выборе контекста Assets/Compose подсвечивать папки Global Assets / Global Compose в Project Structure~~ ✅ | `src/components/project/TreeView.tsx` — аналог подсветки сцены |
 
 ---
 

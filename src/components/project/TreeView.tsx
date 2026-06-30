@@ -306,21 +306,26 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     }
   }, [activeMenu, isContextMenuOpen, closeContextMenu]);
 
-  // Compute highlighted paths based on selected scene/shot
+  // Compute highlighted paths based on selected scene/shot/special context
   const highlightedPaths = ((): Set<string> => {
     const paths = new Set<string>();
-    if (!project.software?.length) return paths;
-
     const base = normPath(project.path.replace(/[/\\]+$/, ''));
 
-    // Scene-level highlight
+    // Special context highlight (Assets / Compose) — no software dependency
+    if (project.currentSpecialContextId) {
+      const specialCtx = project.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId);
+      if (specialCtx?.type === 'asset') paths.add(`${base}/_globalassets`);
+      else if (specialCtx?.type === 'compose') paths.add(`${base}/_globalcompose`);
+    }
+
+    // Scene-level highlight — requires software
+    if (!project.software?.length) return paths;
     const scene = project.scenes?.find((s: any) => s.id === project.currentSceneId);
     if (scene) {
       const sceneFolder = sanitizeFolderName(scene.name).toLowerCase();
       for (const sw of project.software) {
         const swDir = getSoftwareDirName(sw.name).toLowerCase();
-        const swPath = `${base}/${swDir}`;
-        paths.add(`${swPath}/${sceneFolder}`);
+        paths.add(`${base}/${swDir}/${sceneFolder}`);
       }
     }
 
@@ -346,7 +351,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       }, 350);
       return () => clearTimeout(timer);
     }
-  }, [project.currentSceneId]);
+  }, [project.currentSceneId, project.currentSpecialContextId]);
 
   // Group versioned files into stacks
   const groupVersionsInTree = (nodes: FileNode[]): FileNode[] => {

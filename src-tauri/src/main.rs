@@ -4982,6 +4982,15 @@ fn get_monitors_internal() -> Result<Vec<MonitorInfo>, String> {
         );
     }
 
+    // Primary first, then left-to-right, top-to-bottom — stable across sessions
+    monitors.sort_by(|a: &MonitorInfo, b: &MonitorInfo| {
+        b.is_primary.cmp(&a.is_primary)
+            .then(a.x.cmp(&b.x))
+            .then(a.y.cmp(&b.y))
+    });
+    for (i, m) in monitors.iter_mut().enumerate() {
+        m.index = i;
+    }
     Ok(monitors)
 }
 
