@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.9.2] - 2026-07-01
+
+### Added
+- Tool Launcher: new Settings tab to configure custom launcher items with icons and brand colors
+- Tool Launcher: replaces the empty state panel when no project is selected
+- Settings: `initialTab` prop — external buttons can open settings to a specific tab directly
+
+### Removed
+- Welcome Setup: removed Auto-Detect software button and backend `detect_software_paths` command
+
 ## [1.9.1] - 2026-04-28
 
 ### Fixed

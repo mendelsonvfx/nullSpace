@@ -1,9 +1,11 @@
 // src/components/modals/SettingsPanel.tsx
 import { useProjectStore } from '../../store/projectStore';
 import React, { useState, useEffect, useRef } from 'react';
-import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw, Download, Upload } from 'lucide-react';
-import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../../utils/tauri';
-import { SoftwareIcon } from '../SoftwareIcon';
+import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw, Download, Upload, Cpu, Palette, Users, DollarSign, Database, Rocket, Loader2 } from 'lucide-react';
+import { selectProjectDirectory, selectExecutable } from '../../utils/tauri';
+import { getCustomItems, saveCustomItems, getSoftwareEnabled, saveSoftwareEnabled, getExeIcon, sampleColorFromDataUrl, extractNameFromPath } from '../../utils/launcherUtils';
+import { getSoftwareMeta } from '../../utils/softwareMeta';
+import type { CustomLauncherItem } from '../../types/launcher';
 import type { SoftwareName } from '../../types/project';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
 import { CustomSelect } from '../ui/CustomSelect';
@@ -17,9 +19,12 @@ import { open } from '@tauri-apps/api/dialog';
 import { hslStringToHex } from '../../utils/colorUtils';
 import SimpleBar from 'simplebar-react';
 
+export type SettingsTab = 'general' | 'software' | 'launcher' | 'appearance' | 'clients' | 'finance' | 'categories' | 'data';
+
 interface SettingsPanelProps {
   onClose: () => void;
   onDeleteClient?: (clientId: string, clientName: string) => void;
+  initialTab?: SettingsTab;
 }
 
 interface SoftwarePathConfig {
@@ -48,8 +53,8 @@ function isValidExecutablePath(path: string): boolean {
   return path.toLowerCase().endsWith('.exe');
 }
 
-export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState<'general' | 'software' | 'appearance' | 'clients' | 'finance' | 'categories' | 'data'>('general');
+export function SettingsPanel({ onClose, onDeleteClient, initialTab }: SettingsPanelProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? 'general');
   const [softwarePaths, setSoftwarePaths] = useState<SoftwarePathConfig[]>([]);
   const [appVersion, setAppVersion] = useState<string>('');
   const [showTagIcons, setShowTagIcons] = useState(() => {
@@ -70,6 +75,7 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
         }
       });
       localStorage.setItem('softwarePaths', JSON.stringify(pathsToSave));
+      window.dispatchEvent(new CustomEvent('softwarePaths:updated'));
       console.log('Software paths saved:', pathsToSave);
     }
 
@@ -110,124 +116,140 @@ export function SettingsPanel({ onClose, onDeleteClient }: SettingsPanelProps) {
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
-      <div data-settings-panel className="bg-card-bg border border-border-secondary rounded-card max-w-4xl w-full h-[80vh] min-h-[580px] flex overflow-hidden animate-modal" onClick={(e) => e.stopPropagation()}>
-        {/* Sidebar */}
-        <div className="w-48 border-r border-border-secondary p-4 flex flex-col">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold">Settings</h2>
-          </div>
+      <div data-settings-panel className="bg-card-bg border border-border-secondary rounded-[12px] max-w-[860px] w-full h-[80vh] min-h-[520px] flex flex-col overflow-hidden animate-modal" onClick={(e) => e.stopPropagation()}>
 
-          <nav className="space-y-1 flex-1">
-            <button
-              onClick={() => setActiveTab('general')}
-              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
-                activeTab === 'general'
-                  ? 'bg-accent'
-                  : 'hover:bg-hover-bg'
-              }`}
-            >
-              General
-            </button>
-            <button
-              onClick={() => setActiveTab('software')}
-              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
-                activeTab === 'software'
-                  ? 'bg-accent'
-                  : 'hover:bg-hover-bg'
-              }`}
-            >
-              Software Paths
-            </button>
-            <button
-              onClick={() => setActiveTab('appearance')}
-              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
-                activeTab === 'appearance'
-                  ? 'bg-accent'
-                  : 'hover:bg-hover-bg'
-              }`}
-            >
-              Appearance
-            </button>
-            <button
-              onClick={() => setActiveTab('clients')}
-              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
-                activeTab === 'clients'
-                  ? 'bg-accent'
-                  : 'hover:bg-hover-bg'
-              }`}
-            >
-              Clients
-            </button>
-            <button
-              onClick={() => setActiveTab('finance')}
-              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
-                activeTab === 'finance'
-                  ? 'bg-accent'
-                  : 'hover:bg-hover-bg'
-              }`}
-            >
-              Finance
-            </button>
-            <button
-              onClick={() => setActiveTab('data')}
-              className={`w-full text-left px-3 py-2 rounded-button transition-colors ${
-                activeTab === 'data'
-                  ? 'bg-accent'
-                  : 'hover:bg-hover-bg'
-              }`}
-            >
-              Data
-            </button>
-          </nav>
-
-          {/* Version info at bottom */}
-          <div className="mt-4">
-            <div className="text-xs text-text-muted text-center">
-              nullSpace v{appVersion || '0.6.0'}
-            </div>
-          </div>
+        {/* Top header — "Settings" title + X */}
+        <div className="flex items-center justify-between px-5 py-[14px] border-b border-border-primary flex-shrink-0">
+          <span className="text-base font-semibold">Settings</span>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors"
+          >
+            <X className="w-[15px] h-[15px] close-button-red" />
+          </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 flex flex-col">
-          {/* Header */}
-          <div className="px-6 py-4 flex items-center justify-between flex-shrink-0 border-b border-border-secondary">
-            <h3 className="text-xl font-semibold">
-              {activeTab === 'general' && 'General Settings'}
-              {activeTab === 'software' && 'Software Paths'}
-              {activeTab === 'appearance' && 'Appearance'}
-                            {activeTab === 'clients' && 'Clients'}
-              {activeTab === 'finance' && 'Finance Settings'}
-              {activeTab === 'data' && 'Data'}
-            </h3>
-            <button
-              onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors"
-            >
-              <X className="w-5 h-5 close-button-red" />
-            </button>
+        {/* Body: nav + content side by side */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Sidebar */}
+          <div className="w-[180px] border-r border-border-secondary px-3 py-5 flex flex-col flex-shrink-0">
+            <nav className="flex flex-col gap-0.5 flex-1">
+              <button
+                onClick={() => setActiveTab('general')}
+                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                  activeTab === 'general'
+                    ? 'bg-card-bg text-text-primary'
+                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                }`}
+              >
+                <Settings className="w-[17px] h-[17px] flex-shrink-0" />
+                General
+              </button>
+              <button
+                onClick={() => setActiveTab('software')}
+                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                  activeTab === 'software'
+                    ? 'bg-card-bg text-text-primary'
+                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                }`}
+              >
+                <Cpu className="w-[17px] h-[17px] flex-shrink-0" />
+                Software Paths
+              </button>
+              <button
+                onClick={() => setActiveTab('launcher')}
+                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                  activeTab === 'launcher'
+                    ? 'bg-card-bg text-text-primary'
+                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                }`}
+              >
+                <Rocket className="w-[17px] h-[17px] flex-shrink-0" />
+                Tool Launcher
+              </button>
+              <button
+                onClick={() => setActiveTab('appearance')}
+                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                  activeTab === 'appearance'
+                    ? 'bg-card-bg text-text-primary'
+                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                }`}
+              >
+                <Palette className="w-[17px] h-[17px] flex-shrink-0" />
+                Appearance
+              </button>
+              <button
+                onClick={() => setActiveTab('clients')}
+                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                  activeTab === 'clients'
+                    ? 'bg-card-bg text-text-primary'
+                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                }`}
+              >
+                <Users className="w-[17px] h-[17px] flex-shrink-0" />
+                Clients
+              </button>
+              <button
+                onClick={() => setActiveTab('finance')}
+                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                  activeTab === 'finance'
+                    ? 'bg-card-bg text-text-primary'
+                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                }`}
+              >
+                <DollarSign className="w-[17px] h-[17px] flex-shrink-0" />
+                Finance
+              </button>
+              <button
+                onClick={() => setActiveTab('data')}
+                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                  activeTab === 'data'
+                    ? 'bg-card-bg text-text-primary'
+                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                }`}
+              >
+                <Database className="w-[17px] h-[17px] flex-shrink-0" />
+                Data
+              </button>
+            </nav>
+
+            <div className="mt-auto pt-4">
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', fontFamily: 'monospace' }}>
+                nullSpace v{appVersion || '0.6.0'}
+              </div>
+            </div>
           </div>
 
-          {/* Content Area */}
-          <SimpleBar className="flex-1 custom-page-scrollbar" autoHide={false}>
-            <div className="p-6">
-              {activeTab === 'general' && <GeneralSettings />}
-              {activeTab === 'software' && <SoftwareSettings softwarePaths={softwarePaths} setSoftwarePaths={setSoftwarePaths} />}
-              {activeTab === 'appearance' && <AppearanceSettings showTagIcons={showTagIcons} setShowTagIcons={setShowTagIcons} />}
-              {activeTab === 'clients' && <ClientsSettings onDeleteClient={onDeleteClient} />}
-              {activeTab === 'finance' && <FinanceSettings />}
-              {activeTab === 'data' && <DataSettings />}
-            </div>
-          </SimpleBar>
+          {/* Content */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Content Area */}
+            <SimpleBar className="flex-1 custom-page-scrollbar" autoHide={false}>
+              <div className="px-6 py-0">
+                {activeTab === 'general' && <GeneralSettings />}
+                {activeTab === 'software' && <SoftwareSettings softwarePaths={softwarePaths} setSoftwarePaths={setSoftwarePaths} />}
+                {activeTab === 'launcher' && <LauncherSettings />}
+                {activeTab === 'appearance' && <AppearanceSettings showTagIcons={showTagIcons} setShowTagIcons={setShowTagIcons} />}
+                {activeTab === 'clients' && <ClientsSettings onDeleteClient={onDeleteClient} />}
+                {activeTab === 'finance' && <FinanceSettings />}
+                {activeTab === 'data' && <DataSettings />}
+              </div>
+            </SimpleBar>
 
-          {/* Footer */}
-          <div className="border-t border-border-secondary px-6 py-4 flex justify-end gap-3 flex-shrink-0">
-            <button
-              onClick={handleSave}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium animate-button"
-            >
-              Save Changes
-            </button>
+            {/* Footer */}
+            <div className="border-t border-border-primary px-6 py-[14px] flex justify-end gap-2 flex-shrink-0">
+              <button
+                onClick={onClose}
+                className="px-3 py-[7px] text-sm bg-card-bg hover:bg-hover-bg border border-border-secondary rounded-badge transition-colors animate-button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-3 py-[7px] text-sm bg-accent hover:bg-accent-hover rounded-badge transition-colors font-semibold animate-button"
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -296,12 +318,12 @@ function GeneralSettings() {
   };
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Projects Directory */}
-      <div>
+      <div className="py-4 border-b border-border-primary">
         <div className="mb-3">
-          <label className="block font-medium mb-1">Projects Directory</label>
-          <p className="text-sm text-text-muted">
+          <div className="text-sm font-semibold mb-0.5">Projects Directory</div>
+          <p className="text-xs text-text-muted">
             Default location where projects are stored and loaded from
           </p>
         </div>
@@ -323,167 +345,156 @@ function GeneralSettings() {
       </div>
 
       {/* Time Tracking Feature */}
-      <div className="border-t border-border-secondary pt-6">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <div className="font-medium mb-1">Time Tracking & Analytics</div>
-            <p className="text-sm text-text-muted">
-              <span className="text-orange-400 font-semibold">experimental!</span> Enable automatic time tracking when launching software from projects
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              const newValue = !timeTrackingEnabled;
-              setTimeTrackingEnabled(newValue);
-              localStorage.setItem('timeTrackingEnabled', JSON.stringify(newValue));
-              window.dispatchEvent(new Event('storage'));
-            }}
-            className={`w-12 h-6 rounded-full transition-colors relative ${
-              timeTrackingEnabled ? 'bg-accent' : 'bg-border-secondary'
-            }`}
-          >
-            <div
-              className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-                timeTrackingEnabled ? 'translate-x-6' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Time Tracking & Analytics</div>
+          <p className="text-xs text-text-muted">
+            <span className="text-orange-400 font-semibold">experimental!</span> Enable automatic time tracking when launching software from projects
+          </p>
         </div>
+        <button
+          onClick={() => {
+            const newValue = !timeTrackingEnabled;
+            setTimeTrackingEnabled(newValue);
+            localStorage.setItem('timeTrackingEnabled', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${
+            timeTrackingEnabled ? 'bg-accent' : 'bg-border-secondary'
+          }`}
+        >
+          <div
+            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+              timeTrackingEnabled ? 'translate-x-6' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
       </div>
 
       {/* Auto-delete .blend1 backups */}
-      <div className="border-t border-border-secondary pt-6">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <div className="font-medium mb-1">Auto-delete .blend1 backups</div>
-            <p className="text-sm text-text-muted">
-              Automatically delete Blender backup files (.blend1) when a new version is saved
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              const newValue = !autoDeleteBlend1;
-              setAutoDeleteBlend1(newValue);
-              localStorage.setItem('autoDeleteBlend1Backups', JSON.stringify(newValue));
-              window.dispatchEvent(new Event('storage'));
-            }}
-            className={`w-12 h-6 rounded-full transition-colors relative ${
-              autoDeleteBlend1 ? 'bg-accent' : 'bg-border-secondary'
-            }`}
-          >
-            <div
-              className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-                autoDeleteBlend1 ? 'translate-x-6' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Auto-delete .blend1 backups</div>
+          <p className="text-xs text-text-muted">
+            Automatically delete Blender backup files (.blend1) when a new version is saved
+          </p>
         </div>
+        <button
+          onClick={() => {
+            const newValue = !autoDeleteBlend1;
+            setAutoDeleteBlend1(newValue);
+            localStorage.setItem('autoDeleteBlend1Backups', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${
+            autoDeleteBlend1 ? 'bg-accent' : 'bg-border-secondary'
+          }`}
+        >
+          <div
+            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+              autoDeleteBlend1 ? 'translate-x-6' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
       </div>
 
-      {/* Notifications */}
-      <div className="border-t border-border-secondary pt-6">
-        <div className="flex items-center justify-between mb-3">
+      {/* Deadline Notifications */}
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Deadline Notifications</div>
+          <p className="text-xs text-text-muted">
+            Show notifications for projects with upcoming deadlines
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !notifications;
+            setNotifications(newValue);
+            localStorage.setItem('deadlineNotifications', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${
+            notifications ? 'bg-accent' : 'bg-border-secondary'
+          }`}
+        >
+          <div
+            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+              notifications ? 'translate-x-6' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {notifications && (
+        <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
           <div>
-            <div className="font-medium mb-1">Deadline Notifications</div>
-            <p className="text-sm text-text-muted">
-              Show notifications for projects with upcoming deadlines
+            <div className="text-sm font-semibold mb-0.5">Days Before Deadline</div>
+            <p className="text-xs text-text-muted">
+              Show notifications when deadline is within this many days
             </p>
           </div>
-          <button
-            onClick={() => {
-              const newValue = !notifications;
-              setNotifications(newValue);
-              localStorage.setItem('deadlineNotifications', JSON.stringify(newValue));
+          <input
+            type="number"
+            min="0"
+            max="7"
+            value={deadlineDays}
+            onChange={(e) => {
+              const newValue = Math.min(7, Math.max(0, parseInt(e.target.value) || 0));
+              setDeadlineDays(newValue);
+              localStorage.setItem('deadlineNotificationDays', newValue.toString());
               window.dispatchEvent(new Event('storage'));
             }}
-            className={`w-12 h-6 rounded-full transition-colors relative ${
-              notifications ? 'bg-accent' : 'bg-border-secondary'
-            }`}
-          >
-            <div
-              className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-                notifications ? 'translate-x-6' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
+            className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
+          />
         </div>
-
-        {notifications && (
-          <div className="ml-0 mt-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium mb-1">Days Before Deadline</div>
-                <p className="text-sm text-text-muted">
-                  Show notifications when deadline is within this many days
-                </p>
-              </div>
-              <input
-                type="number"
-                min="0"
-                max="7"
-                value={deadlineDays}
-                onChange={(e) => {
-                  const newValue = Math.min(7, Math.max(0, parseInt(e.target.value) || 0));
-                  setDeadlineDays(newValue);
-                  localStorage.setItem('deadlineNotificationDays', newValue.toString());
-                  window.dispatchEvent(new Event('storage'));
-                }}
-                className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
-              />
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Software Update Check */}
-      <div className="border-t border-border-secondary pt-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium mb-1">Software Update Check</div>
-            <p className="text-sm text-text-muted">
-              How often to check for new versions
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCheckNow}
-              disabled={checkStatus !== 'idle'}
-              className="flex items-center gap-2 px-3 py-2 text-sm rounded-button bg-sidebar-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {checkStatus === 'checking' && <RefreshCw className="w-4 h-4 animate-spin" />}
-              {checkStatus === 'idle' && <RefreshCw className="w-4 h-4" />}
-              {checkStatus === 'up-to-date' && <Check className="w-4 h-4 text-green-400" />}
-              {checkStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
-              <span className={
-                checkStatus === 'up-to-date' ? 'text-green-400' :
-                checkStatus === 'error' ? 'text-red-400' : ''
-              }>
-                {checkStatus === 'idle' && 'Check Now'}
-                {checkStatus === 'checking' && 'Checking...'}
-                {checkStatus === 'up-to-date' && 'Up to date'}
-                {checkStatus === 'error' && 'Check failed'}
-              </span>
-            </button>
-            <CustomSelect
-              value={updateCheckFrequency}
-              onChange={(val) => {
-                setUpdateCheckFrequency(val);
-                localStorage.setItem('updateCheckFrequency', val);
-                window.dispatchEvent(new Event('storage'));
-              }}
-              options={[
-                { value: 'launch', label: 'Every launch' },
-                { value: '1h', label: 'Every hour' },
-                { value: '24h', label: 'Every 24 hours' },
-                { value: '7d', label: 'Every week' },
-                { value: 'never', label: 'Never' },
-              ]}
-              className="w-40"
-            />
-          </div>
+      <div className="flex items-center justify-between py-4 gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Software Update Check</div>
+          <p className="text-xs text-text-muted">
+            How often to check for new versions
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={handleCheckNow}
+            disabled={checkStatus !== 'idle'}
+            className="flex items-center gap-2 px-3 py-2 text-sm rounded-button bg-sidebar-bg border border-border-primary hover:bg-hover-bg hover:border-border-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {checkStatus === 'checking' && <RefreshCw className="w-4 h-4 animate-spin" />}
+            {checkStatus === 'idle' && <RefreshCw className="w-4 h-4" />}
+            {checkStatus === 'up-to-date' && <Check className="w-4 h-4 text-green-400" />}
+            {checkStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
+            <span className={
+              checkStatus === 'up-to-date' ? 'text-green-400' :
+              checkStatus === 'error' ? 'text-red-400' : ''
+            }>
+              {checkStatus === 'idle' && 'Check Now'}
+              {checkStatus === 'checking' && 'Checking...'}
+              {checkStatus === 'up-to-date' && 'Up to date'}
+              {checkStatus === 'error' && 'Check failed'}
+            </span>
+          </button>
+          <CustomSelect
+            value={updateCheckFrequency}
+            onChange={(val) => {
+              setUpdateCheckFrequency(val);
+              localStorage.setItem('updateCheckFrequency', val);
+              window.dispatchEvent(new Event('storage'));
+            }}
+            options={[
+              { value: 'launch', label: 'Every launch' },
+              { value: '1h', label: 'Every hour' },
+              { value: '24h', label: 'Every 24 hours' },
+              { value: '7d', label: 'Every week' },
+              { value: 'never', label: 'Never' },
+            ]}
+            className="w-40"
+          />
         </div>
       </div>
-
     </div>
   );
 }
@@ -590,12 +601,12 @@ function DataSettings() {
   };
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Thumbnail Cache */}
-      <div>
+      <div className="py-4 border-b border-border-primary">
         <div className="mb-3">
-          <div className="font-medium mb-1">Thumbnail Cache</div>
-          <p className="text-sm text-text-muted">
+          <div className="text-sm font-semibold mb-0.5">Thumbnail Cache</div>
+          <p className="text-xs text-text-muted">
             Clear cached thumbnails to force reload. Useful if thumbnails appear outdated.
           </p>
         </div>
@@ -618,10 +629,10 @@ function DataSettings() {
       </div>
 
       {/* Clear Time Tracking Data */}
-      <div className="border-t border-border-secondary pt-6">
+      <div className="py-4 border-b border-border-primary">
         <div className="mb-3">
-          <div className="font-medium mb-1 text-red-400">Clear Time Tracking Data</div>
-          <p className="text-sm text-text-muted">
+          <div className="text-sm font-semibold mb-0.5 text-red-400">Clear Time Tracking Data</div>
+          <p className="text-xs text-text-muted">
             Permanently delete all time tracking data from all projects. This includes all time entries, project time statistics, and global software statistics. This action cannot be undone.
           </p>
         </div>
@@ -679,10 +690,10 @@ function DataSettings() {
       </div>
 
       {/* Export & Import */}
-      <div className="border-t border-border-secondary pt-6">
+      <div className="py-4">
         <div className="mb-3">
-          <div className="font-medium mb-1">Export & Import</div>
-          <p className="text-sm text-text-muted">
+          <div className="text-sm font-semibold mb-0.5">Export & Import</div>
+          <p className="text-xs text-text-muted">
             Export all settings, clients, financial data, time statistics, and archived project backups to a file. Use this to transfer data between devices or before reinstalling.
           </p>
         </div>
@@ -777,17 +788,10 @@ function SoftwareSettings({
   softwarePaths: SoftwarePathConfig[];
   setSoftwarePaths: React.Dispatch<React.SetStateAction<SoftwarePathConfig[]>>
 }) {
-  // Load saved paths from localStorage on mount
   useEffect(() => {
     const savedPaths = localStorage.getItem('softwarePaths');
     const pathsMap: Record<string, string> = savedPaths ? JSON.parse(savedPaths) : {};
-
-    const initialPaths = DEFAULT_SOFTWARE.map(sw => ({
-      ...sw,
-      path: pathsMap[sw.name] || ''
-    }));
-
-    setSoftwarePaths(initialPaths);
+    setSoftwarePaths(DEFAULT_SOFTWARE.map(sw => ({ ...sw, path: pathsMap[sw.name] || '' })));
   }, []);
 
   const handleBrowseExecutable = async (index: number) => {
@@ -801,89 +805,313 @@ function SoftwareSettings({
     }
   };
 
-  const [isDetecting, setIsDetecting] = useState(false);
+  const handleClearPath = (index: number) => {
+    setSoftwarePaths(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], path: '' };
+      return updated;
+    });
+  };
 
-  const handleAutoDetect = async () => {
-    setIsDetecting(true);
+  return (
+    <div className="pt-4 pb-2">
+      <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 px-1">
+        Configure paths to installed software
+      </p>
+
+      <div className="space-y-2">
+        {softwarePaths.map((sw, index) => {
+          const meta = getSoftwareMeta(sw.name);
+          const valid = isValidExecutablePath(sw.path);
+          return (
+            <div
+              key={sw.name}
+              className="flex items-center gap-[14px] px-[14px] py-3 rounded-[10px] border transition-colors"
+              style={{
+                background: valid ? '#0f0f12' : '#120f0c',
+                borderColor: valid ? '#202026' : '#3a2a18',
+              }}
+            >
+              {/* Icon */}
+              {valid ? (
+                meta.logoPath ? (
+                  <div className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none bg-card-bg">
+                    <img src={meta.logoPath} alt={meta.display} style={{ width: 28, height: 28, objectFit: 'contain' }} />
+                  </div>
+                ) : (
+                  <div
+                    className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none select-none font-bold"
+                    style={{
+                      background: meta.gradient,
+                      color: meta.textColor ?? '#fff',
+                      fontSize: meta.abbr.length === 1 ? 18 : 14,
+                    }}
+                  >
+                    {meta.abbr}
+                  </div>
+                )
+              ) : (
+                <div
+                  className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none select-none font-bold"
+                  style={{
+                    background: '#1a1a1f',
+                    border: '1px dashed #3a3a44',
+                    color: meta.brandColor,
+                    fontSize: meta.abbr.length === 1 ? 18 : 14,
+                  }}
+                >
+                  {meta.abbr}
+                </div>
+              )}
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-[7px]">
+                  <span className="text-[13px] font-semibold text-text-primary">{sw.displayName}</span>
+                  {valid ? (
+                    <Check style={{ width: 11, height: 11, color: '#5fbf7a', flexShrink: 0 }} />
+                  ) : (
+                    <span className="flex items-center gap-[4px] text-[10px] font-semibold" style={{ color: '#d99a3d' }}>
+                      <AlertCircle style={{ width: 10, height: 10 }} />
+                      Path not set
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] font-mono truncate mt-0.5" style={{ color: '#66666e' }}>
+                  {sw.path || `Path to ${sw.displayName} executable…`}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-1 flex-none">
+                <button
+                  onClick={() => handleBrowseExecutable(index)}
+                  className="w-[30px] h-[30px] flex items-center justify-center rounded-[7px] text-text-muted hover:bg-hover-bg hover:text-text-primary transition-colors"
+                >
+                  <FolderOpen className="w-[14px] h-[14px]" />
+                </button>
+                {valid && (
+                  <button
+                    onClick={() => handleClearPath(index)}
+                    className="w-[30px] h-[30px] flex items-center justify-center rounded-[7px] text-text-muted hover:bg-red-500/15 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="w-[14px] h-[14px]" />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---- Toggle UI helper ----
+
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div
+      onClick={() => onChange(!on)}
+      className="flex-none cursor-pointer transition-colors duration-150"
+      style={{
+        width: 38, height: 22, borderRadius: 11,
+        background: on ? 'linear-gradient(180deg,#7c3aed,#6d28d9)' : '#242429',
+        position: 'relative',
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: 3,
+        left: on ? undefined : 3,
+        right: on ? 3 : undefined,
+        width: 16, height: 16, borderRadius: '50%',
+        background: on ? '#fff' : '#7a7a83',
+        boxShadow: '0 1px 3px rgba(0,0,0,.4)',
+        transition: 'left 0.15s, right 0.15s',
+      }} />
+    </div>
+  );
+}
+
+// ---- LauncherSettings ----
+
+function LauncherSettings() {
+  const [swPaths, setSwPaths] = useState<Record<string, string>>({});
+  const [swEnabled, setSwEnabled] = useState<Record<string, boolean>>({});
+  const [customItems, setCustomItems] = useState<CustomLauncherItem[]>([]);
+  const [isAdding, setIsAdding] = useState(false);
+  const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    try { setSwPaths(JSON.parse(localStorage.getItem('softwarePaths') ?? '{}')); } catch { setSwPaths({}); }
+    setSwEnabled(getSoftwareEnabled());
+    setCustomItems(getCustomItems());
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const configuredSw = Object.entries(swPaths).filter(([, p]) => p && p.trim());
+
+  const handleSwToggle = (key: string, val: boolean) => {
+    const next = { ...swEnabled, [key]: val };
+    setSwEnabled(next);
+    saveSoftwareEnabled(next);
+  };
+
+  const handleCustomToggle = (id: string, val: boolean) => {
+    const next = customItems.map(i => i.id === id ? { ...i, enabled: val } : i);
+    setCustomItems(next);
+    saveCustomItems(next);
+  };
+
+  const handleCustomDelete = (id: string) => {
+    const next = customItems.filter(i => i.id !== id);
+    setCustomItems(next);
+    saveCustomItems(next);
+  };
+
+  const extractAndStore = async (path: string): Promise<{ iconBase64?: string; brandColor: string }> => {
+    const raw = await getExeIcon(path).catch(() => undefined);
+    const iconBase64 = raw?.startsWith('data:image/') ? raw : undefined;
+    const brandColor = iconBase64 ? await sampleColorFromDataUrl(iconBase64) : '#6366f1';
+    return { iconBase64, brandColor };
+  };
+
+  const handleAdd = async () => {
+    setIsAdding(true);
     try {
-      const detected = await detectInstalledSoftware();
-      console.log('Detected software:', detected);
-
-      // Update software paths with detected ones
-      setSoftwarePaths(prev => {
-        return prev.map(sw => {
-          if (detected[sw.name]) {
-            return { ...sw, path: detected[sw.name] };
-          }
-          return sw;
-        });
-      });
-    } catch (error) {
-      console.error('Failed to auto-detect software:', error);
+      const path = await selectExecutable();
+      if (!path || !mountedRef.current) return;
+      if (customItems.some(i => i.path === path)) return;
+      const { iconBase64, brandColor } = await extractAndStore(path);
+      if (!mountedRef.current) return;
+      const name = extractNameFromPath(path);
+      const newItem: CustomLauncherItem = { id: crypto.randomUUID(), name, path, iconBase64, brandColor, enabled: true };
+      const next = [...customItems, newItem];
+      setCustomItems(next);
+      saveCustomItems(next);
     } finally {
-      setIsDetecting(false);
+      if (mountedRef.current) setIsAdding(false);
+    }
+  };
+
+  const handleBrowseExisting = async (id: string) => {
+    setLoadingItemId(id);
+    try {
+      const path = await selectExecutable();
+      if (!path || !mountedRef.current) return;
+      const { iconBase64, brandColor } = await extractAndStore(path);
+      if (!mountedRef.current) return;
+      const name = extractNameFromPath(path);
+      const next = customItems.map(i => i.id === id ? { ...i, path, name, iconBase64, brandColor } : i);
+      setCustomItems(next);
+      saveCustomItems(next);
+    } finally {
+      if (mountedRef.current) setLoadingItemId(null);
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-text-muted">
-          Configure paths to installed 3D software applications
-        </p>
-        <button
-          onClick={handleAutoDetect}
-          disabled={isDetecting}
-          className="px-3 py-1.5 bg-accent hover:bg-accent-hover disabled:bg-accent/50 disabled:cursor-not-allowed rounded-lg transition-colors text-sm font-medium animate-button flex items-center gap-2"
-        >
-          {isDetecting && <RefreshCw className="w-4 h-4 animate-spin" />}
-          {isDetecting ? 'Detecting...' : 'Auto-Detect'}
-        </button>
-      </div>
+    <div className="pt-4 pb-2 space-y-5">
 
-      <div className="space-y-3">
-        {softwarePaths.map((sw, index) => (
-          <div key={sw.name} className="bg-sidebar-bg rounded-button p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <SoftwareIcon name={sw.name} className="w-5 h-5" />
-                <h4 className="font-medium">{sw.displayName}</h4>
-                {isValidExecutablePath(sw.path) && (
-                  <Check className="w-3 h-3 text-green-500" />
-                )}
-              </div>
-            </div>
-            
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={sw.path}
-                onChange={(e) => {
-                  // Remove quotes from path if present
-                  let cleanPath = e.target.value.trim();
-                  if ((cleanPath.startsWith('"') && cleanPath.endsWith('"')) ||
-                      (cleanPath.startsWith("'") && cleanPath.endsWith("'"))) {
-                    cleanPath = cleanPath.slice(1, -1);
-                  }
-                  setSoftwarePaths(prev => {
-                    const updated = [...prev];
-                    updated[index] = { ...updated[index], path: cleanPath };
-                    return updated;
-                  });
-                }}
-                placeholder={`Path to ${sw.displayName} executable...`}
-                className="flex-1 bg-app-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent"
-              />
-              <button
-                onClick={() => handleBrowseExecutable(index)}
-                className="px-3 py-2 bg-border-secondary hover:bg-border-secondary rounded-button transition-colors"
-              >
-                <FolderOpen className="w-4 h-4" />
-              </button>
-            </div>
+      {/* Custom items section — always shown */}
+      <div>
+        <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 px-1">Custom software</p>
+          <div className="space-y-2">
+            {customItems.map(item => {
+              const isOn = item.enabled !== false;
+              const abbr = (item.name ?? 'App').slice(0, 2).toUpperCase();
+              const isLoading = loadingItemId === item.id;
+              return (
+                <div key={item.id} className="flex items-center gap-[14px] px-[14px] py-3 rounded-[10px] border"
+                  style={{ background: '#0f0f12', borderColor: '#202026' }}>
+                  {/* Icon */}
+                  {item.iconBase64 ? (
+                    <div className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none bg-card-bg">
+                      <img src={item.iconBase64} alt={item.name} style={{ width: 28, height: 28, objectFit: 'contain' }} />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none select-none font-bold text-white text-[13px]"
+                      style={{ background: `radial-gradient(circle at 30% 30%, ${item.brandColor ?? '#6366f1'}88, ${item.brandColor ?? '#6366f1'}44)` }}>
+                      {abbr}
+                    </div>
+                  )}
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-text-primary">{item.name ?? 'App'}</div>
+                    <div className="text-[11px] font-mono truncate mt-0.5" style={{ color: '#66666e' }}>{item.path}</div>
+                  </div>
+                  {/* Actions */}
+                  <div className="flex items-center gap-1.5 flex-none">
+                    <button
+                      onClick={() => handleBrowseExisting(item.id)}
+                      disabled={isLoading}
+                      className="w-[30px] h-[30px] flex items-center justify-center rounded-[7px] text-text-muted hover:bg-hover-bg hover:text-text-primary transition-colors disabled:opacity-40"
+                    >
+                      {isLoading ? <Loader2 className="w-[14px] h-[14px] animate-spin" /> : <FolderOpen className="w-[14px] h-[14px]" />}
+                    </button>
+                    <button
+                      onClick={() => handleCustomDelete(item.id)}
+                      className="w-[30px] h-[30px] flex items-center justify-center rounded-[7px] text-text-muted hover:bg-red-500/15 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="w-[14px] h-[14px]" />
+                    </button>
+                    <div className="w-px h-[22px] flex-none" style={{ background: '#26262c' }} />
+                    <Toggle on={isOn} onChange={v => handleCustomToggle(item.id, v)} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
+
+          {/* Add software button — inside Custom section */}
+          <button
+            onClick={handleAdd}
+            disabled={isAdding}
+            className="w-full mt-2 flex items-center justify-center gap-[9px] py-[14px] rounded-[10px] border border-dashed border-border-secondary
+                       text-[13px] font-semibold text-text-muted transition-colors
+                       hover:border-border-hover hover:text-text-primary
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Add software…
+          </button>
+        </div>
+
+      {/* Software Paths section */}
+      {configuredSw.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 px-1">From Software Paths</p>
+          <div className="space-y-2">
+            {configuredSw.map(([key]) => {
+              const meta = getSoftwareMeta(key);
+              const isOn = swEnabled[key] !== false;
+              return (
+                <div key={key} className="flex items-center gap-[12px] px-[14px] py-[9px] rounded-[10px] border"
+                  style={{ background: '#0f0f12', borderColor: '#202026' }}>
+                  {meta.logoPath ? (
+                    <div className="w-8 h-8 rounded-[9px] flex items-center justify-center flex-none bg-card-bg">
+                      <img src={meta.logoPath} alt={meta.display} style={{ width: 22, height: 22, objectFit: 'contain' }} />
+                    </div>
+                  ) : (
+                    <div className="w-8 h-8 rounded-[9px] flex items-center justify-center flex-none select-none font-bold text-white text-[12px]"
+                      style={{ background: meta.gradient }}>
+                      {meta.abbr}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-text-primary">{meta.display}</div>
+                  </div>
+                  <Toggle on={isOn} onChange={v => handleSwToggle(key, v)} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+
     </div>
   );
 }
@@ -1073,10 +1301,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
   };
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Theme */}
-      <div>
-        <label className="block text-sm font-medium mb-3 text-text-muted">Theme</label>
+      <div className="py-4 border-b border-border-primary">
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Theme</div>
         <div className="grid grid-cols-2 gap-3">
           <button
             disabled
@@ -1096,8 +1324,8 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       </div>
 
       {/* Accent Color */}
-      <div className="border-t border-border-secondary pt-6">
-        <label className="block text-sm font-medium mb-3 text-text-muted">Accent Color</label>
+      <div className="py-4 border-b border-border-primary">
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Accent Color</div>
         <div className="flex gap-3 flex-wrap items-center">
           {defaultAccentColors.map(color => (
             <button
@@ -1181,12 +1409,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
       />
 
       {/* Animations */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
         <div>
-          <div className="font-medium mb-1">Animations</div>
-          <p className="text-sm text-text-muted">
-            Enable smooth transitions and animations
-          </p>
+          <div className="text-sm font-semibold mb-0.5">Animations</div>
+          <p className="text-xs text-text-muted">Enable smooth transitions and animations</p>
         </div>
         <button
           onClick={() => {
@@ -1200,25 +1426,19 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
             }
             window.dispatchEvent(new Event('storage'));
           }}
-          className={`w-12 h-6 rounded-full transition-colors relative ${
+          className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${
             animationsEnabled ? 'bg-accent' : 'bg-border-secondary'
           }`}
         >
-          <div
-            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-              animationsEnabled ? 'translate-x-6' : 'translate-x-0.5'
-            }`}
-          />
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${animationsEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
         </button>
       </div>
 
       {/* Modal Blur */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
         <div>
-          <div className="font-medium mb-1">Modal Blur Effect</div>
-          <p className="text-sm text-text-muted">
-            Add subtle blur to background when modals are open
-          </p>
+          <div className="text-sm font-semibold mb-0.5">Modal Blur Effect</div>
+          <p className="text-xs text-text-muted">Add subtle blur to background when modals are open</p>
         </div>
         <button
           onClick={() => {
@@ -1227,25 +1447,19 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
             localStorage.setItem('modalBlurEnabled', JSON.stringify(newValue));
             window.dispatchEvent(new Event('storage'));
           }}
-          className={`w-12 h-6 rounded-full transition-colors relative ${
+          className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${
             modalBlurEnabled ? 'bg-accent' : 'bg-border-secondary'
           }`}
         >
-          <div
-            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-              modalBlurEnabled ? 'translate-x-6' : 'translate-x-0.5'
-            }`}
-          />
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${modalBlurEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
         </button>
       </div>
 
-{/* Tag Icons */}
-      <div className="flex items-center justify-between">
+      {/* Tag Icons */}
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
         <div>
-          <div className="font-medium mb-1">Tag Icons</div>
-          <p className="text-sm text-text-muted">
-            Display icons in client and payment status tags
-          </p>
+          <div className="text-sm font-semibold mb-0.5">Tag Icons</div>
+          <p className="text-xs text-text-muted">Display icons in client and payment status tags</p>
         </div>
         <button
           onClick={() => {
@@ -1254,23 +1468,17 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
             localStorage.setItem('showTagIcons', JSON.stringify(newValue));
             window.dispatchEvent(new Event('storage'));
           }}
-          className={`w-12 h-6 rounded-full relative transition-colors ${
-            showTagIcons ? 'bg-accent' : 'bg-border-secondary'
-          }`}
+          className={`w-12 h-6 rounded-full relative transition-colors flex-shrink-0 ${showTagIcons ? 'bg-accent' : 'bg-border-secondary'}`}
         >
-          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-            showTagIcons ? 'translate-x-6' : 'translate-x-0.5'
-          }`} />
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showTagIcons ? 'translate-x-6' : 'translate-x-0.5'}`} />
         </button>
       </div>
 
       {/* Blender File Previews */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
         <div>
-          <div className="font-medium mb-1">Blender File Previews</div>
-          <p className="text-sm text-text-muted">
-            Show thumbnail previews for .blend files in Versions Overview
-          </p>
+          <div className="text-sm font-semibold mb-0.5">Blender File Previews</div>
+          <p className="text-xs text-text-muted">Show thumbnail previews for .blend files in Versions Overview</p>
         </div>
         <button
           onClick={() => {
@@ -1279,233 +1487,213 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
             localStorage.setItem('blendPreviewsEnabled', JSON.stringify(newValue));
             window.dispatchEvent(new Event('storage'));
           }}
-          className={`w-12 h-6 rounded-full relative transition-colors ${
-            blendPreviewsEnabled ? 'bg-accent' : 'bg-border-secondary'
-          }`}
+          className={`w-12 h-6 rounded-full relative transition-colors flex-shrink-0 ${blendPreviewsEnabled ? 'bg-accent' : 'bg-border-secondary'}`}
         >
-          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-            blendPreviewsEnabled ? 'translate-x-6' : 'translate-x-0.5'
-          }`} />
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${blendPreviewsEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
         </button>
       </div>
 
-      <div className="border-t border-border-secondary pt-6">
-        <label className="block text-sm font-medium mb-3 text-text-muted">Shots Browser Settings</label>
-
-        {/* Button Hover Delay */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="font-medium mb-1">Button Reveal Delay</div>
-            <p className="text-sm text-text-muted">Delay before Add Shot / Add Scene buttons appear on hover (ms)</p>
-          </div>
-          <input
-            type="number"
-            min="0"
-            max="2000"
-            step="100"
-            value={shotsBrowserHoverDelay}
-            onChange={(e) => {
-              const newValue = Math.min(2000, Math.max(0, parseInt(e.target.value) || 0));
-              setShotsBrowserHoverDelay(newValue);
-              localStorage.setItem('shotsbrowser_hoverDelay', newValue.toString());
-              window.dispatchEvent(new Event('storage'));
-            }}
-            className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
-          />
-        </div>
-
-        {/* Button Hide Delay */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="font-medium mb-1">Button Hide Delay</div>
-            <p className="text-sm text-text-muted">Delay before Add Shot / Add Scene buttons disappear (ms)</p>
-          </div>
-          <input
-            type="number"
-            min="0"
-            max="2000"
-            step="50"
-            value={shotsBrowserHideDelay}
-            onChange={(e) => {
-              const newValue = Math.min(2000, Math.max(0, parseInt(e.target.value) || 0));
-              setShotsBrowserHideDelay(newValue);
-              localStorage.setItem('shotsbrowser_hideDelay', newValue.toString());
-              window.dispatchEvent(new Event('storage'));
-            }}
-            className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
-          />
-        </div>
-
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="font-medium mb-1">Show Search & Filter</div>
-            <p className="text-sm text-text-muted">Show search bar and filter controls in Shots Browser</p>
-          </div>
-          <button
-            onClick={() => {
-              const newValue = !showShotsBrowserSearch;
-              setShowShotsBrowserSearch(newValue);
-              localStorage.setItem('shotsbrowser_showSearchFilter', JSON.stringify(newValue));
-              window.dispatchEvent(new Event('storage'));
-            }}
-            className={`w-12 h-6 rounded-full relative transition-colors ${showShotsBrowserSearch ? 'bg-accent' : 'bg-border-secondary'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showShotsBrowserSearch ? 'translate-x-6' : 'translate-x-0.5'}`} />
-          </button>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium mb-1">Show Asset/Compose Buttons</div>
-            <p className="text-sm text-text-muted">Show Asset Projects and Compose buttons in Shots Browser</p>
-          </div>
-          <button
-            onClick={() => {
-              const newValue = !showShotsBrowserAssetButtons;
-              setShowShotsBrowserAssetButtons(newValue);
-              localStorage.setItem('shotsbrowser_showSpecialContextButtons', JSON.stringify(newValue));
-              window.dispatchEvent(new Event('storage'));
-            }}
-            className={`w-12 h-6 rounded-full relative transition-colors ${showShotsBrowserAssetButtons ? 'bg-accent' : 'bg-border-secondary'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showShotsBrowserAssetButtons ? 'translate-x-6' : 'translate-x-0.5'}`} />
-          </button>
-        </div>
+      {/* Shots Browser Settings */}
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }} className="mt-6 mb-2">
+        Shots Browser Settings
       </div>
 
-      {/* Project Structure Settings */}
-      <div className="border-t border-border-secondary pt-6">
-        <label className="block text-sm font-medium mb-3 text-text-muted">Project Structure</label>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium mb-1">Auto-hide Project Files</div>
-            <p className="text-sm text-text-muted">Automatically hide project files (.blend, .hip, .ma, etc.) in the project structure</p>
-          </div>
-          <button
-            onClick={() => {
-              const newValue = !autoHideProjectFiles;
-              setAutoHideProjectFiles(newValue);
-              localStorage.setItem('autoHideProjectFiles', JSON.stringify(newValue));
-              window.dispatchEvent(new Event('storage'));
-            }}
-            className={`w-12 h-6 rounded-full relative transition-colors ${autoHideProjectFiles ? 'bg-accent' : 'bg-border-secondary'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${autoHideProjectFiles ? 'translate-x-6' : 'translate-x-0.5'}`} />
-          </button>
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Button Reveal Delay</div>
+          <p className="text-xs text-text-muted">Delay before Add Shot / Add Scene buttons appear on hover (ms)</p>
         </div>
+        <input
+          type="number"
+          min="0"
+          max="2000"
+          step="100"
+          value={shotsBrowserHoverDelay}
+          onChange={(e) => {
+            const newValue = Math.min(2000, Math.max(0, parseInt(e.target.value) || 0));
+            setShotsBrowserHoverDelay(newValue);
+            localStorage.setItem('shotsbrowser_hoverDelay', newValue.toString());
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
+        />
+      </div>
+
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Button Hide Delay</div>
+          <p className="text-xs text-text-muted">Delay before Add Shot / Add Scene buttons disappear (ms)</p>
+        </div>
+        <input
+          type="number"
+          min="0"
+          max="2000"
+          step="50"
+          value={shotsBrowserHideDelay}
+          onChange={(e) => {
+            const newValue = Math.min(2000, Math.max(0, parseInt(e.target.value) || 0));
+            setShotsBrowserHideDelay(newValue);
+            localStorage.setItem('shotsbrowser_hideDelay', newValue.toString());
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className="w-20 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
+        />
+      </div>
+
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Show Search & Filter</div>
+          <p className="text-xs text-text-muted">Show search bar and filter controls in Shots Browser</p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !showShotsBrowserSearch;
+            setShowShotsBrowserSearch(newValue);
+            localStorage.setItem('shotsbrowser_showSearchFilter', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full relative transition-colors flex-shrink-0 ${showShotsBrowserSearch ? 'bg-accent' : 'bg-border-secondary'}`}
+        >
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showShotsBrowserSearch ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Show Asset/Compose Buttons</div>
+          <p className="text-xs text-text-muted">Show Asset Projects and Compose buttons in Shots Browser</p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !showShotsBrowserAssetButtons;
+            setShowShotsBrowserAssetButtons(newValue);
+            localStorage.setItem('shotsbrowser_showSpecialContextButtons', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full relative transition-colors flex-shrink-0 ${showShotsBrowserAssetButtons ? 'bg-accent' : 'bg-border-secondary'}`}
+        >
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${showShotsBrowserAssetButtons ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+
+      {/* Project Structure */}
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }} className="mt-6 mb-2">
+        Project Structure
+      </div>
+
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Auto-hide Project Files</div>
+          <p className="text-xs text-text-muted">Automatically hide project files (.blend, .hip, .ma, etc.) in the project structure</p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !autoHideProjectFiles;
+            setAutoHideProjectFiles(newValue);
+            localStorage.setItem('autoHideProjectFiles', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full relative transition-colors flex-shrink-0 ${autoHideProjectFiles ? 'bg-accent' : 'bg-border-secondary'}`}
+        >
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${autoHideProjectFiles ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        </button>
       </div>
 
       {/* Window Settings */}
-      <div className="border-t border-border-secondary pt-6">
-        <label className="block text-sm font-medium mb-3 text-text-muted">Window Settings</label>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }} className="mt-6 mb-2">
+        Window Settings
+      </div>
 
-        {/* Auto-Maximize on Launch */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="font-medium mb-1">Auto-Maximize on Launch</div>
-            <p className="text-sm text-text-muted">
-              Automatically maximize nullSpace window on startup
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              const newValue = !autoMaximizeOnLaunch;
-              setAutoMaximizeOnLaunch(newValue);
-              updateWindowSettings({ autoMaximizeOnLaunch: newValue });
-            }}
-            className={`w-12 h-6 rounded-full transition-colors relative ${
-              autoMaximizeOnLaunch ? 'bg-accent' : 'bg-border-secondary'
-            }`}
-          >
-            <div
-              className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-                autoMaximizeOnLaunch ? 'translate-x-6' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Auto-Maximize on Launch</div>
+          <p className="text-xs text-text-muted">Automatically maximize nullSpace window on startup</p>
         </div>
+        <button
+          onClick={() => {
+            const newValue = !autoMaximizeOnLaunch;
+            setAutoMaximizeOnLaunch(newValue);
+            updateWindowSettings({ autoMaximizeOnLaunch: newValue });
+          }}
+          className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${
+            autoMaximizeOnLaunch ? 'bg-accent' : 'bg-border-secondary'
+          }`}
+        >
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${autoMaximizeOnLaunch ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
 
-        {/* Monitor Selection (only shown if auto-maximize is enabled) */}
-        {autoMaximizeOnLaunch && monitors.length > 0 && (
+      {autoMaximizeOnLaunch && monitors.length > 0 && (
+        <div className="py-4 border-b border-border-primary">
           <div className="mb-3">
-            <div className="mb-3">
-              <label className="block font-medium mb-1">Preferred Monitor</label>
-              <p className="text-sm text-text-muted">
-                Select monitor for auto-maximized window
-              </p>
-            </div>
-            <CustomSelect
-              value={String(preferredMonitor)}
-              onChange={(val) => {
-                const index = parseInt(val);
-                setPreferredMonitor(index);
-                const monitor = monitors[index];
-                updateWindowSettings({
-                  preferredMonitor: index,
-                  preferredMonitorName: monitor?.name || '',
-                });
-              }}
-              options={monitors.map((monitor) => {
-                const displayNum = monitor.name.match(/DISPLAY(\d+)/)?.[1] || (monitor.index + 1);
-                const displayName = `Display ${displayNum}`;
-                return {
-                  value: String(monitor.index),
-                  label: `${monitor.index + 1}. ${displayName}${monitor.is_primary ? ' (Primary)' : ''} - ${monitor.width}x${monitor.height}`,
-                };
-              })}
-            />
+            <div className="text-sm font-semibold mb-0.5">Preferred Monitor</div>
+            <p className="text-xs text-text-muted">Select monitor for auto-maximized window</p>
           </div>
-        )}
-
-        {/* Monitor Preview (only shown if multiple monitors and auto-maximize enabled) */}
-        {autoMaximizeOnLaunch && monitors.length > 1 && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">Monitor Layout</label>
-            <div className="bg-sidebar-bg rounded-button p-4 flex items-center justify-center gap-2" style={{ minHeight: '100px' }}>
-              {monitors.map((monitor) => {
-                const isSelected = monitor.index === preferredMonitor;
-                const scale = 60 / Math.max(...monitors.map(m => m.height));
-                const width = monitor.width * scale;
-                const height = monitor.height * scale;
-
-                return (
-                  <div
-                    key={monitor.index}
-                    className={`relative rounded border-2 transition-all ${
-                      isSelected ? 'border-accent bg-accent/20' : 'border-border-primary bg-hover-bg'
-                    }`}
-                    style={{ width: `${width}px`, height: `${height}px` }}
-                  >
-                    {monitor.is_primary && (
-                      <div className="absolute -top-2 left-1/2 -translate-x-1/2">
-                        <span className="text-[10px] bg-card-bg px-1 rounded text-text-muted">
-                          Primary
-                        </span>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 flex items-center justify-center text-xs text-text-muted">
-                      {monitor.index + 1}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Reset Window Position Button */}
-        <div className="mt-6">
-          <button
-            onClick={handleResetWindowPosition}
-            className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg rounded-button transition-colors text-sm font-medium"
-          >
-            Reset Window Position
-          </button>
-          <p className="text-xs text-text-muted mt-2">
-            Center window on primary monitor and restore default size (1920x900)
-          </p>
+          <CustomSelect
+            value={String(preferredMonitor)}
+            onChange={(val) => {
+              const index = parseInt(val);
+              setPreferredMonitor(index);
+              const monitor = monitors[index];
+              updateWindowSettings({
+                preferredMonitor: index,
+                preferredMonitorName: monitor?.name || '',
+              });
+            }}
+            options={monitors.map((monitor) => {
+              const displayNum = monitor.name.match(/DISPLAY(\d+)/)?.[1] || (monitor.index + 1);
+              const displayName = `Display ${displayNum}`;
+              return {
+                value: String(monitor.index),
+                label: `${monitor.index + 1}. ${displayName}${monitor.is_primary ? ' (Primary)' : ''} - ${monitor.width}x${monitor.height}`,
+              };
+            })}
+          />
         </div>
+      )}
+
+      {autoMaximizeOnLaunch && monitors.length > 1 && (
+        <div className="py-4 border-b border-border-primary">
+          <div className="text-sm font-semibold mb-2">Monitor Layout</div>
+          <div className="bg-sidebar-bg rounded-button p-4 flex items-center justify-center gap-2" style={{ minHeight: '100px' }}>
+            {monitors.map((monitor) => {
+              const isSelected = monitor.index === preferredMonitor;
+              const scale = 60 / Math.max(...monitors.map(m => m.height));
+              const width = monitor.width * scale;
+              const height = monitor.height * scale;
+              return (
+                <div
+                  key={monitor.index}
+                  className={`relative rounded border-2 transition-all ${
+                    isSelected ? 'border-accent bg-accent/20' : 'border-border-primary bg-hover-bg'
+                  }`}
+                  style={{ width: `${width}px`, height: `${height}px` }}
+                >
+                  {monitor.is_primary && (
+                    <div className="absolute -top-2 left-1/2 -translate-x-1/2">
+                      <span className="text-[10px] bg-card-bg px-1 rounded text-text-muted">Primary</span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center text-xs text-text-muted">
+                    {monitor.index + 1}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="py-4">
+        <button
+          onClick={handleResetWindowPosition}
+          className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg rounded-button transition-colors text-sm font-medium"
+        >
+          Reset Window Position
+        </button>
+        <p className="text-xs text-text-muted mt-2">
+          Center window on primary monitor and restore default size (1920x900)
+        </p>
       </div>
     </div>
   );
@@ -1563,10 +1751,10 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-text-muted">
-          Manage your clients and their contact information
+    <div className="pt-4 pb-2">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-1">
+          Manage clients and contact information
         </p>
         <button
           onClick={() => setShowAddClient(!showAddClient)}
@@ -1896,14 +2084,12 @@ function FinanceSettings() {
   // const currentRates = getCurrentRates(); // Unused for now
 
   return (
-    <div className="space-y-6">
-      {/* Currency Settings */}
-      <div>
+    <div>
+      {/* Base Currency */}
+      <div className="py-4 border-b border-border-primary">
         <div className="mb-3">
-          <label className="block font-medium mb-1">Base Currency</label>
-          <p className="text-sm text-text-muted">
-            Select the base currency for financial reports
-          </p>
+          <div className="text-sm font-semibold mb-0.5">Base Currency</div>
+          <p className="text-xs text-text-muted">Select the base currency for financial reports</p>
         </div>
         <CustomSelect
           value={baseCurrency}
@@ -1917,31 +2103,27 @@ function FinanceSettings() {
       </div>
 
       {/* Convert to Base Currency */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
         <div>
-          <div className="font-medium mb-1">Convert to Base Currency</div>
-          <p className="text-sm text-text-muted">
-            Automatically convert all revenue to the selected currency
-          </p>
+          <div className="text-sm font-semibold mb-0.5">Convert to Base Currency</div>
+          <p className="text-xs text-text-muted">Automatically convert all revenue to the selected currency</p>
         </div>
         <button
           onClick={handleConvertToggle}
-          className={`w-12 h-6 rounded-full transition-colors relative ${
+          className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${
             convertToBaseCurrency ? 'bg-accent' : 'bg-border-secondary'
           }`}
         >
-          <div
-            className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-              convertToBaseCurrency ? 'translate-x-6' : 'translate-x-0.5'
-            }`}
-          />
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${convertToBaseCurrency ? 'translate-x-6' : 'translate-x-0.5'}`} />
         </button>
       </div>
 
       {/* Exchange Rate Mode */}
       {convertToBaseCurrency && (
-        <div className="border-t border-border-secondary pt-6">
-          <label className="block text-sm font-medium mb-3">Exchange Rate Source</label>
+        <div className="py-4 border-b border-border-primary">
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }} className="mb-3">
+            Exchange Rate Source
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => handleRateModeChange('auto')}
@@ -1951,10 +2133,8 @@ function FinanceSettings() {
                   : 'border-border-primary bg-sidebar-bg hover:border-border-hover'
               }`}
             >
-              <div className="font-medium mb-1">Automatic</div>
-              <p className="text-xs text-text-muted">
-                Get real-time rates from the internet
-              </p>
+              <div className="text-sm font-semibold mb-0.5">Automatic</div>
+              <p className="text-xs text-text-muted">Get real-time rates from the internet</p>
             </button>
             <button
               onClick={() => handleRateModeChange('manual')}
@@ -1964,10 +2144,8 @@ function FinanceSettings() {
                   : 'border-border-primary bg-sidebar-bg hover:border-border-hover'
               }`}
             >
-              <div className="font-medium mb-1">Manual</div>
-              <p className="text-xs text-text-muted">
-                Set custom exchange rates
-              </p>
+              <div className="text-sm font-semibold mb-0.5">Manual</div>
+              <p className="text-xs text-text-muted">Set custom exchange rates</p>
             </button>
           </div>
         </div>
@@ -1975,14 +2153,16 @@ function FinanceSettings() {
 
       {/* Exchange Rates Display */}
       {convertToBaseCurrency && (
-        <div className="border-t border-border-secondary pt-6">
+        <div className="py-4 border-b border-border-primary">
           <div className="flex items-center justify-between mb-3">
-            <label className="block text-sm font-medium">Exchange Rates</label>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Exchange Rates
+            </div>
             {rateMode === 'auto' && (
               <button
                 onClick={() => fetchAutoRates(baseCurrency)}
                 disabled={isLoadingRates}
-                className="px-3 py-1.5 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 rounded-button transition-colors text-sm flex items-center gap-2"
+                className="px-3 py-1.5 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 rounded-button transition-colors text-xs flex items-center gap-2"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoadingRates ? 'animate-spin' : ''}`} />
                 {isLoadingRates ? 'Updating...' : 'Update'}
@@ -1994,14 +2174,10 @@ function FinanceSettings() {
             {Object.keys(currencySymbols).map(currency => {
               if (currency === baseCurrency) return null;
 
-              // В авто режиме берем курсы из autoRates, в ручном из exchangeRates
               let rate = 0;
               if (rateMode === 'auto' && autoRates) {
-                // autoRates содержит прямые курсы от базовой валюты
-                // Нужно инвертировать для отображения "сколько базовой за 1 другую"
                 rate = autoRates[currency] ? 1 / autoRates[currency] : 0;
               } else {
-                // В ручном режиме: exchangeRates[baseCurrency][currency] = сколько базовой за 1 другую
                 rate = exchangeRates[baseCurrency]?.[currency] || 0;
               }
 
@@ -2067,14 +2243,13 @@ function FinanceSettings() {
       )}
 
       {/* Revenue Normalization Threshold */}
-      <div className="border-t border-border-secondary pt-6">
+      <div className="py-4">
         <div className="mb-3">
-          <label className="block font-medium mb-1">Revenue Normalization Threshold</label>
-          <p className="text-sm text-text-muted">
+          <div className="text-sm font-semibold mb-0.5">Revenue Normalization Threshold</div>
+          <p className="text-xs text-text-muted">
             Set minimum threshold for revenue chart normalization. Charts will scale to at least this value.
           </p>
         </div>
-
         <div className="flex items-center justify-between bg-sidebar-bg rounded-button px-4 py-2.5">
           <span className="text-sm">
             {baseCurrency} ({currencySymbols[baseCurrency]})

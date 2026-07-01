@@ -4,3 +4,4 @@ export { LinkItem } from './LinkItem';
 export { LinkInputForm } from './LinkInputForm';
 export { NotesSection } from './NotesSection';
 export { EmptyState } from './EmptyState';
+export { SoftwareLauncher } from './SoftwareLauncher';

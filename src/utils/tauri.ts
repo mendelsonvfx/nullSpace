@@ -85,15 +85,6 @@ export function getSoftwarePaths(_softwareName: string): string[] {
   return [];
 }
 
-export async function detectInstalledSoftware(): Promise<Record<string, string>> {
-  try {
-    const detected = await invoke<Record<string, string>>('detect_software_paths');
-    return detected;
-  } catch (error) {
-    console.error('Failed to detect installed software:', error);
-    return {};
-  }
-}
 
 export class TauriError extends Error {
   constructor(message: string, public originalError?: unknown) {

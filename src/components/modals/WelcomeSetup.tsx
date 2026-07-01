@@ -1,8 +1,8 @@
 // src/components/modals/WelcomeSetup.tsx
 import { useState } from 'react';
-import { FolderOpen, Rocket, Check, RefreshCw, Heart } from 'lucide-react';
+import { FolderOpen, Rocket, Check, Heart } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { selectProjectDirectory, selectExecutable, detectInstalledSoftware } from '../../utils/tauri';
+import { selectProjectDirectory, selectExecutable } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import type { SoftwareName } from '../../types/project';
 import { useModalBlur } from '../../hooks/useModalBlur';
@@ -48,8 +48,6 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
   const [softwarePaths, setSoftwarePaths] = useState<SoftwarePathConfig[]>(
     DEFAULT_SOFTWARE.map(sw => ({ ...sw, path: '' }))
   );
-  const [isDetecting, setIsDetecting] = useState(false);
-
   const handleBrowseDirectory = async () => {
     const selected = await selectProjectDirectory();
     if (selected) {
@@ -65,28 +63,6 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
         updated[index] = { ...updated[index], path: selected };
         return updated;
       });
-    }
-  };
-
-  const handleAutoDetect = async () => {
-    setIsDetecting(true);
-    try {
-      const detected = await detectInstalledSoftware();
-      console.log('Detected software:', detected);
-
-      // Update software paths with detected ones
-      setSoftwarePaths(prev => {
-        return prev.map(sw => {
-          if (detected[sw.name]) {
-            return { ...sw, path: detected[sw.name] };
-          }
-          return sw;
-        });
-      });
-    } catch (error) {
-      console.error('Failed to auto-detect software:', error);
-    } finally {
-      setIsDetecting(false);
     }
   };
 
@@ -341,16 +317,8 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
           {step === 3 && (
             <div className="space-y-4 pt-3 pb-3" style={{ animation: 'fadeSlideIn 0.2s ease-out' }}>
                 <div className="flex flex-col gap-0.5">
-                  <div className="flex items-center justify-between gap-4">
+                  <div>
                     <h2 className="text-xl font-bold">Software Paths (Optional)</h2>
-                    <button
-                      onClick={handleAutoDetect}
-                      disabled={isDetecting}
-                      className="px-3 py-1 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-button transition-colors text-xs font-medium flex items-center gap-1.5 text-white flex-shrink-0"
-                    >
-                      {isDetecting && <RefreshCw className="w-3 h-3 animate-spin" />}
-                      {isDetecting ? 'Detecting...' : 'Auto-Detect'}
-                    </button>
                   </div>
                   <p className="text-sm text-text-muted">
                     Configure paths to your 3D software. You can skip this step and configure it later in settings.

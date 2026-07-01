@@ -55,7 +55,8 @@ import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
 
 // Import refactored components
-import { EmptyState } from './components/shared';
+import { SoftwareLauncher } from './components/shared';
+import type { SettingsTab } from './components/modals/SettingsPanel';
 import { FinancePage } from './components/finance';
 import { ProjectDetails, RightSidebar } from './components/project';
 import ShotsBrowser from './components/project/ShotsBrowser';
@@ -184,6 +185,7 @@ function App() {
   } | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>('general');
   const [showFeedback, setShowFeedback] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [filterView, setFilterView] = useState<'all' | 'favorites' | 'archive'>('all');
@@ -1945,7 +1947,7 @@ function App() {
                   </button>
                 </div>
                 <button
-                  onClick={() => setShowSettings(true)}
+                  onClick={() => { setSettingsInitialTab('general'); setShowSettings(true); }}
                   className="px-3 hover:bg-hover-bg rounded-lg transition-colors flex-shrink-0 flex items-center justify-center py-1.5"
                   title="Settings"
                 >
@@ -2045,7 +2047,9 @@ function App() {
                   }}
                 />
               ) : (
-                <EmptyState onCreateProject={() => setShowCreateModal(true)} />
+                <SoftwareLauncher
+                  onOpenSettings={(tab) => { setSettingsInitialTab(tab); setShowSettings(true); }}
+                />
               )
             )}
           </div>
@@ -2127,6 +2131,7 @@ function App() {
         {/* Settings Modal */}
         {showSettings && (
           <SettingsPanel
+            initialTab={settingsInitialTab}
             onClose={() => setShowSettings(false)}
             onDeleteClient={(clientId, clientName) => {
               setDeleteConfirm({
@@ -2502,7 +2507,6 @@ function App() {
   );
 }
 
-// ✅ EmptyState now imported from './components/shared'
 
 // ✅ generateBrightColor now imported from './utils'
 

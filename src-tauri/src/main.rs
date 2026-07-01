@@ -3993,169 +3993,6 @@ async fn rename_scene_thumbnails(
     Ok(renamed_count)
 }
 
-#[tauri::command]
-async fn detect_software_paths() -> Result<std::collections::HashMap<String, String>, String> {
-    use std::collections::HashMap;
-
-    #[cfg(target_os = "windows")]
-    {
-        use winreg::enums::*;
-        use winreg::RegKey;
-
-        let mut detected_paths = HashMap::new();
-
-        // Helper function to check if path exists
-        fn path_exists(path: &str) -> bool {
-            std::path::Path::new(path).exists()
-        }
-
-        // 1. Detect Blender
-        // Check registry
-        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-        if let Ok(blender_key) = hklm.open_subkey(r"SOFTWARE\BlenderFoundation") {
-            if let Ok(subkeys) = blender_key.enum_keys().collect::<Result<Vec<_>, _>>() {
-                for key_name in subkeys {
-                    if let Ok(version_key) = blender_key.open_subkey(&key_name) {
-                        if let Ok(install_dir) = version_key.get_value::<String, _>("InstallDir") {
-                            let blender_exe = format!("{}\\blender.exe", install_dir);
-                            if path_exists(&blender_exe) {
-                                detected_paths.insert("blender".to_string(), blender_exe);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Check default paths for Blender
-        if !detected_paths.contains_key("blender") {
-            let default_blender_paths = vec![
-                r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
-            ];
-
-            for path in default_blender_paths {
-                if path_exists(path) {
-                    detected_paths.insert("blender".to_string(), path.to_string());
-                    break;
-                }
-            }
-        }
-
-        // 2. Detect Houdini
-        if let Ok(houdini_key) = hklm.open_subkey(r"SOFTWARE\Side Effects Software") {
-            if let Ok(subkeys) = houdini_key.enum_keys().collect::<Result<Vec<_>, _>>() {
-                for key_name in subkeys {
-                    if key_name.starts_with("Houdini") {
-                        if let Ok(version_key) = houdini_key.open_subkey(&key_name) {
-                            if let Ok(install_path) = version_key.get_value::<String, _>("InstallPath") {
-                                let houdini_exe = format!("{}\\bin\\houdinifx.exe", install_path);
-                                if path_exists(&houdini_exe) {
-                                    detected_paths.insert("houdini".to_string(), houdini_exe);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Check default paths for Houdini
-        if !detected_paths.contains_key("houdini") {
-            let default_houdini_paths = vec![
-                r"C:\Program Files\Side Effects Software\Houdini 20.5.370\bin\houdinifx.exe",
-                r"C:\Program Files\Side Effects Software\Houdini 20.0.688\bin\houdinifx.exe",
-                r"C:\Program Files\Side Effects Software\Houdini 19.5.805\bin\houdinifx.exe",
-            ];
-
-            for path in default_houdini_paths {
-                if path_exists(path) {
-                    detected_paths.insert("houdini".to_string(), path.to_string());
-                    break;
-                }
-            }
-        }
-
-        // 3. Detect Adobe After Effects
-        if let Ok(adobe_key) = hklm.open_subkey(r"SOFTWARE\Adobe\After Effects") {
-            if let Ok(subkeys) = adobe_key.enum_keys().collect::<Result<Vec<_>, _>>() {
-                for key_name in subkeys {
-                    if let Ok(version_key) = adobe_key.open_subkey(&key_name) {
-                        if let Ok(install_path) = version_key.get_value::<String, _>("InstallPath") {
-                            let ae_exe = format!("{}\\AfterFX.exe", install_path);
-                            if path_exists(&ae_exe) {
-                                detected_paths.insert("after-effects".to_string(), ae_exe);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Check default paths for After Effects
-        if !detected_paths.contains_key("after-effects") {
-            let default_ae_paths = vec![
-                r"C:\Program Files\Adobe\Adobe After Effects 2024\Support Files\AfterFX.exe",
-                r"C:\Program Files\Adobe\Adobe After Effects 2025\Support Files\AfterFX.exe",
-                r"C:\Program Files\Adobe\Adobe After Effects 2023\Support Files\AfterFX.exe",
-            ];
-
-            for path in default_ae_paths {
-                if path_exists(path) {
-                    detected_paths.insert("after-effects".to_string(), path.to_string());
-                    break;
-                }
-            }
-        }
-
-        // 4. Detect Adobe Photoshop
-        if let Ok(adobe_key) = hklm.open_subkey(r"SOFTWARE\Adobe\Photoshop") {
-            if let Ok(subkeys) = adobe_key.enum_keys().collect::<Result<Vec<_>, _>>() {
-                for key_name in subkeys {
-                    if let Ok(version_key) = adobe_key.open_subkey(&key_name) {
-                        if let Ok(install_path) = version_key.get_value::<String, _>("ApplicationPath") {
-                            if path_exists(&install_path) {
-                                detected_paths.insert("photoshop".to_string(), install_path);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Check default paths for Photoshop
-        if !detected_paths.contains_key("photoshop") {
-            let default_ps_paths = vec![
-                r"C:\Program Files\Adobe\Adobe Photoshop 2024\Photoshop.exe",
-                r"C:\Program Files\Adobe\Adobe Photoshop 2025\Photoshop.exe",
-                r"C:\Program Files\Adobe\Adobe Photoshop 2023\Photoshop.exe",
-            ];
-
-            for path in default_ps_paths {
-                if path_exists(path) {
-                    detected_paths.insert("photoshop".to_string(), path.to_string());
-                    break;
-                }
-            }
-        }
-
-        Ok(detected_paths)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        // For non-Windows platforms, return empty map for now
-        Ok(HashMap::new())
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct OutputFile {
     name: String,
@@ -5399,6 +5236,53 @@ fn set_window_corners(_window: tauri::Window, _rounded: bool) {
     // No-op on non-Windows platforms
 }
 
+#[tauri::command]
+async fn get_exe_icon(path: String) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let escaped = path.replace('\'', "''");
+        let script = format!(
+            "$ErrorActionPreference='Stop'; \
+             Add-Type -AssemblyName System.Drawing; \
+             $src = [System.Drawing.Icon]::ExtractAssociatedIcon('{escaped}').ToBitmap(); \
+             $bmp = New-Object System.Drawing.Bitmap(32,32); \
+             $g = [System.Drawing.Graphics]::FromImage($bmp); \
+             $g.Clear([System.Drawing.Color]::Transparent); \
+             $g.DrawImage($src, 0, 0, 32, 32); \
+             $g.Dispose(); \
+             $ms = New-Object System.IO.MemoryStream; \
+             $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); \
+             [System.Convert]::ToBase64String($ms.ToArray())"
+        );
+
+        let output = Command::new("powershell.exe")
+            .args(["-WindowStyle", "Hidden", "-NonInteractive", "-Command", &script])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).to_string());
+        }
+
+        let b64 = String::from_utf8(output.stdout)
+            .map_err(|e| e.to_string())?
+            .trim()
+            .to_string();
+
+        if b64.is_empty() {
+            return Err("Empty icon output".to_string());
+        }
+
+        Ok(format!("data:image/png;base64,{}", b64))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    Err("Icon extraction only supported on Windows".to_string())
+}
 
 fn main() {
     // Set WebView2 default background to transparent to prevent white corners
@@ -5489,7 +5373,6 @@ fn main() {
             time_tracking::update_session_pid,
             time_tracking::migrate_to_child_process,
             time_tracking::get_focus_summary,
-            detect_software_paths,
             get_project_outputs,
             get_available_monitors,
             set_window_to_monitor,
@@ -5508,6 +5391,7 @@ fn main() {
             delete_project_backup,
             updater::check_for_update,
             updater::install_portable_update,
+            get_exe_icon,
         ])
 
         .run(tauri::generate_context!())
