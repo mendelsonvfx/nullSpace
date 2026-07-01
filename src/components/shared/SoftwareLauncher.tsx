@@ -1,8 +1,9 @@
-import { memo, useState, useEffect } from 'react';
-import { Settings, Plus } from 'lucide-react';
+import { memo, useState, useEffect, useRef } from 'react';
+import { Settings, Plus, Loader2 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { getSoftwareMeta } from '../../utils/softwareMeta';
-import { getCustomItems, getSoftwareEnabled } from '../../utils/launcherUtils';
+import { getCustomItems, getSoftwareEnabled, saveCustomItems, getExeIcon, sampleColorFromDataUrl, extractNameFromPath } from '../../utils/launcherUtils';
+import { selectExecutable } from '../../utils/tauri';
 import type { CustomLauncherItem } from '../../types/launcher';
 import type { SettingsTab } from '../modals/SettingsPanel';
 
@@ -51,9 +52,9 @@ function buildTiles(): TileData[] {
     .filter(i => i.enabled !== false && i.path)
     .map(i => ({
       id: i.id,
-      name: i.name ?? 'App',
+      name: i.name || 'App',
       path: i.path,
-      abbr: (i.name ?? 'App').slice(0, 2).toUpperCase(),
+      abbr: (i.name || 'App').slice(0, 2).toUpperCase(),
       gradient: 'linear-gradient(160deg,#1e1e26,#13131a)',
       shadow: 'rgba(0,0,0,.30)',
       brandColor: i.brandColor ?? '#6366f1',
@@ -124,7 +125,13 @@ function SoftwareTile({ tile, onLaunch }: {
 
 // ---- LauncherEmptyState ----
 
-function LauncherEmptyState({ onOpenSettings }: { onOpenSettings: (tab: SettingsTab) => void }) {
+function LauncherEmptyState({
+  onOpenSettings, onAdd, isAdding,
+}: {
+  onOpenSettings: (tab: SettingsTab) => void;
+  onAdd: () => void;
+  isAdding: boolean;
+}) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-app-bg">
       <div style={{ width: 520 }}>
@@ -132,29 +139,27 @@ function LauncherEmptyState({ onOpenSettings }: { onOpenSettings: (tab: Settings
           <h2 className="text-[23px] font-bold text-text-primary mb-[5px]">Tool Launcher</h2>
           <p className="text-[13px] text-text-muted">Select an app to launch</p>
         </div>
-        <div
-          className="border-[1.5px] border-dashed border-border-secondary rounded-[18px] px-8 py-10 flex flex-col items-center text-center"
-          style={{ background: 'radial-gradient(125% 100% at 50% 0%,#131319 0%,#0c0c10 70%)' }}
-        >
+        <div className="bg-sidebar-bg border border-border-secondary/50 rounded-modal p-8 flex flex-col items-center text-center">
           <div className="flex gap-4 mb-7 opacity-55">
             {[0, 1, 2].map(i => (
               <div key={i} className="flex flex-col items-center gap-[13px]">
-                <div className="w-[54px] h-[54px] rounded-[15px] bg-card-bg border-[1.5px] border-dashed border-border-secondary" />
+                <div className="w-[54px] h-[54px] rounded-[15px] bg-hover-bg border-[1.5px] border-dashed border-border-hover" />
                 <div className="w-12 h-2 rounded-full bg-hover-bg" />
               </div>
             ))}
           </div>
           <h3 className="text-lg font-bold text-text-primary mb-2">No software added yet</h3>
           <p className="text-[13px] text-text-muted leading-relaxed mb-[26px] max-w-[330px]">
-            Add apps — Blender, Houdini, DaVinci and others — and they will appear here as tiles for quick launch.
+            Add your apps and they'll appear here as tiles for quick launch.
           </p>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => onOpenSettings('launcher')}
-              className="flex items-center gap-2 h-11 px-5 rounded-[12px] text-white font-bold text-[13.5px] border-0 cursor-pointer"
-              style={{ background: 'linear-gradient(180deg,#7c3aed,#6d28d9)', boxShadow: '0 6px 18px rgba(124,58,237,.35)' }}
+              onClick={onAdd}
+              disabled={isAdding}
+              className="flex items-center gap-2 h-11 px-5 rounded-[12px] text-white font-bold text-[13.5px] border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: 'linear-gradient(180deg,#7c3aed,#6d28d9)' }}
             >
-              <Plus className="w-4 h-4" />
+              {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Add software
             </button>
             <button
@@ -180,22 +185,52 @@ export const SoftwareLauncher = memo(function SoftwareLauncher({
   onOpenSettings: (tab: SettingsTab) => void;
 }) {
   const [tiles, setTiles] = useState<TileData[]>([]);
+  const [isAdding, setIsAdding] = useState(false);
+  const mountedRef = useRef(true);
   const launchSoftwareWithoutProject = useProjectStore(s => s.launchSoftwareWithoutProject);
 
   useEffect(() => {
+    mountedRef.current = true;
     const load = () => setTiles(buildTiles());
     load();
     window.addEventListener('storage', load);
     window.addEventListener('softwarePaths:updated', load as EventListener);
     window.addEventListener('launcherItems:updated', load as EventListener);
     return () => {
+      mountedRef.current = false;
       window.removeEventListener('storage', load);
       window.removeEventListener('softwarePaths:updated', load as EventListener);
       window.removeEventListener('launcherItems:updated', load as EventListener);
     };
   }, []);
 
-  if (tiles.length === 0) return <LauncherEmptyState onOpenSettings={onOpenSettings} />;
+  const handleAdd = async () => {
+    setIsAdding(true);
+    try {
+      const path = await selectExecutable();
+      if (!path || !mountedRef.current) return;
+      const current = getCustomItems();
+      if (current.some(i => i.path === path)) return;
+      const iconBase64 = await getExeIcon(path);
+      const brandColor = iconBase64 ? await sampleColorFromDataUrl(iconBase64) : '#6366f1';
+      if (!mountedRef.current) return;
+      const name = extractNameFromPath(path);
+      const newItem: CustomLauncherItem = {
+        id: crypto.randomUUID(), name, path, iconBase64, brandColor, enabled: true,
+      };
+      saveCustomItems([...current, newItem]);
+    } finally {
+      if (mountedRef.current) setIsAdding(false);
+    }
+  };
+
+  if (tiles.length === 0) return (
+    <LauncherEmptyState
+      onOpenSettings={onOpenSettings}
+      onAdd={handleAdd}
+      isAdding={isAdding}
+    />
+  );
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-app-bg p-6">

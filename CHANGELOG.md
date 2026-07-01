@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.9.3] - 2026-07-01
+
+### Changed
+- Settings: sidebar active tab now shows accent border + subtle tint instead of plain bg highlight
+- Settings → Clients: redesigned as accordion cards with avatar initials and contact subtitle
+- Settings → Launcher: item name is now editable inline
+- Settings → Software: clear-path button fades in on row hover only; uses X icon
+
+### Fixed
+- Settings: Toggle animation uses left-based transform for smooth slide
+
 ## [1.9.2] - 2026-07-01
 
 ### Added

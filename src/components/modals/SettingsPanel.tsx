@@ -1,7 +1,7 @@
 // src/components/modals/SettingsPanel.tsx
 import { useProjectStore } from '../../store/projectStore';
 import React, { useState, useEffect, useRef } from 'react';
-import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw, Download, Upload, Cpu, Palette, Users, DollarSign, Database, Rocket, Loader2 } from 'lucide-react';
+import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw, Download, Upload, Cpu, Palette, Users, DollarSign, Database, Rocket, Loader2, Globe, ChevronDown } from 'lucide-react';
 import { selectProjectDirectory, selectExecutable } from '../../utils/tauri';
 import { getCustomItems, saveCustomItems, getSoftwareEnabled, saveSoftwareEnabled, getExeIcon, sampleColorFromDataUrl, extractNameFromPath } from '../../utils/launcherUtils';
 import { getSoftwareMeta } from '../../utils/softwareMeta';
@@ -132,14 +132,14 @@ export function SettingsPanel({ onClose, onDeleteClient, initialTab }: SettingsP
         {/* Body: nav + content side by side */}
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
-          <div className="w-[180px] border-r border-border-secondary px-3 py-5 flex flex-col flex-shrink-0">
-            <nav className="flex flex-col gap-0.5 flex-1">
+          <div className="w-[180px] border-r border-border-primary px-3 py-5 flex flex-col flex-shrink-0">
+            <nav className="flex flex-col gap-[9px] flex-1">
               <button
                 onClick={() => setActiveTab('general')}
-                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                className={`w-full flex items-center gap-2 px-3 py-[7px] rounded-[9px] text-[15px] transition-colors ${
                   activeTab === 'general'
-                    ? 'bg-card-bg text-text-primary'
-                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                    ? 'bg-[var(--accent-color-subtle)] text-text-primary border border-accent'
+                    : 'border border-transparent text-text-secondary hover:bg-hover-bg hover:text-text-primary'
                 }`}
               >
                 <Settings className="w-[17px] h-[17px] flex-shrink-0" />
@@ -147,10 +147,10 @@ export function SettingsPanel({ onClose, onDeleteClient, initialTab }: SettingsP
               </button>
               <button
                 onClick={() => setActiveTab('software')}
-                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                className={`w-full flex items-center gap-2 px-3 py-[7px] rounded-[9px] text-[15px] transition-colors ${
                   activeTab === 'software'
-                    ? 'bg-card-bg text-text-primary'
-                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                    ? 'bg-[var(--accent-color-subtle)] text-text-primary border border-accent'
+                    : 'border border-transparent text-text-secondary hover:bg-hover-bg hover:text-text-primary'
                 }`}
               >
                 <Cpu className="w-[17px] h-[17px] flex-shrink-0" />
@@ -158,10 +158,10 @@ export function SettingsPanel({ onClose, onDeleteClient, initialTab }: SettingsP
               </button>
               <button
                 onClick={() => setActiveTab('launcher')}
-                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                className={`w-full flex items-center gap-2 px-3 py-[7px] rounded-[9px] text-[15px] transition-colors ${
                   activeTab === 'launcher'
-                    ? 'bg-card-bg text-text-primary'
-                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                    ? 'bg-[var(--accent-color-subtle)] text-text-primary border border-accent'
+                    : 'border border-transparent text-text-secondary hover:bg-hover-bg hover:text-text-primary'
                 }`}
               >
                 <Rocket className="w-[17px] h-[17px] flex-shrink-0" />
@@ -169,10 +169,10 @@ export function SettingsPanel({ onClose, onDeleteClient, initialTab }: SettingsP
               </button>
               <button
                 onClick={() => setActiveTab('appearance')}
-                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                className={`w-full flex items-center gap-2 px-3 py-[7px] rounded-[9px] text-[15px] transition-colors ${
                   activeTab === 'appearance'
-                    ? 'bg-card-bg text-text-primary'
-                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                    ? 'bg-[var(--accent-color-subtle)] text-text-primary border border-accent'
+                    : 'border border-transparent text-text-secondary hover:bg-hover-bg hover:text-text-primary'
                 }`}
               >
                 <Palette className="w-[17px] h-[17px] flex-shrink-0" />
@@ -180,10 +180,10 @@ export function SettingsPanel({ onClose, onDeleteClient, initialTab }: SettingsP
               </button>
               <button
                 onClick={() => setActiveTab('clients')}
-                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                className={`w-full flex items-center gap-2 px-3 py-[7px] rounded-[9px] text-[15px] transition-colors ${
                   activeTab === 'clients'
-                    ? 'bg-card-bg text-text-primary'
-                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                    ? 'bg-[var(--accent-color-subtle)] text-text-primary border border-accent'
+                    : 'border border-transparent text-text-secondary hover:bg-hover-bg hover:text-text-primary'
                 }`}
               >
                 <Users className="w-[17px] h-[17px] flex-shrink-0" />
@@ -191,10 +191,10 @@ export function SettingsPanel({ onClose, onDeleteClient, initialTab }: SettingsP
               </button>
               <button
                 onClick={() => setActiveTab('finance')}
-                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                className={`w-full flex items-center gap-2 px-3 py-[7px] rounded-[9px] text-[15px] transition-colors ${
                   activeTab === 'finance'
-                    ? 'bg-card-bg text-text-primary'
-                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                    ? 'bg-[var(--accent-color-subtle)] text-text-primary border border-accent'
+                    : 'border border-transparent text-text-secondary hover:bg-hover-bg hover:text-text-primary'
                 }`}
               >
                 <DollarSign className="w-[17px] h-[17px] flex-shrink-0" />
@@ -202,10 +202,10 @@ export function SettingsPanel({ onClose, onDeleteClient, initialTab }: SettingsP
               </button>
               <button
                 onClick={() => setActiveTab('data')}
-                className={`w-full flex items-center gap-2 px-3 py-[10px] rounded-badge text-[15px] transition-colors ${
+                className={`w-full flex items-center gap-2 px-3 py-[7px] rounded-[9px] text-[15px] transition-colors ${
                   activeTab === 'data'
-                    ? 'bg-card-bg text-text-primary'
-                    : 'text-text-secondary hover:bg-hover-bg hover:text-text-primary'
+                    ? 'bg-[var(--accent-color-subtle)] text-text-primary border border-accent'
+                    : 'border border-transparent text-text-secondary hover:bg-hover-bg hover:text-text-primary'
                 }`}
               >
                 <Database className="w-[17px] h-[17px] flex-shrink-0" />
@@ -826,7 +826,7 @@ function SoftwareSettings({
           return (
             <div
               key={sw.name}
-              className="flex items-center gap-[14px] px-[14px] py-3 rounded-[10px] border transition-colors"
+              className="group flex items-center gap-[14px] px-[14px] py-3 rounded-[10px] border transition-colors"
               style={{
                 background: valid ? '#0f0f12' : '#120f0c',
                 borderColor: valid ? '#202026' : '#3a2a18',
@@ -884,20 +884,24 @@ function SoftwareSettings({
 
               {/* Actions */}
               <div className="flex items-center gap-1 flex-none">
+                {valid && (
+                  <button
+                    onClick={() => handleClearPath(index)}
+                    className="w-[30px] h-[30px] flex items-center justify-center rounded-[7px]
+                               text-text-muted hover:bg-red-500/15 hover:text-red-400
+                               opacity-0 pointer-events-none
+                               group-hover:opacity-100 group-hover:pointer-events-auto
+                               transition-all duration-150"
+                  >
+                    <X className="w-[14px] h-[14px]" />
+                  </button>
+                )}
                 <button
                   onClick={() => handleBrowseExecutable(index)}
                   className="w-[30px] h-[30px] flex items-center justify-center rounded-[7px] text-text-muted hover:bg-hover-bg hover:text-text-primary transition-colors"
                 >
                   <FolderOpen className="w-[14px] h-[14px]" />
                 </button>
-                {valid && (
-                  <button
-                    onClick={() => handleClearPath(index)}
-                    className="w-[30px] h-[30px] flex items-center justify-center rounded-[7px] text-text-muted hover:bg-red-500/15 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="w-[14px] h-[14px]" />
-                  </button>
-                )}
               </div>
             </div>
           );
@@ -913,21 +917,21 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   return (
     <div
       onClick={() => onChange(!on)}
-      className="flex-none cursor-pointer transition-colors duration-150"
+      className="flex-none cursor-pointer"
       style={{
         width: 38, height: 22, borderRadius: 11,
         background: on ? 'linear-gradient(180deg,#7c3aed,#6d28d9)' : '#242429',
         position: 'relative',
+        transition: 'background 0.15s ease',
       }}
     >
       <span style={{
         position: 'absolute', top: 3,
-        left: on ? undefined : 3,
-        right: on ? 3 : undefined,
+        left: on ? 19 : 3,
         width: 16, height: 16, borderRadius: '50%',
         background: on ? '#fff' : '#7a7a83',
         boxShadow: '0 1px 3px rgba(0,0,0,.4)',
-        transition: 'left 0.15s, right 0.15s',
+        transition: 'left 0.15s ease, background 0.15s ease',
       }} />
     </div>
   );
@@ -1012,6 +1016,12 @@ function LauncherSettings() {
     }
   };
 
+  const handleNameChange = (id: string, name: string) => {
+    const next = customItems.map(i => i.id === id ? { ...i, name } : i);
+    setCustomItems(next);
+    saveCustomItems(next);
+  };
+
   return (
     <div className="pt-4 pb-2 space-y-5">
 
@@ -1021,7 +1031,7 @@ function LauncherSettings() {
           <div className="space-y-2">
             {customItems.map(item => {
               const isOn = item.enabled !== false;
-              const abbr = (item.name ?? 'App').slice(0, 2).toUpperCase();
+              const abbr = (item.name || 'App').slice(0, 2).toUpperCase();
               const isLoading = loadingItemId === item.id;
               return (
                 <div key={item.id} className="flex items-center gap-[14px] px-[14px] py-3 rounded-[10px] border"
@@ -1039,7 +1049,13 @@ function LauncherSettings() {
                   )}
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-text-primary">{item.name ?? 'App'}</div>
+                    <input
+                      type="text"
+                      value={item.name ?? ''}
+                      onChange={(e) => handleNameChange(item.id, e.target.value)}
+                      placeholder="App name…"
+                      className="text-[13px] font-semibold text-text-primary bg-transparent border-0 focus:outline-none w-full p-0 leading-none"
+                    />
                     <div className="text-[11px] font-mono truncate mt-0.5" style={{ color: '#66666e' }}>{item.path}</div>
                   </div>
                   {/* Actions */}
@@ -1057,7 +1073,6 @@ function LauncherSettings() {
                     >
                       <Trash2 className="w-[14px] h-[14px]" />
                     </button>
-                    <div className="w-px h-[22px] flex-none" style={{ background: '#26262c' }} />
                     <Toggle on={isOn} onChange={v => handleCustomToggle(item.id, v)} />
                   </div>
                 </div>
@@ -1699,6 +1714,14 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
   );
 }
 
+function clientSubtitle(c: { telegram?: string; instagram?: string; website?: string }): string {
+  const contacts = [c.telegram, c.instagram].filter(Boolean).length;
+  const parts: string[] = [contacts === 0 ? 'no contacts' : `${contacts} contact${contacts > 1 ? 's' : ''}`];
+  if (c.telegram) parts.push(`tg ${c.telegram}`);
+  else if (!c.website) parts.push('no website');
+  return parts.join(' · ');
+}
+
 function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: string, clientName: string) => void }) {
   const { clients, addClient, updateClient, deleteClient } = useProjectStore();
   const [showAddClient, setShowAddClient] = useState(false);
@@ -1751,45 +1774,46 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
   };
 
   return (
-    <div className="pt-4 pb-2">
-      <div className="flex items-center justify-between mb-2">
+    <div className="pt-4 pb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-[14px]">
         <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider px-1">
-          Manage clients and contact information
+          Manage clients · {clients.length} total
         </p>
         <button
           onClick={() => setShowAddClient(!showAddClient)}
-          className="px-3 py-1.5 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium flex items-center gap-2 animate-button"
+          className="flex items-center gap-[8px] h-[34px] px-[14px] rounded-[9px] text-white font-bold text-[12.5px] cursor-pointer border-0 flex-none"
+          style={{ background: 'linear-gradient(180deg,#7c3aed,#6d28d9)' }}
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus className="w-[14px] h-[14px]" />
           Add Client
         </button>
       </div>
 
+      {/* Add Client Form */}
       {showAddClient && (
-        <div className="bg-sidebar-bg rounded-button p-3">
-          <label className="block text-xs font-medium mb-2">Client Name</label>
+        <div className="bg-card-bg border border-[#262633] rounded-[12px] p-[14px_16px] mb-[10px]">
+          <div className="text-[11px] font-semibold text-text-muted mb-[8px]">Client name</div>
           <div className="flex gap-2">
             <input
               type="text"
               value={newClientName}
               onChange={(e) => setNewClientName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddClient()}
-              placeholder="Enter client name..."
-              className="flex-1 bg-app-bg border border-border-primary rounded-button px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
+              placeholder="Enter client name…"
+              className="flex-1 bg-app-bg border border-[#232329] rounded-[9px] px-[12px] h-[38px] text-[13px] focus:outline-none focus:border-accent text-text-primary placeholder:text-[#5c5c64]"
               autoFocus
             />
             <button
               onClick={handleAddClient}
-              className="px-3 py-1.5 bg-accent hover:bg-accent-hover rounded-lg transition-colors text-sm font-medium animate-button"
+              className="h-[38px] px-[14px] rounded-[9px] text-white font-bold text-[12.5px] cursor-pointer border-0 flex-none"
+              style={{ background: 'linear-gradient(180deg,#7c3aed,#6d28d9)' }}
             >
               Add
             </button>
             <button
-              onClick={() => {
-                setShowAddClient(false);
-                setNewClientName('');
-              }}
-              className="px-3 py-1.5 bg-border-secondary hover:bg-border-secondary rounded-button transition-colors text-sm"
+              onClick={() => { setShowAddClient(false); setNewClientName(''); }}
+              className="h-[38px] px-[14px] bg-card-bg border border-[#2a2a31] rounded-[9px] text-text-secondary text-[12.5px] font-semibold cursor-pointer hover:border-[#3a3a44] hover:text-text-primary transition-colors flex-none"
             >
               Cancel
             </button>
@@ -1797,135 +1821,184 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
         </div>
       )}
 
-      <div className="space-y-2">
-        {clients.map(client => (
-          <div
-            key={client.id}
-            className="bg-sidebar-bg rounded-button p-3"
-          >
+      {/* Client List */}
+      <div className="flex flex-col gap-[10px]">
+        {clients.map(client => {
+          const isExpanded = editingClient === client.id;
+          return (
             <div
-              className="flex items-center gap-2.5 cursor-pointer"
-              onClick={() => setEditingClient(editingClient === client.id ? null : client.id)}
+              key={client.id}
+              className={`border rounded-[10px] overflow-hidden transition-colors ${
+                isExpanded ? 'border-[#262633]' : 'border-[#202026]'
+              }`}
+              style={{ background: '#0f0f12' }}
             >
+              {/* Header row */}
               <div
-                className="w-3 h-3 rounded-full flex-shrink-0"
-                style={{ backgroundColor: client.color || '#ffffff' }}
-              />
-              <span className="text-sm font-medium flex-1">{client.name}</span>
-              <div className="p-1.5 rounded-button">
-                <Settings className={`w-3.5 h-3.5 transition-transform duration-300 ${editingClient === client.id ? 'rotate-180' : ''}`} />
-              </div>
-            </div>
-
-            {editingClient === client.id && (
-              <div className="mt-3 space-y-4">
-                {/* Color Picker Section */}
-                <button
-                  onClick={(e) => {
-                    clientPickerTriggerRef.current = e.currentTarget;
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const popupWidth = 224, popupHeight = 390;
-                    const left = rect.left + popupWidth > window.innerWidth ? window.innerWidth - popupWidth - 8 : rect.left;
-                    const top = rect.bottom + 8 + popupHeight > window.innerHeight ? rect.top - popupHeight - 8 : rect.bottom - 8;
-                    const hex = hslStringToHex(client.color || '#9103c6');
-                    setClientOriginalColor(client.color || '#9103c6');
-                    setClientPickerColor(hex);
-                    clientPendingColorRef.current = hex;
-                    setClientPickerClientId(client.id);
-                    setClientPickerPos({ top, left });
-                    setShowClientPicker(true);
-                  }}
-                  className="w-full h-9 rounded-lg border-2 border-white/20 hover:border-white/40 flex items-center justify-center gap-2"
-                  style={{ backgroundColor: client.color || '#9103c6' }}
+                className="flex items-center gap-[14px] px-[14px] py-3 cursor-pointer hover:bg-hover-bg transition-colors"
+                onClick={() => setEditingClient(isExpanded ? null : client.id)}
+              >
+                <div
+                  className="w-[34px] h-[34px] flex-none rounded-[9px] flex items-center justify-center font-bold text-[14px] text-white"
+                  style={{ background: client.color || '#7c3aed' }}
                 >
-                  <div className="w-2.5 h-2.5 rounded-full bg-white/80" />
-                  <span className="text-xs font-medium text-white/90">Click to change color</span>
-                </button>
+                  {client.name[0]?.toUpperCase() ?? '?'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-[13.5px] text-text-primary truncate">{client.name}</div>
+                  <div className="text-[11px] text-[#6f6f78] mt-[2px]">{clientSubtitle(client)}</div>
+                </div>
+                <div className="w-[30px] h-[30px] flex items-center justify-center rounded-[7px] text-text-muted flex-none">
+                  <ChevronDown className={`w-[16px] h-[16px] transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                </div>
+              </div>
 
-                {/* Form Fields */}
-                <div className="space-y-3">
+              {/* Expanded body */}
+              <div style={{
+                display: 'grid',
+                gridTemplateRows: isExpanded ? '1fr' : '0fr',
+                transition: 'grid-template-rows 0.22s ease',
+              }}>
+              <div className="overflow-hidden">
+                <div className="px-[14px] pb-[14px] flex flex-col gap-[14px]">
+
+                  {/* Accent color */}
                   <div>
-                    <label className="block text-xs font-medium mb-1.5 text-text-muted">Description</label>
+                    <div className="text-[11px] font-semibold text-text-muted mb-[8px]">Accent color</div>
+                    <button
+                      onClick={(e) => {
+                        clientPickerTriggerRef.current = e.currentTarget;
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const popupWidth = 224, popupHeight = 390;
+                        const left = rect.left + popupWidth > window.innerWidth ? window.innerWidth - popupWidth - 8 : rect.left;
+                        const top = rect.bottom + 8 + popupHeight > window.innerHeight ? rect.top - popupHeight - 8 : rect.bottom - 8;
+                        const hex = hslStringToHex(client.color || '#9103c6');
+                        setClientOriginalColor(client.color || '#9103c6');
+                        setClientPickerColor(hex);
+                        clientPendingColorRef.current = hex;
+                        setClientPickerClientId(client.id);
+                        setClientPickerPos({ top, left });
+                        setShowClientPicker(true);
+                      }}
+                      className="flex items-center gap-[10px] h-[36px] pl-[9px] pr-[11px] bg-app-bg border border-[#232329] rounded-[9px] hover:border-[#3a3a44] transition-colors cursor-pointer"
+                    >
+                      <span
+                        data-swatch=""
+                        className="w-[20px] h-[20px] rounded-[6px] flex-none"
+                        style={{ background: client.color || '#7c3aed' }}
+                      />
+                      <span className="text-[12.5px] font-semibold text-[#d3d3d9]">
+                        {hslStringToHex(client.color || '#7c3aed').toUpperCase()}
+                      </span>
+                      <ChevronDown className="w-[14px] h-[14px] text-[#6a6a73] ml-[1px]" />
+                    </button>
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <div className="text-[11px] font-semibold text-text-muted mb-[6px]">Description</div>
                     <textarea
                       value={client.description || ''}
                       onChange={(e) => updateClient(client.id, { description: e.target.value })}
-                      placeholder="Brief description..."
+                      placeholder="Brief description…"
                       rows={2}
-                      className="w-full text-sm bg-app-bg/50 border border-border-primary/50 rounded-button px-3 py-2 focus:outline-none focus:border-accent focus:bg-app-bg resize-none transition-all placeholder:text-text-dim"
+                      className="w-full min-h-[56px] p-[10px_12px] bg-app-bg border border-[#232329] rounded-[9px]
+                                 text-[12.5px] text-text-secondary placeholder:text-[#5c5c64]
+                                 focus:border-accent focus:outline-none resize-none transition-colors"
                     />
                   </div>
+
+                  {/* Website */}
                   <div>
-                    <label className="block text-xs font-medium mb-1.5 text-text-muted">Website</label>
-                    <input
-                      type="url"
-                      value={client.website || ''}
-                      onChange={(e) => updateClient(client.id, { website: e.target.value })}
-                      placeholder="https://..."
-                      className="w-full text-sm bg-app-bg/50 border border-border-primary/50 rounded-button px-3 py-2 focus:outline-none focus:border-accent focus:bg-app-bg transition-all placeholder:text-text-dim"
-                    />
+                    <div className="text-[11px] font-semibold text-text-muted mb-[6px]">Website</div>
+                    <div className="flex items-center gap-[9px] h-[38px] px-[12px] bg-app-bg border border-[#232329] rounded-[9px] transition-colors focus-within:border-accent">
+                      <Globe className="w-[14px] h-[14px] text-[#5c5c64] flex-none" />
+                      <input
+                        type="url"
+                        value={client.website || ''}
+                        onChange={(e) => updateClient(client.id, { website: e.target.value })}
+                        placeholder="https://…"
+                        className="flex-1 text-[12.5px] bg-transparent border-0 focus:outline-none text-text-secondary placeholder:text-[#5c5c64]"
+                      />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5 text-text-muted">Telegram</label>
-                      <input
-                        type="text"
-                        value={client.telegram || ''}
-                        onChange={(e) => updateClient(client.id, { telegram: e.target.value })}
-                        placeholder="@username"
-                        className="w-full text-sm bg-app-bg/50 border border-border-primary/50 rounded-button px-3 py-2 focus:outline-none focus:border-accent focus:bg-app-bg transition-all placeholder:text-text-dim"
-                      />
+
+                  {/* Social */}
+                  <div className="flex gap-[12px]">
+                    <div className="flex-1">
+                      <div className="text-[11px] font-semibold text-text-muted mb-[6px]">Telegram</div>
+                      <div className="flex items-center gap-[9px] h-[38px] px-[12px] bg-app-bg border border-[#232329] rounded-[9px] transition-colors focus-within:border-accent">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5c5c64" strokeWidth="1.8" strokeLinejoin="round">
+                          <path d="M21 4 3 11l6 2 2 6 3-4 4 3z" />
+                        </svg>
+                        <input
+                          type="text"
+                          value={client.telegram || ''}
+                          onChange={(e) => updateClient(client.id, { telegram: e.target.value })}
+                          placeholder="@username"
+                          className="flex-1 text-[12.5px] bg-transparent border-0 focus:outline-none text-text-secondary placeholder:text-[#5c5c64]"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5 text-text-muted">Instagram</label>
-                      <input
-                        type="text"
-                        value={client.instagram || ''}
-                        onChange={(e) => updateClient(client.id, { instagram: e.target.value })}
-                        placeholder="@username"
-                        className="w-full text-sm bg-app-bg/50 border border-border-primary/50 rounded-button px-3 py-2 focus:outline-none focus:border-accent focus:bg-app-bg transition-all placeholder:text-text-dim"
-                      />
+                    <div className="flex-1">
+                      <div className="text-[11px] font-semibold text-text-muted mb-[6px]">Instagram</div>
+                      <div className="flex items-center gap-[9px] h-[38px] px-[12px] bg-app-bg border border-[#232329] rounded-[9px] transition-colors focus-within:border-accent">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5c5c64" strokeWidth="1.8">
+                          <rect x="3" y="3" width="18" height="18" rx="5" />
+                          <circle cx="12" cy="12" r="4" />
+                          <circle cx="17.5" cy="6.5" r="1" fill="#5c5c64" stroke="none" />
+                        </svg>
+                        <input
+                          type="text"
+                          value={client.instagram || ''}
+                          onChange={(e) => updateClient(client.id, { instagram: e.target.value })}
+                          placeholder="@username"
+                          className="flex-1 text-[12.5px] bg-transparent border-0 focus:outline-none text-text-secondary placeholder:text-[#5c5c64]"
+                        />
+                      </div>
                     </div>
+                  </div>
+
+                  {/* Delete */}
+                  <div className="flex justify-end pt-[2px]">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const clientName = client.name;
+                        const clientId = client.id;
+                        setEditingClient(null);
+                        if (onDeleteClient) {
+                          onDeleteClient(clientId, clientName);
+                        } else {
+                          const confirmed = confirm(`Delete client "${clientName}"?`);
+                          if (confirmed) deleteClient(clientId);
+                        }
+                      }}
+                      className="flex items-center gap-[7px] h-[32px] px-[12px] border border-[#3a2020] rounded-[8px]
+                                 text-[#d97575] text-[12px] font-semibold cursor-pointer
+                                 hover:bg-[#2a1414] hover:border-[#5a2828] hover:text-[#ef8888] transition-all"
+                    >
+                      <Trash2 className="w-[13px] h-[13px]" />
+                      Delete client
+                    </button>
                   </div>
                 </div>
-
-                {/* Delete Button */}
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const clientName = client.name;
-                    const clientId = client.id;
-
-                    // Close editing mode
-                    setEditingClient(null);
-
-                    // Use custom confirm dialog if provided, otherwise use native confirm
-                    if (onDeleteClient) {
-                      onDeleteClient(clientId, clientName);
-                    } else {
-                      const confirmed = confirm(`Delete client "${clientName}"?`);
-                      if (confirmed) {
-                        deleteClient(clientId);
-                      }
-                    }
-                  }}
-                  className="w-full px-4 py-2.5 text-sm bg-red-600/90 hover:bg-red-600 rounded-lg transition-all font-medium shadow-lg shadow-red-900/20 hover:shadow-red-900/40"
-                >
-                  Delete Client
-                </button>
               </div>
-            )}
-          </div>
-        ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
+      {/* Empty state */}
       {clients.length === 0 && !showAddClient && (
-        <div className="text-center py-8">
-          <p className="text-text-muted mb-4">No clients yet</p>
+        <div className="text-center py-10">
+          <p className="text-[13px] text-text-muted mb-4">No clients yet</p>
           <button
             onClick={() => setShowAddClient(true)}
-            className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-colors font-medium inline-flex items-center gap-2"
+            className="inline-flex items-center gap-[8px] h-[38px] px-[18px] rounded-[10px] text-white font-bold text-[13px] cursor-pointer border-0"
+            style={{ background: 'linear-gradient(180deg,#7c3aed,#6d28d9)' }}
           >
             <Plus className="w-4 h-4" />
             Add Your First Client
@@ -1940,7 +2013,8 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
         triggerRef={clientPickerTriggerRef as React.RefObject<HTMLElement>}
         onChange={(hex) => {
           clientPendingColorRef.current = hex;
-          if (clientPickerTriggerRef.current) clientPickerTriggerRef.current.style.backgroundColor = hex;
+          const swatch = clientPickerTriggerRef.current?.querySelector<HTMLElement>('[data-swatch]');
+          if (swatch) swatch.style.background = hex;
         }}
         onApply={() => {
           if (clientPickerClientId) updateClient(clientPickerClientId, { color: clientPendingColorRef.current });
@@ -1948,7 +2022,8 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
         }}
         onCancel={() => {
           if (clientPickerClientId) updateClient(clientPickerClientId, { color: clientOriginalColor });
-          if (clientPickerTriggerRef.current) clientPickerTriggerRef.current.style.backgroundColor = clientOriginalColor;
+          const swatch = clientPickerTriggerRef.current?.querySelector<HTMLElement>('[data-swatch]');
+          if (swatch) swatch.style.background = clientOriginalColor;
           setShowClientPicker(false);
         }}
       />
