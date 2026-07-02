@@ -377,6 +377,11 @@ body.fullscreen #root {
   to { transform: rotate(360deg); }
 }
 
+@keyframes launcherItemEnter {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
 .status-glow-green {
   animation: pulse-glow-green 2s ease-in-out infinite !important;
 }

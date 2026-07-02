@@ -64,11 +64,14 @@ function buildTiles(): TileData[] {
   return [...swTiles, ...cusTiles];
 }
 
+let _launchAnimDone = false;
+
 // ---- SoftwareTile ----
 
-function SoftwareTile({ tile, onLaunch }: {
+function SoftwareTile({ tile, onLaunch, animIndex }: {
   tile: TileData;
   onLaunch: (path: string, id: string) => void;
+  animIndex?: number;
 }) {
   const [imgError, setImgError] = useState(false);
   const bgDefault = `radial-gradient(circle at 0% 120%, ${tile.brandColor}15 0%, transparent 80%), rgb(20,20,20)`;
@@ -80,7 +83,13 @@ function SoftwareTile({ tile, onLaunch }: {
                  border border-border-primary
                  hover:border-border-secondary hover:scale-[1.04]
                  transition-all duration-150"
-      style={{ background: bgDefault }}
+      style={{
+        background: bgDefault,
+        ...(animIndex !== undefined ? {
+          animation: 'launcherItemEnter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both',
+          animationDelay: `${Math.min(animIndex, 11) * 45}ms`,
+        } : {}),
+      }}
       onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = bgHover; }}
       onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = bgDefault; }}
       onClick={() => onLaunch(tile.path, tile.id)}
@@ -186,6 +195,11 @@ export const SoftwareLauncher = memo(function SoftwareLauncher({
 }) {
   const [tiles, setTiles] = useState<TileData[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+  const [shouldAnimate] = useState<boolean>(() => {
+    const first = !_launchAnimDone;
+    _launchAnimDone = true;
+    return first;
+  });
   const mountedRef = useRef(true);
   const launchSoftwareWithoutProject = useProjectStore(s => s.launchSoftwareWithoutProject);
 
@@ -252,8 +266,13 @@ export const SoftwareLauncher = memo(function SoftwareLauncher({
             </button>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            {tiles.map(tile => (
-              <SoftwareTile key={tile.id} tile={tile} onLaunch={launchSoftwareWithoutProject} />
+            {tiles.map((tile, index) => (
+              <SoftwareTile
+                key={tile.id}
+                tile={tile}
+                onLaunch={launchSoftwareWithoutProject}
+                animIndex={shouldAnimate ? index : undefined}
+              />
             ))}
           </div>
         </div>

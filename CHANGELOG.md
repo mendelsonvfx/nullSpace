@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.4] - 2026-07-02
+
+### Added
+- Tool Launcher: entrance animation on first mount — tiles slide in with staggered delay
+
 ## [1.9.3] - 2026-07-01
 
 ### Changed
