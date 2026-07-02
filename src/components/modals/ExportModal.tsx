@@ -16,9 +16,11 @@ interface ExportModalProps {
 }
 
 type ExportFormat = 'pdf' | 'csv' | 'json' | 'markdown';
+type PdfTheme = 'dark' | 'light';
 
 export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, project, client }) => {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('pdf');
+  const [pdfTheme, setPdfTheme] = useState<PdfTheme>('dark');
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [exportedFilename, setExportedFilename] = useState<string>('');
@@ -57,71 +59,91 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
     const pageHeight = doc.internal.pageSize.height;
-    const primaryColor = [139, 92, 246]; // Purple accent
-    const darkBg = [24, 24, 27]; // zinc-900
-    const cardBg = [39, 39, 42]; // zinc-800
-    const lightText = [161, 161, 170]; // zinc-400
-    const whiteText = [255, 255, 255]; // white
 
-    // Dark background for entire page
-    doc.setFillColor(darkBg[0], darkBg[1], darkBg[2]);
+    // ---- Palette ----
+    const isDark = pdfTheme === 'dark';
+    type RGB = [number, number, number];
+    const palette: Record<string, RGB> = {
+      pageBg:    isDark ? [24, 24, 27]    : [255, 255, 255],
+      cardBg:    isDark ? [39, 39, 42]    : [243, 244, 246],
+      rowAlt:    isDark ? [32, 32, 35]    : [249, 250, 251],
+      textMain:  isDark ? [255, 255, 255] : [17, 24, 39],
+      textMuted: isDark ? [161, 161, 170] : [107, 114, 128],
+      border:    isDark ? [63, 63, 70]    : [209, 213, 219],
+      accent:    isDark ? [139, 92, 246]  : [109, 40, 217],
+      tableText: isDark ? [212, 212, 216] : [55, 65, 81],
+      dateHdrBg: isDark ? [35, 30, 50]   : [237, 233, 254],
+    };
+    const fill = (c: RGB) => doc.setFillColor(c[0], c[1], c[2]);
+    const ink  = (c: RGB) => doc.setTextColor(c[0], c[1], c[2]);
+
+    // ---- Multi-page background: subscribe before any autoTable call ----
+    (doc.internal as any).events.subscribe('addPage', () => {
+      fill(palette.pageBg);
+      doc.rect(0, 0, pageWidth, pageHeight, 'F');
+      if (isDark) {
+        fill(palette.accent);
+        doc.rect(0, 0, pageWidth, 3, 'F');
+      }
+    });
+
+    // ---- Page 1 background ----
+    fill(palette.pageBg);
     doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
-    // Header with accent bar
-    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    // Header accent bar
+    fill(palette.accent);
     doc.rect(0, 0, pageWidth, 8, 'F');
 
     // Project name (main title)
     doc.setFontSize(28);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    ink(palette.textMain);
     doc.text(project.name, 14, 22);
 
     // Subtitle
     doc.setFontSize(14);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+    ink(palette.textMuted);
     doc.text('Project Report', 14, 30);
 
     // nullSpace branding in top right with "Generated in:" prefix
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+    ink(palette.textMuted);
     const generatedInText = 'Generated in: ';
     const generatedInWidth = doc.getTextWidth(generatedInText);
 
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    ink(palette.textMain);
     const brandText = 'nullSpace';
     const brandTextWidth = doc.getTextWidth(brandText);
 
     const totalWidth = generatedInWidth + brandTextWidth;
     const startX = pageWidth - totalWidth - 14;
 
-    // Draw "Generated in: " text
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+    ink(palette.textMuted);
     doc.text(generatedInText, startX, 22);
 
-    // Draw nullSpace text
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    ink(palette.textMain);
     const brandTextX = startX + generatedInWidth;
     doc.text(brandText, brandTextX, 22);
 
-    // Add logo after nullSpace text (slightly bigger than text height)
-    const textHeight = 10; // Font size 10
-    const logoSize = 4; 
-    const logoX = brandTextX + brandTextWidth + 1; // 1mm gap after text
-    const logoY = 24.3 - (logoSize / 2) - (textHeight * 0.35); // Vertically centered with text
+    // Logo after nullSpace text
+    const textHeight = 10;
+    const logoSize = 4;
+    const logoX = brandTextX + brandTextWidth + 1;
+    const logoY = 24.3 - (logoSize / 2) - (textHeight * 0.35);
     if (logoDataUrl) {
       doc.addImage(logoDataUrl, 'PNG', logoX, logoY, logoSize, logoSize);
     }
 
-    // Summary Cards
+    // ---- Summary Cards ----
     let yPos = 40;
     doc.setFontSize(14);
-    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    ink(palette.textMain);
     doc.text('Summary', 14, yPos);
 
     yPos += 8;
@@ -129,49 +151,52 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     const cardHeight = 24;
 
     // Time Card
-    doc.setFillColor(cardBg[0], cardBg[1], cardBg[2]);
+    fill(palette.cardBg);
     doc.roundedRect(14, yPos, cardWidth, cardHeight, 2, 2, 'F');
-    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    fill(palette.accent);
     doc.rect(14, yPos, cardWidth, 3, 'F');
 
     doc.setFontSize(9);
-    doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+    ink(palette.textMuted);
     doc.text('Total Time', 18, yPos + 10);
     doc.setFontSize(14);
-    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    ink(palette.textMain);
     doc.text(formatTime(project.totalMinutesSpent || 0), 18, yPos + 18);
 
     // Cost Card
     if (project.cost) {
-      doc.setFillColor(cardBg[0], cardBg[1], cardBg[2]);
+      fill(palette.cardBg);
       doc.roundedRect(14 + cardWidth + 4, yPos, cardWidth, cardHeight, 2, 2, 'F');
       doc.setFillColor(34, 197, 94);
       doc.rect(14 + cardWidth + 4, yPos, cardWidth, 3, 'F');
 
       doc.setFontSize(9);
-      doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+      ink(palette.textMuted);
       doc.text('Total Cost', 18 + cardWidth + 4, yPos + 10);
       doc.setFontSize(14);
-      doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+      ink(palette.textMain);
       doc.text(`${currencySymbol}${Math.round(project.cost)}`, 18 + cardWidth + 4, yPos + 18);
     }
 
     // Rate Card
     if (project.hourlyRate) {
-      doc.setFillColor(cardBg[0], cardBg[1], cardBg[2]);
+      fill(palette.cardBg);
       doc.roundedRect(14 + (cardWidth + 4) * 2, yPos, cardWidth, cardHeight, 2, 2, 'F');
       doc.setFillColor(251, 191, 36);
       doc.rect(14 + (cardWidth + 4) * 2, yPos, cardWidth, 3, 'F');
 
       doc.setFontSize(9);
-      doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+      ink(palette.textMuted);
       doc.text('Hourly Rate', 18 + (cardWidth + 4) * 2, yPos + 10);
       doc.setFontSize(14);
-      doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+      ink(palette.textMain);
       doc.text(`${currencySymbol}${Math.round(project.hourlyRate)}/h`, 18 + (cardWidth + 4) * 2, yPos + 18);
     }
 
-    // Software Breakdown
+    // Always advance past cards (fixes yPos bug when bySoftware is empty)
+    yPos += cardHeight + 12;
+
+    // ---- Software Breakdown ----
     const bySoftware = new Map<string, number>();
     entries.forEach(e => {
       const name = formatSoftwareName(e.software);
@@ -179,9 +204,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     });
 
     if (bySoftware.size > 0) {
-      yPos += 36;
       doc.setFontSize(14);
-      doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+      ink(palette.textMain);
       doc.text('Software Breakdown', 14, yPos);
 
       yPos += 4;
@@ -197,8 +221,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
         body: softwareData,
         theme: 'plain',
         headStyles: {
-          fillColor: [primaryColor[0], primaryColor[1], primaryColor[2]],
-          textColor: 255,
+          fillColor: palette.accent,
+          textColor: [255, 255, 255],
           fontSize: 10,
           fontStyle: 'bold',
           cellPadding: 4
@@ -206,10 +230,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
         styles: {
           fontSize: 9,
           cellPadding: 4,
-          lineColor: [63, 63, 70],
+          lineColor: palette.border,
           lineWidth: 0.5,
-          textColor: [212, 212, 216],
-          fillColor: [cardBg[0], cardBg[1], cardBg[2]]
+          textColor: palette.tableText,
+          fillColor: palette.cardBg
         },
         columnStyles: {
           0: { cellWidth: 60 },
@@ -222,35 +246,77 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
       yPos = (doc as any).lastAutoTable.finalY + 10;
     }
 
-    // Time Entries Table
+    // ---- Detailed Time Entries ----
     doc.setFontSize(14);
-    doc.setTextColor(whiteText[0], whiteText[1], whiteText[2]);
+    ink(palette.textMain);
     doc.text('Detailed Time Entries', 14, yPos);
 
     yPos += 4;
-    const tableData = entries
-      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-      .map(entry => {
-        const date = new Date(entry.startTime).toLocaleDateString();
-        const software = formatSoftwareName(entry.software);
-        const duration = formatTime(entry.durationMinutes);
-        const shot = entry.shotId
-          ? `Shot ${project.shots?.find(s => s.id === entry.shotId)?.number || ''}`
-          : '-';
-        const type = entry.isManual ? 'Manual' : 'Auto';
-        const notes = entry.notes || '-';
 
-        return [date, software, duration, shot, type, notes];
-      });
+    // Auto-detect empty columns
+    const hasNotes  = entries.some(e => e.notes && e.notes.trim() !== '' && e.notes !== '-');
+    const hasManual = entries.some(e => e.isManual);
+
+    const headers = ['Software', 'Duration', 'Shot'];
+    if (hasManual) headers.push('Type');
+    if (hasNotes)  headers.push('Notes');
+
+    // Group entries by date
+    const sorted = [...entries].sort((a, b) =>
+      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    );
+
+    const byDate = new Map<string, typeof sorted>();
+    for (const e of sorted) {
+      const d = new Date(e.startTime);
+      const key = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+      if (!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key)!.push(e);
+    }
+
+    const body: any[] = [];
+    for (const [dateStr, dayEntries] of byDate) {
+      const dayTotal = dayEntries.reduce((s, e) => s + e.durationMinutes, 0);
+
+      // Date group header row — spans all columns
+      body.push([{
+        content: `${dateStr}   ·   ${formatTime(dayTotal)}`,
+        colSpan: headers.length,
+        styles: {
+          fontStyle: 'bold',
+          fontSize: 8.5,
+          textColor: palette.accent,
+          fillColor: palette.dateHdrBg,
+          cellPadding: { top: 4, bottom: 4, left: 8, right: 8 },
+        },
+      }]);
+
+      for (const e of dayEntries) {
+        const shotLabel = (() => {
+          if (!e.shotId) return '-';
+          const num = project.shots?.find(s => s.id === e.shotId)?.number;
+          return num != null ? `Shot ${num}` : '-';
+        })();
+
+        const row: any[] = [
+          formatSoftwareName(e.software),
+          formatTime(e.durationMinutes),
+          shotLabel,
+        ];
+        if (hasManual) row.push(e.isManual ? 'Manual' : 'Auto');
+        if (hasNotes)  row.push(e.notes || '-');
+        body.push(row);
+      }
+    }
 
     autoTable(doc, {
       startY: yPos,
-      head: [['Date', 'Software', 'Duration', 'Shot', 'Type', 'Notes']],
-      body: tableData,
-      theme: 'striped',
+      head: [headers],
+      body,
+      theme: 'plain',
       headStyles: {
-        fillColor: [primaryColor[0], primaryColor[1], primaryColor[2]],
-        textColor: 255,
+        fillColor: palette.accent,
+        textColor: [255, 255, 255],
         fontSize: 9,
         fontStyle: 'bold',
         cellPadding: 3
@@ -258,34 +324,31 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
       styles: {
         fontSize: 8,
         cellPadding: 3,
-        textColor: [212, 212, 216],
-        fillColor: [cardBg[0], cardBg[1], cardBg[2]],
-        lineColor: [63, 63, 70],
+        textColor: palette.tableText,
+        fillColor: palette.cardBg,
+        lineColor: palette.border,
         lineWidth: 0.5
       },
       alternateRowStyles: {
-        fillColor: [32, 32, 35]
+        fillColor: palette.rowAlt,
       },
       columnStyles: {
-        0: { cellWidth: 25 },
-        1: { cellWidth: 28 },
-        2: { cellWidth: 20, halign: 'right' },
-        3: { cellWidth: 22 },
-        4: { cellWidth: 18 },
-        5: { cellWidth: 'auto' }
+        0: { cellWidth: 40 },
+        1: { cellWidth: 22, halign: 'right' },
+        2: { cellWidth: 28 },
       },
       margin: { left: 14, right: 14 }
     });
 
-    // Footer with metadata
+    // ---- Footer ----
     yPos = (doc as any).lastAutoTable.finalY + 16;
-    doc.setFillColor(cardBg[0], cardBg[1], cardBg[2]);
+    fill(palette.cardBg);
     doc.roundedRect(14, yPos, pageWidth - 28, client ? 18 : 12, 2, 2, 'F');
 
     yPos += 7;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.setTextColor(lightText[0], lightText[1], lightText[2]);
+    ink(palette.textMuted);
     doc.text(`Generated: ${new Date().toLocaleString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -303,7 +366,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     const pdfBytes = doc.output('arraybuffer');
     const uint8Array = new Uint8Array(pdfBytes);
 
-    // Format date as DDMMYY
     const now = new Date();
     const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
     const filename = `${project.name}_report_${dateStr}.pdf`;
@@ -356,7 +418,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
     csv += `Hourly Rate,${currencySymbol}${Math.round(project.hourlyRate || 0)}\n`;
     csv += `Total Cost,${currencySymbol}${Math.round(project.cost || 0)}\n`;
 
-    // Format date as DDMMYY
     const now = new Date();
     const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
     const filename = `${project.name}_report_${dateStr}.csv`;
@@ -408,7 +469,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
         }))
     };
 
-    // Format date as DDMMYY
     const now = new Date();
     const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
     const filename = `${project.name}_report_${dateStr}.json`;
@@ -484,7 +544,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
         md += `| ${date} | ${software} | ${duration} | ${shot} | ${type} | ${notes} |\n`;
       });
 
-    // Format date as DDMMYY
     const now = new Date();
     const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
     const filename = `${project.name}_report_${dateStr}.md`;
@@ -508,7 +567,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
   const handleExport = async () => {
     setIsExporting(true);
 
-    // Add minimum delay to show "Exporting..." state (prevents flicker)
     const minDelay = new Promise(resolve => setTimeout(resolve, 500));
 
     try {
@@ -527,16 +585,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
         }
       })();
 
-      // Wait for both export and minimum delay
       [filename] = await Promise.all([exportPromise, minDelay]);
 
       console.log(`Report exported successfully: ${filename}`);
 
-      // Show success state
       setExportedFilename(filename);
       setExportSuccess(true);
 
-      // Hide spinner after 1 second, button stays as "Open Report Folder"
       setTimeout(() => {
         setIsExporting(false);
       }, 1000);
@@ -659,6 +714,26 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
               );
             })}
           </div>
+
+          {/* PDF theme toggle */}
+          {selectedFormat === 'pdf' && (
+            <div className="flex items-center gap-2 mt-4">
+              <span className="text-xs text-text-muted">PDF theme:</span>
+              {(['dark', 'light'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setPdfTheme(t)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    pdfTheme === t
+                      ? 'bg-accent text-white'
+                      : 'bg-hover-bg text-text-muted hover:text-white'
+                  }`}
+                >
+                  {t === 'dark' ? 'Dark' : 'Light'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

@@ -1715,11 +1715,12 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
 }
 
 function clientSubtitle(c: { telegram?: string; instagram?: string; website?: string }): string {
-  const contacts = [c.telegram, c.instagram].filter(Boolean).length;
-  const parts: string[] = [contacts === 0 ? 'no contacts' : `${contacts} contact${contacts > 1 ? 's' : ''}`];
-  if (c.telegram) parts.push(`tg ${c.telegram}`);
-  else if (!c.website) parts.push('no website');
-  return parts.join(' · ');
+  const links: string[] = [];
+  if (c.telegram) links.push(`tg ${c.telegram}`);
+  if (c.instagram) links.push(`ig ${c.instagram}`);
+  if (c.website) links.push(c.website.replace(/^https?:\/\//, ''));
+  if (links.length === 0) return 'no links';
+  return `${links.length} link${links.length > 1 ? 's' : ''} · ${links.join(' · ')}`;
 }
 
 function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: string, clientName: string) => void }) {
@@ -1867,6 +1868,13 @@ function ClientsSettings({ onDeleteClient }: { onDeleteClient?: (clientId: strin
                     <div className="text-[11px] font-semibold text-text-muted mb-[8px]">Accent color</div>
                     <button
                       onClick={(e) => {
+                        if (showClientPicker && clientPickerClientId === client.id) {
+                          if (clientPickerClientId) updateClient(clientPickerClientId, { color: clientOriginalColor });
+                          const sw = clientPickerTriggerRef.current?.querySelector<HTMLElement>('[data-swatch]');
+                          if (sw) sw.style.background = clientOriginalColor;
+                          setShowClientPicker(false);
+                          return;
+                        }
                         clientPickerTriggerRef.current = e.currentTarget;
                         const rect = e.currentTarget.getBoundingClientRect();
                         const popupWidth = 224, popupHeight = 390;
