@@ -1343,7 +1343,6 @@ function App() {
           version={updateInfo.version}
           downloadUrl={updateInfo.downloadUrl}
           notes={updateInfo.notes}
-          releaseUrl={updateInfo.releaseUrl}
           pubDate={updateInfo.pubDate}
           onDismiss={dismissUpdate}
         />

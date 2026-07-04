@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.9.5] - 2026-07-04
+
+### Added
+- Output: NullConverter items in right-click menu for files and sequences
+- Updater: release notes strip auto-generated "Full Changelog" link before display
+
+### Changed
+- Updater: releases now published to dedicated `nullSpace-releases` repo for auto-update checks
+- Update Notification: "View Full Changelog" always shown, links to portfolio website
+
+### Fixed
+- Build: `UPDATE_TOKEN` env var tracked so stale token is never baked into a cached build
+
 ## [1.9.4] - 2026-07-02
 
 ### Added

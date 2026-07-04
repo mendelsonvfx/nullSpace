@@ -10,12 +10,11 @@ interface Props {
   version: string;
   downloadUrl: string;
   notes?: string;
-  releaseUrl?: string;
   pubDate?: string;
   onDismiss: () => void;
 }
 
-export function UpdateNotification({ version, downloadUrl, notes, releaseUrl, pubDate, onDismiss }: Props) {
+export function UpdateNotification({ version, downloadUrl, notes, pubDate, onDismiss }: Props) {
   const [isVisible, setIsVisible] = useState(false);
   const [phase, setPhase] = useState<Phase>('available');
 
@@ -130,15 +129,13 @@ export function UpdateNotification({ version, downloadUrl, notes, releaseUrl, pu
               )}
 
               {/* View Full Changelog */}
-              {releaseUrl && (
-                <button
-                  onClick={() => open(releaseUrl).catch(() => {})}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-button bg-sidebar-bg border border-border-primary text-text-muted hover:text-white hover:border-border-secondary text-sm font-medium transition-colors mb-2"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  View Full Changelog
-                </button>
-              )}
+              <button
+                onClick={() => open('https://mendelsonvfx.com/').catch(() => {})}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-button bg-sidebar-bg border border-border-primary text-text-muted hover:text-white hover:border-border-secondary text-sm font-medium transition-colors mb-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                View Full Changelog
+              </button>
             </div>
 
             {/* Footer */}

@@ -1403,6 +1403,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             onClear={folderColors.has(contextMenuNode.path) ? () => handleRemoveFolderColor(contextMenuNode.path) : undefined}
           />
         )}
+
       </ContextMenu>
     </div>
   );

@@ -5,8 +5,10 @@ import type { SoftwareName } from '../../types/project';
 import { Film, Eye, FolderOpen, Copy, ChevronDown, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { outputsCache } from '../../utils/outputsCache';
-import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
+import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { useNullConverter } from '../../hooks/useNullConverter';
+import { NullConverterMenuItem } from '../ui/NullConverterMenuItem';
 
 interface OutputFile {
   name: string;
@@ -35,6 +37,7 @@ interface OutputOverviewProps {
 }
 
 export function OutputOverview({ project, currentScene, currentShot, specialContextType }: OutputOverviewProps) {
+  const nullConverter = useNullConverter();
   const [outputs, setOutputs] = useState<OutputFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -959,6 +962,18 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         >
           Copy Path
         </ContextMenuItem>
+        {fileMenuData?.is_sequence && nullConverter && nullConverter.folder_items.length > 0 && (
+          <>
+            <ContextMenuDivider />
+            <NullConverterMenuItem items={nullConverter.folder_items} exe={nullConverter.exe} input={fileMenuData.path} onClose={closeFileMenu} />
+          </>
+        )}
+        {fileMenuData && !fileMenuData.is_sequence && nullConverter && nullConverter.file_items.length > 0 && (
+          <>
+            <ContextMenuDivider />
+            <NullConverterMenuItem items={nullConverter.file_items} exe={nullConverter.exe} input={fileMenuData.path} onClose={closeFileMenu} />
+          </>
+        )}
       </ContextMenu>
 
       {/* Group Context Menu */}
@@ -980,6 +995,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         >
           Copy Path
         </ContextMenuItem>
+        {groupMenuData && nullConverter && nullConverter.folder_items.length > 0 && (
+          <>
+            <ContextMenuDivider />
+            <NullConverterMenuItem items={nullConverter.folder_items} exe={nullConverter.exe} input={groupMenuData.groupPath} onClose={closeGroupMenu} />
+          </>
+        )}
       </ContextMenu>
     </div>
   );

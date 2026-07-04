@@ -1,5 +1,6 @@
 import { memo, useState, useEffect, useRef } from 'react';
-import { Settings, Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
+import { IconSettings } from '@tabler/icons-react';
 import { useProjectStore } from '../../store/projectStore';
 import { getSoftwareMeta } from '../../utils/softwareMeta';
 import { getCustomItems, getSoftwareEnabled, saveCustomItems, getExeIcon, sampleColorFromDataUrl, extractNameFromPath } from '../../utils/launcherUtils';
@@ -261,7 +262,7 @@ export const SoftwareLauncher = memo(function SoftwareLauncher({
                          rounded-[9px] text-text-secondary text-[12px] font-semibold cursor-pointer
                          hover:border-border-hover hover:text-text-primary transition-colors"
             >
-              <Settings className="w-[14px] h-[14px]" />
+              <IconSettings stroke={1.5} className="w-[14px] h-[14px] animate-settings-icon" />
               Manage
             </button>
           </div>

@@ -11,7 +11,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
   const links = [
     {
       title: 'Portfolio Website',
-      url: 'https://mendelsonvfx.framer.website',
+      url: 'https://mendelsonvfx.com/',
       description: 'My VFX portfolio'
     },
     {
@@ -98,7 +98,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
           </div>
 
           <div className="text-center text-[12px] text-text-muted">
-            <p>Version 1.9.4</p>
+            <p>Version 1.9.5</p>
             <p className="mt-1">Made with passion by MendelsonVFX</p>
           </div>
         </div>

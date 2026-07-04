@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 // Embedded at compile time via UPDATE_TOKEN env var (set in GitHub Actions).
 // None in local dev builds → update check silently returns Ok(None).
 // Some("") if Actions secret is missing → treated as None (see token guard below).
+// Scoped via fine-grained PAT to Contents:Read-only on mendelsonvfx/nullSpace-releases ONLY —
+// that repo holds no source code, so embedding this token in the shipped binary is safe by design.
 const GITHUB_TOKEN: Option<&str> = option_env!("UPDATE_TOKEN");
 
 #[derive(Deserialize)]
@@ -50,7 +52,7 @@ pub async fn check_for_update(app_handle: tauri::AppHandle) -> Result<Option<Upd
         .map_err(|e| e.to_string())?;
 
     let release: GithubRelease = client
-        .get("https://api.github.com/repos/mendelsonvfx/nullSpace/releases/latest")
+        .get("https://api.github.com/repos/mendelsonvfx/nullSpace-releases/releases/latest")
         .header("Authorization", format!("Bearer {}", token))
         .header("Accept", "application/vnd.github+json")
         .send()
@@ -75,13 +77,26 @@ pub async fn check_for_update(app_handle: tauri::AppHandle) -> Result<Option<Upd
         Ok(Some(UpdateInfo {
             version,
             download_url: asset.url.clone(),
-            notes: release.body,
+            notes: strip_full_changelog_line(release.body),
             release_url: Some(release.html_url),
             pub_date: release.published_at,
         }))
     } else {
         Ok(None)
     }
+}
+
+// GitHub auto-appends a "**Full Changelog**: <compare-url>" line to generated release notes.
+// Strip it — the link points at a repo page most users can't/shouldn't need to open.
+fn strip_full_changelog_line(body: Option<String>) -> Option<String> {
+    body.map(|b| {
+        b.lines()
+            .filter(|line| !line.trim_start().starts_with("**Full Changelog**"))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string()
+    })
 }
 
 fn is_newer_version(latest: &str, current: &str) -> bool {

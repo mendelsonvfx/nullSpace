@@ -4,6 +4,7 @@ mod time_tracking;
 mod file_naming;
 mod blend_thumbnail;
 mod updater;
+mod nullconverter;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -5392,6 +5393,8 @@ fn main() {
             updater::check_for_update,
             updater::install_portable_update,
             get_exe_icon,
+            nullconverter::detect_null_converter,
+            nullconverter::launch_null_converter,
         ])
 
         .run(tauri::generate_context!())
