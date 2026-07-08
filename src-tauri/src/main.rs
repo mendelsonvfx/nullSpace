@@ -178,12 +178,28 @@ struct Link {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+struct TaskAttachment {
+    id: String,
+    name: String,
+    size: String,
+    path: String,
+    #[serde(rename = "fileType", skip_serializing_if = "Option::is_none")]
+    file_type: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct TodoItem {
     id: String,
     text: String,
     completed: bool,
     #[serde(rename = "createdAt", skip_serializing_if = "Option::is_none")]
     created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    priority: Option<String>,
+    #[serde(rename = "deadlineDate", skip_serializing_if = "Option::is_none")]
+    deadline_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attachments: Option<Vec<TaskAttachment>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1478,17 +1494,16 @@ async fn reveal_in_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         // Check if path is a directory or file
+        let win_path = path.replace('/', "\\");
         if path_obj.is_dir() {
-            // For directories, just open them directly
             Command::new("explorer")
-                .arg(&path)
+                .arg(&win_path)
                 .spawn()
                 .map_err(|e| format!("Failed to open folder in explorer: {}", e))?;
         } else {
-            // For files, use /select to highlight the file
             Command::new("explorer")
                 .arg("/select,")
-                .arg(&path)
+                .arg(&win_path)
                 .spawn()
                 .map_err(|e| format!("Failed to reveal in explorer: {}", e))?;
         }
@@ -1542,9 +1557,9 @@ async fn open_file(file_path: String) -> Result<(), String> {
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        Command::new("explorer.exe")
+        Command::new("cmd")
             .creation_flags(CREATE_NO_WINDOW)
-            .arg(&file_path)
+            .args(&["/c", "start", "", &file_path])
             .spawn()
             .map_err(|e| format!("Failed to open file: {}", e))?;
     }
@@ -1572,6 +1587,44 @@ async fn open_file(file_path: String) -> Result<(), String> {
 struct OpenFileResult {
     file_name: String,
     pid: u32,
+}
+
+#[tauri::command]
+async fn copy_file_to_clipboard(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let escaped = path.replace('\'', "''");
+        let script = format!(
+            "Add-Type -AssemblyName System.Windows.Forms; \
+             $fc = [System.Collections.Specialized.StringCollection]::new(); \
+             $fc.Add('{}'); \
+             [System.Windows.Forms.Clipboard]::SetFileDropList($fc)",
+            escaped
+        );
+        Command::new("powershell")
+            .creation_flags(CREATE_NO_WINDOW)
+            .args(&["-NonInteractive", "-Command", &script])
+            .spawn()
+            .map_err(|e| format!("Failed to copy file to clipboard: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn rename_attachment_folder(project_path: String, old_subdir: String, new_subdir: String) -> Result<(), String> {
+    let base = std::path::PathBuf::from(&project_path).join("_attachments");
+    let old_path = old_subdir.split('/').filter(|s| !s.is_empty()).fold(base.clone(), |p, s| p.join(s));
+    let new_path = new_subdir.split('/').filter(|s| !s.is_empty()).fold(base, |p, s| p.join(s));
+    if !old_path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = new_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent dir: {}", e))?;
+    }
+    fs::rename(&old_path, &new_path).map_err(|e| format!("Failed to rename attachment folder: {}", e))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -2524,6 +2577,13 @@ async fn get_directory_size(path: String) -> Result<u64, String> {
 }
 
 #[tauri::command]
+fn get_file_size(path: String) -> Result<u64, String> {
+    std::fs::metadata(&path)
+        .map(|m| m.len())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn open_url(url: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -2982,6 +3042,95 @@ fn save_project_file(project_path: String, filename: String, contents: Vec<u8>) 
         .map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(filename)
+}
+
+fn resolve_attachment_path(project_path: &str, subdir: &str, filename: &str) -> Result<PathBuf, String> {
+    let mut dest_dir = PathBuf::from(project_path).join("_attachments");
+    for part in subdir.split('/') {
+        if !part.is_empty() { dest_dir = dest_dir.join(part); }
+    }
+    fs::create_dir_all(&dest_dir).map_err(|e| format!("create_dir_all: {}", e))?;
+
+    let base = dest_dir.join(filename);
+    if !base.exists() { return Ok(base); }
+
+    let stem = Path::new(filename).file_stem().unwrap_or_default().to_string_lossy().to_string();
+    let ext = Path::new(filename).extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+
+    for i in 2u32..1000 {
+        let candidate = dest_dir.join(format!("{}_{}{}", stem, i, ext));
+        if !candidate.exists() { return Ok(candidate); }
+    }
+    Err("Too many conflicting filenames".into())
+}
+
+#[tauri::command]
+fn copy_attachment(src_path: String, project_path: String, subdir: String, filename: String) -> Result<String, String> {
+    let dest = resolve_attachment_path(&project_path, &subdir, &filename)?;
+    fs::copy(&src_path, &dest).map_err(|e| format!("copy: {}", e))?;
+    Ok(dest.to_string_lossy().replace('\\', "/"))
+}
+
+#[tauri::command]
+fn save_attachment_bytes(bytes: Vec<u8>, project_path: String, subdir: String, filename: String) -> Result<String, String> {
+    let dest = resolve_attachment_path(&project_path, &subdir, &filename)?;
+    fs::write(&dest, &bytes).map_err(|e| format!("write: {}", e))?;
+    Ok(dest.to_string_lossy().replace('\\', "/"))
+}
+
+#[tauri::command]
+fn paste_clipboard_image(project_path: String, subdir: String, filename: String) -> Result<String, String> {
+    let mut clipboard = arboard::Clipboard::new()
+        .map_err(|e| format!("clipboard init: {}", e))?;
+    let img_data = clipboard.get_image()
+        .map_err(|e| format!("no image in clipboard: {}", e))?;
+
+    let img = image::RgbaImage::from_raw(
+        img_data.width as u32,
+        img_data.height as u32,
+        img_data.bytes.into_owned(),
+    ).ok_or("failed to construct image from clipboard data")?;
+
+    let dest = resolve_attachment_path(&project_path, &subdir, &filename)?;
+    img.save_with_format(&dest, image::ImageFormat::Png)
+        .map_err(|e| format!("save png: {}", e))?;
+
+    Ok(dest.to_string_lossy().replace('\\', "/"))
+}
+
+#[tauri::command]
+fn get_clipboard_file_path() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::System::DataExchange::{
+            CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
+        };
+        use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
+        const CF_HDROP: u32 = 15;
+        unsafe {
+            if IsClipboardFormatAvailable(CF_HDROP).is_err() {
+                return Err("no CF_HDROP".into());
+            }
+            OpenClipboard(HWND(0)).map_err(|e| format!("OpenClipboard: {e}"))?;
+            let result = (|| -> Result<String, String> {
+                let handle = GetClipboardData(CF_HDROP)
+                    .map_err(|e| format!("GetClipboardData: {e}"))?;
+                let hdrop = HDROP(handle.0);
+                let n = DragQueryFileW(hdrop, 0, None);
+                if n == 0 { return Err("empty drop".into()); }
+                let mut buf = vec![0u16; n as usize + 1];
+                DragQueryFileW(hdrop, 0, Some(&mut buf));
+                Ok(String::from_utf16_lossy(&buf[..n as usize]).replace('\\', "/"))
+            })();
+            let _ = CloseClipboard();
+            result
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err("not supported".into())
 }
 
 #[tauri::command]
@@ -5322,6 +5471,8 @@ fn main() {
             open_in_explorer,
             reveal_in_explorer,
             open_file,
+            copy_file_to_clipboard,
+            rename_attachment_folder,
             open_file_with_tracking,
             get_folder_structure,
             set_project_thumbnail,
@@ -5335,6 +5486,7 @@ fn main() {
             move_version_to_shot,
             copy_version_to_shot,
             get_directory_size,
+            get_file_size,
             open_url,
             open_links_in_browser,
             fetch_page_title,
@@ -5342,6 +5494,10 @@ fn main() {
             stop_watching_project,
             save_feedback,
             save_project_file,
+            copy_attachment,
+            save_attachment_bytes,
+            paste_clipboard_image,
+            get_clipboard_file_path,
             read_feedback,
             read_feedback_full,
             check_shot_files_accessible,

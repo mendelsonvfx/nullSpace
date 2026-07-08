@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
-import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, TimeEntry, SoftwareName, Transaction } from '../types/project';
+import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, TimeEntry, SoftwareName, Transaction, TodoItem } from '../types/project';
 import { thumbnailCache } from '../utils/thumbnailCache';
 import { versionsCache } from '../utils/versionsCache';
 import { indexedDBThumbnailCache } from '../utils/indexedDBCache';
@@ -14,6 +14,27 @@ import { findNextAvailableShotNumber, isShotNumberAvailable } from '../utils/sho
 const sanitizeFolderName = (name: string): string => {
   return name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
 };
+
+// Sanitize for _attachments subfolder names — matches ProjectDetails.tsx sanitizeDirName
+const sanitizeDirName = (name: string): string => {
+  return name.replace(/[^\wа-яёА-ЯЁ\s_-]/gu, '').replace(/\s+/g, '-').slice(0, 64) || 'unnamed';
+};
+
+function rewriteAttachPath(path: string, oldDir: string, newDir: string): string {
+  const oldSeg = `_attachments\\${oldDir.replace(/\//g, '\\')}\\`;
+  const newSeg = `_attachments\\${newDir.replace(/\//g, '\\')}\\`;
+  if (path.includes(oldSeg)) return path.split(oldSeg).join(newSeg);
+  const oldFwd = `_attachments/${oldDir}/`;
+  const newFwd = `_attachments/${newDir}/`;
+  return path.split(oldFwd).join(newFwd);
+}
+
+function rewriteTodos(todos: TodoItem[], oldDir: string, newDir: string): TodoItem[] {
+  return todos.map(t => ({
+    ...t,
+    attachments: t.attachments?.map(a => ({ ...a, path: rewriteAttachPath(a.path, oldDir, newDir) })),
+  }));
+}
 
 interface ProjectStore {
   // State
@@ -54,6 +75,7 @@ interface ProjectStore {
   addTodo: (projectId: string, text: string) => void;
   toggleTodo: (projectId: string, todoId: string) => void;
   removeTodo: (projectId: string, todoId: string) => void;
+  updateTodo: (projectId: string, todoId: string, patch: Partial<TodoItem>) => void;
   addLink: (projectId: string, url: string, title: string) => string;
   updateLink: (projectId: string, linkId: string, newTitle: string) => void;
   removeLink: (projectId: string, linkId: string) => void;
@@ -84,6 +106,7 @@ interface ProjectStore {
   addSceneTodo: (projectId: string, sceneId: string, text: string) => void;
   toggleSceneTodo: (projectId: string, sceneId: string, todoId: string) => void;
   removeSceneTodo: (projectId: string, sceneId: string, todoId: string) => void;
+  updateSceneTodo: (projectId: string, sceneId: string, todoId: string, patch: Partial<TodoItem>) => void;
   addSceneBrowserTab: (projectId: string, sceneId: string, url: string, title: string) => void;
   removeSceneBrowserTab: (projectId: string, sceneId: string, tabId: string) => void;
   addSceneLink: (projectId: string, sceneId: string, url: string, title: string) => string;
@@ -102,6 +125,7 @@ interface ProjectStore {
   addShotTodo: (projectId: string, shotId: string, text: string) => void;
   toggleShotTodo: (projectId: string, shotId: string, todoId: string) => void;
   removeShotTodo: (projectId: string, shotId: string, todoId: string) => void;
+  updateShotTodo: (projectId: string, shotId: string, todoId: string, patch: Partial<TodoItem>) => void;
   addShotBrowserTab: (projectId: string, shotId: string, url: string, title: string) => void;
   removeShotBrowserTab: (projectId: string, shotId: string, tabId: string) => void;
   addShotLink: (projectId: string, shotId: string, url: string, title: string) => string;
@@ -117,6 +141,7 @@ interface ProjectStore {
   addSpecialContextTodo: (projectId: string, contextId: string, text: string) => void;
   toggleSpecialContextTodo: (projectId: string, contextId: string, todoId: string) => void;
   removeSpecialContextTodo: (projectId: string, contextId: string, todoId: string) => void;
+  updateSpecialContextTodo: (projectId: string, contextId: string, todoId: string, patch: Partial<TodoItem>) => void;
   addSpecialContextNote: (projectId: string, contextId: string, content: string) => void;
   updateSpecialContextNote: (projectId: string, contextId: string, noteId: string, content: string) => void;
   removeSpecialContextNote: (projectId: string, contextId: string, noteId: string) => void;
@@ -886,6 +911,17 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
+  updateTodo: (projectId: string, todoId: string, patch: Partial<TodoItem>) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project) {
+      const updated = {
+        ...project,
+        todos: (project.todos || []).map(t => t.id === todoId ? { ...t, ...patch } : t)
+      };
+      get().updateProject(updated);
+    }
+  },
+
   // Add link
   addLink: (projectId: string, url: string, title: string) => {
     const newLink = {
@@ -1192,6 +1228,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Generate sanitized folder names for old and new scene names
       const oldFolderName = sanitizeFolderName(scene.name);
       const newFolderName = sanitizeFolderName(newName);
+      const oldAttachDir = sanitizeDirName(scene.name);
+      const newAttachDir = sanitizeDirName(newName);
 
       // Only rename if the sanitized names are different
       if (oldFolderName !== newFolderName) {
@@ -1247,6 +1285,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               oldFolderName: oldFolderName,
               newFolderName: newFolderName
             });
+            if (oldAttachDir !== newAttachDir) {
+              try { await invoke('rename_attachment_folder', { projectPath: project.path, oldSubdir: oldAttachDir, newSubdir: newAttachDir }); }
+              catch (e) { console.warn('Failed to rename attachment folder:', e); }
+            }
 
             // 5. Rename version files with WAL and progress
             const filesRenamed = await invoke<number>('rename_scene_files', {
@@ -1299,6 +1341,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               oldFolderName: oldFolderName,
               newFolderName: newFolderName
             });
+            if (oldAttachDir !== newAttachDir) {
+              try { await invoke('rename_attachment_folder', { projectPath: project.path, oldSubdir: oldAttachDir, newSubdir: newAttachDir }); }
+              catch (e) { console.warn('Failed to rename attachment folder:', e); }
+            }
           } catch (error) {
             console.error('Failed to rename scene folders:', error);
             return;
@@ -1314,10 +1360,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             // Extract number from new name (e.g., "Scene 777" -> 777)
             const match = newName.match(/\d+/);
             const newNumber = match ? parseInt(match[0]) : s.number;
-            return { ...s, name: newName, number: newNumber };
+            return { ...s, name: newName, number: newNumber, todos: rewriteTodos(s.todos, oldAttachDir, newAttachDir) };
           }
           return s;
-        })
+        }),
+        ...(project.shots ? {
+          shots: project.shots.map(s =>
+            s.sceneId === sceneId ? { ...s, todos: rewriteTodos(s.todos, oldAttachDir, newAttachDir) } : s
+          ),
+        } : {}),
+        ...(project.specialContexts ? {
+          specialContexts: project.specialContexts.map(sc =>
+            sc.sceneId === sceneId ? { ...sc, todos: rewriteTodos(sc.todos, oldAttachDir, newAttachDir) } : sc
+          ),
+        } : {}),
       };
       get().updateProject(updated);
 
@@ -1511,6 +1567,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         ...project,
         scenes: (project.scenes || []).map(s =>
           s.id === sceneId ? { ...s, todos: s.todos.filter(t => t.id !== todoId) } : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  updateSceneTodo: (projectId: string, sceneId: string, todoId: string, patch: Partial<TodoItem>) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasScenes) {
+      const updated = {
+        ...project,
+        scenes: (project.scenes || []).map(s =>
+          s.id === sceneId
+            ? { ...s, todos: s.todos.map(t => t.id === todoId ? { ...t, ...patch } : t) }
+            : s
         )
       };
       get().updateProject(updated);
@@ -1845,6 +1916,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               newShotFolderName: newShotFolderName
             });
           }
+          const sceneDirForAttach = scene ? sanitizeDirName(scene.name) : '';
+          const oldShotAttachDir = [sceneDirForAttach, `SH${oldShotFolderName}`].filter(Boolean).join('/');
+          const newShotAttachDir = [sceneDirForAttach, `SH${newShotFolderName}`].filter(Boolean).join('/');
+          try { await invoke('rename_attachment_folder', { projectPath: project.path, oldSubdir: oldShotAttachDir, newSubdir: newShotAttachDir }); }
+          catch (e) { console.warn('Failed to rename shot attachment folder:', e); }
 
           // 2. Rename version files with WAL and progress
           const filesRenamed = await invoke<number>('rename_shot_files', {
@@ -1902,11 +1978,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       // Update metadata with final number and name
       const finalName = newName.replace(/\d+$/, '') + finalNumber.toString().padStart(3, '0');
+      const sceneForAttach = (project.scenes || []).find(s => s.id === shot.sceneId);
+      const sceneDirForAttach = sceneForAttach ? sanitizeDirName(sceneForAttach.name) : '';
+      const oldShotDir = [sceneDirForAttach, `SH${oldNumber.toString().padStart(3, '0')}`].filter(Boolean).join('/');
+      const newShotDir = [sceneDirForAttach, `SH${finalNumber.toString().padStart(3, '0')}`].filter(Boolean).join('/');
       const updated = {
         ...project,
         shots: (project.shots || []).map(s => {
           if (s.id === shotId) {
-            return { ...s, name: finalName, number: finalNumber };
+            return { ...s, name: finalName, number: finalNumber, todos: rewriteTodos(s.todos, oldShotDir, newShotDir) };
           }
           return s;
         })
@@ -2084,6 +2164,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         ...project,
         shots: (project.shots || []).map(s =>
           s.id === shotId ? { ...s, todos: s.todos.filter(t => t.id !== todoId) } : s
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  updateShotTodo: (projectId: string, shotId: string, todoId: string, patch: Partial<TodoItem>) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.hasShots) {
+      const updated = {
+        ...project,
+        shots: (project.shots || []).map(s =>
+          s.id === shotId
+            ? { ...s, todos: s.todos.map(t => t.id === todoId ? { ...t, ...patch } : t) }
+            : s
         )
       };
       get().updateProject(updated);
@@ -2763,6 +2858,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         specialContexts: project.specialContexts.map(ctx =>
           ctx.id === contextId
             ? { ...ctx, todos: (ctx.todos || []).filter(todo => todo.id !== todoId) }
+            : ctx
+        )
+      };
+      get().updateProject(updated);
+    }
+  },
+
+  updateSpecialContextTodo: (projectId: string, contextId: string, todoId: string, patch: Partial<TodoItem>) => {
+    const project = get().projects.find(p => p.id === projectId);
+    if (project && project.specialContexts) {
+      const updated = {
+        ...project,
+        specialContexts: project.specialContexts.map(ctx =>
+          ctx.id === contextId
+            ? { ...ctx, todos: (ctx.todos || []).map(t => t.id === todoId ? { ...t, ...patch } : t) }
             : ctx
         )
       };

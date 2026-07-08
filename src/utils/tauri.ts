@@ -57,6 +57,21 @@ export async function selectExecutable(): Promise<string | null> {
   }
 }
 
+export async function selectAttachmentFile(): Promise<string | null> {
+  try {
+    const selected = await open({
+      multiple: false,
+      filters: [
+        { name: 'All supported', extensions: ['png','jpg','jpeg','gif','webp','bmp','mp4','mov','avi','mkv','mxf','webm','pdf','txt','md','doc','docx','rtf','odt','csv','json','xml'] },
+        { name: 'Images',    extensions: ['png','jpg','jpeg','gif','webp','bmp'] },
+        { name: 'Video',     extensions: ['mp4','mov','avi','mkv','mxf','webm'] },
+        { name: 'Documents', extensions: ['pdf','txt','md','doc','docx','rtf','odt','csv','json','xml'] },
+      ],
+    });
+    return selected as string | null;
+  } catch { return null; }
+}
+
 export async function selectImageFile(): Promise<string | null> {
   try {
     const selected = await open({

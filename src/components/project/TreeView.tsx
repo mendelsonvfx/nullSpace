@@ -1363,6 +1363,15 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         menuId="tree"
       >
         <ContextMenuItem
+          icon={<IconFolderOpen className="w-4 h-4" stroke={1.5} />}
+          onClick={() => contextMenuNode && (contextMenuNode.is_dir
+            ? openInExplorerHandler(contextMenuNode.path)
+            : revealInExplorerHandler(contextMenuNode.path)
+          )}
+        >
+          {contextMenuNode?.is_dir ? 'Open in Explorer' : 'Reveal in Explorer'}
+        </ContextMenuItem>
+        <ContextMenuItem
           icon={copiedPath === contextMenuNode?.path
             ? <IconCircleCheck className="w-4 h-4 text-status-active" stroke={1.5} />
             : <IconCopy className="w-4 h-4" stroke={1.5} />
@@ -1374,15 +1383,6 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           ) : (
             'Copy Path'
           )}
-        </ContextMenuItem>
-        <ContextMenuItem
-          icon={<IconFolderOpen className="w-4 h-4" stroke={1.5} />}
-          onClick={() => contextMenuNode && (contextMenuNode.is_dir
-            ? openInExplorerHandler(contextMenuNode.path)
-            : revealInExplorerHandler(contextMenuNode.path)
-          )}
-        >
-          {contextMenuNode?.is_dir ? 'Open in Explorer' : 'Reveal in Explorer'}
         </ContextMenuItem>
         {contextMenuNode?.is_dir && !getSoftwareFolderIcon(contextMenuNode.name) && (
           <>

@@ -4,7 +4,7 @@
 
 **Desktop Project Manager for VFX Artists & 3D Designers**
 
-![Version](https://img.shields.io/badge/version-1.7.2-purple)
+![Version](https://img.shields.io/badge/version-1.9.5-purple)
 ![Tauri](https://img.shields.io/badge/Tauri-1.6-orange)
 ![React](https://img.shields.io/badge/React-19-61dafb)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue)
@@ -15,7 +15,7 @@
 
 ## 🎯 About
 
-**nullSpace** is a powerfull desktop application designed specifically for VFX artists and 3D designers to manage their creative projects. It combines project management, financial tracking, and seamless integration with industry-standard 3D software into one intuitive interface.
+**nullSpace** is a tool designed specifically for 3D VFX artists and to manage their creative projects. It combines project management, financial tracking, and seamless integration with industry-standard 3D software into one intuitive interface.
 
 ## ✨ Key Features
 
@@ -96,29 +96,6 @@ Seamlessly work with your favorite tools:
 - **Node.js** (v18 or higher)
 - **Rust** (latest stable version)
 - **npm** or **pnpm**
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/mendelsonvfx/nullSpace.git
-cd nullSpace
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Run in development mode:
-```bash
-npm run tauri dev
-```
-
-4. Build for production:
-```bash
-npm run tauri build
-```
 
 ---
 

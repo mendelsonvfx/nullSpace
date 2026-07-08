@@ -22,8 +22,40 @@ import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { CustomSelect } from '../ui/CustomSelect';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { getPaymentStatusUpdate } from '../../utils/financeService';
+import { useTasks } from '../../hooks/useTasks';
+import { TaskItem } from '../tasks/TaskItem';
+import type { TaskContext } from '../../types/project';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
+
+function sanitizeDirName(name: string): string {
+  return name.replace(/[^\wа-яёА-ЯЁ\s_-]/gu, '').replace(/\s+/g, '-').slice(0, 64) || 'unnamed';
+}
+
+type FullContext = TaskContext & { specialContextType?: 'asset' | 'compose' };
+
+function getAttachmentSubdir(context: FullContext, project: any): string {
+  if (context.isShot && context.shotId) {
+    const shot = project.shots?.find((s: any) => s.id === context.shotId);
+    const scene = project.scenes?.find((s: any) => s.id === shot?.sceneId);
+    const shotCode = shot ? `SH${String(shot.number).padStart(3, '0')}` : null;
+    const parts = [scene && sanitizeDirName(scene.name), shotCode].filter(Boolean);
+    return parts.join('/') || 'Shot';
+  }
+  if (context.isScene && context.sceneId) {
+    const scene = project.scenes?.find((s: any) => s.id === context.sceneId);
+    return scene ? `${sanitizeDirName(scene.name)}/SCENE` : 'Scene/SCENE';
+  }
+  if (context.isSpecialContext) {
+    const type = context.specialContextType === 'asset' ? 'Asset' : 'Compose';
+    if (context.sceneId) {
+      const scene = project.scenes?.find((s: any) => s.id === context.sceneId);
+      return `${scene ? sanitizeDirName(scene.name) : 'Scene'}/${type}`;
+    }
+    return type;
+  }
+  return 'Main';
+}
 
 function fmtAssetDate(ts: number): string {
   const d = Math.floor((Date.now() - ts * 1000) / 86400000);
@@ -233,6 +265,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   };
 
   const context = getCurrentContext();
+  const tasks = useTasks(project.id, context);
+  const attachmentSubdir = getAttachmentSubdir(context, project);
+  const isLastTaskWithAttachments = tasks.todos.filter(t => (t.attachments?.length ?? 0) > 0).length === 1;
 
   // Compute breadcrumb parts for reuse in rendering
   const breadcrumbParts = (() => {
@@ -929,122 +964,37 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
             {/* Task list */}
             <div className="space-y-1.5 mb-3">
-              {context.todos.slice(0, 3).map((todo: any) => (
-                <div
+              {tasks.todos.slice(0, 3).map(todo => (
+                <TaskItem
                   key={todo.id}
-                  onClick={() => {
-                    if (context.isShot && context.shotId) {
-                      const { toggleShotTodo } = useProjectStore.getState();
-                      toggleShotTodo(project.id, context.shotId, todo.id);
-                    } else if (context.isSpecialContext && context.specialContextId) {
-                      const { toggleSpecialContextTodo } = useProjectStore.getState();
-                      toggleSpecialContextTodo(project.id, context.specialContextId, todo.id);
-                    } else if (context.isScene && context.sceneId) {
-                      const { toggleSceneTodo } = useProjectStore.getState();
-                      toggleSceneTodo(project.id, context.sceneId, todo.id);
-                    } else {
-                      const { toggleTodo } = useProjectStore.getState();
-                      toggleTodo(project.id, todo.id);
-                    }
-                  }}
-                  className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
-                >
-                  <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                    {todo.completed
-                      ? <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />
-                      : <div className="w-1 h-1 rounded-full bg-text-primary" />
-                    }
-                  </div>
-                  <span className={`flex-1 text-[13px] transition-all duration-200 ${
-                    todo.completed ? 'text-text-muted' : 'text-text-primary'
-                  }`}>
-                    {todo.text}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (context.isShot && context.shotId) {
-                        const { removeShotTodo } = useProjectStore.getState();
-                        removeShotTodo(project.id, context.shotId, todo.id);
-                      } else if (context.isSpecialContext && context.specialContextId) {
-                        const { removeSpecialContextTodo } = useProjectStore.getState();
-                        removeSpecialContextTodo(project.id, context.specialContextId, todo.id);
-                      } else if (context.isScene && context.sceneId) {
-                        const { removeSceneTodo } = useProjectStore.getState();
-                        removeSceneTodo(project.id, context.sceneId, todo.id);
-                      } else {
-                        const { removeTodo } = useProjectStore.getState();
-                        removeTodo(project.id, todo.id);
-                      }
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded-lg transition-opacity cursor-pointer"
-                  >
-                    <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted hover:text-red-500 transition-colors" />
-                  </button>
-                </div>
+                  todo={todo}
+                  onToggle={() => tasks.toggle(todo.id)}
+                  onRemove={() => tasks.remove(todo.id)}
+                  onUpdate={(patch) => tasks.update(todo.id, patch)}
+                  projectPath={project.path}
+                  attachmentSubdir={attachmentSubdir}
+                  isLastTaskWithAttachments={isLastTaskWithAttachments}
+                />
               ))}
 
               {/* Expandable overflow tasks */}
-              {context.todos.length > 3 && (
+              {tasks.todos.length > 3 && (
                 <div
                   className="grid transition-[grid-template-rows] duration-200 ease-out"
                   style={{ gridTemplateRows: tasksExpanded ? '1fr' : '0fr' }}
                 >
                   <div className="overflow-hidden">
-                    <div className="space-y-1.5">
-                      {context.todos.slice(3).map((todo: any) => (
-                        <div
+                    <div className="space-y-1.5 pt-1.5">
+                      {tasks.todos.slice(3).map(todo => (
+                        <TaskItem
                           key={todo.id}
-                          onClick={() => {
-                            if (context.isShot && context.shotId) {
-                              const { toggleShotTodo } = useProjectStore.getState();
-                              toggleShotTodo(project.id, context.shotId, todo.id);
-                            } else if (context.isSpecialContext && context.specialContextId) {
-                              const { toggleSpecialContextTodo } = useProjectStore.getState();
-                              toggleSpecialContextTodo(project.id, context.specialContextId, todo.id);
-                            } else if (context.isScene && context.sceneId) {
-                              const { toggleSceneTodo } = useProjectStore.getState();
-                              toggleSceneTodo(project.id, context.sceneId, todo.id);
-                            } else {
-                              const { toggleTodo } = useProjectStore.getState();
-                              toggleTodo(project.id, todo.id);
-                            }
-                          }}
-                          className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
-                        >
-                          <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                            {todo.completed
-                              ? <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />
-                              : <div className="w-1 h-1 rounded-full bg-text-primary" />
-                            }
-                          </div>
-                          <span className={`flex-1 text-[13px] transition-all duration-200 ${
-                            todo.completed ? 'text-text-muted' : 'text-text-primary'
-                          }`}>
-                            {todo.text}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (context.isShot && context.shotId) {
-                                const { removeShotTodo } = useProjectStore.getState();
-                                removeShotTodo(project.id, context.shotId, todo.id);
-                              } else if (context.isSpecialContext && context.specialContextId) {
-                                const { removeSpecialContextTodo } = useProjectStore.getState();
-                                removeSpecialContextTodo(project.id, context.specialContextId, todo.id);
-                              } else if (context.isScene && context.sceneId) {
-                                const { removeSceneTodo } = useProjectStore.getState();
-                                removeSceneTodo(project.id, context.sceneId, todo.id);
-                              } else {
-                                const { removeTodo } = useProjectStore.getState();
-                                removeTodo(project.id, todo.id);
-                              }
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded transition-opacity"
-                          >
-                            <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted hover:text-red-500 transition-colors" />
-                          </button>
-                        </div>
+                          todo={todo}
+                          onToggle={() => tasks.toggle(todo.id)}
+                          onRemove={() => tasks.remove(todo.id)}
+                          onUpdate={(patch) => tasks.update(todo.id, patch)}
+                          projectPath={project.path}
+                          attachmentSubdir={attachmentSubdir}
+                        />
                       ))}
                     </div>
                   </div>
@@ -1058,37 +1008,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               placeholder="+ Add task..."
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                  if (context.isShot && context.shotId) {
-                    const { addShotTodo } = useProjectStore.getState();
-                    addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
-                  } else if (context.isSpecialContext && context.specialContextId) {
-                    const { addSpecialContextTodo } = useProjectStore.getState();
-                    addSpecialContextTodo(project.id, context.specialContextId, e.currentTarget.value.trim());
-                  } else if (context.isScene && context.sceneId) {
-                    const { addSceneTodo } = useProjectStore.getState();
-                    addSceneTodo(project.id, context.sceneId, e.currentTarget.value.trim());
-                  } else {
-                    const { addTodo } = useProjectStore.getState();
-                    addTodo(project.id, e.currentTarget.value.trim());
-                  }
+                  tasks.add(e.currentTarget.value.trim());
                   e.currentTarget.value = '';
                 }
               }}
               onBlur={(e) => {
                 if (e.currentTarget.value.trim()) {
-                  if (context.isShot && context.shotId) {
-                    const { addShotTodo } = useProjectStore.getState();
-                    addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
-                  } else if (context.isSpecialContext && context.specialContextId) {
-                    const { addSpecialContextTodo } = useProjectStore.getState();
-                    addSpecialContextTodo(project.id, context.specialContextId, e.currentTarget.value.trim());
-                  } else if (context.isScene && context.sceneId) {
-                    const { addSceneTodo } = useProjectStore.getState();
-                    addSceneTodo(project.id, context.sceneId, e.currentTarget.value.trim());
-                  } else {
-                    const { addTodo } = useProjectStore.getState();
-                    addTodo(project.id, e.currentTarget.value.trim());
-                  }
+                  tasks.add(e.currentTarget.value.trim());
                   e.currentTarget.value = '';
                 }
               }}
@@ -1183,122 +1109,37 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
             {/* Task list */}
             <div className="space-y-1.5 mb-3">
-              {context.todos.slice(0, 3).map((todo: any) => (
-                <div
+              {tasks.todos.slice(0, 3).map(todo => (
+                <TaskItem
                   key={todo.id}
-                  onClick={() => {
-                    if (context.isShot && context.shotId) {
-                      const { toggleShotTodo } = useProjectStore.getState();
-                      toggleShotTodo(project.id, context.shotId, todo.id);
-                    } else if (context.isSpecialContext && context.specialContextId) {
-                      const { toggleSpecialContextTodo } = useProjectStore.getState();
-                      toggleSpecialContextTodo(project.id, context.specialContextId, todo.id);
-                    } else if (context.isScene && context.sceneId) {
-                      const { toggleSceneTodo } = useProjectStore.getState();
-                      toggleSceneTodo(project.id, context.sceneId, todo.id);
-                    } else {
-                      const { toggleTodo } = useProjectStore.getState();
-                      toggleTodo(project.id, todo.id);
-                    }
-                  }}
-                  className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
-                >
-                  <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                    {todo.completed
-                      ? <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />
-                      : <div className="w-1 h-1 rounded-full bg-text-primary" />
-                    }
-                  </div>
-                  <span className={`flex-1 text-[13px] transition-all duration-200 ${
-                    todo.completed ? 'text-text-muted' : 'text-text-primary'
-                  }`}>
-                    {todo.text}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (context.isShot && context.shotId) {
-                        const { removeShotTodo } = useProjectStore.getState();
-                        removeShotTodo(project.id, context.shotId, todo.id);
-                      } else if (context.isSpecialContext && context.specialContextId) {
-                        const { removeSpecialContextTodo } = useProjectStore.getState();
-                        removeSpecialContextTodo(project.id, context.specialContextId, todo.id);
-                      } else if (context.isScene && context.sceneId) {
-                        const { removeSceneTodo } = useProjectStore.getState();
-                        removeSceneTodo(project.id, context.sceneId, todo.id);
-                      } else {
-                        const { removeTodo } = useProjectStore.getState();
-                        removeTodo(project.id, todo.id);
-                      }
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded-lg transition-opacity cursor-pointer"
-                  >
-                    <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted hover:text-red-500 transition-colors" />
-                  </button>
-                </div>
+                  todo={todo}
+                  onToggle={() => tasks.toggle(todo.id)}
+                  onRemove={() => tasks.remove(todo.id)}
+                  onUpdate={(patch) => tasks.update(todo.id, patch)}
+                  projectPath={project.path}
+                  attachmentSubdir={attachmentSubdir}
+                  isLastTaskWithAttachments={isLastTaskWithAttachments}
+                />
               ))}
 
               {/* Expandable overflow tasks */}
-              {context.todos.length > 3 && (
+              {tasks.todos.length > 3 && (
                 <div
                   className="grid transition-[grid-template-rows] duration-200 ease-out"
                   style={{ gridTemplateRows: tasksExpanded ? '1fr' : '0fr' }}
                 >
                   <div className="overflow-hidden">
-                    <div className="space-y-1.5">
-                      {context.todos.slice(3).map((todo: any) => (
-                        <div
+                    <div className="space-y-1.5 pt-1.5">
+                      {tasks.todos.slice(3).map(todo => (
+                        <TaskItem
                           key={todo.id}
-                          onClick={() => {
-                            if (context.isShot && context.shotId) {
-                              const { toggleShotTodo } = useProjectStore.getState();
-                              toggleShotTodo(project.id, context.shotId, todo.id);
-                            } else if (context.isSpecialContext && context.specialContextId) {
-                              const { toggleSpecialContextTodo } = useProjectStore.getState();
-                              toggleSpecialContextTodo(project.id, context.specialContextId, todo.id);
-                            } else if (context.isScene && context.sceneId) {
-                              const { toggleSceneTodo } = useProjectStore.getState();
-                              toggleSceneTodo(project.id, context.sceneId, todo.id);
-                            } else {
-                              const { toggleTodo } = useProjectStore.getState();
-                              toggleTodo(project.id, todo.id);
-                            }
-                          }}
-                          className="flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
-                        >
-                          <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                            {todo.completed
-                              ? <IconCheck stroke={3} className="w-3 h-3 text-text-muted" />
-                              : <div className="w-1 h-1 rounded-full bg-text-primary" />
-                            }
-                          </div>
-                          <span className={`flex-1 text-[13px] transition-all duration-200 ${
-                            todo.completed ? 'text-text-muted' : 'text-text-primary'
-                          }`}>
-                            {todo.text}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (context.isShot && context.shotId) {
-                                const { removeShotTodo } = useProjectStore.getState();
-                                removeShotTodo(project.id, context.shotId, todo.id);
-                              } else if (context.isSpecialContext && context.specialContextId) {
-                                const { removeSpecialContextTodo } = useProjectStore.getState();
-                                removeSpecialContextTodo(project.id, context.specialContextId, todo.id);
-                              } else if (context.isScene && context.sceneId) {
-                                const { removeSceneTodo } = useProjectStore.getState();
-                                removeSceneTodo(project.id, context.sceneId, todo.id);
-                              } else {
-                                const { removeTodo } = useProjectStore.getState();
-                                removeTodo(project.id, todo.id);
-                              }
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover-bg rounded transition-opacity"
-                          >
-                            <IconX stroke={1.5} className="w-3.5 h-3.5 text-text-muted hover:text-red-500 transition-colors" />
-                          </button>
-                        </div>
+                          todo={todo}
+                          onToggle={() => tasks.toggle(todo.id)}
+                          onRemove={() => tasks.remove(todo.id)}
+                          onUpdate={(patch) => tasks.update(todo.id, patch)}
+                          projectPath={project.path}
+                          attachmentSubdir={attachmentSubdir}
+                        />
                       ))}
                     </div>
                   </div>
@@ -1312,37 +1153,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               placeholder="+ Add task..."
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                  if (context.isShot && context.shotId) {
-                    const { addShotTodo } = useProjectStore.getState();
-                    addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
-                  } else if (context.isSpecialContext && context.specialContextId) {
-                    const { addSpecialContextTodo } = useProjectStore.getState();
-                    addSpecialContextTodo(project.id, context.specialContextId, e.currentTarget.value.trim());
-                  } else if (context.isScene && context.sceneId) {
-                    const { addSceneTodo } = useProjectStore.getState();
-                    addSceneTodo(project.id, context.sceneId, e.currentTarget.value.trim());
-                  } else {
-                    const { addTodo } = useProjectStore.getState();
-                    addTodo(project.id, e.currentTarget.value.trim());
-                  }
+                  tasks.add(e.currentTarget.value.trim());
                   e.currentTarget.value = '';
                 }
               }}
               onBlur={(e) => {
                 if (e.currentTarget.value.trim()) {
-                  if (context.isShot && context.shotId) {
-                    const { addShotTodo } = useProjectStore.getState();
-                    addShotTodo(project.id, context.shotId, e.currentTarget.value.trim());
-                  } else if (context.isSpecialContext && context.specialContextId) {
-                    const { addSpecialContextTodo } = useProjectStore.getState();
-                    addSpecialContextTodo(project.id, context.specialContextId, e.currentTarget.value.trim());
-                  } else if (context.isScene && context.sceneId) {
-                    const { addSceneTodo } = useProjectStore.getState();
-                    addSceneTodo(project.id, context.sceneId, e.currentTarget.value.trim());
-                  } else {
-                    const { addTodo } = useProjectStore.getState();
-                    addTodo(project.id, e.currentTarget.value.trim());
-                  }
+                  tasks.add(e.currentTarget.value.trim());
                   e.currentTarget.value = '';
                 }
               }}

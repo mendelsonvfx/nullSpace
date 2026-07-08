@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.9.6] - 2026-07-08
+
+### Added
+- Tasks: file attachments — attach images, video, documents or paste from clipboard directly into a task
+- Tasks: priority field (`high` / `med` / `low`) and deadline date per task
+- Tasks: attachment preview toggle in Settings → Appearance
+- Backend: `copy_attachment`, `save_attachment_bytes`, `paste_clipboard_image`, `get_clipboard_file_path`, `copy_file_to_clipboard` commands for attachment handling
+- Backend: `rename_attachment_folder` — attachment paths rewritten automatically when a scene or shot is renamed
+
+### Fixed
+- Explorer: `reveal_in_explorer` now selects the file correctly (was opening default folder)
+- Explorer: `open_file` uses `cmd /c start` instead of `explorer.exe` for proper file-type association
+
 ## [1.9.5] - 2026-07-04
 
 ### Added

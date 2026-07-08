@@ -1153,6 +1153,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
     const saved = localStorage.getItem('blendPreviewsEnabled');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [taskAttachmentPreview, setTaskAttachmentPreview] = useState(() => {
+    const saved = localStorage.getItem('taskAttachmentPreview');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const [showShotsBrowserSearch, setShowShotsBrowserSearch] = useState(() => {
     const saved = localStorage.getItem('shotsbrowser_showSearchFilter');
     return saved !== null ? JSON.parse(saved) : true;
@@ -1505,6 +1509,25 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
           className={`w-12 h-6 rounded-full relative transition-colors flex-shrink-0 ${blendPreviewsEnabled ? 'bg-accent' : 'bg-border-secondary'}`}
         >
           <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${blendPreviewsEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+
+      {/* Task Attachment Preview */}
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Attachment Preview</div>
+          <p className="text-xs text-text-muted">Show file preview on hover in task attachments</p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !taskAttachmentPreview;
+            setTaskAttachmentPreview(newValue);
+            localStorage.setItem('taskAttachmentPreview', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full relative transition-colors flex-shrink-0 ${taskAttachmentPreview ? 'bg-accent' : 'bg-border-secondary'}`}
+        >
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${taskAttachmentPreview ? 'translate-x-6' : 'translate-x-0.5'}`} />
         </button>
       </div>
 

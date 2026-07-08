@@ -6,13 +6,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { IconCircleCheckFilled, IconClock, IconMoon, IconCircle } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
 import { extractShotNumber, extractVersion, getScenePattern } from '../../utils/fileNaming';
-
-interface TodoItem {
-  id: string;
-  text: string;
-  completed: boolean;
-  createdAt?: string;
-}
+import type { TodoItem } from '../../types/project';
 
 interface Note {
   id: string;

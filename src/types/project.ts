@@ -38,11 +38,35 @@ export interface Client {
   instagram?: string;
 }
 
+export type AttachmentFileType = 'image' | 'video' | 'pdf' | 'text';
+
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  size: string;
+  path: string;
+  fileType?: AttachmentFileType;
+}
+
 export interface TodoItem {
   id: string;
   text: string;
   completed: boolean;
-  createdAt?: string; // ISO date string for date separator
+  createdAt?: string;
+  priority?: 'high' | 'med' | 'low';
+  deadlineDate?: string; // ISO date "2026-07-12"
+  attachments?: TaskAttachment[];
+  expanded?: boolean;
+}
+
+export interface TaskContext {
+  todos: TodoItem[];
+  isShot: boolean;
+  shotId?: string;
+  isScene: boolean;
+  sceneId?: string;
+  isSpecialContext: boolean;
+  specialContextId?: string;
 }
 
 export interface Scene {

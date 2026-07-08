@@ -5,12 +5,12 @@ export function ContextMenuColorPicker({
   selectedColor,
   onSelect,
   onClear,
-  label = 'Mark Color'
+  label = 'Color Tag'
 }: ContextMenuColorPickerProps) {
   return (
-    <div className="px-3 py-2">
+    <div className="px-3 pb-2">
       {label && (
-        <div className="text-[10px] text-text-muted mb-2 opacity-70">{label}</div>
+        <div className="text-[10px] font-bold tracking-[.1em] text-text-muted uppercase pt-1 pb-1.5">{label}</div>
       )}
       <div className="flex gap-2 flex-wrap">
         {colors.map((color) => (
