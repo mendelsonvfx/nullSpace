@@ -139,16 +139,18 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
   // Calculate average hours per day (based on days with activity)
   const averageHoursPerDay = useMemo(() => {
     const daysWithActivity = new Set<string>();
+    let totalMinutesFromEntries = 0;
 
     allTimeEntries.forEach(entry => {
       const date = new Date(entry.startTime);
-      const dateKey = date.toISOString().split('T')[0];
+      const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
       daysWithActivity.add(dateKey);
+      totalMinutesFromEntries += entry.durationMinutes;
     });
 
     if (daysWithActivity.size === 0) return 0;
-    return totalMinutes / 60 / daysWithActivity.size;
-  }, [allTimeEntries, totalMinutes]);
+    return totalMinutesFromEntries / 60 / daysWithActivity.size;
+  }, [allTimeEntries]);
 
   // Get most productive day
   const mostProductiveDay = useMemo(() => {

@@ -85,26 +85,25 @@ export const getTotalMinutesForWeek = (entries: TimeEntry[], weekStart: Date): n
  * Includes both active and completed sessions
  */
 export const getMostProductiveDay = (entries: TimeEntry[]): ProductiveDayStats => {
-  const dayTotals = new Map<number, { totalMinutes: number; count: number }>();
+  const dayTotals = new Map<number, { totalMinutes: number; distinctDays: Set<string> }>();
 
   entries.forEach(entry => {
     const date = new Date(entry.startTime);
     const day = date.getDay();
-    const current = dayTotals.get(day) || { totalMinutes: 0, count: 0 };
+    const dateKey = getLocalDateString(date);
+    const current = dayTotals.get(day) || { totalMinutes: 0, distinctDays: new Set<string>() };
     const minutes = getEntryMinutes(entry);
 
-    // Accumulate minutes for this day of week
-    dayTotals.set(day, {
-      totalMinutes: current.totalMinutes + minutes,
-      count: current.count + 1
-    });
+    current.totalMinutes += minutes;
+    current.distinctDays.add(dateKey);
+    dayTotals.set(day, current);
   });
 
   let maxDay = 0;
   let maxAverage = 0;
 
   dayTotals.forEach((data, day) => {
-    const average = data.totalMinutes / data.count;
+    const average = data.totalMinutes / data.distinctDays.size;
     if (average > maxAverage) {
       maxAverage = average;
       maxDay = day;

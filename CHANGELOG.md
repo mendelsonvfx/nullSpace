@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.9.7] - 2026-07-14
+
+### Added
+- Finance: configurable "Hours per Work Day" setting in Settings → Finance — used to calculate Revenue per Day rate
+
+### Fixed
+- Titlebar: double-click to maximize/restore window (toggles fullscreen if already fullscreen)
+- Time Analytics: average hours per day uses local date grouping instead of UTC — fixes off-by-one on timezone boundaries
+- Time Analytics: most productive day averages by distinct calendar days, not by entry count
+- Tasks: priority bar and badge dim when task is completed
+
 ## [1.9.6] - 2026-07-08
 
 ### Added

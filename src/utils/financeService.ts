@@ -301,20 +301,21 @@ export const calculateStatistics = (
   paidProjects: RevenueResult['paidProjects'],
   totalRevenue: Record<string, number>,
   baseCurrency: string,
-  convertToBase: boolean
+  convertToBase: boolean,
+  hoursPerWorkDay: number = 8
 ): FinanceStatistics => {
   const totalPaid = Object.values(totalRevenue).reduce((sum, val) => sum + val, 0);
   const displayCurrency = convertToBase ? baseCurrency : (paidProjects[0]?.currency || 'USD');
   const avgValue = paidProjects.length > 0 ? totalPaid / paidProjects.length : 0;
 
-  // Calculate daily rate using tracked hours (12 tracked hours = 1 working day)
+  // Calculate daily rate: total earned / (total hours worked / hours per work day)
   let totalHoursWorked = 0;
   paidProjects.forEach((project) => {
     if (!project.isPrepaidProject && (project.totalMinutesSpent ?? 0) > 0) {
       totalHoursWorked += project.totalMinutesSpent! / 60;
     }
   });
-  const dailyRate = totalHoursWorked >= 1 ? totalPaid / (totalHoursWorked / 12) : 0;
+  const dailyRate = totalHoursWorked >= 1 ? totalPaid / (totalHoursWorked / hoursPerWorkDay) : 0;
 
   return {
     totalPaid,

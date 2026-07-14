@@ -17,6 +17,7 @@ import { clearAllTimeTrackingData } from '../../utils/clearAllData';
 import { exportData, readExportFile, applyImport, type ExportData } from '../../utils/dataExportImport';
 import { open } from '@tauri-apps/api/dialog';
 import { hslStringToHex } from '../../utils/colorUtils';
+import { getHoursPerWorkDay, saveHoursPerWorkDay } from '../../utils/financeSettings';
 import SimpleBar from 'simplebar-react';
 
 export type SettingsTab = 'general' | 'software' | 'launcher' | 'appearance' | 'clients' | 'finance' | 'categories' | 'data';
@@ -2087,6 +2088,7 @@ function FinanceSettings() {
   const [isLoadingRates, setIsLoadingRates] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [editingRate, setEditingRate] = useState<{ from: string; to: string } | null>(null);
+  const [hoursPerWorkDay, setHoursPerWorkDay] = useState(() => getHoursPerWorkDay());
   const [revenueThresholds, setRevenueThresholds] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('revenueNormalizationThresholds');
     return saved ? JSON.parse(saved) : {
@@ -2347,6 +2349,26 @@ function FinanceSettings() {
           )}
         </div>
       )}
+
+      {/* Hours per Work Day */}
+      <div className="flex items-center justify-between py-4 border-b border-border-primary">
+        <div>
+          <p className="text-sm text-[#e8e8f0]">Hours per Work Day</p>
+          <p className="text-xs text-text-muted mt-0.5">Used to calculate Revenue per Day</p>
+        </div>
+        <input
+          type="number"
+          min="1"
+          max="24"
+          value={hoursPerWorkDay}
+          onChange={(e) => {
+            const v = Math.min(24, Math.max(1, parseInt(e.target.value) || 8));
+            setHoursPerWorkDay(v);
+            saveHoursPerWorkDay(v);
+          }}
+          className="w-20 bg-app-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent text-center"
+        />
+      </div>
 
       {/* Revenue Normalization Threshold */}
       <div className="py-4">

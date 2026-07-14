@@ -364,7 +364,7 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
 
         {/* Priority bar */}
         <span
-          className="absolute left-0 inset-y-0 w-[3px] transition-colors"
+          className={`absolute left-0 inset-y-0 w-[3px] transition-[opacity,background-color] duration-200 ${todo.completed ? 'opacity-40' : 'opacity-100'}`}
           style={{ background: barColor }}
         />
 
@@ -390,7 +390,7 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
           <button
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); cyclePriority(); }}
-            className="flex-none flex items-center font-bold text-[10px] tracking-[.06em] rounded-[5px] px-[7px] py-[2px] cursor-pointer border transition-opacity"
+            className={`flex-none flex items-center font-bold text-[10px] tracking-[.06em] rounded-[5px] px-[7px] py-[2px] cursor-pointer border transition-opacity duration-200 ${todo.completed ? 'opacity-40' : 'opacity-100'}`}
             style={{
               color: PRIORITY_COLOR[todo.priority],
               background: `${PRIORITY_COLOR[todo.priority]}1a`,

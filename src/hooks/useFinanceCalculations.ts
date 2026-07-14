@@ -1,7 +1,7 @@
 // src/hooks/useFinanceCalculations.ts
 // Memoized hook for finance calculations
 
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState, useEffect } from 'react';
 import type { Project, Transaction } from '../types/project';
 import {
   getChartDataPoints,
@@ -11,6 +11,7 @@ import {
   type RevenueResult,
   type FinanceStatistics
 } from '../utils/financeService';
+import { getHoursPerWorkDay } from '../utils/financeSettings';
 
 interface UseFinanceCalculationsResult {
   // Currency conversion
@@ -75,10 +76,18 @@ export const useFinanceCalculations = (
     [projects, otherTransactions, convertCurrency, baseCurrency, convertToBaseCurrency]
   );
 
+  // Sync hoursPerWorkDay from localStorage, react to settings changes
+  const [hoursPerWorkDay, setHoursPerWorkDay] = useState(() => getHoursPerWorkDay());
+  useEffect(() => {
+    const handler = () => setHoursPerWorkDay(getHoursPerWorkDay());
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, []);
+
   // Memoized statistics
   const statistics = useMemo(
-    () => calculateStatistics(paidProjects, totalRevenue, baseCurrency, convertToBaseCurrency),
-    [paidProjects, totalRevenue, baseCurrency, convertToBaseCurrency]
+    () => calculateStatistics(paidProjects, totalRevenue, baseCurrency, convertToBaseCurrency, hoursPerWorkDay),
+    [paidProjects, totalRevenue, baseCurrency, convertToBaseCurrency, hoursPerWorkDay]
   );
 
   // Helper for monthly breakdown - uses chartDataPoints for consistency

@@ -237,6 +237,7 @@ function App() {
   const [showBottomShadow, setShowBottomShadow] = useState(true);
   const [showTopShadow, setShowTopShadow] = useState(false);
   const projectListRef = useRef<HTMLDivElement>(null);
+  const titlebarLastClickRef = useRef(0);
 
   // Scene rename confirmation state
   const [sceneRenameConfirm, setSceneRenameConfirm] = useState<{
@@ -1230,6 +1231,7 @@ function App() {
     }
   }, [handleProjectListScroll]);
 
+
   // ✅ OPTIMIZATION: Memoize expensive computations to avoid recalculating on every render
   // Create a Map of clients by ID for O(1) lookup instead of O(n) find operations
   const clientsById = useMemo(() => {
@@ -1374,8 +1376,21 @@ function App() {
           className="flex items-center gap-2 flex-1 h-full"
           style={{ paddingLeft: '13px' }}
           onMouseDown={(e) => {
-            // Only drag if not clicking on the logo button
-            if (!(e.target as HTMLElement).closest('button')) {
+            if ((e.target as HTMLElement).closest('button')) return;
+            const now = Date.now();
+            if (now - titlebarLastClickRef.current < 300) {
+              titlebarLastClickRef.current = 0;
+              (async () => {
+                const isFullscreen = await appWindow.isFullscreen();
+                if (isFullscreen) {
+                  await appWindow.setFullscreen(false);
+                } else {
+                  appWindow.toggleMaximize();
+                }
+                setTimeout(() => saveWindowState(), 200);
+              })();
+            } else {
+              titlebarLastClickRef.current = now;
               appWindow.startDragging();
             }
           }}

@@ -52,3 +52,30 @@ export function saveRevenueThresholds(thresholds: RevenueThresholds): void {
     console.error('Failed to save revenue thresholds:', error);
   }
 }
+
+/**
+ * Get hours per work day used for Revenue per Day calculation
+ * Default is 8 (industry standard freelance day)
+ */
+export function getHoursPerWorkDay(): number {
+  try {
+    const saved = localStorage.getItem('hoursPerWorkDay');
+    const parsed = parseInt(saved || '8');
+    if (isNaN(parsed) || parsed < 1) return 8;
+    return Math.min(24, parsed);
+  } catch {
+    return 8;
+  }
+}
+
+/**
+ * Save hours per work day to localStorage
+ */
+export function saveHoursPerWorkDay(hours: number): void {
+  try {
+    localStorage.setItem('hoursPerWorkDay', hours.toString());
+    window.dispatchEvent(new Event('storage'));
+  } catch (error) {
+    console.error('Failed to save hours per work day:', error);
+  }
+}
