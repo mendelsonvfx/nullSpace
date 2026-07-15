@@ -11,6 +11,7 @@ import { writeText } from '@tauri-apps/api/clipboard';
 import type { SoftwareName } from '../../types/project';
 import { getScenePattern, getShotPattern, parseFileName, hasSuffix } from '../../utils/fileNaming';
 import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
+import { usePsdThumbnail } from '../../hooks/usePsdThumbnail';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuColorPicker, VERSION_MARK_COLORS } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
 
@@ -450,7 +451,8 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
         'After Effects': 'after-effects',
         'Unreal Engine': 'unreal',
         'Unity': 'unity',
-        'Marmoset': 'marmoset'
+        'Marmoset': 'marmoset',
+        'Photoshop': 'photoshop'
       };
 
       const softwareKey = nameToKey[softwareName] || 'blender';
@@ -746,16 +748,22 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
   };
 
   // Version Card Component with optional Blender thumbnail
-  const VersionCard = ({ version, isBlendFile, versionMark, onDoubleClick, onContextMenu }: {
+  const VersionCard = ({ version, isBlendFile, isPsdFile, versionMark, onDoubleClick, onContextMenu }: {
     version: ProjectVersion;
     isBlendFile: boolean;
+    isPsdFile: boolean;
     versionMark?: MarkColor;
     onDoubleClick: () => void;
     onContextMenu: (e: React.MouseEvent) => void;
   }) => {
-    // Determine if this card will show a thumbnail area (reserve space immediately)
-    const willShowThumbnail = isBlendFile && blendPreviewsEnabled;
-    const blendThumbnail = useBlendThumbnail(willShowThumbnail ? version.path : undefined);
+    const willShowBlendThumb = isBlendFile && blendPreviewsEnabled;
+    const willShowPsdThumb   = isPsdFile  && blendPreviewsEnabled;
+    const willShowThumbnail  = willShowBlendThumb || willShowPsdThumb;
+
+    const blendThumbnail  = useBlendThumbnail(willShowBlendThumb ? version.path : undefined);
+    const psdThumbnail    = usePsdThumbnail(willShowPsdThumb ? version.path : undefined);
+    const thumbnail       = blendThumbnail || psdThumbnail;
+    const softwareForIcon = isBlendFile ? 'Blender' : 'Photoshop';
 
     // Build tooltip with file dates
     const tooltip = `${version.name}\nCreated: ${formatDateTime(version.created_at)}\nModified: ${formatDateTime(version.modified_at)}`;
@@ -779,20 +787,20 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
           />
         )}
 
-        {/* Blender thumbnail preview area (fixed size) or software icons */}
+        {/* Thumbnail preview area (fixed size) or software icons */}
         {willShowThumbnail ? (
           <div className="mb-2 rounded overflow-hidden bg-zinc-800 border border-border-primary relative h-16">
-            {blendThumbnail && (
+            {thumbnail && (
               <img
-                src={blendThumbnail}
-                alt="Blender preview"
+                src={thumbnail}
+                alt="Preview"
                 className="w-full h-full object-cover"
                 draggable={false}
               />
             )}
             {/* Software icon overlay in bottom-right corner */}
             <div className="absolute bottom-1 right-1 w-5 h-5">
-              <SoftwareIcon name="Blender" />
+              <SoftwareIcon name={softwareForIcon} />
             </div>
           </div>
         ) : (
@@ -897,11 +905,13 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
             <div className="flex gap-3 w-max">
               {filteredVersions.map((version) => {
                 const isBlendFile = version.software.includes('Blender');
+                const isPsdFile   = version.software.includes('Photoshop');
                 return (
                   <VersionCard
                     key={version.path}
                     version={version}
                     isBlendFile={isBlendFile}
+                    isPsdFile={isPsdFile}
                     versionMark={versionMarks[version.path]}
                     onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
                     onContextMenu={(e) => handleContextMenu(e, version)}

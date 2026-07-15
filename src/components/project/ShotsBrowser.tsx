@@ -34,6 +34,7 @@ import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextM
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { extractShotNumber, getScenePattern, extractVersion } from '../../utils/fileNaming';
 import { useBlendThumbnail, isBlendThumbnailCached } from '../../hooks/useBlendThumbnail';
+import { usePsdThumbnail, isPsdThumbnailCached } from '../../hooks/usePsdThumbnail';
 import { findNextAvailableShotNumber } from '../../utils/shotNumbering';
 
 const sanitizeFolderName = (name: string) =>
@@ -79,6 +80,7 @@ interface ShotCardProps {
   viewMode: 'grid' | 'list';
   projectPath: string;
   blendPath?: string;
+  psdPath?: string;
   onClick: () => void;
   onStatusChange: (shotId: string) => void;
   onContextMenu: (e: React.MouseEvent, shotId: string, type: 'preview' | 'name') => void;
@@ -99,6 +101,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
   viewMode,
   projectPath,
   blendPath,
+  psdPath,
   onClick,
   onStatusChange,
   onContextMenu,
@@ -118,7 +121,8 @@ const ShotCard: React.FC<ShotCardProps> = ({
     return saved !== null ? JSON.parse(saved) : true;
   });
   const autoBlendSrc = useBlendThumbnail(!shot.preview && blendPreviewsEnabled ? blendPath : undefined);
-  const displaySrc = shotPreviewSrc || autoBlendSrc;
+  const autoPsdSrc = usePsdThumbnail(!shot.preview && blendPreviewsEnabled ? psdPath : undefined);
+  const displaySrc = shotPreviewSrc || autoBlendSrc || autoPsdSrc;
   const wasImageReadyOnMount = useRef(!!displaySrc);
 
   // When blendPath first becomes defined, check memory cache synchronously.
@@ -127,6 +131,15 @@ const ShotCard: React.FC<ShotCardProps> = ({
   if (blendPath !== prevBlendPathRef.current) {
     prevBlendPathRef.current = blendPath;
     if (blendPath && isBlendThumbnailCached(blendPath)) {
+      wasImageReadyOnMount.current = true;
+    }
+  }
+
+  // Same suppression for PSD path
+  const prevPsdPathRef = useRef<string | undefined>(psdPath);
+  if (psdPath !== prevPsdPathRef.current) {
+    prevPsdPathRef.current = psdPath;
+    if (psdPath && isPsdThumbnailCached(psdPath)) {
       wasImageReadyOnMount.current = true;
     }
   }
@@ -373,6 +386,7 @@ interface SceneCardProps {
   onAddShot?: (sceneId: string) => void;
   onShotsAreaHoverChange?: (isHovered: boolean) => void;
   shotBlendPaths: Map<string, string>;
+  shotPsdPaths: Map<string, string>;
   versionsLoaded: boolean;
   animatingShotId: string | null;
   editingItem: { type: 'shot' | 'scene' | 'description'; id: string; value: string } | null;
@@ -402,6 +416,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onAddShot,
   onShotsAreaHoverChange,
   shotBlendPaths,
+  shotPsdPaths,
   versionsLoaded,
   animatingShotId,
   editingItem,
@@ -592,6 +607,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                   viewMode={viewMode}
                   projectPath={project.path}
                   blendPath={shotBlendPaths.get(`${shot.sceneId}_${shot.number}`)}
+                  psdPath={shotPsdPaths.get(`${shot.sceneId}_${shot.number}`)}
                   onClick={() => onShotSelect(shot.id)}
                   onStatusChange={onShotStatusChange}
                   onContextMenu={onShotContextMenu}
@@ -816,6 +832,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 viewMode={viewMode}
                 projectPath={project.path}
                 blendPath={shotBlendPaths.get(`${shot.sceneId}_${shot.number}`)}
+                psdPath={shotPsdPaths.get(`${shot.sceneId}_${shot.number}`)}
                 onClick={() => onShotSelect(shot.id)}
                 onStatusChange={onShotStatusChange}
                 onContextMenu={onShotContextMenu}
@@ -1751,18 +1768,30 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     return versionMap;
   }, [allVersions, project?.shots, project?.scenes, project?.name, project?.path]);
 
-  // Map of latest versioned file path per shot (for auto blend thumbnail fallback)
-  const shotLatestBlendPaths = useMemo(() => {
-    const pathMap = new Map<string, string>();
-    const bestNum  = new Map<string, number>();
-    if (!project?.shots || !allVersions.length) return pathMap;
+  // Maps of latest versioned file path per shot — one pass, split by software
+  const { shotLatestBlendPaths, shotLatestPsdPaths } = useMemo(() => {
+    const blendMap  = new Map<string, string>();
+    const psdMap    = new Map<string, string>();
+    const bestBlend = new Map<string, number>();
+    const bestPsd   = new Map<string, number>();
+
+    if (!project?.shots || !allVersions.length) {
+      return { shotLatestBlendPaths: blendMap, shotLatestPsdPaths: psdMap };
+    }
 
     allVersions.forEach(version => {
       if (!version.is_versioned) return;
+      const isBlender   = version.software.includes('Blender');
+      const isPhotoshop = version.software.includes('Photoshop');
+      if (!isBlender && !isPhotoshop) return;
+
       const shotNumber = extractShotNumber(version.name);
       if (shotNumber === null) return;
       const versionNum = extractVersion(version.name);
       if (!versionNum) return;
+
+      const targetMap  = isBlender ? blendMap  : psdMap;
+      const targetBest = isBlender ? bestBlend : bestPsd;
 
       const matchingShots = project.shots?.filter((s: any) => s.number === shotNumber) || [];
 
@@ -1772,25 +1801,25 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
           if (!shotScene) continue;
           if (!version.name.startsWith(getScenePattern(project.name, shotScene.name))) continue;
           const key = `${matchingShot.sceneId}_${shotNumber}`;
-          if (versionNum > (bestNum.get(key) ?? 0)) {
-            bestNum.set(key, versionNum);
-            pathMap.set(key, version.path);
+          if (versionNum > (targetBest.get(key) ?? 0)) {
+            targetBest.set(key, versionNum);
+            targetMap.set(key, version.path);
           }
           break;
         }
       } else {
         for (const matchingShot of matchingShots) {
           const key = `${matchingShot.sceneId || ''}_${shotNumber}`;
-          if (versionNum > (bestNum.get(key) ?? 0)) {
-            bestNum.set(key, versionNum);
-            pathMap.set(key, version.path);
+          if (versionNum > (targetBest.get(key) ?? 0)) {
+            targetBest.set(key, versionNum);
+            targetMap.set(key, version.path);
           }
           break;
         }
       }
     });
 
-    return pathMap;
+    return { shotLatestBlendPaths: blendMap, shotLatestPsdPaths: psdMap };
   }, [allVersions, project?.shots, project?.scenes, project?.name, project?.hasScenes]);
 
   // Get scenes and shots from project
@@ -2217,6 +2246,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                     onAddShot={project.hasShots ? (sceneId) => addShot(projectId, sceneId) : undefined}
                     onShotsAreaHoverChange={setIsShotsAreaHovered}
                     shotBlendPaths={shotLatestBlendPaths}
+                    shotPsdPaths={shotLatestPsdPaths}
                     versionsLoaded={versionsLoaded}
                     hoverDelay={hoverDelay}
                     hideDelay={hideDelay}
@@ -2255,6 +2285,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                       viewMode={viewMode}
                       projectPath={project.path}
                       blendPath={shotLatestBlendPaths.get(`${shot.sceneId || ''}_${shot.number}`)}
+                      psdPath={shotLatestPsdPaths.get(`${shot.sceneId || ''}_${shot.number}`)}
                       versionsLoaded={versionsLoaded}
                       onClick={() => handleShotSelect(shot.id)}
                       onStatusChange={handleShotStatusChange}

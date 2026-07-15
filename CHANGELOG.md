@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.9.8] - 2026-07-16
+
+### Added
+- Shots: PSD/PSB thumbnail support — Photoshop files show embedded preview in shot cards and version list
+- Backend: `extract_psd_thumbnail` and `get_file_mtime` commands; `psd_thumbnail` module
+
+### Fixed
+- Thumbnails: blend thumbnail cache busted automatically when file is modified on disk (mtime-based invalidation)
+- Thumbnails: PSD and blend thumbnails refresh on window focus if the file has changed
+
 ## [1.9.7] - 2026-07-14
 
 ### Added

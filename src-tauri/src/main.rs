@@ -3,6 +3,7 @@
 mod time_tracking;
 mod file_naming;
 mod blend_thumbnail;
+mod psd_thumbnail;
 mod updater;
 mod nullconverter;
 
@@ -2115,6 +2116,26 @@ async fn extract_blend_thumbnail(path: String) -> Result<Option<String>, String>
         return Err("File must be a .blend file".to_string());
     }
     blend_thumbnail::extract_blend_thumbnail(&path)
+}
+
+#[tauri::command]
+async fn extract_psd_thumbnail(path: String) -> Result<Option<String>, String> {
+    let p = std::path::Path::new(&path);
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if ext != "psd" && ext != "psb" {
+        return Err("File must be a .psd or .psb file".to_string());
+    }
+    psd_thumbnail::extract_psd_thumbnail(&path)
+}
+
+#[tauri::command]
+async fn get_file_mtime(path: String) -> Result<u64, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    let mtime = meta.modified().map_err(|e| e.to_string())?;
+    mtime
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -5480,6 +5501,8 @@ fn main() {
             set_shot_preview,
             get_project_versions,
             extract_blend_thumbnail,
+            extract_psd_thumbnail,
+            get_file_mtime,
             cleanup_backup_files,
             delete_shot_files,
             delete_scene_files,

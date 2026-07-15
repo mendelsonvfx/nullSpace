@@ -1938,9 +1938,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
           console.log(`✅ Shot renamed: ${filesRenamed} files, ${thumbnailsRenamed} thumbnails`);
 
-          // Clear blend thumbnail cache after rename
+          // Clear thumbnail caches after rename
           if (typeof (window as any).clearAllBlendThumbnailCache === 'function') {
             (window as any).clearAllBlendThumbnailCache();
+          }
+          if (typeof (window as any).clearAllPsdThumbnailCache === 'function') {
+            (window as any).clearAllPsdThumbnailCache();
           }
 
           // Invalidate versions cache so VersionsOverview re-fetches renamed files
@@ -2692,6 +2695,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       if (typeof (window as any).clearAllBlendThumbnailCache === 'function') {
         (window as any).clearAllBlendThumbnailCache();
       }
+      if (typeof (window as any).clearAllPsdThumbnailCache === 'function') {
+        (window as any).clearAllPsdThumbnailCache();
+      }
 
       if (typeof (window as any).showNotification === 'function') {
         (window as any).showNotification(
@@ -2739,6 +2745,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       if (typeof (window as any).clearAllBlendThumbnailCache === 'function') {
         (window as any).clearAllBlendThumbnailCache();
+      }
+      if (typeof (window as any).clearAllPsdThumbnailCache === 'function') {
+        (window as any).clearAllPsdThumbnailCache();
       }
 
       window.dispatchEvent(new CustomEvent('version-created', { detail: { projectPath: project.path } }));
