@@ -42,7 +42,7 @@ export function findNextAvailableShotNumber(
   }
 
   // Все 999 номеров заняты (крайне маловероятно)
-  throw new Error('Достигнут лимит шотов в сцене (максимум 999)');
+  throw new Error('Shot limit reached in scene (maximum 999)');
 }
 
 /**

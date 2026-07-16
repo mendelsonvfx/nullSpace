@@ -1461,7 +1461,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     <div className="relative w-14">
                       <input
                         type="text"
-                        placeholder="ДД"
+                        placeholder="DD"
                         value={project.deadline ? project.deadline.split('-')[2] : ''}
                         onKeyDown={(e) => {
                           if (e.key >= '0' && e.key <= '9') {
@@ -1521,7 +1521,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       })()}
                       <input
                         type="text"
-                        placeholder="ММ"
+                        placeholder="MM"
                         value={project.deadline ? project.deadline.split('-')[1] : ''}
                         onKeyDown={(e) => {
                           if (e.key >= '0' && e.key <= '9') {
@@ -1592,7 +1592,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       })()}
                       <input
                         type="text"
-                        placeholder="ГГ"
+                        placeholder="YY"
                         value={project.deadline ? project.deadline.split('-')[0].slice(-2) : ''}
                         onKeyDown={(e) => {
                           if (e.key >= '0' && e.key <= '9') {

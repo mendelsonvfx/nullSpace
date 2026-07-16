@@ -197,7 +197,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
             {!displaySrc && (
               <div className="flex flex-col items-center justify-center gap-0.5">
                 <span className="text-2xl font-bold text-text-primary">{pendingNumber ?? String(shot.number).padStart(3, '0')}</span>
-                <span className="text-[10px] text-text-muted">No preview</span>
+                <span className="font-semibold text-[8px] tracking-[0.16em] text-[#52525b]">NO PREVIEW</span>
               </div>
             )}
             {displaySrc && (
@@ -522,18 +522,23 @@ const SceneCard: React.FC<SceneCardProps> = ({
               draggable={false}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center flex-col gap-2 scene-preview-content">
-              <div
-                className="w-10 h-10 rounded-badge flex items-center justify-center text-white text-lg font-bold"
-                style={{
-                  background: scene.color
-                    ? `linear-gradient(135deg, ${scene.color}, ${scene.color}aa)`
-                    : 'linear-gradient(135deg, #8b5cf6, #8b5cf6aa)',
-                }}
-              >
-                {scene.name.charAt(0).toUpperCase()}
+            <div className="w-full h-full relative">
+              <svg width="100%" height="100%" className="absolute inset-0 opacity-50" aria-hidden>
+                <defs>
+                  <pattern id={`dotGrid-${scene.id}`} width="16" height="16" patternUnits="userSpaceOnUse">
+                    <circle cx="1.5" cy="1.5" r="1.1" fill="#333337" />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill={`url(#dotGrid-${scene.id})`} />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+                <span className="font-extrabold text-[38px] leading-none tracking-[-0.04em] text-[#71717a]">
+                  {scene.name.charAt(0).toUpperCase()}
+                </span>
+                <span className="font-semibold text-[8px] tracking-[0.16em] text-[#52525b]">
+                  NO PREVIEW
+                </span>
               </div>
-              <span className="text-xs text-text-muted">No preview</span>
             </div>
           )}
 

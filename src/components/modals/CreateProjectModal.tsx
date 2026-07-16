@@ -407,7 +407,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                 <div className="relative w-14">
                 <input
                   type="text"
-                  placeholder="ДД"
+                  placeholder="DD"
                   value={formData.deadline ? formData.deadline.split('-')[2] : ''}
                   onKeyDown={(e) => {
                   if (e.key >= '0' && e.key <= '9') {
@@ -470,7 +470,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
               })()}
               <input
                 type="text"
-                placeholder="ММ"
+                placeholder="MM"
                 value={formData.deadline ? formData.deadline.split('-')[1] : ''}
                 onKeyDown={(e) => {
                   if (e.key >= '0' && e.key <= '9') {
@@ -544,7 +544,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
               })()}
               <input
                 type="text"
-                placeholder="ГГ"
+                placeholder="YY"
                 value={formData.deadline ? formData.deadline.split('-')[0].slice(-2) : ''}
                 onKeyDown={(e) => {
                   if (e.key >= '0' && e.key <= '9') {

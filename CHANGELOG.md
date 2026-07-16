@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.10] - 2026-07-17
+
+### Changed
+- Shots: scene card empty state — dot-grid background with large initial letter and uppercase "NO PREVIEW" label
+- Shots: shot card "No preview" label restyled to match — small uppercase tracking-wide text
+- Tasks: attachment button wrapped in fixed-width slot — no layout shift between empty and filled state; row padding increased
+
+### Fixed
+- UI: deadline field placeholders changed from Russian (ДД/ММ/ГГ) to English (DD/MM/YY) in project creation and project details
+- UI: deadline notification messages translated to English
+- UI: remaining Russian-language strings replaced with English across Finance and shot numbering
+
 ## [1.9.8] - 2026-07-16
 
 ### Added

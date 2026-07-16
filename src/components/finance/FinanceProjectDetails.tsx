@@ -93,7 +93,7 @@ export function FinanceProjectDetails({
         <button
           onClick={onClose}
           className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-          title="Вернуться к обзору"
+          title="Back to overview"
         >
           <X className="w-6 h-6 close-button-red" />
         </button>

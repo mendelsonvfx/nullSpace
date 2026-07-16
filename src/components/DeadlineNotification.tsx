@@ -47,9 +47,9 @@ export function DeadlineNotification({ projectName, daysRemaining, onClose }: De
   };
 
   const getMessage = () => {
-    if (daysRemaining === 0) return 'Дедлайн сегодня!';
-    if (daysRemaining === 1) return 'Остался 1 день до дедлайна';
-    return `Осталось ${daysRemaining} дня до дедлайна`;
+    if (daysRemaining === 0) return 'Deadline today!';
+    if (daysRemaining === 1) return '1 day until deadline';
+    return `${daysRemaining} days until deadline`;
   };
 
   return (

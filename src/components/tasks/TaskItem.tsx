@@ -350,7 +350,7 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
       <div
         onClick={() => { onToggle(); }}
         onContextMenu={(e) => openTaskMenu(e, null)}
-        className="relative overflow-hidden flex items-center gap-3 px-3 py-1.5 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
+        className="relative overflow-hidden flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
         style={expanded ? {
           borderBottomLeftRadius: 0,
           borderBottomRightRadius: 0,
@@ -414,25 +414,27 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
         )}
 
         {/* Attachment button */}
-        {attCount > 0 ? (
-          <button
-            onClick={(e) => { e.stopPropagation(); const next = !expanded; setExpanded(next); onUpdate({ expanded: next }); setAttachHover(false); }}
-            onMouseEnter={() => setAttachHover(true)}
-            onMouseLeave={() => setAttachHover(false)}
-            onContextMenu={(e) => e.stopPropagation()}
-            className="flex-none flex items-center gap-1 h-[26px] px-2 bg-transparent border border-transparent group-hover:border-[#26262d] rounded-[7px] text-[#9a9aa3] text-[11px] font-semibold cursor-pointer hover:bg-[#0f0f0f] hover:border-border-secondary hover:text-text-primary transition-all"
-          >
-            <Paperclip className="w-[13px] h-[13px]" strokeWidth={1.9} />
-            {attCount}
-          </button>
-        ) : (
-          <button
-            onClick={(e) => { e.stopPropagation(); addAttachment(); }}
-            className="flex-none opacity-0 group-hover:opacity-100 flex items-center gap-1 h-[26px] px-2 bg-[#17171c] border border-dashed border-[#26262d] rounded-[7px] text-[#6f6f78] text-[11px] font-semibold cursor-pointer hover:border-border-secondary hover:text-text-primary transition-all"
-          >
-            <Paperclip className="w-[13px] h-[13px]" strokeWidth={1.9} />
-          </button>
-        )}
+        <div className="flex-none w-[41px] flex items-center justify-center">
+          {attCount > 0 ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); const next = !expanded; setExpanded(next); onUpdate({ expanded: next }); setAttachHover(false); }}
+              onMouseEnter={() => setAttachHover(true)}
+              onMouseLeave={() => setAttachHover(false)}
+              onContextMenu={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 h-[23px] px-2 bg-transparent border border-transparent group-hover:border-[#26262d] rounded-[7px] text-[#9a9aa3] text-[11px] font-semibold cursor-pointer hover:bg-[#0f0f0f] hover:border-border-secondary hover:text-text-primary transition-all"
+            >
+              <Paperclip className="w-[13px] h-[13px]" strokeWidth={1.9} />
+              {attCount}
+            </button>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); addAttachment(); }}
+              className="opacity-0 group-hover:opacity-100 flex items-center gap-1 h-[22px] px-2 bg-card-bg border border-dashed border-[#26262d] rounded-[7px] text-[#6f6f78] text-[11px] font-semibold cursor-pointer hover:border-border-secondary hover:text-text-primary transition-all"
+            >
+              <Paperclip className="w-[21px] h-[13px]" strokeWidth={1.9} />
+            </button>
+          )}
+        </div>
 
         {/* Delete */}
         <button
