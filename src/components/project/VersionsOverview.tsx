@@ -843,7 +843,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                       setSelectedSoftware(software);
                       setShowOnlyUnversioned(false);
                     }}
-                    className={`px-2.5 py-[5px] rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 border ${selectedSoftware === software && !showOnlyUnversioned
+                    className={`px-2.5 h-7 rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 border ${selectedSoftware === software && !showOnlyUnversioned
                       ? 'bg-[#1a1a1a] border-[#3f3f46] text-text-primary'
                       : 'border-[#262626] text-zinc-500 hover:bg-[#1a1a1a] hover:border-[#3f3f46]'
                       }`}
@@ -857,7 +857,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                     setSelectedSoftware('all');
                     setShowOnlyUnversioned(false);
                   }}
-                  className={`px-2.5 py-[5px] rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap border ${selectedSoftware === 'all' && !showOnlyUnversioned
+                  className={`px-2.5 h-7 flex items-center rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap border ${selectedSoftware === 'all' && !showOnlyUnversioned
                     ? 'bg-[#1a1a1a] border-[#3f3f46] text-text-primary'
                     : 'border-[#262626] text-zinc-500 hover:bg-[#1a1a1a] hover:border-[#3f3f46]'
                     }`}
@@ -869,7 +869,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                     setShowOnlyUnversioned(!showOnlyUnversioned);
                     setSelectedSoftware('all');
                   }}
-                  className={`px-2.5 py-[5px] rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap border ${showOnlyUnversioned
+                  className={`px-2.5 h-7 flex items-center rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap border ${showOnlyUnversioned
                     ? 'bg-[#1a1a1a] border-[#3f3f46] text-text-primary'
                     : 'border-[#262626] text-zinc-500 hover:bg-[#1a1a1a] hover:border-[#3f3f46]'
                     }`}

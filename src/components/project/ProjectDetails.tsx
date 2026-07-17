@@ -951,14 +951,25 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             <div className="flex items-center justify-between mb-3 h-7">
               <span className="text-sm font-medium text-text-secondary">Tasks</span>
               {context.todos.length > 3 && (
-                <button
-                  onClick={() => setTasksExpanded(!tasksExpanded)}
-                  className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:bg-accent/10 px-2 h-7 rounded-button transition-all cursor-pointer"
-                >
-                  <IconChevronRight stroke={2} className={`w-3.5 h-3.5 transition-transform duration-200 ${tasksExpanded ? 'rotate-90' : ''}`} />
-                  <span>{tasksExpanded ? 'Collapse' : 'View All Tasks'}</span>
-                  <span className="bg-[#1e1e1e] text-text-secondary text-[11px] min-w-5 h-5 rounded grid place-items-center">{context.todos.length}</span>
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setTasksExpanded(!tasksExpanded)}
+                    className={`flex items-center gap-1.5 px-2.5 py-[5px] rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap border ${
+                      tasksExpanded
+                        ? 'bg-[#1a1a1a] border-[#3f3f46] text-zinc-500'
+                        : 'border-[#262626] text-zinc-500 hover:bg-[#1a1a1a] hover:border-[#3f3f46]'
+                    }`}
+                  >
+                    <span className="relative">
+                      <span className="invisible">Collapse</span>
+                      <span className="absolute inset-0 flex items-center">{tasksExpanded ? 'Collapse' : 'View all'}</span>
+                    </span>
+                    <IconChevronRight stroke={2} className={`w-3 h-3 transition-transform duration-200 ${tasksExpanded ? 'rotate-90' : ''}`} />
+                  </button>
+                  <span className="flex items-center justify-center min-w-[28px] px-2.5 py-[5px] rounded-[6px] border border-[#262626] text-[11px] font-bold text-zinc-500">
+                    {context.todos.length}
+                  </span>
+                </div>
               )}
             </div>
 
@@ -1096,14 +1107,25 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             <div className="flex items-center justify-between mb-3 h-7">
               <span className="text-sm font-medium text-text-secondary">Tasks</span>
               {context.todos.length > 3 && (
-                <button
-                  onClick={() => setTasksExpanded(!tasksExpanded)}
-                  className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:bg-accent/10 px-2 h-7 rounded-button transition-all cursor-pointer"
-                >
-                  <IconChevronRight stroke={2} className={`w-3.5 h-3.5 transition-transform duration-200 ${tasksExpanded ? 'rotate-90' : ''}`} />
-                  <span>{tasksExpanded ? 'Collapse' : 'View All Tasks'}</span>
-                  <span className="bg-[#1e1e1e] text-text-secondary text-[11px] min-w-5 h-5 rounded grid place-items-center">{context.todos.length}</span>
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setTasksExpanded(!tasksExpanded)}
+                    className={`flex items-center gap-1.5 px-2.5 py-[5px] rounded-[6px] text-[11px] font-medium transition-colors whitespace-nowrap border ${
+                      tasksExpanded
+                        ? 'bg-[#1a1a1a] border-[#3f3f46] text-zinc-500'
+                        : 'border-[#262626] text-zinc-500 hover:bg-[#1a1a1a] hover:border-[#3f3f46]'
+                    }`}
+                  >
+                    <span className="relative">
+                      <span className="invisible">Collapse</span>
+                      <span className="absolute inset-0 flex items-center">{tasksExpanded ? 'Collapse' : 'View all'}</span>
+                    </span>
+                    <IconChevronRight stroke={2} className={`w-3 h-3 transition-transform duration-200 ${tasksExpanded ? 'rotate-90' : ''}`} />
+                  </button>
+                  <span className="flex items-center justify-center min-w-[28px] px-2.5 py-[5px] rounded-[6px] border border-[#262626] text-[11px] font-bold text-zinc-500">
+                    {context.todos.length}
+                  </span>
+                </div>
               )}
             </div>
 

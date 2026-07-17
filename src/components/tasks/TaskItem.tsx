@@ -420,7 +420,7 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
               onClick={(e) => { e.stopPropagation(); const next = !expanded; setExpanded(next); onUpdate({ expanded: next }); setAttachHover(false); }}
               onMouseEnter={() => setAttachHover(true)}
               onMouseLeave={() => setAttachHover(false)}
-              onContextMenu={(e) => e.stopPropagation()}
+              onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); }}
               className="flex items-center gap-1 h-[23px] px-2 bg-transparent border border-transparent group-hover:border-[#26262d] rounded-[7px] text-[#9a9aa3] text-[11px] font-semibold cursor-pointer hover:bg-[#0f0f0f] hover:border-border-secondary hover:text-text-primary transition-all"
             >
               <Paperclip className="w-[13px] h-[13px]" strokeWidth={1.9} />
@@ -429,7 +429,8 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
           ) : (
             <button
               onClick={(e) => { e.stopPropagation(); addAttachment(); }}
-              className="opacity-0 group-hover:opacity-100 flex items-center gap-1 h-[22px] px-2 bg-card-bg border border-dashed border-[#26262d] rounded-[7px] text-[#6f6f78] text-[11px] font-semibold cursor-pointer hover:border-border-secondary hover:text-text-primary transition-all"
+              onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              className="opacity-0 group-hover:opacity-100 flex items-center gap-1 h-[23px] px-2 bg-card-bg border border-dashed border-[#26262d] rounded-[7px] text-[#6f6f78] text-[11px] font-semibold cursor-pointer hover:border-border-secondary hover:text-text-primary transition-all"
             >
               <Paperclip className="w-[21px] h-[13px]" strokeWidth={1.9} />
             </button>

@@ -684,7 +684,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
               <button
                 key={software}
                 onClick={() => updateSelectedSoftware(software)}
-                className={`px-2.5 py-[5px] rounded-[6px] text-[11px] font-medium flex items-center gap-1.5 whitespace-nowrap border ${!isRestoringStateRef.current ? 'transition-colors' : ''
+                className={`px-2.5 h-7 rounded-[6px] text-[11px] font-medium flex items-center gap-1.5 whitespace-nowrap border ${!isRestoringStateRef.current ? 'transition-colors' : ''
                   } ${selectedSoftware === software
                     ? 'bg-[#1a1a1a] border-[#3f3f46] text-text-primary'
                     : 'border-[#262626] text-zinc-500 hover:bg-[#1a1a1a] hover:border-[#3f3f46]'

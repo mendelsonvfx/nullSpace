@@ -1,6 +1,7 @@
 use std::process::Command;
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 // Embedded at compile time via UPDATE_TOKEN env var (set in GitHub Actions).
 // None in local dev builds → update check silently returns Ok(None).
@@ -112,7 +113,10 @@ fn is_newer_version(latest: &str, current: &str) -> bool {
 }
 
 #[tauri::command]
-pub async fn install_portable_update(download_url: String) -> Result<(), String> {
+pub async fn install_portable_update(
+    app_handle: tauri::AppHandle,
+    download_url: String,
+) -> Result<(), String> {
     // Token guard — install_portable_update is only reachable after check_for_update
     // returned Some(...), which requires a valid token. This is a safety net.
     let token = match GITHUB_TOKEN {
@@ -135,7 +139,7 @@ pub async fn install_portable_update(download_url: String) -> Result<(), String>
         .build()
         .map_err(|e| e.to_string())?;
 
-    let bytes = client
+    let mut response = client
         .get(&download_url)
         .header("Authorization", format!("Bearer {}", token))
         .header("Accept", "application/octet-stream")
@@ -144,10 +148,20 @@ pub async fn install_portable_update(download_url: String) -> Result<(), String>
         .await
         .map_err(|e| e.to_string())?
         .error_for_status()
-        .map_err(|e| e.to_string())?
-        .bytes()
-        .await
         .map_err(|e| e.to_string())?;
+
+    let total = response.content_length().unwrap_or(0);
+    let mut downloaded: u64 = 0;
+    let mut bytes: Vec<u8> = Vec::with_capacity(total as usize);
+
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        downloaded += chunk.len() as u64;
+        bytes.extend_from_slice(&chunk);
+        let _ = app_handle.emit_all("update:progress", serde_json::json!({
+            "downloaded": downloaded,
+            "total": total,
+        }));
+    }
 
     // Sanity check: verify the downloaded bytes are a Windows PE executable.
     // If the token is expired, GitHub may redirect to an HTML login page (200 OK)

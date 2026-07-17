@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.9.11] - 2026-07-17
+
+### Added
+- Updater: real-time download progress bar with MB count and percentage — replaces spinner during update install
+
+### Changed
+- Project: "View all tasks" toggle redesigned — fixed-width pill button with separate count badge; no layout shift on expand/collapse
+- Tree: `_attachments` folder hidden by default alongside `backup`
+- Versions: software filter tabs use fixed height for consistent alignment
+- Output: software filter tabs use fixed height for consistent alignment
+
+### Fixed
+- Tasks: right-click on attachment button no longer triggers the system context menu
+
 ## [1.9.10] - 2026-07-17
 
 ### Changed

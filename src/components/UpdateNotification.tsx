@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { X, Download, ExternalLink, Loader2 } from 'lucide-react';
+import { X, Download, ExternalLink } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
+import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/api/shell';
 import ReactMarkdown from 'react-markdown';
 
@@ -17,15 +18,20 @@ interface Props {
 export function UpdateNotification({ version, downloadUrl, notes, pubDate, onDismiss }: Props) {
   const [isVisible, setIsVisible] = useState(false);
   const [phase, setPhase] = useState<Phase>('available');
+  const [progress, setProgress] = useState<{ downloaded: number; total: number } | null>(null);
 
   useEffect(() => { setIsVisible(true); }, []);
 
   const handleUpdate = async () => {
     setPhase('installing');
+    const unlisten = await listen<{ downloaded: number; total: number }>('update:progress', (e) => {
+      setProgress(e.payload);
+    });
     try {
       // Downloads new exe to temp dir and exits the process — may not return
       await invoke('install_portable_update', { downloadUrl });
     } catch {
+      unlisten();
       onDismiss();
     }
   };
@@ -156,9 +162,26 @@ export function UpdateNotification({ version, downloadUrl, notes, pubDate, onDis
             </div>
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center py-14 px-6">
-            <Loader2 className="w-8 h-8 animate-spin text-accent mb-4" />
-            <div className="font-semibold mb-1">Installing Update...</div>
+          <div className="flex flex-col items-center py-10 px-6 gap-5">
+            <div className="font-semibold">Installing Update...</div>
+            <div className="w-full">
+              <div className="w-full h-1.5 bg-hover-bg rounded-full overflow-hidden">
+                {progress && progress.total > 0 ? (
+                  <div
+                    className="h-full bg-accent rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, Math.round((progress.downloaded / progress.total) * 100))}%` }}
+                  />
+                ) : (
+                  <div className="h-full bg-accent rounded-full opacity-40 animate-pulse" />
+                )}
+              </div>
+              {progress && progress.total > 0 && (
+                <div className="flex justify-between mt-2 text-xs text-text-muted">
+                  <span>{(progress.downloaded / 1024 / 1024).toFixed(1)} MB</span>
+                  <span>{Math.round((progress.downloaded / progress.total) * 100)}%</span>
+                </div>
+              )}
+            </div>
             <div className="text-sm text-text-muted text-center">
               The app will restart automatically when the update is ready
             </div>

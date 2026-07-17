@@ -78,7 +78,7 @@ interface TreeViewProps {
   onToggleHidden: () => void;
 }
 
-const AUTO_HIDDEN_NAMES = ['backup'];
+const AUTO_HIDDEN_NAMES = ['backup', '_attachments'];
 
 const PROJECT_FILE_EXTENSIONS = [
   'blend', 'hip', 'hiplc', 'hipnc',
@@ -1304,7 +1304,10 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
               </div>
 
               {/* Separator between normal and underscore items */}
-              {normalItems.length > 0 && underscoreItems.length > 0 && (
+              {normalItems.length > 0 && underscoreItems.length > 0 && (showHidden || underscoreItems.some(n =>
+                !hiddenPaths.has(n.path) &&
+                !(n.is_dir && AUTO_HIDDEN_NAMES.includes(n.name.toLowerCase()) && !explicitlyShownPaths.has(n.path))
+              )) && (
                 <div className="my-2 mx-12 border-t border-border-secondary" />
               )}
 
