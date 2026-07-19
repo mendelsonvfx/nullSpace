@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.13] - 2026-07-19
+
+### Fixed
+- Updater: brief pause after download completes — progress bar animates to 100% before the app exits to install
+
 ## [1.9.12] - 2026-07-19
 
 ### Changed

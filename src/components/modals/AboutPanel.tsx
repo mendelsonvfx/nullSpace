@@ -98,7 +98,7 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
           </div>
 
           <div className="text-center text-[12px] text-text-muted">
-            <p>Version 1.9.12</p>
+            <p>Version 1.9.13</p>
             <p className="mt-1">Made with passion by MendelsonVFX</p>
           </div>
         </div>

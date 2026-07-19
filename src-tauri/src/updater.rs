@@ -163,6 +163,9 @@ pub async fn install_portable_update(
         }));
     }
 
+    // Give the WebView time to animate the progress bar to 100% before exit.
+    std::thread::sleep(Duration::from_millis(650));
+
     // Sanity check: verify the downloaded bytes are a Windows PE executable.
     // If the token is expired, GitHub may redirect to an HTML login page (200 OK)
     // which error_for_status() would not catch. Writing HTML to disk and running
