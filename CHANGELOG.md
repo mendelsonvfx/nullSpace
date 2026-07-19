@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.9.12] - 2026-07-19
+
+### Changed
+- Updater: default update check frequency changed to "on launch" instead of every 24 hours
+
+### Fixed
+- Updater: last-check timestamp written before the network call — prevents repeated checks when the server is unreachable
+- Time Entry modal: removed fixed minimum height — modal size now adapts to content
+- Finance: payment modal removed fixed minimum height — modal size now adapts to content
+
 ## [1.9.11] - 2026-07-17
 
 ### Added

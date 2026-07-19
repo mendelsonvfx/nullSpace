@@ -12,7 +12,7 @@ export function useUpdateCheck() {
 
   useEffect(() => {
     const timer = setTimeout(async () => {
-      const frequency = localStorage.getItem('updateCheckFrequency') || '24h';
+      const frequency = localStorage.getItem('updateCheckFrequency') || 'launch';
       if (frequency === 'never') return;
 
       if (frequency !== 'launch') {
@@ -25,6 +25,7 @@ export function useUpdateCheck() {
         if (Date.now() - lastCheck < (intervalMs[frequency] ?? 86_400_000)) return;
       }
 
+      localStorage.setItem('lastUpdateCheck', Date.now().toString());
       try {
         const info = await invoke<{
           version: string;
@@ -33,7 +34,6 @@ export function useUpdateCheck() {
           release_url: string | null;
           pub_date: string | null;
         } | null>('check_for_update');
-        localStorage.setItem('lastUpdateCheck', Date.now().toString());
         if (info) {
           setUpdateInfo({
             version: info.version,

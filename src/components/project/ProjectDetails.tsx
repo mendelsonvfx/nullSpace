@@ -1227,7 +1227,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           }}
         >
           <div
-            className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-md mx-4 max-h-[85vh] min-h-[400px] overflow-hidden flex flex-col transition-all duration-200 ${
+            className={`bg-card-bg rounded-card border border-border-secondary shadow-2xl w-full max-w-md mx-4 max-h-[85vh] overflow-hidden flex flex-col transition-all duration-200 ${
               isPaymentModalAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
             }`}
             onClick={(e) => e.stopPropagation()}

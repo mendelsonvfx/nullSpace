@@ -278,7 +278,7 @@ function GeneralSettings() {
     return saved !== null ? parseInt(saved) : 3;
   });
   const [updateCheckFrequency, setUpdateCheckFrequency] = useState(() => {
-    return localStorage.getItem('updateCheckFrequency') || '24h';
+    return localStorage.getItem('updateCheckFrequency') || 'launch';
   });
   type CheckStatus = 'idle' | 'checking' | 'up-to-date' | 'error';
   const [checkStatus, setCheckStatus] = useState<CheckStatus>('idle');
