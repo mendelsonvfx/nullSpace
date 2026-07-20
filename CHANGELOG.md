@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.14] - 2026-07-21
+
+### Changed
+- About: Project Page link now active — opens mendelsonvfx.com/#nullspace
+- About: link buttons use Tauri shell open instead of anchor tags
+
 ## [1.9.13] - 2026-07-19
 
 ### Fixed

@@ -7,7 +7,7 @@
   },
   "package": {
     "productName": "nullSpace",
-    "version": "1.9.13"
+    "version": "1.9.14"
   },
   "tauri": {
     "allowlist": {

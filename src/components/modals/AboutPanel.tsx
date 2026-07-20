@@ -1,4 +1,5 @@
 import { X, ExternalLink } from 'lucide-react';
+import { open } from '@tauri-apps/api/shell';
 import appIcon from '../../appIcon';
 import { useModalBlur } from '../../hooks/useModalBlur';
 
@@ -21,9 +22,9 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
     },
     {
       title: 'Project Page',
-      url: '#',
-      description: 'Coming soon',
-      disabled: true
+      url: 'https://mendelsonvfx.com/#nullspace',
+      description: 'View project page',
+      disabled: false
     }
   ];
 
@@ -76,29 +77,27 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
 
           <div className="flex flex-col gap-2 mb-6">
             {links.map((link) => (
-              <a
+              <button
                 key={link.title}
-                href={link.disabled ? undefined : link.url}
-                target={link.disabled ? undefined : '_blank'}
-                rel={link.disabled ? undefined : 'noopener noreferrer'}
-                className={`flex items-center justify-between p-3 border rounded-lg transition-colors text-text-primary no-underline ${
+                disabled={link.disabled}
+                onClick={() => !link.disabled && open(link.url).catch(() => {})}
+                className={`w-full flex items-center justify-between p-3 border rounded-lg transition-colors text-text-primary text-left ${
                   link.disabled
                     ? 'border-border-secondary bg-card-bg opacity-50 cursor-not-allowed'
                     : 'border-border-secondary bg-card-bg hover:bg-hover-bg hover:border-border-hover cursor-pointer'
                 }`}
-                onClick={(e) => link.disabled && e.preventDefault()}
               >
                 <div>
                   <div className="text-[13px] font-medium text-text-primary">{link.title}</div>
                   <div className="text-[11px] text-text-muted mt-0.5">{link.description}</div>
                 </div>
                 {!link.disabled && <ExternalLink className="w-4 h-4 text-text-muted flex-shrink-0" />}
-              </a>
+              </button>
             ))}
           </div>
 
           <div className="text-center text-[12px] text-text-muted">
-            <p>Version 1.9.13</p>
+            <p>Version 1.9.14</p>
             <p className="mt-1">Made with passion by MendelsonVFX</p>
           </div>
         </div>
