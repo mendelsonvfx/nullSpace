@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.16] - 2026-07-22
+
+### Fixed
+- Tasks: double-click on a task row with attachments toggles the attachment panel instead of toggling completion twice
+
 ## [1.9.15] - 2026-07-22
 
 ### Added

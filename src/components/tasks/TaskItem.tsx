@@ -161,6 +161,8 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
   const onUpdateRef = useRef(onUpdate);
   useEffect(() => { onUpdateRef.current = onUpdate; }, [onUpdate]);
   const justRemovedRef = useRef(false);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => { return () => { if (clickTimerRef.current) clearTimeout(clickTimerRef.current); }; }, []);
 
   useEffect(() => {
     const handler = () => {
@@ -348,7 +350,33 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
     <div ref={containerRef} className="relative" onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
       {/* Main row */}
       <div
-        onClick={() => { onToggle(); }}
+        onClick={() => {
+          if (attCount > 0) {
+            if (clickTimerRef.current !== null) {
+              clearTimeout(clickTimerRef.current);
+              clickTimerRef.current = null;
+            } else {
+              clickTimerRef.current = setTimeout(() => {
+                clickTimerRef.current = null;
+                onToggle();
+              }, 150);
+            }
+          } else {
+            onToggle();
+          }
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          if (attCount > 0) {
+            if (clickTimerRef.current !== null) {
+              clearTimeout(clickTimerRef.current);
+              clickTimerRef.current = null;
+            }
+            const next = !expanded;
+            setExpanded(next);
+            onUpdate({ expanded: next });
+          }
+        }}
         onContextMenu={(e) => openTaskMenu(e, null)}
         className="relative overflow-hidden flex items-center gap-3 px-3 py-2 bg-[#0f0f0f] border border-border-primary rounded-button group hover:bg-hover-bg hover:border-border-secondary transition-all cursor-pointer"
         style={expanded ? {
@@ -417,7 +445,7 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
         <div className="flex-none w-[41px] flex items-center justify-center">
           {attCount > 0 ? (
             <button
-              onClick={(e) => { e.stopPropagation(); const next = !expanded; setExpanded(next); onUpdate({ expanded: next }); setAttachHover(false); }}
+              onClick={(e) => { e.stopPropagation(); if (clickTimerRef.current !== null) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; } const next = !expanded; setExpanded(next); onUpdate({ expanded: next }); setAttachHover(false); }}
               onMouseEnter={() => setAttachHover(true)}
               onMouseLeave={() => setAttachHover(false)}
               onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); }}
