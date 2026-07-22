@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.15] - 2026-07-22
+
+### Added
+- Tool Launcher: right-click context menu on tiles — "Reveal in Explorer" and "Copy Path"
+
 ## [1.9.14] - 2026-07-21
 
 ### Changed

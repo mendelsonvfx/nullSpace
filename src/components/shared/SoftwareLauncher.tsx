@@ -1,10 +1,14 @@
 import { memo, useState, useEffect, useRef } from 'react';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, FolderOpen, Copy } from 'lucide-react';
 import { IconSettings } from '@tabler/icons-react';
+import { invoke } from '@tauri-apps/api/tauri';
+import { writeText } from '@tauri-apps/api/clipboard';
 import { useProjectStore } from '../../store/projectStore';
 import { getSoftwareMeta } from '../../utils/softwareMeta';
 import { getCustomItems, getSoftwareEnabled, saveCustomItems, getExeIcon, sampleColorFromDataUrl, extractNameFromPath } from '../../utils/launcherUtils';
 import { selectExecutable } from '../../utils/tauri';
+import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
+import { useContextMenu } from '../../hooks/useContextMenu';
 import type { CustomLauncherItem } from '../../types/launcher';
 import type { SettingsTab } from '../modals/SettingsPanel';
 
@@ -69,10 +73,11 @@ let _launchAnimDone = false;
 
 // ---- SoftwareTile ----
 
-function SoftwareTile({ tile, onLaunch, animIndex }: {
+function SoftwareTile({ tile, onLaunch, animIndex, onContextMenu }: {
   tile: TileData;
   onLaunch: (path: string, id: string) => void;
   animIndex?: number;
+  onContextMenu?: (e: React.MouseEvent, tile: TileData) => void;
 }) {
   const [imgError, setImgError] = useState(false);
   const bgDefault = `radial-gradient(circle at 0% 120%, ${tile.brandColor}15 0%, transparent 80%), rgb(20,20,20)`;
@@ -94,6 +99,7 @@ function SoftwareTile({ tile, onLaunch, animIndex }: {
       onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = bgHover; }}
       onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = bgDefault; }}
       onClick={() => onLaunch(tile.path, tile.id)}
+      onContextMenu={(e) => onContextMenu?.(e, tile)}
     >
       {/* Icon: custom base64 > known logoPath > gradient+abbr fallback */}
       {tile.iconBase64 && !imgError ? (
@@ -203,6 +209,13 @@ export const SoftwareLauncher = memo(function SoftwareLauncher({
   });
   const mountedRef = useRef(true);
   const launchSoftwareWithoutProject = useProjectStore(s => s.launchSoftwareWithoutProject);
+  const {
+    isOpen: isTileMenuOpen,
+    position: tileMenuPosition,
+    data: tileMenuData,
+    openMenu: openTileMenu,
+    closeMenu: closeTileMenu,
+  } = useContextMenu<TileData>();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -273,11 +286,41 @@ export const SoftwareLauncher = memo(function SoftwareLauncher({
                 tile={tile}
                 onLaunch={launchSoftwareWithoutProject}
                 animIndex={shouldAnimate ? index : undefined}
+                onContextMenu={openTileMenu}
               />
             ))}
           </div>
         </div>
       </div>
+      <ContextMenu
+        isOpen={isTileMenuOpen}
+        position={tileMenuPosition}
+        onClose={closeTileMenu}
+        menuId="launcher-tile"
+      >
+        <ContextMenuItem
+          icon={<FolderOpen className="w-4 h-4" />}
+          onClick={async () => {
+            if (tileMenuData) {
+              try { await invoke('reveal_in_explorer', { path: tileMenuData.path }); } catch {}
+              closeTileMenu();
+            }
+          }}
+        >
+          Reveal in Explorer
+        </ContextMenuItem>
+        <ContextMenuItem
+          icon={<Copy className="w-4 h-4" />}
+          onClick={async () => {
+            if (tileMenuData) {
+              try { await writeText(tileMenuData.path); } catch {}
+              closeTileMenu();
+            }
+          }}
+        >
+          Copy Path
+        </ContextMenuItem>
+      </ContextMenu>
     </div>
   );
 });
