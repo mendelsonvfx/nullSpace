@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.9.18] - 2026-07-23
+
+### Changed
+- Welcome Setup: full redesign — segmented stepper (Projects → Currency → Software → Ready), smooth slide animations, software rows styled as SettingsPanel cards with brand icons and clear-path button
+- Welcome Setup: currency selection step added before software setup
+
+## [1.9.17] - 2026-07-23
+
+### Changed
+- Activation: screen header redesigned to match main app — app icon, centered title, Tabler icon window controls with maximize button, red close hover; exit animation fixed
+
+### Removed
+- Tool Launcher: removed "Add Software" button from empty state — only "Open Settings" button remains
+
 ## [1.9.16] - 2026-07-22
 
 ### Fixed

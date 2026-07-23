@@ -28,7 +28,7 @@ interface TileData {
 function buildTiles(): TileData[] {
   let rawPaths: Record<string, string> = {};
   let enabled: Record<string, boolean> = {};
-  let custom: CustomLauncherItem[] = [];
+  let custom: ReturnType<typeof getCustomItems> = [];
 
   try { rawPaths = JSON.parse(localStorage.getItem('softwarePaths') ?? '{}'); } catch { /* */ }
   enabled = getSoftwareEnabled();
