@@ -1,15 +1,13 @@
-import { memo, useState, useEffect, useRef } from 'react';
-import { Plus, Loader2, FolderOpen, Copy } from 'lucide-react';
+import { memo, useState, useEffect } from 'react';
+import { FolderOpen, Copy } from 'lucide-react';
 import { IconSettings } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { useProjectStore } from '../../store/projectStore';
 import { getSoftwareMeta } from '../../utils/softwareMeta';
-import { getCustomItems, getSoftwareEnabled, saveCustomItems, getExeIcon, sampleColorFromDataUrl, extractNameFromPath } from '../../utils/launcherUtils';
-import { selectExecutable } from '../../utils/tauri';
+import { getCustomItems, getSoftwareEnabled } from '../../utils/launcherUtils';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
-import type { CustomLauncherItem } from '../../types/launcher';
 import type { SettingsTab } from '../modals/SettingsPanel';
 
 // ---- Unified tile data ----
@@ -142,11 +140,9 @@ function SoftwareTile({ tile, onLaunch, animIndex, onContextMenu }: {
 // ---- LauncherEmptyState ----
 
 function LauncherEmptyState({
-  onOpenSettings, onAdd, isAdding,
+  onOpenSettings,
 }: {
   onOpenSettings: (tab: SettingsTab) => void;
-  onAdd: () => void;
-  isAdding: boolean;
 }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-app-bg">
@@ -168,25 +164,14 @@ function LauncherEmptyState({
           <p className="text-[13px] text-text-muted leading-relaxed mb-[26px] max-w-[330px]">
             Add your apps and they'll appear here as tiles for quick launch.
           </p>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onAdd}
-              disabled={isAdding}
-              className="flex items-center gap-2 h-11 px-5 rounded-[12px] text-white font-bold text-[13.5px] border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ background: 'linear-gradient(180deg,#7c3aed,#6d28d9)' }}
-            >
-              {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Add software
-            </button>
-            <button
-              onClick={() => onOpenSettings('launcher')}
-              className="h-11 px-[17px] bg-transparent border border-border-secondary rounded-[12px]
-                         text-text-secondary text-[13px] font-semibold cursor-pointer
-                         hover:border-border-hover hover:text-text-primary transition-colors"
-            >
-              Open Settings
-            </button>
-          </div>
+          <button
+            onClick={() => onOpenSettings('launcher')}
+            className="h-11 px-[17px] bg-transparent border border-border-secondary rounded-button
+                       text-text-secondary text-[13px] font-semibold cursor-pointer
+                       hover:border-border-hover hover:text-text-primary transition-colors"
+          >
+            Open Settings
+          </button>
         </div>
       </div>
     </div>
@@ -201,13 +186,11 @@ export const SoftwareLauncher = memo(function SoftwareLauncher({
   onOpenSettings: (tab: SettingsTab) => void;
 }) {
   const [tiles, setTiles] = useState<TileData[]>([]);
-  const [isAdding, setIsAdding] = useState(false);
   const [shouldAnimate] = useState<boolean>(() => {
     const first = !_launchAnimDone;
     _launchAnimDone = true;
     return first;
   });
-  const mountedRef = useRef(true);
   const launchSoftwareWithoutProject = useProjectStore(s => s.launchSoftwareWithoutProject);
   const {
     isOpen: isTileMenuOpen,
@@ -218,45 +201,21 @@ export const SoftwareLauncher = memo(function SoftwareLauncher({
   } = useContextMenu<TileData>();
 
   useEffect(() => {
-    mountedRef.current = true;
     const load = () => setTiles(buildTiles());
     load();
     window.addEventListener('storage', load);
     window.addEventListener('softwarePaths:updated', load as EventListener);
     window.addEventListener('launcherItems:updated', load as EventListener);
     return () => {
-      mountedRef.current = false;
       window.removeEventListener('storage', load);
       window.removeEventListener('softwarePaths:updated', load as EventListener);
       window.removeEventListener('launcherItems:updated', load as EventListener);
     };
   }, []);
 
-  const handleAdd = async () => {
-    setIsAdding(true);
-    try {
-      const path = await selectExecutable();
-      if (!path || !mountedRef.current) return;
-      const current = getCustomItems();
-      if (current.some(i => i.path === path)) return;
-      const iconBase64 = await getExeIcon(path);
-      const brandColor = iconBase64 ? await sampleColorFromDataUrl(iconBase64) : '#6366f1';
-      if (!mountedRef.current) return;
-      const name = extractNameFromPath(path);
-      const newItem: CustomLauncherItem = {
-        id: crypto.randomUUID(), name, path, iconBase64, brandColor, enabled: true,
-      };
-      saveCustomItems([...current, newItem]);
-    } finally {
-      if (mountedRef.current) setIsAdding(false);
-    }
-  };
-
   if (tiles.length === 0) return (
     <LauncherEmptyState
       onOpenSettings={onOpenSettings}
-      onAdd={handleAdd}
-      isAdding={isAdding}
     />
   );
 
