@@ -55,7 +55,7 @@ import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
 
 // Import refactored components
-import { SoftwareLauncher } from './components/shared';
+import { SoftwareLauncher, EmptyState } from './components/shared';
 import type { SettingsTab } from './components/modals/SettingsPanel';
 import { FinancePage } from './components/finance';
 import { ProjectDetails, RightSidebar } from './components/project';
@@ -217,6 +217,9 @@ function App() {
     const saved = localStorage.getItem('showCategoryBar');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [toolLauncherEnabled, setToolLauncherEnabled] = useState(() =>
+    JSON.parse(localStorage.getItem('toolLauncherEnabled') ?? 'false')
+  );
   const [shotsBrowserDocked, setShotsBrowserDocked] = useState(() => {
     const saved = localStorage.getItem('shotsBrowserDocked');
     return saved !== null ? JSON.parse(saved) : false;
@@ -1016,6 +1019,8 @@ function App() {
 
   useEffect(() => {
     const handleStorageChange = () => {
+      setToolLauncherEnabled(JSON.parse(localStorage.getItem('toolLauncherEnabled') ?? 'false'));
+
       const saved = localStorage.getItem('showTagIcons');
       setShowTagIcons(saved !== null ? JSON.parse(saved) : true);
 
@@ -2060,10 +2065,12 @@ function App() {
                     });
                   }}
                 />
-              ) : (
+              ) : toolLauncherEnabled ? (
                 <SoftwareLauncher
                   onOpenSettings={(tab) => { setSettingsInitialTab(tab); setShowSettings(true); }}
                 />
+              ) : (
+                <EmptyState onCreateProject={() => setShowCreateModal(true)} />
               )
             )}
           </div>

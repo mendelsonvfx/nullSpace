@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.9.19] - 2026-07-27
+
+### Added
+- Tool Launcher: enable/disable toggle in Settings → Launcher — disabled by default; shows the standard empty state when off
+- Tool Launcher: warning dialog when enabling while Time Tracking is active — notes that launcher launches do not start the time tracker
+
+### Fixed
+- Welcome Setup: dispatches `softwarePaths:updated` event on complete so software buttons update without a restart
+
 ## [1.9.18] - 2026-07-23
 
 ### Changed

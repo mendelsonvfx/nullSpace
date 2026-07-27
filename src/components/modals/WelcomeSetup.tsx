@@ -116,6 +116,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
     });
     if (Object.keys(pathsToSave).length > 0) {
       localStorage.setItem('softwarePaths', JSON.stringify(pathsToSave));
+      window.dispatchEvent(new CustomEvent('softwarePaths:updated'));
     }
 
     localStorage.setItem('setupCompleted', 'true');

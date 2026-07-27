@@ -1,6 +1,7 @@
 // src/components/modals/SettingsPanel.tsx
 import { useProjectStore } from '../../store/projectStore';
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw, Download, Upload, Cpu, Palette, Users, DollarSign, Database, Rocket, Loader2, Globe, ChevronDown } from 'lucide-react';
 import { selectProjectDirectory, selectExecutable } from '../../utils/tauri';
 import { getCustomItems, saveCustomItems, getSoftwareEnabled, saveSoftwareEnabled, getExeIcon, sampleColorFromDataUrl, extractNameFromPath } from '../../utils/launcherUtils';
@@ -947,6 +948,24 @@ function LauncherSettings() {
   const [isAdding, setIsAdding] = useState(false);
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const [launcherEnabled, setLauncherEnabled] = useState(() =>
+    JSON.parse(localStorage.getItem('toolLauncherEnabled') ?? 'false')
+  );
+  const [showLauncherWarning, setShowLauncherWarning] = useState(false);
+
+  const handleLauncherToggle = () => {
+    if (!launcherEnabled) {
+      const timeTracking = JSON.parse(localStorage.getItem('timeTrackingEnabled') ?? 'true');
+      if (timeTracking) {
+        setShowLauncherWarning(true);
+        return;
+      }
+    }
+    const newVal = !launcherEnabled;
+    setLauncherEnabled(newVal);
+    localStorage.setItem('toolLauncherEnabled', JSON.stringify(newVal));
+    window.dispatchEvent(new Event('storage'));
+  };
 
   useEffect(() => {
     mountedRef.current = true;
@@ -1025,6 +1044,56 @@ function LauncherSettings() {
 
   return (
     <div className="pt-4 pb-2 space-y-5">
+
+      {/* Warning dialog — rendered via portal to cover full app */}
+      {showLauncherWarning && createPortal(
+        <div
+          className="fixed inset-0 flex items-center justify-center z-[200]"
+          style={{ background: 'rgba(0,0,0,0.65)' }}
+          onClick={() => setShowLauncherWarning(false)}
+        >
+          <div
+            className="bg-card-bg border border-orange-600 rounded-modal p-6 mx-4 text-text-primary"
+            style={{ maxWidth: 400 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="font-bold text-base mb-2 text-text-primary">Tool Launcher</div>
+            <p className="text-[13px] text-text-secondary leading-relaxed mb-5">
+              Launching software through the Tool Launcher does not start the time tracker.
+              To track time, open a project and use the software buttons there.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowLauncherWarning(false)}
+                className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors animate-button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowLauncherWarning(false);
+                  setLauncherEnabled(true);
+                  localStorage.setItem('toolLauncherEnabled', 'true');
+                  window.dispatchEvent(new Event('storage'));
+                }}
+                className="px-4 py-2 rounded-lg transition-colors font-medium animate-button bg-orange-600 hover:bg-orange-700"
+              >
+                Enable anyway
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Enable/disable toggle — top of section */}
+      <div className="flex items-center justify-between pb-5 border-b border-border-primary">
+        <div>
+          <div className="text-[13px] font-semibold text-text-primary">Enable Tool Launcher</div>
+          <div className="text-[12px] text-text-muted mt-0.5">Show a software launcher when no project is open</div>
+        </div>
+        <Toggle on={launcherEnabled} onChange={handleLauncherToggle} />
+      </div>
 
       {/* Custom items section — always shown */}
       <div>
