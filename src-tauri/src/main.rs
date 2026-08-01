@@ -5246,16 +5246,41 @@ fn apply_window_startup_settings(window: &tauri::Window, app_handle: &tauri::App
     }
 
     // Restore saved position if auto-maximize is off
-    if let (Some(x), Some(y)) = (config.x, config.y) {
+    let cx = config.x;
+    let cy = config.y;
+    let cw = config.width;
+    let ch = config.height;
+
+    let pos_valid  = cx.map_or(false, |x| x > -10000) && cy.map_or(false, |y| y > -10000);
+    let size_valid = cw.map_or(false, |w| w >= 300) && ch.map_or(false, |h| h >= 200);
+    let has_state  = cx.is_some() || cy.is_some() || cw.is_some() || ch.is_some();
+
+    if pos_valid && size_valid {
         let _ = window.set_position(tauri::Position::Physical(
-            tauri::PhysicalPosition { x, y }
+            tauri::PhysicalPosition { x: cx.unwrap(), y: cy.unwrap() }
         ));
-    }
-    if let (Some(w), Some(h)) = (config.width, config.height) {
         let _ = window.set_size(tauri::Size::Physical(
-            tauri::PhysicalSize { width: w, height: h }
+            tauri::PhysicalSize { width: cw.unwrap(), height: ch.unwrap() }
         ));
+    } else if has_state {
+        // Corrupt state (e.g. saved while minimized) — center at default size
+        if let Ok(Some(monitor)) = window.primary_monitor() {
+            let ms = monitor.size();
+            let mp = monitor.position();
+            let dw = 1920u32;
+            let dh = 900u32;
+            let dx = (mp.x + ((ms.width as i32 - dw as i32) / 2)).max(mp.x);
+            let dy = (mp.y + ((ms.height as i32 - dh as i32) / 2)).max(mp.y);
+            let _ = window.set_position(tauri::Position::Physical(
+                tauri::PhysicalPosition { x: dx, y: dy }
+            ));
+            let _ = window.set_size(tauri::Size::Physical(
+                tauri::PhysicalSize { width: dw, height: dh }
+            ));
+        }
     }
+    // else: fresh install (all None) — Tauri uses tauri.conf.json defaults
+
     if config.is_maximized == Some(true) {
         let _ = window.maximize();
     }

@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.20] - 2026-07-28
+
+### Fixed
+- Window: state not saved when window is minimized — prevents corrupt position/size from persisting on next launch
+- Window: corrupted saved state (off-screen coordinates or invalid dimensions) now resets to centered 1920×900 instead of opening off-screen
+
 ## [1.9.19] - 2026-07-27
 
 ### Added

@@ -74,6 +74,9 @@ export const useWindowState = () => {
   // Save current window state to localStorage
   const saveWindowState = async () => {
     try {
+      const isMinimized = await appWindow.isMinimized();
+      if (isMinimized) return;
+
       const isMaximized = await appWindow.isMaximized();
       const isFullscreen = await appWindow.isFullscreen();
 
