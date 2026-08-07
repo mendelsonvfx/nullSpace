@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconPencil, IconPlayerPlay, IconAppWindow, IconChevronRight } from '@tabler/icons-react';
+import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconPencil, IconPlayerPlay, IconAppWindow, IconChevronRight, IconInfoCircle } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api';
 import { selectExecutable } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
@@ -81,10 +81,12 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showManualTimeEntry, setShowManualTimeEntry] = useState(false);
-  const [isToolsEditMode, setIsToolsEditMode] = useState(false);
-  const [editingToolKey, setEditingToolKey] = useState<string | null>(null);
-  const [toolPathInputValue, setToolPathInputValue] = useState('');
-  const [toolPathsSnapshot, setToolPathsSnapshot] = useState<Record<string, string> | null>(null);
+  const [toolEditorOpen, setToolEditorOpen] = useState(false);
+  const [toolEditorClosing, setToolEditorClosing] = useState(false);
+  const [selectedToolKey, setSelectedToolKey] = useState('blender');
+  const [toolSavedFlash, setToolSavedFlash] = useState(false);
+  const [toolWorkingPath, setToolWorkingPath] = useState('');
+  const [toolEditMode, setToolEditMode] = useState(false);
   const [isPaymentModalAnimating, setIsPaymentModalAnimating] = useState(false);
   const [isFavoriteAnimating, setIsFavoriteAnimating] = useState(false);
   const [shotToDelete, setShotToDelete] = useState<{ id: string; name: string } | null>(null);
@@ -414,18 +416,54 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
     'Marmoset': 'marmoset'
   };
 
-  const handleSaveToolPath = () => {
-    if (!editingToolKey) return;
-    const key = `projectSoftwarePaths_${project.id}`;
-    const map: Record<string, string> = JSON.parse(localStorage.getItem(key) || '{}');
-    map[editingToolKey] = toolPathInputValue;
-    localStorage.setItem(key, JSON.stringify(map));
-    setEditingToolKey(null);
+  const openToolEditor = (key: string) => {
+    const globalPaths: Record<string, string> = JSON.parse(localStorage.getItem('softwarePaths') || '{}');
+    const projectPaths: Record<string, string> = JSON.parse(localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}');
+    const effective = projectPaths[key] ?? globalPaths[key] ?? '';
+    setSelectedToolKey(key);
+    setToolWorkingPath(effective);
+    setToolSavedFlash(false);
+    setToolEditorOpen(true);
+    setToolEditorClosing(false);
   };
 
-  const handleBrowseToolPath = async () => {
+  const closeToolEditor = () => {
+    setToolEditorOpen(false);
+    setToolEditorClosing(true);
+    setTimeout(() => setToolEditorClosing(false), 260);
+  };
+
+  const leaveEditMode = () => {
+    setToolEditMode(false);
+    if (toolEditorOpen) closeToolEditor();
+  };
+
+  const saveToolPath = () => {
+    const key = `projectSoftwarePaths_${project.id}`;
+    const map: Record<string, string> = JSON.parse(localStorage.getItem(key) || '{}');
+    if (toolWorkingPath) {
+      map[selectedToolKey] = toolWorkingPath;
+    } else {
+      delete map[selectedToolKey];
+    }
+    localStorage.setItem(key, JSON.stringify(map));
+    setToolSavedFlash(true);
+    setTimeout(() => setToolSavedFlash(false), 1800);
+  };
+
+  const resetToolToDefault = () => {
+    const key = `projectSoftwarePaths_${project.id}`;
+    const map: Record<string, string> = JSON.parse(localStorage.getItem(key) || '{}');
+    delete map[selectedToolKey];
+    localStorage.setItem(key, JSON.stringify(map));
+    const globalPaths: Record<string, string> = JSON.parse(localStorage.getItem('softwarePaths') || '{}');
+    setToolWorkingPath(globalPaths[selectedToolKey] ?? '');
+    setToolSavedFlash(false);
+  };
+
+  const browseToolPath = async () => {
     const path = await selectExecutable();
-    if (path) setToolPathInputValue(path);
+    if (path) setToolWorkingPath(path);
   };
 
   const handleToggleSoftware = async (softwareName: string) => {
@@ -1345,7 +1383,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             delete (e.currentTarget as HTMLDivElement).dataset.mousedownTarget;
           }}
         >
-          <div className="bg-card-bg border border-border-secondary rounded-card max-w-2xl w-full max-h-[90vh] min-h-[780px] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-card-bg border border-border-secondary rounded-card max-w-2xl w-full max-h-[90vh] flex flex-col animate-modal" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b border-border-secondary flex items-center justify-between flex-shrink-0">
               <h2 className="text-lg font-semibold">Project Settings</h2>
               <button onClick={() => setShowProjectSettings(false)} className="w-7 h-7 flex items-center justify-center hover:bg-hover-bg rounded-badge transition-colors">
@@ -1353,7 +1391,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               </button>
             </div>
 
-            <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
+            <SimpleBar className="flex-1 min-h-0 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
               <div className="p-4 space-y-2.5">
               <div className="flex gap-3 items-center">
                 <div className="flex-1">
@@ -1794,179 +1832,185 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
               {/* Tools Section */}
               <div className="border-t border-border-secondary pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="font-medium">Tools</div>
-                  {!isToolsEditMode ? (
-                    <button
-                      onClick={() => {
-                        const snapshot: Record<string, string> = JSON.parse(
-                          localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
-                        );
-                        setToolPathsSnapshot(snapshot);
-                        setIsToolsEditMode(true);
-                        setEditingToolKey(null);
+                {/* Header */}
+                <div className="flex items-center gap-2.5 mb-3.5">
+                  <span className="font-medium">Tools</span>
+                  <div className="flex-1" />
+                  <div className="relative h-[26px]">
+                    {/* Close/Done — fades in from right on edit mode */}
+                    <div
+                      className="flex items-center gap-1"
+                      style={{
+                        opacity: toolEditMode ? 1 : 0,
+                        transform: toolEditMode ? 'translateX(0)' : 'translateX(6px)',
+                        transition: 'opacity 0.15s ease, transform 0.15s ease',
+                        pointerEvents: toolEditMode ? undefined : 'none',
                       }}
-                      title="Edit local software paths"
-                      className="p-1 rounded transition-colors text-text-muted hover:text-white"
                     >
-                      <IconPencil stroke={1.5} className="w-3.5 h-3.5" />
+                      <button onClick={leaveEditMode} className="h-[26px] px-1.5 text-[11.5px] font-medium text-text-muted hover:text-text-primary transition-colors">
+                        Close
+                      </button>
+                      <button onClick={leaveEditMode} className="h-[26px] px-1.5 text-[11.5px] font-semibold text-text-secondary hover:text-text-primary transition-colors">
+                        Done
+                      </button>
+                    </div>
+                    {/* Pencil — fades out to right on edit mode */}
+                    <button
+                      onClick={() => setToolEditMode(true)}
+                      title="Edit paths"
+                      className="w-[26px] h-[26px] absolute right-0 top-0 flex items-center justify-center rounded-md text-text-muted hover:text-text-primary hover:bg-hover-bg transition-colors"
+                      style={{
+                        opacity: toolEditMode ? 0 : 1,
+                        transform: toolEditMode ? 'translateX(4px)' : 'translateX(0)',
+                        transition: 'opacity 0.15s ease, transform 0.15s ease',
+                        pointerEvents: toolEditMode ? 'none' : undefined,
+                      }}
+                    >
+                      <IconPencil stroke={1.9} className="w-3.5 h-3.5" />
                     </button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          localStorage.removeItem(`projectSoftwarePaths_${project.id}`);
-                          setToolPathsSnapshot(null);
-                          setIsToolsEditMode(false);
-                          setEditingToolKey(null);
-                        }}
-                        className="text-xs text-text-muted hover:text-white transition-colors mr-2"
-                      >
-                        Reset to default
-                      </button>
-                      <button
-                        onClick={() => {
-                          setToolPathsSnapshot(null);
-                          setIsToolsEditMode(false);
-                          setEditingToolKey(null);
-                        }}
-                        title="Apply changes"
-                        className="p-1 rounded transition-colors text-green-500 hover:text-green-400"
-                      >
-                        <IconCheck stroke={2} className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (toolPathsSnapshot !== null) {
-                            localStorage.setItem(
-                              `projectSoftwarePaths_${project.id}`,
-                              JSON.stringify(toolPathsSnapshot)
-                            );
-                          }
-                          setToolPathsSnapshot(null);
-                          setIsToolsEditMode(false);
-                          setEditingToolKey(null);
-                        }}
-                        title="Cancel"
-                        className="p-1 rounded transition-colors text-red-500 hover:text-red-400"
-                      >
-                        <IconX stroke={2} className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  {(() => {
-                    const projectPathsMap: Record<string, string> =
-                      JSON.parse(localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}');
 
-                    return SOFTWARE_OPTIONS.map((sw) => {
-                      const softwareKey = nameToKey[sw] || sw.toLowerCase().replace(/\s+/g, '-');
-                      const isSelected = latestProject.software.some((pSw: any) => {
-                        const existingKey = nameToKey[pSw.name] || pSw.name.toLowerCase().replace(/\s+/g, '-');
-                        return existingKey === softwareKey;
-                      });
-                      const isThisEditing = editingToolKey === softwareKey;
-                      const hasLocalPath = !!projectPathsMap[softwareKey];
+                {/* 4-column card grid */}
+                {(() => {
+                  const globalPaths: Record<string, string> = JSON.parse(localStorage.getItem('softwarePaths') || '{}');
+                  const projectPaths: Record<string, string> = JSON.parse(localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}');
 
-                      return (
-                        <button
-                          key={sw}
-                          onClick={() => {
-                            if (isToolsEditMode && isSelected) {
-                              if (isThisEditing) {
-                                setEditingToolKey(null);
-                              } else {
-                                const globalPaths: Record<string, string> =
-                                  JSON.parse(localStorage.getItem('softwarePaths') || '{}');
-                                setToolPathInputValue(projectPathsMap[softwareKey] || globalPaths[softwareKey] || '');
-                                setEditingToolKey(softwareKey);
-                              }
-                            } else {
-                              handleToggleSoftware(sw);
-                            }
-                          }}
-                          className={`flex-1 px-3 py-1.5 rounded text-xs transition-all duration-200 ease-out whitespace-nowrap flex items-center justify-center relative ${
-                            isSelected
-                              ? isThisEditing
-                                ? 'bg-accent/20 text-white ring-1 ring-accent'
-                                : 'bg-hover-bg text-white'
-                              : 'bg-sidebar-bg/50 text-text-muted hover:text-white hover:bg-hover-bg'
-                          }`}
-                        >
+                  return (
+                    <div className="grid grid-cols-4 gap-2">
+                      {SOFTWARE_OPTIONS.map((sw) => {
+                        const key = nameToKey[sw] || sw.toLowerCase().replace(/\s+/g, '-');
+                        const effective = projectPaths[key] ?? globalPaths[key] ?? '';
+                        const isEdited = !!projectPaths[key] && projectPaths[key] !== (globalPaths[key] ?? '');
+                        const isSelected = latestProject.software.some((pSw: any) => {
+                          const existingKey = nameToKey[pSw.name] || pSw.name.toLowerCase().replace(/\s+/g, '-');
+                          return existingKey === key;
+                        });
+
+                        return (
                           <div
-                            className="flex items-center gap-1.5 transition-transform duration-200 ease-out"
-                            style={{ transform: isSelected ? 'translateX(-8px)' : 'translateX(0)' }}
+                            key={sw}
+                            onClick={() => {
+                              if (toolEditMode && isSelected) {
+                                openToolEditor(key);
+                              } else {
+                                handleToggleSoftware(sw);
+                              }
+                            }}
+                            title={effective || sw}
+                            className={`relative flex items-center gap-[9px] h-[42px] px-[11px] rounded-lg cursor-pointer bg-card-bg border ${isSelected ? 'border-border-secondary' : 'border-border-secondary/50'} hover:border-border-hover transition-colors`}
                           >
-                            <SoftwareIcon name={sw} className="w-3.5 h-3.5" />
-                            {sw}
+                            <span style={{ opacity: isSelected ? 1 : 0.35 }} className="flex-none">
+                              <SoftwareIcon name={sw} className="w-[22px] h-[22px]" />
+                            </span>
+                            <span
+                              className="text-xs font-semibold whitespace-nowrap overflow-hidden text-ellipsis"
+                              style={{ color: isSelected ? '#ededf2' : '#6b6b75' }}
+                            >
+                              {sw}
+                            </span>
+                            <div className="flex-1" />
+                            {isSelected && isEdited && (
+                              <span className="flex items-center gap-1.5 flex-none">
+                                <span className="w-[7px] h-[7px] rounded-full bg-green-400 flex-none" />
+                                <span className="text-[10px] font-mono font-semibold tracking-wide text-text-muted">edited</span>
+                              </span>
+                            )}
+                            {isSelected && !isEdited && (
+                              <span className="w-[7px] h-[7px] rounded-full bg-green-400 flex-none" />
+                            )}
                           </div>
-                          {/* Normal mode: green checkmark */}
-                          {!isToolsEditMode && (
-                            <IconCheck
-                              stroke={1.5}
-                              className={`w-3.5 h-3.5 text-green-500 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out ${
-                                isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-50'
-                              }`}
-                            />
-                          )}
-                          {/* Edit mode: folder icon on selected badges */}
-                          {isToolsEditMode && isSelected && (
-                            <IconFolderOpen
-                              stroke={1.5}
-                              className={`w-3.5 h-3.5 flex-shrink-0 absolute right-3 transition-all duration-200 ease-out ${
-                                hasLocalPath ? 'text-text-primary' : 'text-text-primary/70'
-                              }`}
-                            />
-                          )}
-                          {/* Dot badge: top-right corner of button when a project-local path is saved */}
-                          {isToolsEditMode && isSelected && hasLocalPath && (
-                            <span className="absolute -top-0.5 -right-0.5 w-1 h-1 rounded-full bg-text-primary/80 pointer-events-none" />
-                          )}
-                        </button>
-                      );
-                    });
-                  })()}
-                </div>
-
-                {/* Slide-down path editor */}
-                <div
-                  className="overflow-hidden transition-all duration-300 ease-out"
-                  style={{
-                    maxHeight: editingToolKey ? '52px' : '0px',
-                    opacity: editingToolKey ? 1 : 0,
-                    marginTop: editingToolKey ? '8px' : '0px'
-                  }}
-                >
-                  {editingToolKey && (
-                    <div className="flex gap-2 items-center">
-                      <input
-                        type="text"
-                        value={toolPathInputValue}
-                        onChange={(e) => setToolPathInputValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveToolPath();
-                          if (e.key === 'Escape') setEditingToolKey(null);
-                        }}
-                        placeholder="Path to executable..."
-                        autoFocus
-                        className="flex-1 bg-sidebar-bg border border-border-primary rounded px-3 py-1.5 text-xs focus:outline-none focus:border-border-secondary"
-                      />
-                      <button
-                        onClick={handleBrowseToolPath}
-                        className="px-2.5 py-1.5 bg-sidebar-bg border border-border-primary hover:bg-hover-bg rounded-button text-xs transition-colors whitespace-nowrap"
-                      >
-                        Browse
-                      </button>
-                      <button
-                        onClick={handleSaveToolPath}
-                        className="px-2.5 py-1.5 bg-accent hover:bg-accent-hover rounded-button text-xs font-bold text-white transition-colors"
-                      >
-                        Save
-                      </button>
+                        );
+                      })}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
+
+                {/* Path editor — animates open/close */}
+                {(toolEditorOpen || toolEditorClosing) && (() => {
+                  const selDef = SOFTWARE_OPTIONS.find(sw => (nameToKey[sw] || sw.toLowerCase().replace(/\s+/g, '-')) === selectedToolKey);
+                  const globalPaths: Record<string, string> = JSON.parse(localStorage.getItem('softwarePaths') || '{}');
+                  const projectPaths: Record<string, string> = JSON.parse(localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}');
+                  const globalPath = globalPaths[selectedToolKey] ?? '';
+                  const isDirty = toolWorkingPath !== (projectPaths[selectedToolKey] ?? globalPath);
+
+                  return (
+                    <div
+                      className="overflow-hidden pt-2"
+                      style={{
+                        animation: toolEditorOpen
+                          ? 'toolsExpand .26s cubic-bezier(.33,1,.68,1) both'
+                          : 'toolsCollapse .26s cubic-bezier(.33,1,.68,1) both',
+                        pointerEvents: toolEditorClosing ? 'none' : undefined,
+                      }}
+                    >
+                      <div className="bg-sidebar-bg border border-border-secondary rounded-lg p-3 flex flex-col gap-2.5">
+                        {/* Tool name + status */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold tracking-wider font-mono text-text-secondary">
+                            {selDef?.toUpperCase() ?? selectedToolKey.toUpperCase()}
+                          </span>
+                          <div className="flex-1" />
+                          {toolSavedFlash && (
+                            <span className="text-[11px] text-green-400 font-medium">Saved</span>
+                          )}
+                          {!toolSavedFlash && isDirty && (
+                            <span className="text-[11px] text-text-muted">Unsaved change</span>
+                          )}
+                          {!toolSavedFlash && !isDirty && toolWorkingPath && (
+                            <span className="text-[11px] text-text-muted">Path set</span>
+                          )}
+                          {!toolSavedFlash && !isDirty && !toolWorkingPath && (
+                            <span className="text-[11px] text-text-muted">No path</span>
+                          )}
+                        </div>
+
+                        {/* Path input */}
+                        <div className="flex gap-2 items-center">
+                          <input
+                            key={selectedToolKey}
+                            type="text"
+                            value={toolWorkingPath}
+                            onChange={(e) => { setToolWorkingPath(e.target.value); setToolSavedFlash(false); }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveToolPath();
+                              if (e.key === 'Escape') closeToolEditor();
+                            }}
+                            placeholder="Path to executable..."
+                            autoFocus
+                            className="flex-1 bg-card-bg border border-border-primary rounded px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-border-secondary"
+                          />
+                          <button
+                            onClick={browseToolPath}
+                            className="px-2.5 py-1.5 bg-card-bg border border-border-primary hover:bg-hover-bg rounded-button text-xs transition-colors whitespace-nowrap"
+                          >
+                            Browse
+                          </button>
+                          <button
+                            onClick={saveToolPath}
+                            className="px-2.5 py-1.5 bg-accent hover:bg-accent-hover rounded-button text-xs font-bold text-white transition-colors"
+                          >
+                            Save
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-text-muted flex items-center gap-1">
+                            <IconInfoCircle stroke={1.5} className="w-3.5 h-3.5 flex-none" />
+                            Set a custom path if this project needs a different version of the app.
+                          </span>
+                          <div className="flex-1" />
+                          <button
+                            onClick={resetToolToDefault}
+                            className="text-[11px] text-text-muted hover:text-text-primary transition-colors flex-none"
+                          >
+                            Reset to default
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               </div>
             </SimpleBar>
@@ -1979,7 +2023,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   // Show custom confirmation dialog on top of settings modal
                   onDeleteProject(project);
                 }}
-                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
+                className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
               >
                 <IconTrash stroke={1.5} className="w-4 h-4" />
                 Delete Project
@@ -1988,13 +2032,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               {/* Close and Save buttons on the right */}
               <div className="flex gap-3">
                 <button
-                  onClick={() => { setShowProjectSettings(false); setIsToolsEditMode(false); setEditingToolKey(null); setToolPathsSnapshot(null); }}
+                  onClick={() => { setShowProjectSettings(false); setToolEditMode(false); if (toolEditorOpen) closeToolEditor(); }}
                   className="px-4 py-2 bg-sidebar-bg hover:bg-hover-bg border border-border-primary rounded-button transition-colors text-sm"
                 >
                   Close
                 </button>
                 <button
-                  onClick={() => { setShowProjectSettings(false); setIsToolsEditMode(false); setEditingToolKey(null); setToolPathsSnapshot(null); }}
+                  onClick={() => { setShowProjectSettings(false); setToolEditMode(false); if (toolEditorOpen) closeToolEditor(); }}
                   className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-button transition-colors font-medium text-sm text-white"
                 >
                   Save Changes

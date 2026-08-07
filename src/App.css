@@ -92,6 +92,15 @@ input, textarea, [contenteditable],
   animation: fadeInSlide var(--animation-duration) var(--animation-timing);
 }
 
+@keyframes toolsExpand {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 200px; }
+}
+@keyframes toolsCollapse {
+  from { opacity: 1; max-height: 200px; }
+  to   { opacity: 0; max-height: 0; }
+}
+
 @keyframes fadeInSlide {
   from {
     opacity: 0;
@@ -493,7 +502,7 @@ input[type="number"] {
 .custom-scrollbar-fixed .simplebar-track.simplebar-vertical,
 .custom-scrollbar-grid .simplebar-track.simplebar-vertical {
   width: 6px;
-  right: -8px;
+  right: 2px;
   background: transparent;
   top: 6px;
   /* Top margin */

@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.9.21] - 2026-08-07
+
+### Changed
+- Project: software tools path editor redesigned — animated expand panel per tool, pencil/done buttons with crossfade, save flash and "Reset to default" per tool
+- Project: project-local executable paths now take priority over global paths when launching software
+- Versions: executable path resolution checks project-local paths first, then global settings
+
+### Fixed
+- UI: custom scrollbar track repositioned to sit inside its container
+
 ## [1.9.20] - 2026-07-28
 
 ### Fixed

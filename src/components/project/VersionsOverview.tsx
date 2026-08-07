@@ -8,7 +8,6 @@ import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTr
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { FolderOpen, Copy, RefreshCw, Check } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
-import type { SoftwareName } from '../../types/project';
 import { getScenePattern, getShotPattern, parseFileName, hasSuffix } from '../../utils/fileNaming';
 import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
 import { usePsdThumbnail } from '../../hooks/usePsdThumbnail';
@@ -414,17 +413,23 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
         return;
       }
 
-      // Get executable path from project or fallback to global settings
-      let executablePath = softwareInfo.path || softwareInfo.executable_path || softwareInfo.executablePath;
+      // Resolve executable path — same priority as Launch button: per-project → global → stored in object
+      const softwareKey = softwareName.toLowerCase().replace(/\s+/g, '-');
 
-      // If still empty, try to get from global localStorage settings
+      const projectPaths: Record<string, string> = JSON.parse(
+        localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
+      );
+      let executablePath: string | undefined = projectPaths[softwareKey];
+
       if (!executablePath) {
         const savedPaths = localStorage.getItem('softwarePaths');
         if (savedPaths) {
-          const paths = JSON.parse(savedPaths);
-          const softwareKey = softwareName.toLowerCase().replace(/\s+/g, '-');
-          executablePath = paths[softwareKey];
+          executablePath = JSON.parse(savedPaths)[softwareKey];
         }
+      }
+
+      if (!executablePath) {
+        executablePath = softwareInfo.path || softwareInfo.executable_path || softwareInfo.executablePath;
       }
 
       if (!executablePath) {
@@ -438,24 +443,6 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
         filePath: versionPath,
         executablePath: executablePath
       });
-
-      // Convert software name to SoftwareName key
-      const nameToKey: Record<string, SoftwareName> = {
-        'Blender': 'blender',
-        'Houdini': 'houdini',
-        'Maya': 'maya',
-        'Cinema 4D': 'cinema4d',
-        'Substance Painter': 'substance',
-        'Substance Designer': 'substance',
-        'ZBrush': 'zbrush',
-        'After Effects': 'after-effects',
-        'Unreal Engine': 'unreal',
-        'Unity': 'unity',
-        'Marmoset': 'marmoset',
-        'Photoshop': 'photoshop'
-      };
-
-      const softwareKey = nameToKey[softwareName] || 'blender';
 
       // Start time tracking
       await useTimeTrackingStore.getState().startSession({
