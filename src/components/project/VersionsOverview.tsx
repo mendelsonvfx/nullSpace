@@ -51,6 +51,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadingTimerRef = useRef<number | null>(null);
   const isFirstLoadRef = useRef(true);
+  const loadRequestIdRef = useRef(0);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const shotSubmenuRef = useRef<HTMLDivElement>(null);
   const submenuCloseTimeoutRef = useRef<number | null>(null);
@@ -62,6 +63,10 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
   const { isOpen: isContextMenuOpen, position: contextMenuPosition, data: contextMenuVersion, openMenu: openContextMenu, closeMenu: closeContextMenuHook } = useContextMenu<ProjectVersion>();
 
   const loadVersions = async (skipCleanup = false, forceReload = false) => {
+    const capturedPath = project.path;
+    loadRequestIdRef.current += 1;
+    const reqId = loadRequestIdRef.current;
+
     // Clear any existing timer first
     if (loadingTimerRef.current !== null) {
       clearTimeout(loadingTimerRef.current);
@@ -70,9 +75,8 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
 
     // Check cache first if not forcing reload
     if (!forceReload) {
-      const cachedVersions = versionsCache.get(project.path);
+      const cachedVersions = versionsCache.get(capturedPath);
       if (cachedVersions) {
-        console.log('Using cached versions:', cachedVersions.length);
         setAllVersions(cachedVersions);
         setLoading(false);
         isFirstLoadRef.current = false;
@@ -98,14 +102,18 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
       // Clean up backup files only if not skipped and setting is enabled
       if (!skipCleanup && autoDelete) {
         await invoke<number>('cleanup_backup_files', {
-          projectPath: project.path
+          projectPath: capturedPath
         });
       }
 
-      const result = await invoke<ProjectVersion[]>('get_project_versions', {
-        projectPath: project.path
-      });
-      console.log('Loaded versions:', result);
+      if (reqId !== loadRequestIdRef.current) return;
+
+      if (forceReload) versionsCache.invalidate(capturedPath);
+      const result = await versionsCache.fetch(capturedPath, () =>
+        invoke<ProjectVersion[]>('get_project_versions', { projectPath: capturedPath })
+      );
+
+      if (reqId !== loadRequestIdRef.current) return;
 
       // Clear the loading timer if it hasn't fired yet
       if (loadingTimerRef.current !== null) {
@@ -113,13 +121,10 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
         loadingTimerRef.current = null;
       }
 
-      // Update data and cache it
       setAllVersions(result);
-      versionsCache.set(project.path, result);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load versions:', error);
-      // Clear the loading timer on error
       if (loadingTimerRef.current !== null) {
         clearTimeout(loadingTimerRef.current);
         loadingTimerRef.current = null;
@@ -138,17 +143,20 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
     loadVersions();
 
     // ✅ RE-ENABLED: File watcher now has proper shutdown mechanism
-    // Start watching the project directory
-    const autoDeleteWatcher = localStorage.getItem('autoDeleteBlend1Backups') === 'true';
-    invoke('start_watching_project', {
-      projectPath: project.path,
-      autoDeleteBackups: autoDeleteWatcher
-    }).catch((err) => {
-      console.error('Failed to start watching project:', err);
-    });
+    // Debounce watcher start: intermediate projects during rapid switching don't need a watcher
+    const watcherTimer = setTimeout(() => {
+      const autoDeleteWatcher = localStorage.getItem('autoDeleteBlend1Backups') === 'true';
+      invoke('start_watching_project', {
+        projectPath: project.path,
+        autoDeleteBackups: autoDeleteWatcher
+      }).catch((err) => {
+        console.error('Failed to start watching project:', err);
+      });
+    }, 150);
 
     // Cleanup watcher on unmount
     return () => {
+      clearTimeout(watcherTimer);
       invoke('stop_watching_project').catch((err) => {
         console.error('Failed to stop watching project:', err);
       });
@@ -205,7 +213,8 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
   // Listen for version changes from file system watcher
   // ✅ RE-ENABLED: File watcher now works properly
   useEffect(() => {
-    let unlisten: any;
+    let aborted = false;
+    let unlisten: (() => void) | undefined;
 
     listen('version-changed', () => {
       console.log('Version changed detected by file watcher');
@@ -214,11 +223,13 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
       // Skip cleanup since watcher already did it, force reload
       loadVersions(true, true);
     }).then((fn) => {
-      unlisten = fn;
+      if (aborted) fn(); // already unmounted — clean up immediately
+      else unlisten = fn;
     });
 
     return () => {
-      if (unlisten) unlisten();
+      aborted = true;
+      unlisten?.();
     };
   }, [project.path]);
 

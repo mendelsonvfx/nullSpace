@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.9.30] - 2026-08-10
+
+### Changed
+- Performance: `get_project_versions`, `extract_blend_thumbnail`, `extract_psd_thumbnail`, `update_project` and file I/O commands moved to `spawn_blocking` — no longer block the async Tauri runtime
+- Performance: versions cache adds in-flight deduplication — parallel requests for the same project share one IPC call instead of firing duplicates
+- Performance: tree structure and directory size cached per-project (5-min TTL, max 10 entries) — instant restore on project switch
+- Performance: thumbnail hooks skip `get_file_mtime` IPC on normal mount/remount when memory cache is warm; only check on window focus
+- Performance: file watcher start debounced 150 ms — rapid project switching skips unnecessary watcher startups
+- Performance: `ProjectDetails` uses `useShallow` for project selector to avoid re-renders from unchanged references
+- Performance: `projectsRef` ref pattern eliminates stale-closure re-subscriptions in break reminder and global paste handler
+
+### Fixed
+- Versions: stale load responses discarded via request-ID tracking in VersionsOverview and ShotsBrowser
+- Events: Tauri `unlisten` callbacks guarded with abort flags to prevent calls after component unmount
+
 ## [1.9.21] - 2026-08-07
 
 ### Changed

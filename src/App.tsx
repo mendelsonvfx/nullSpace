@@ -35,6 +35,7 @@ import { FeedbackPanel } from './components/modals/FeedbackPanel';
 import { AboutPanel } from './components/modals/AboutPanel';
 // MDXEditor imports moved to NotesSection component
 import { SoftwareIcon } from './components/SoftwareIcon';
+import { DevPerfPanel } from './components/dev/DevPerfPanel';
 import { ProjectCard } from './components/ProjectCard';
 import { appWindow } from '@tauri-apps/api/window';
 import { DeadlineNotification } from './components/DeadlineNotification';
@@ -101,6 +102,9 @@ function App() {
 
   // Get full projects array (will update every second, but that's OK)
   const projects = useProjectStore((state) => state.projects);
+  // Always-fresh ref so break-reminder closure never reads stale project data
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
   const archivedBackups = useProjectStore((state) => state.archivedBackups);
   const deleteBackup = useProjectStore((state) => state.deleteBackup);
 
@@ -741,8 +745,8 @@ function App() {
 
             // Only trigger once per threshold when we reach it
             if (minutesWorked >= minutes && !shownReminders.has(reminderKey)) {
-              // Find project name
-              const project = projects.find(p => p.id === session.project_id);
+              // Find project name — use ref so closure always has the latest projects
+              const project = projectsRef.current.find(p => p.id === session.project_id);
               const projectName = project?.name || 'Unknown Project';
 
               setBreakReminders(prev => [...prev, {
@@ -768,7 +772,7 @@ function App() {
     const interval = setInterval(checkBreakReminders, 60000);
 
     return () => clearInterval(interval);
-  }, [projects, shownReminders]);
+  }, [shownReminders]);
 
   // Global paste handler that uses hovered project
   useEffect(() => {
@@ -781,7 +785,7 @@ function App() {
       // Use hovered project if available
       if (!hoveredProjectId) return;
 
-      const project = projects.find(p => p.id === hoveredProjectId);
+      const project = projectsRef.current.find(p => p.id === hoveredProjectId);
       if (!project) return;
 
       const items = e.clipboardData?.items;
@@ -832,7 +836,7 @@ function App() {
 
     window.addEventListener('paste', handleGlobalPaste);
     return () => window.removeEventListener('paste', handleGlobalPaste);
-  }, [hoveredProjectId, projects]);
+  }, [hoveredProjectId]);
 
 
   const processImageBlobForProject = async (project: any, blob: Blob) => {
@@ -1187,14 +1191,6 @@ function App() {
 
     setSelectedProjectId(project.id);
     selectProject(project);
-
-    // Trigger version list update when project is opened
-    // This ensures versions are refreshed even if files were deleted outside the app
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('version-created', {
-        detail: { projectPath: project.path }
-      }));
-    }, 100);
   }, [selectProject, viewMode]);
 
   const selectedProject = useMemo(() =>
@@ -2524,6 +2520,7 @@ function App() {
       </div>
       {/* Global Text Context Menu for all inputs/textareas */}
       <GlobalTextContextMenu />
+      {import.meta.env.DEV && <DevPerfPanel />}
     </div>
   );
 }

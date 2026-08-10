@@ -40,6 +40,14 @@ export function usePsdThumbnail(psdFilePath: string | undefined) {
       try {
         if (!psdFilePath || !cacheKey) return;
 
+        // Skip IPC on normal mount/remount if memory cache is already warm.
+        // focusTick is 0 on every mount and only > 0 after a window focus event.
+        const memCached = memoryCache.get(cacheKey);
+        if (memCached && focusTick === 0) {
+          if (isMounted) setImageSrc(memCached);
+          return;
+        }
+
         let currentMtime: number | null = null;
         try {
           currentMtime = await invoke<number>('get_file_mtime', { path: psdFilePath });

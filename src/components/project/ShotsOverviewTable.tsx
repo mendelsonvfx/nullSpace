@@ -7,6 +7,7 @@ import { IconCircleCheckFilled, IconClock, IconMoon, IconCircle } from '@tabler/
 import ReactMarkdown from 'react-markdown';
 import { extractShotNumber, extractVersion, getScenePattern } from '../../utils/fileNaming';
 import type { TodoItem } from '../../types/project';
+import { versionsCache, type ProjectVersion } from '../../utils/versionsCache';
 
 interface Note {
   id: string;
@@ -38,11 +39,25 @@ interface ShotsOverviewTableProps {
 export function ShotsOverviewTable({ projectId, projectPath, projectName, currentScene, shots }: ShotsOverviewTableProps) {
   const { setCurrentShot } = useProjectStore();
 
-  const [allVersions, setAllVersions] = useState<any[]>([]);
+  const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
+  const loadVersionsReqRef = useRef(0);
   useEffect(() => {
-    invoke<any[]>('get_project_versions', { projectPath })
-      .then(setAllVersions)
-      .catch(() => {});
+    const capturedPath = projectPath;
+    loadVersionsReqRef.current += 1;
+    const reqId = loadVersionsReqRef.current;
+
+    const cached = versionsCache.get(capturedPath);
+    if (cached) {
+      setAllVersions(cached);
+      return;
+    }
+
+    versionsCache.fetch(capturedPath, () =>
+      invoke<ProjectVersion[]>('get_project_versions', { projectPath: capturedPath })
+    ).then(result => {
+      if (reqId !== loadVersionsReqRef.current) return;
+      setAllVersions(result);
+    }).catch(() => {});
   }, [projectId]);
 
   const shotLatestBlendPaths = useMemo(() => {
@@ -66,7 +81,10 @@ export function ShotsOverviewTable({ projectId, projectPath, projectName, curren
   }, [allVersions, currentScene, projectName]);
 
   // Sort shots by number
-  const sortedShots = [...shots].sort((a, b) => a.number - b.number);
+  const sortedShots = useMemo(
+    () => [...shots].sort((a, b) => a.number - b.number),
+    [shots]
+  );
 
   const handleShotClick = (shotId: string) => {
     setCurrentShot(projectId, shotId);

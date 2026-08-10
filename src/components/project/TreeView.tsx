@@ -39,6 +39,28 @@ import houdiniFolIcon from '/icons/folders/houdini_fol.png';
 import photoshopFolIcon from '/icons/folders/photoshop_fol.png';
 import afterEffectsFolIcon from '/icons/folders/after-effects_fol.png';
 
+// Module-level caches for tree structure and directory size, keyed by project path.
+// Persists across component unmount/remount; avoids redundant IPC calls on project switch.
+const TREE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const TREE_CACHE_MAX = 10;
+
+function cacheSet<T>(map: Map<string, { data: T; ts: number }>, path: string, data: T) {
+  if (map.size >= TREE_CACHE_MAX) map.delete(map.keys().next().value!);
+  map.set(path, { data, ts: Date.now() });
+}
+function cacheGet<T>(map: Map<string, { data: T; ts: number }>, path: string): T | null {
+  const entry = map.get(path);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > TREE_CACHE_TTL) { map.delete(path); return null; }
+  return entry.data;
+}
+const treeStructureCache = new Map<string, { data: FileNode[]; ts: number }>();
+const treeSizeCache = new Map<string, { data: number; ts: number }>();
+function invalidateTreeCache(path: string) {
+  treeStructureCache.delete(path);
+  treeSizeCache.delete(path);
+}
+
 // Folder SVG component
 const FolderIcon = ({ color, size = 16 }: { color: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -414,6 +436,15 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   };
 
   const loadTree = async () => {
+    // Serve from cache immediately if available
+    const projectPathAtCall = currentProjectPathRef.current;
+    const cached = cacheGet(treeStructureCache, projectPathAtCall);
+    if (cached) {
+      setTree(cached);
+      setLoading(false);
+      return;
+    }
+
     // Clear any existing timer first
     if (loadingTimerRef.current !== null) {
       clearTimeout(loadingTimerRef.current);
@@ -437,13 +468,10 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
 
     try {
       const projectPath = currentProjectPathRef.current;
-      console.log('Loading tree for project:', projectPath);
       const result = await invoke<FileNode[]>('get_folder_structure', { path: projectPath });
-      console.log('Received tree structure:', result.length, 'items');
 
       // Check if project changed while loading
       if (projectPath !== currentProjectPathRef.current) {
-        console.log('Project changed during load, discarding results');
         return;
       }
 
@@ -467,8 +495,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         loadingTimerRef.current = null;
       }
 
-      // Update tree data
-      console.log('Setting tree with', groupedResult.length, 'items for project', projectPath);
+      // Cache the processed result and update state
+      cacheSet(treeStructureCache, projectPath, groupedResult);
       setTree(groupedResult);
 
       // Auto-expand software folders on first load
@@ -538,17 +566,20 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
 
   // Listen for version changes from file system watcher
   useEffect(() => {
-    let unlisten: any;
+    let aborted = false;
+    let unlisten: (() => void) | undefined;
 
     listen('version-changed', () => {
-      console.log('Version changed detected - updating folder tree');
+      invalidateTreeCache(project.path);
       debouncedReload();
     }).then((fn) => {
-      unlisten = fn;
+      if (aborted) fn(); // already unmounted — clean up immediately
+      else unlisten = fn;
     });
 
     return () => {
-      if (unlisten) unlisten();
+      aborted = true;
+      unlisten?.();
       // Clear all timers on unmount
       if (debounceTimerRef.current !== null) {
         clearTimeout(debounceTimerRef.current);
@@ -565,7 +596,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   // Listen for version updates from launch_software
   useEffect(() => {
     const handleVersionUpdate = () => {
-      console.log('Version update event received - updating folder tree');
+      invalidateTreeCache(project.path);
       debouncedReload();
     };
 
@@ -578,12 +609,12 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   // Listen for tree refresh requests (e.g., when adding/removing software)
   useEffect(() => {
     const handleTreeRefresh = () => {
-      console.log('Tree refresh event received - updating folder tree');
+      invalidateTreeCache(project.path);
       debouncedReload();
     };
 
     const handleRefreshAll = () => {
-      console.log('Refresh all event received - updating folder tree');
+      invalidateTreeCache(project.path);
       debouncedReload();
     };
 
@@ -596,6 +627,15 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   }, [project.path]);
 
   const loadDirectorySize = async () => {
+    // Serve from cache immediately if available
+    const projectPathAtCall = currentProjectPathRef.current;
+    const cachedSize = cacheGet(treeSizeCache, projectPathAtCall);
+    if (cachedSize !== null) {
+      setDirectorySize(cachedSize);
+      setLoadingSize(false);
+      return;
+    }
+
     // Clear any existing timer first
     if (loadingSizeTimerRef.current !== null) {
       clearTimeout(loadingSizeTimerRef.current);
@@ -621,7 +661,6 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
 
       // Check if project changed while loading
       if (projectPath !== currentProjectPathRef.current) {
-        console.log('Project changed during size load, discarding results');
         return;
       }
 
@@ -631,6 +670,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         loadingSizeTimerRef.current = null;
       }
 
+      cacheSet(treeSizeCache, projectPath, size);
       setDirectorySize(size);
       setLoadingSize(false);
     } catch (error) {

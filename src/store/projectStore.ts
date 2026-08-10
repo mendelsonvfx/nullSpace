@@ -493,14 +493,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             }
           }
 
-          // Log active entry durationMinutes before update
-          const oldActiveEntry = oldProject?.timeEntries?.find(e => e.isActive);
-          const newActiveEntry = project.timeEntries?.find(e => e.isActive);
-          console.log(`[updateProject] 📝 Updating project ${project.name}`);
-          console.log(`[updateProject] 📊 Active entry durationMinutes: ${oldActiveEntry?.durationMinutes} → ${newActiveEntry?.durationMinutes}`);
-
           // First update local state synchronously
-          console.trace('[DEBUG] projectStore set(projects) from updateProject');
           set(state => ({
             projects: state.projects.map(p =>
               p.id === project.id ? project : p

@@ -164,8 +164,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
     year: false
   });
 
-  // Get fresh project from store for real-time timer updates
-  const latestProject = useProjectStore(state => state.projects.find(p => p.id === project.id) || project);
+  // Get fresh project from store; useShallow avoids re-renders when spread-unchanged fields (software, scenes) stay the same reference
+  const latestProject = useProjectStore(
+    useShallow(state => state.projects.find(p => p.id === project.id) || project)
+  );
   const timeTrackingEnabled = useTimeTrackingFeature();
   // Only re-render when active+visible sessions change, not on every elapsedSeconds tick
   const activeVisibleSessions = useTimeTrackingStore(
@@ -821,18 +823,12 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           <div className="mb-6">
             <h3 className="text-sm font-medium text-text-secondary mb-3.5">Launch Software</h3>
             <div className="grid grid-cols-2 gap-2">
-            {((context.isSpecialContext && context.specialContextType === 'compose')
-              ? project.software.filter((sw: any) => {
-                  const key = sw.name.toLowerCase().replace(/\s+/g, '-');
-                  return (project.composeSoftware || []).some((cs: string) => cs === key || cs === sw.name);
-                })
-              : project.software
-            ).map((sw: any) => {
-              // Get executable path from localStorage
+            {(() => {
               const savedPaths = localStorage.getItem('softwarePaths');
               const pathsMap: Record<string, string> = savedPaths ? JSON.parse(savedPaths) : {};
-
-              // Map display names to internal keys
+              const projectPathsMap: Record<string, string> = JSON.parse(
+                localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
+              );
               const nameToKey: Record<string, string> = {
                 'Blender': 'blender',
                 'Houdini': 'houdini',
@@ -845,11 +841,14 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 'ZBrush': 'zbrush',
                 'Marmoset': 'marmoset'
               };
-
+              return ((context.isSpecialContext && context.specialContextType === 'compose')
+                ? project.software.filter((sw: any) => {
+                    const key = sw.name.toLowerCase().replace(/\s+/g, '-');
+                    return (project.composeSoftware || []).some((cs: string) => cs === key || cs === sw.name);
+                  })
+                : project.software
+              ).map((sw: any) => {
               const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
-              const projectPathsMap: Record<string, string> = JSON.parse(
-                localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
-              );
               const executablePath = projectPathsMap[softwareKey] || pathsMap[softwareKey] || sw.executablePath;
 
               // Get launch status for this software
@@ -976,7 +975,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   )}
                 </button>
               );
-            })}
+              });
+            })()}
           </div>
         </div>
         )}

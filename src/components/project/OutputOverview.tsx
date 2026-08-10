@@ -180,10 +180,12 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
   // Listen for output changes from file system watcher
   useEffect(() => {
-    let unlisten: any;
+    let aborted = false;
+    let unlisten: (() => void) | undefined;
 
     // Import listen function
     import('@tauri-apps/api/event').then(({ listen }) => {
+      if (aborted) return; // unmounted before dynamic import resolved
       // Listen to output-changed event (specific for output files)
       listen('output-changed', () => {
         console.log('Output changed detected by file watcher');
@@ -192,7 +194,8 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         outputsCache.invalidate(cacheKey);
         loadOutputs(true);
       }).then((fn) => {
-        unlisten = fn;
+        if (aborted) fn();
+        else unlisten = fn;
       });
     });
 
@@ -201,7 +204,8 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     // event causes race conditions when switching contexts during refresh.
 
     return () => {
-      if (unlisten) unlisten();
+      aborted = true;
+      unlisten?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.path, cacheKey]);

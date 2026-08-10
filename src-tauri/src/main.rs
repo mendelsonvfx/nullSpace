@@ -21,14 +21,12 @@ use parking_lot::Mutex;
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode, DebounceEventResult};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread::JoinHandle;
 use tauri::Manager;
 use regex;
 use walkdir::WalkDir;
 
 // Global state for file watcher
 struct WatcherHandle {
-    thread: Option<JoinHandle<()>>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -705,19 +703,19 @@ async fn load_projects(projects_dir: String) -> Result<Vec<Project>, String> {
 
 #[tauri::command]
 async fn update_project(project: Project) -> Result<(), String> {
-    let project_path = PathBuf::from(&project.path);
-    let metadata_path = project_path.join(".project-metadata.json");
-
-    let mut updated_project = project.clone();
-    updated_project.updated_at = Utc::now().to_rfc3339();
-
-    let json = serde_json::to_string_pretty(&updated_project)
-        .map_err(|e| format!("Failed to serialize project: {}", e))?;
-    
-    fs::write(metadata_path, json)
-        .map_err(|e| format!("Failed to write metadata: {}", e))?;
-
-    Ok(())
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        let project_path = PathBuf::from(&project.path);
+        let metadata_path = project_path.join(".project-metadata.json");
+        let mut updated_project = project.clone();
+        updated_project.updated_at = Utc::now().to_rfc3339();
+        let json = serde_json::to_string_pretty(&updated_project)
+            .map_err(|e| format!("Failed to serialize project: {}", e))?;
+        fs::write(metadata_path, json)
+            .map_err(|e| format!("Failed to write metadata: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1934,6 +1932,9 @@ struct ProjectVersion {
 
 #[tauri::command]
 async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion>, String> {
+    #[cfg(debug_assertions)]
+    let t = std::time::Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<ProjectVersion>, String> {
     let project_dir = PathBuf::from(&project_path);
 
     // Get project metadata
@@ -2107,68 +2108,104 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
     versions.sort_by(|a, b| a.name.cmp(&b.name));
 
     Ok(versions)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    #[cfg(debug_assertions)]
+    println!("[PERF] get_project_versions: {}ms", t.elapsed().as_millis());
+    result
 }
 
 #[tauri::command]
 async fn extract_blend_thumbnail(path: String) -> Result<Option<String>, String> {
-    let p = std::path::Path::new(&path);
-    if p.extension().and_then(|e| e.to_str()) != Some("blend") {
+    if std::path::Path::new(&path).extension().and_then(|e| e.to_str()) != Some("blend") {
         return Err("File must be a .blend file".to_string());
     }
-    blend_thumbnail::extract_blend_thumbnail(&path)
+    #[cfg(debug_assertions)]
+    let t = std::time::Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<Option<String>, String> {
+        blend_thumbnail::extract_blend_thumbnail(&path)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    #[cfg(debug_assertions)]
+    println!("[PERF] extract_blend_thumbnail: {}ms", t.elapsed().as_millis());
+    result
 }
 
 #[tauri::command]
 async fn extract_psd_thumbnail(path: String) -> Result<Option<String>, String> {
-    let p = std::path::Path::new(&path);
-    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    let ext = std::path::Path::new(&path)
+        .extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
     if ext != "psd" && ext != "psb" {
         return Err("File must be a .psd or .psb file".to_string());
     }
-    psd_thumbnail::extract_psd_thumbnail(&path)
+    #[cfg(debug_assertions)]
+    let t = std::time::Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<Option<String>, String> {
+        psd_thumbnail::extract_psd_thumbnail(&path)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    #[cfg(debug_assertions)]
+    println!("[PERF] extract_psd_thumbnail: {}ms", t.elapsed().as_millis());
+    result
 }
 
 #[tauri::command]
 async fn get_file_mtime(path: String) -> Result<u64, String> {
-    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
-    let mtime = meta.modified().map_err(|e| e.to_string())?;
-    mtime
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || -> Result<u64, String> {
+        let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+        let mtime = meta.modified().map_err(|e| e.to_string())?;
+        mtime
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
-    let project_dir = PathBuf::from(&project_path);
-    let mut deleted_count = 0u32;
+    #[cfg(debug_assertions)]
+    let t = std::time::Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<u32, String> {
+        let project_dir = PathBuf::from(&project_path);
+        let mut deleted_count = 0u32;
 
-    let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
-    ];
+        let software_folders = vec![
+            "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
+            "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+        ];
 
-    for software_folder in software_folders {
-        let software_dir = project_dir.join(software_folder);
-        if software_dir.exists() {
-            for entry in WalkDir::new(&software_dir).max_depth(2).into_iter().flatten() {
-                if entry.file_type().is_file() {
-                    let file_path = entry.path();
-                    let is_blend1 = file_path.extension()
-                        .and_then(|e| e.to_str())
-                        .map_or(false, |e| e.eq_ignore_ascii_case("blend1"));
-                    if is_blend1 {
-                        if fs::remove_file(file_path).is_ok() {
-                            deleted_count += 1;
-                            println!("Deleted backup file: {:?}", file_path);
+        for software_folder in software_folders {
+            let software_dir = project_dir.join(software_folder);
+            if software_dir.exists() {
+                for entry in WalkDir::new(&software_dir).max_depth(2).into_iter().flatten() {
+                    if entry.file_type().is_file() {
+                        let file_path = entry.path();
+                        let is_blend1 = file_path.extension()
+                            .and_then(|e| e.to_str())
+                            .map_or(false, |e| e.eq_ignore_ascii_case("blend1"));
+                        if is_blend1 {
+                            if fs::remove_file(file_path).is_ok() {
+                                deleted_count += 1;
+                                println!("Deleted backup file: {:?}", file_path);
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    Ok(deleted_count)
+        Ok(deleted_count)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    #[cfg(debug_assertions)]
+    println!("[PERF] cleanup_backup_files: {}ms", t.elapsed().as_millis());
+    result
 }
 
 #[tauri::command]
@@ -2592,9 +2629,15 @@ async fn get_directory_size(path: String) -> Result<u64, String> {
         Ok(total_size)
     }
 
-    let dir_path = PathBuf::from(&path);
-    calculate_size(&dir_path)
-        .map_err(|e| format!("Failed to calculate directory size: {}", e))
+    #[cfg(debug_assertions)]
+    let t = std::time::Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(move || calculate_size(&PathBuf::from(&path)))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("Failed to calculate directory size: {}", e));
+    #[cfg(debug_assertions)]
+    println!("[PERF] get_directory_size: {}ms", t.elapsed().as_millis());
+    result
 }
 
 #[tauri::command]
@@ -2933,12 +2976,12 @@ async fn start_watching_project(
         }
     });
 
-    // Store handle globally
+    // Detach the thread (JoinHandle dropped here) — it exits when shutdown flag is set
+    drop(thread);
+
+    // Store shutdown signal so stop_watching_project can signal the thread
     let mut handle = WATCHER_HANDLE.lock();
-    *handle = Some(WatcherHandle {
-        thread: Some(thread),
-        shutdown,
-    });
+    *handle = Some(WatcherHandle { shutdown });
     Ok(())
 }
 
@@ -2946,28 +2989,11 @@ async fn start_watching_project(
 async fn stop_watching_project() -> Result<(), String> {
     let mut handle_guard = WATCHER_HANDLE.lock();
 
-    if let Some(mut handle) = handle_guard.take() {
-        // Signal shutdown
+    if let Some(handle) = handle_guard.take() {
         handle.shutdown.store(true, Ordering::Relaxed);
-
-        // Wait for thread to finish (with timeout)
-        if let Some(thread) = handle.thread.take() {
-            let timeout = Duration::from_secs(2);
-            let start = std::time::Instant::now();
-
-            loop {
-                if thread.is_finished() {
-                    let _ = thread.join();
-                    break;
-                }
-
-                if start.elapsed() > timeout {
-                    break;
-                }
-
-                std::thread::sleep(Duration::from_millis(100));
-            }
-        }
+        // JoinHandle is dropped here — this detaches (does NOT kill) the thread.
+        // The thread reads the flag every 100ms and exits on its own.
+        // Not waiting avoids blocking the Tokio executor thread.
     }
 
     Ok(())
@@ -4539,6 +4565,9 @@ async fn get_project_outputs(
     shot_filter: Option<String>,
     special_context: Option<String>
 ) -> Result<Vec<OutputFile>, String> {
+    #[cfg(debug_assertions)]
+    let t = std::time::Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<OutputFile>, String> {
     let project_dir = PathBuf::from(&project_path);
     let mut outputs = Vec::new();
 
@@ -4643,6 +4672,12 @@ async fn get_project_outputs(
     let grouped_outputs = group_sequences(outputs);
 
     Ok(grouped_outputs)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    #[cfg(debug_assertions)]
+    println!("[PERF] get_project_outputs: {}ms", t.elapsed().as_millis());
+    result
 }
 
 #[derive(Debug, Deserialize)]

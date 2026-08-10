@@ -397,13 +397,15 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
       if (!skipCleanup && autoDelete) {
         await invoke<number>('cleanup_backup_files', { projectPath: project.path });
       }
-      const result = await invoke<ProjectVersion[]>('get_project_versions', { projectPath: project.path });
+      if (forceReload) versionsCache.invalidate(project.path);
+      const result = await versionsCache.fetch(project.path, () =>
+        invoke<ProjectVersion[]>('get_project_versions', { projectPath: project.path })
+      );
       if (loadingTimerRef.current !== null) {
         clearTimeout(loadingTimerRef.current);
         loadingTimerRef.current = null;
       }
       setAllVersions(result);
-      versionsCache.set(project.path, result);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load versions:', error);
@@ -430,12 +432,19 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
 
   // Effect 2: Tauri file-system event
   useEffect(() => {
+    let aborted = false;
     let unlisten: (() => void) | undefined;
     listen('version-changed', () => {
       versionsCache.invalidate(project.path);
       loadVersions(true, true);
-    }).then((fn) => { unlisten = fn; });
-    return () => { if (unlisten) unlisten(); };
+    }).then((fn) => {
+      if (aborted) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      aborted = true;
+      unlisten?.();
+    };
   }, [project.path]);
 
   // Effect 3: window custom events from launch_software / manual refresh

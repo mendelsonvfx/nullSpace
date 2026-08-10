@@ -36,17 +36,11 @@ import { extractShotNumber, getScenePattern, extractVersion } from '../../utils/
 import { useBlendThumbnail, isBlendThumbnailCached } from '../../hooks/useBlendThumbnail';
 import { usePsdThumbnail, isPsdThumbnailCached } from '../../hooks/usePsdThumbnail';
 import { findNextAvailableShotNumber } from '../../utils/shotNumbering';
+import { versionsCache, type ProjectVersion } from '../../utils/versionsCache';
 
 const sanitizeFolderName = (name: string) =>
   name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
 
-interface ProjectVersion {
-  name: string;
-  path: string;
-  software: string[];
-  created_at: number;
-  is_versioned: boolean;
-}
 
 // Local types for component
 interface Shot {
@@ -986,7 +980,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
   const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
   const [versionsLoaded, setVersionsLoaded] = useState(false);
   const previousProjectPath = useRef<string | undefined>(undefined);
-  const cachedVersionsForPath = useRef<Map<string, ProjectVersion[]>>(new Map());
+  const loadVersionsRequestIdRef = useRef(0);
   const scrollRef = useRef<any>(null);
   const containerHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -1582,7 +1576,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
 
     // При смене проекта мгновенно восстанавливаем кэш если есть
     if (previousProjectPath.current !== project.path) {
-      const cached = cachedVersionsForPath.current.get(project.path);
+      const cached = versionsCache.get(project.path);
       if (cached) {
         setAllVersions(cached);
         setVersionsLoaded(true);
@@ -1593,28 +1587,32 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     }
 
     const loadVersions = async () => {
+      loadVersionsRequestIdRef.current += 1;
+      const reqId = loadVersionsRequestIdRef.current;
+      const capturedPath = project.path;
+
       try {
-        const result = await invoke<ProjectVersion[]>('get_project_versions', {
-          projectPath: project.path
-        });
+        const result = await versionsCache.fetch(capturedPath, () =>
+          invoke<ProjectVersion[]>('get_project_versions', { projectPath: capturedPath })
+        );
+
+        if (reqId !== loadVersionsRequestIdRef.current) return;
 
         setAllVersions(result);
-        cachedVersionsForPath.current.set(project.path, result);
         setVersionsLoaded(true);
       } catch (error) {
+        if (reqId !== loadVersionsRequestIdRef.current) return;
         console.error('Failed to load versions:', error);
-        const cached = cachedVersionsForPath.current.get(project.path);
-        if (!cached) {
-          setAllVersions([]);
-        }
+        const cached = versionsCache.get(capturedPath);
+        if (!cached) setAllVersions([]);
         setVersionsLoaded(true);
       }
     };
 
     loadVersions();
 
-    // Listen for version updates
     const handleVersionUpdate = () => {
+      versionsCache.invalidate(project.path);
       loadVersions();
     };
 

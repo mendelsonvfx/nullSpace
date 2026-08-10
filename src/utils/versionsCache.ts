@@ -22,6 +22,7 @@ interface CacheEntry {
 
 class VersionsCache {
   private cache: Map<string, CacheEntry> = new Map();
+  private inFlight: Map<string, Promise<ProjectVersion[]>> = new Map();
   private expandedStacksCache: Map<string, Set<string>> = new Map();
   private filterCache: Map<string, VersionsFilterState> = new Map();
   private readonly STORAGE_PREFIX = 'versions_cache_';
@@ -130,15 +131,45 @@ class VersionsCache {
     this.saveToStorage(projectPath, entry);
   }
 
+  // Fetch with in-flight deduplication: returns existing in-flight Promise for the same
+  // projectPath instead of firing a duplicate IPC call. Callers that need a forced fresh
+  // load should call invalidate(projectPath) first.
+  fetch(
+    projectPath: string,
+    fetcher: () => Promise<ProjectVersion[]>
+  ): Promise<ProjectVersion[]> {
+    const cached = this.get(projectPath);
+    if (cached !== null) return Promise.resolve(cached);
+
+    const existing = this.inFlight.get(projectPath);
+    if (existing) return existing;
+
+    const promise = fetcher()
+      .then(versions => {
+        this.set(projectPath, versions);
+        if (this.inFlight.get(projectPath) === promise) this.inFlight.delete(projectPath);
+        return versions;
+      })
+      .catch(err => {
+        if (this.inFlight.get(projectPath) === promise) this.inFlight.delete(projectPath);
+        throw err;
+      });
+
+    this.inFlight.set(projectPath, promise);
+    return promise;
+  }
+
   // Invalidate cache for a specific project
   invalidate(projectPath: string): void {
     this.cache.delete(projectPath);
     this.removeFromStorage(projectPath);
+    this.inFlight.delete(projectPath);
   }
 
   // Clear entire cache
   clearAll(): void {
     this.cache.clear();
+    this.inFlight.clear();
 
     // Clear from localStorage
     if (typeof window !== 'undefined') {
