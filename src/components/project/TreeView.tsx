@@ -804,16 +804,20 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           return;
         }
 
-        // Get executable path from project or fallback to global settings
-        let executablePath = softwareInfo.path || softwareInfo.executable_path || softwareInfo.executablePath;
-
-        // If still empty, try to get from global localStorage settings
+        // Get executable path: per-project → global → stored in object
+        const projectPaths: Record<string, string> = JSON.parse(
+          localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
+        );
+        let executablePath: string | undefined = projectPaths[softwareMapping.key];
         if (!executablePath) {
           const savedPaths = localStorage.getItem('softwarePaths');
           if (savedPaths) {
             const paths = JSON.parse(savedPaths);
             executablePath = paths[softwareMapping.key];
           }
+        }
+        if (!executablePath) {
+          executablePath = softwareInfo.path || softwareInfo.executable_path || softwareInfo.executablePath;
         }
 
         if (!executablePath) {
@@ -1335,7 +1339,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       </div>
 
       <SimpleBar className="custom-scrollbar" autoHide={false} style={{ height: 'calc(100% - 40px)', paddingBottom: '45px' }}>
-        <div className="flex flex-col">
+        <div className="flex flex-col pr-2">
           {tree.length > 0 ? (
             <>
               {/* Normal items (without underscore) */}

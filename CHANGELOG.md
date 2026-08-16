@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.9.32] - 2026-08-17
+
+### Changed
+- Shots: overview table header border removed, row spacing tightened
+
+### Fixed
+- Assets: software launch now checks project-local executable path before global settings (was skipping it)
+- Tree: software launch now checks project-local executable path before global settings (was skipping it)
+- Shots: "No preview" placeholder no longer renders over a loaded thumbnail in the overview table
+
 ## [1.9.30] - 2026-08-10
 
 ### Changed

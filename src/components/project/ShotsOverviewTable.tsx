@@ -97,7 +97,7 @@ export function ShotsOverviewTable({ projectId, projectPath, projectName, curren
           Shots overview
         </h3>
         {/* Table Header */}
-        <div className="grid grid-cols-[140px_120px_120px_1fr_120px] gap-4 pb-3 px-4 border-b border-border-primary">
+        <div className="grid grid-cols-[140px_120px_120px_1fr_120px] gap-4 pb-3 px-4">
           <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Preview</div>
           <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Number</div>
           <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Tasks</div>
@@ -106,7 +106,7 @@ export function ShotsOverviewTable({ projectId, projectPath, projectName, curren
         </div>
 
         {/* Table Body */}
-        <div className="flex flex-col gap-2 mt-3">
+        <div className="flex flex-col gap-2 mt-2">
           {sortedShots.length === 0 ? (
             <div className="py-8 text-center text-text-muted text-sm">
               No shots in this scene
@@ -188,9 +188,9 @@ function ShotRow({ shot, projectId: _projectId, projectPath, blendPath, onClick 
   return (
     <div className="grid grid-cols-[140px_120px_120px_1fr_120px] gap-4 px-4 py-3.5 bg-[#0f0f0f] border border-border-primary rounded-xl hover:border-border-secondary transition-colors cursor-pointer" onClick={onClick}>
       {/* Preview */}
-      <div className="flex items-center justify-center">
+      <div className="flex items-center">
         <div className="relative w-32 h-20 rounded-lg overflow-hidden bg-zinc-900 flex items-center justify-center border border-zinc-800">
-          <span className="text-[10px] text-zinc-600">No preview</span>
+          {!displaySrc && <span className="text-[10px] text-zinc-600">No preview</span>}
           {displaySrc && (
             <img
               src={displaySrc}

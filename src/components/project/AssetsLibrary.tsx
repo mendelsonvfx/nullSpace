@@ -589,13 +589,19 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
         return;
       }
 
-      let executablePath = softwareInfo.path || softwareInfo.executable_path || softwareInfo.executablePath;
+      const softwareKey = softwareName.toLowerCase().replace(/\s+/g, '-');
+      const projectPaths: Record<string, string> = JSON.parse(
+        localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
+      );
+      let executablePath: string | undefined = projectPaths[softwareKey];
       if (!executablePath) {
         const savedPaths = localStorage.getItem('softwarePaths');
         if (savedPaths) {
-          const paths = JSON.parse(savedPaths);
-          executablePath = paths[softwareName.toLowerCase().replace(/\s+/g, '-')];
+          executablePath = JSON.parse(savedPaths)[softwareKey];
         }
+      }
+      if (!executablePath) {
+        executablePath = softwareInfo.path || softwareInfo.executable_path || softwareInfo.executablePath;
       }
 
       if (!executablePath) {
