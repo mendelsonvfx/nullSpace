@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.9.35] - 2026-10-20
+
+### Added
+- Project: project name validated on create and rename — only Latin letters, digits, spaces and hyphens; invalid chars blocked on input with red border and collapsible inline hint
+- Compose: selecting compose software in the activation modal now automatically enables it in the project (creates software folders, adds it to the tool list)
+
+### Changed
+- Compose: `_GlobalCompose` folder and scene subfolders created only when Compose is first enabled, not on every new project or scene
+- Compose: `_GlobalCompose` outputs labeled with the actual compose software name instead of hardcoded "AfterEffects"
+- Finance: pending revenue breakdown sorted by amount descending
+- Finance: "Total Projects" count includes archived projects
+
+### Fixed
+- Project: removing software that was also the compose software now clears it from `composeSoftware` too
+- Project: rename and software removal use latest project state after async update — prevents stale data overwriting concurrent changes
+- Project: deleting a project removes its archive backup — prevents orphaned entries reappearing in Finance after reload
+- Store: switching project categories clears stale archived backups before the next load
+- Output: compose outputs reload when compose software changes
+- Compose: Confirm button disabled while applying — prevents double submission
+- Compose: file watcher restarted and tree refreshed after enabling Compose — new folders appear without switching projects
+
 ## [1.9.32] - 2026-08-17
 
 ### Changed

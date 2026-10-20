@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, AlertCircle } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { selectProjectDirectory } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { generateBrightColor, SOFTWARE_OPTIONS } from '../../utils';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { useProjectNameInput } from '../../hooks/useProjectNameInput';
+import { PROJECT_NAME_HINT } from '../../utils/fileNaming';
 import SimpleBar from 'simplebar-react';
 import { CustomSelect } from '../ui/CustomSelect';
+import { CollapsibleHint } from '../ui/CollapsibleHint';
 
 interface CreateProjectModalProps {
   onClose: () => void;
@@ -17,6 +20,7 @@ interface CreateProjectModalProps {
 
 export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: CreateProjectModalProps) {
   const blurClass = useModalBlur();
+  const nameInput = useProjectNameInput();
   const { defaultProjectsPath, clients, addClient, selectedCategory } = useProjectStore();
   const [useDefaultPath, setUseDefaultPath] = useState(true);
   const [newClientName, setNewClientName] = useState('');
@@ -123,7 +127,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
   };
 
   const handleCreate = async () => {
-    if (!formData.name || !formData.path) return;
+    if (!formData.name.trim() || !formData.path) return;
 
     // If there's a new client name entered but not yet created, create it first
     let finalClientId = formData.clientId;
@@ -244,16 +248,30 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
 
         <SimpleBar className="flex-1 custom-scrollbar" autoHide={false} style={{ maxHeight: '100%' }}>
           <div className="p-4 space-y-2.5">
+          <div>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
               <label className="block text-sm font-medium mb-1.5">Project Name</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="My Awesome Project"
-                className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-accent"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.name}
+                  onKeyDown={nameInput.onKeyDown}
+                  onChange={(e) => {
+                    const name = nameInput.sanitize(e.target.value);
+                    setFormData(prev => ({ ...prev, name }));
+                  }}
+                  placeholder="My Awesome Project"
+                  className={`w-full bg-sidebar-bg rounded-button px-3 py-2 pr-9 text-sm focus:outline-none transition-colors ${
+                    nameInput.rejected
+                      ? 'border border-red-500'
+                      : 'border border-border-primary focus:border-accent'
+                  }`}
+                />
+                {nameInput.rejected && (
+                  <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-500" />
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2 h-[38px] px-3">
               <span className="text-sm whitespace-nowrap">Shot-based</span>
@@ -269,6 +287,8 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
                 }`} />
               </button>
             </div>
+          </div>
+          <CollapsibleHint show={nameInput.rejected}>{PROJECT_NAME_HINT}</CollapsibleHint>
           </div>
 
           <div className="flex gap-3 items-start">
@@ -746,7 +766,7 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
           </button>
           <button
             onClick={handleCreate}
-            disabled={!formData.name || !formData.path || formData.software.length === 0}
+            disabled={!formData.name.trim() || !formData.path || formData.software.length === 0}
             className="px-4 py-2 bg-gradient-to-br from-accent to-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-button transition-all font-medium animate-button text-sm text-white"
           >
             Create Project

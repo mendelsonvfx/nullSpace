@@ -60,12 +60,15 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   }, [specialContextType, project.hasScenes, project.hasShots, currentShot]);
 
   // Generate unique cache key for project + scene + shot + specialContext combination
+  // Compose outputs depend on which compose software is enabled — reload when it changes
+  const composeKey = specialContextType === 'compose' ? `_cs_${(project.composeSoftware || []).join(',')}` : '';
+
   const cacheKey = useMemo(() => {
     const shotId = currentShot ? `_shot_${currentShot.number}` : '';
     const sceneId = currentScene ? `_scene_${currentScene.name}` : '';
     const specialContextId = specialContextType ? `_context_${specialContextType}` : '';
-    return `${project.path}${sceneId}${shotId}${specialContextId}`;
-  }, [project.path, currentScene, currentShot, specialContextType]);
+    return `${project.path}${sceneId}${shotId}${specialContextId}${composeKey}`;
+  }, [project.path, currentScene, currentShot, specialContextType, composeKey]);
 
   // Initialize with empty values - will be set in useLayoutEffect before paint
   const [selectedSoftware, setSelectedSoftware] = useState<SoftwareName | ''>('');
@@ -176,7 +179,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     isFirstLoadRef.current = true;
     loadOutputs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.path, currentScene, currentShot, specialContextType]);
+  }, [project.path, currentScene, currentShot, specialContextType, composeKey]);
 
   // Listen for output changes from file system watcher
   useEffect(() => {

@@ -9,6 +9,15 @@
 export const SHOT_DIGITS = 3;
 export const VERSION_DIGITS = 3;
 
+// Project name goes into every file name (PROJECT_SCENE_SHOT_v001). Allow only what the Rust sanitizer keeps
+// (minus '_', the field separator) so TS patterns and Rust-built names always match and the folder is valid on Windows.
+// Must match validate_project_name in src-tauri/src/main.rs
+const PROJECT_NAME_CHAR = /[A-Za-z0-9 -]/;
+export const PROJECT_NAME_HINT = 'Only Latin letters, digits, spaces and hyphens allowed';
+export const isAllowedProjectNameChar = (ch: string) => PROJECT_NAME_CHAR.test(ch);
+export const isValidProjectName = (name: string) => [...name].every(isAllowedProjectNameChar);
+export const stripInvalidProjectNameChars = (name: string) => [...name].filter(isAllowedProjectNameChar).join('');
+
 // Interface for file name components
 export interface FileNameComponents {
   projectName: string;

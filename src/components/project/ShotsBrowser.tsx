@@ -27,7 +27,7 @@ import {
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
-import { ComposeSoftwareModal } from '../modals/ComposeSoftwareModal';
+import { ComposeSoftwareModal, composeKeyOf } from '../modals/ComposeSoftwareModal';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
@@ -37,6 +37,7 @@ import { useBlendThumbnail, isBlendThumbnailCached } from '../../hooks/useBlendT
 import { usePsdThumbnail, isPsdThumbnailCached } from '../../hooks/usePsdThumbnail';
 import { findNextAvailableShotNumber } from '../../utils/shotNumbering';
 import { versionsCache, type ProjectVersion } from '../../utils/versionsCache';
+import type { SoftwareName } from '../../types/project';
 
 const sanitizeFolderName = (name: string) =>
   name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
@@ -2695,10 +2696,32 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
 
       {showComposeSoftwareModal && (
         <ComposeSoftwareModal
-          onConfirm={async (softwareKeys) => {
+          onConfirm={async (selected) => {
             const current = useProjectStore.getState().projects.find(p => p.id === projectId);
             if (current) {
-              await updateProject({ ...current, composeSoftware: softwareKeys });
+              // Auto-enable selected compose software that isn't in the project yet — otherwise Global Compose has no launch button
+              const existingKeys = new Set(current.software.map((sw: any) => composeKeyOf(sw.name)));
+              const missing = selected.filter(s => !existingKeys.has(s.key));
+              for (const sw of missing) {
+                try {
+                  await invoke('add_software_to_project', { projectPath: current.path, softwareName: sw.key });
+                } catch (e) { console.error(`Failed to create folders for ${sw.name}:`, e); }
+              }
+
+              // Re-read after the awaits: updateProject replaces the whole object, a stale snapshot would drop concurrent changes (e.g. time tracking)
+              const latest = useProjectStore.getState().projects.find(p => p.id === projectId) ?? current;
+              const latestKeys = new Set(latest.software.map((sw: any) => composeKeyOf(sw.name)));
+              await updateProject({
+                ...latest,
+                software: [
+                  ...latest.software,
+                  ...missing
+                    .filter(sw => !latestKeys.has(sw.key))
+                    .map(sw => ({ name: sw.name as SoftwareName, executablePath: '', version: undefined, icon: undefined })),
+                ],
+                composeSoftware: selected.map(s => s.key),
+              });
+
               if (current.hasScenes && current.shots && current.scenes) {
                 for (const shot of current.shots) {
                   const scene = current.scenes.find(s => s.id === shot.sceneId);
@@ -2715,6 +2738,12 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                   }
                 }
               }
+              // Watcher only watches folders that existed when it started — restart it to pick up _GlobalCompose
+              invoke('start_watching_project', {
+                projectPath: current.path,
+                autoDeleteBackups: localStorage.getItem('autoDeleteBlend1Backups') === 'true',
+              }).catch(console.error);
+              window.dispatchEvent(new CustomEvent('tree-refresh'));
             }
             setShowComposeSoftwareModal(false);
             setSpecialContext(projectId, 'compose');

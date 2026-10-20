@@ -3,6 +3,7 @@ import { SoftwareIcon } from '../SoftwareIcon';
 import { COMPOSE_SOFTWARE_OPTIONS } from '../../utils';
 import { useModalBlur } from '../../hooks/useModalBlur';
 
+// Only needed when the key can't be derived from the display name (e.g. 'Cinema 4D' -> 'cinema4d')
 const nameToKey: Record<string, string> = {
   'After Effects': 'after-effects',
   'Blender': 'blender',
@@ -10,14 +11,23 @@ const nameToKey: Record<string, string> = {
   'Photoshop': 'photoshop',
 };
 
+export const composeKeyOf = (name: string) =>
+  nameToKey[name] ?? name.toLowerCase().replace(/\s+/g, '-');
+
+export interface ComposeSoftwareSelection {
+  key: string;
+  name: string;
+}
+
 export function ComposeSoftwareModal({
   onConfirm,
   onClose,
 }: {
-  onConfirm: (softwareKeys: string[]) => Promise<void> | void;
+  onConfirm: (selected: ComposeSoftwareSelection[]) => Promise<void> | void;
   onClose: () => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [submitting, setSubmitting] = useState(false);
   const blurClass = useModalBlur();
 
   useEffect(() => {
@@ -67,11 +77,14 @@ export function ComposeSoftwareModal({
             Cancel
           </button>
           <button
-            disabled={selected.size === 0}
+            disabled={selected.size === 0 || submitting}
             onClick={async () => {
-              if (selected.size > 0) {
-                const keys = [...selected].map(s => nameToKey[s] ?? s.toLowerCase().replace(/\s+/g, '-'));
-                await onConfirm(keys);
+              if (selected.size === 0 || submitting) return;
+              setSubmitting(true);
+              try {
+                await onConfirm([...selected].map(name => ({ key: composeKeyOf(name), name })));
+              } finally {
+                setSubmitting(false);
               }
             }}
             className="px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed rounded-button text-sm font-medium text-white transition-colors"

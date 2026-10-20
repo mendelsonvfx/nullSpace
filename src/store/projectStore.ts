@@ -9,6 +9,7 @@ import { indexedDBThumbnailCache } from '../utils/indexedDBCache';
 import { useTimeStatsStore, useTimeTrackingStore } from '../features/time-tracking';
 import { generateProjectColor, generateBrightColor } from '../utils/colorUtils';
 import { findNextAvailableShotNumber, isShotNumberAvailable } from '../utils/shotNumbering';
+import { isValidProjectName, PROJECT_NAME_HINT } from '../utils/fileNaming';
 
 // Sanitize scene name for folder name (remove spaces and special characters)
 const sanitizeFolderName = (name: string): string => {
@@ -520,6 +521,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   renameProject: async (project: Project, newName: string) => {
     const trimmed = newName.trim();
     if (!trimmed || trimmed === project.name) return;
+    if (!isValidProjectName(trimmed)) throw new Error(PROJECT_NAME_HINT);
 
     const parentDir = project.path.substring(0, project.path.lastIndexOf('\\'));
     const folderName = trimmed.replace(/\s+/g, '');
@@ -555,6 +557,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
 
       await invoke('delete_project', { projectPath });
+
+      // Deleting from RayHub is intentional — drop the archive backup too, otherwise the project
+      // comes back as an orphaned "folder deleted" entry (and in Finance) after the next reload
+      const deletedId = get().projects.find(p => p.path === projectPath)?.id;
+      if (deletedId) {
+        try {
+          await invoke('delete_project_backup', { projectId: deletedId });
+        } catch (err) {
+          console.warn('[Backup] Failed to remove backup of deleted project:', err);
+        }
+      }
+
       set(state => ({
         projects: state.projects.filter(p => p.path !== projectPath),
         selectedProject: state.selectedProject?.path === projectPath
@@ -2401,7 +2415,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Migrate projects to scene-based structure if needed
       const migratedProjects = projects.map(project => get().migrateProjectToScenes(project));
 
-      set({ projects: migratedProjects, isLoading: false });
+      // Drop the previous category's backups right away so they aren't mixed with the new projects while reloading
+      set({ projects: migratedProjects, archivedBackups: [], isLoading: false });
 
       // Load archived backups for this category
       get().loadArchivedBackups();

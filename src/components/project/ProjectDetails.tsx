@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconPencil, IconPlayerPlay, IconAppWindow, IconChevronRight, IconInfoCircle } from '@tabler/icons-react';
+import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconPencil, IconPlayerPlay, IconAppWindow, IconChevronRight, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api';
 import { selectExecutable } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
@@ -17,9 +17,13 @@ import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTr
 import { useShallow } from 'zustand/react/shallow';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { useProjectNameInput } from '../../hooks/useProjectNameInput';
+import { PROJECT_NAME_HINT } from '../../utils/fileNaming';
+import { composeKeyOf } from '../modals/ComposeSoftwareModal';
 import SimpleBar from 'simplebar-react';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { CustomSelect } from '../ui/CustomSelect';
+import { CollapsibleHint } from '../ui/CollapsibleHint';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { getPaymentStatusUpdate } from '../../utils/financeService';
 import { useTasks } from '../../hooks/useTasks';
@@ -100,6 +104,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState(project.description || '');
   const [nameInput, setNameInput] = useState(project.name);
+  const projectNameInput = useProjectNameInput();
   useEffect(() => { setNameInput(project.name); }, [project.id]);
   const contentScrollRef = useRef<HTMLElement | null>(null);
 
@@ -514,6 +519,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
     if (!softwareToRemove) return;
 
     const softwareKey = nameToKey[softwareToRemove] || softwareToRemove.toLowerCase().replace(/\s+/g, '-');
+    // Compose keys come from ComposeSoftwareModal's mapping, which can differ from nameToKey above
+    const composeKey = composeKeyOf(softwareToRemove);
     const { updateProject } = useProjectStore.getState();
 
     try {
@@ -523,15 +530,20 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         softwareName: softwareKey
       });
 
+      // Read the latest project after the await: updateProject replaces the whole object
+      const latest = useProjectStore.getState().projects.find(p => p.id === project.id) || project;
+
       // Remove software from project metadata
-      const updatedSoftware = project.software.filter((sw: any) => {
+      const updatedSoftware = latest.software.filter((sw: any) => {
         const existingKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
         return existingKey !== softwareKey;
       });
 
       await updateProject({
-        ...project,
-        software: updatedSoftware
+        ...latest,
+        software: updatedSoftware,
+        // Keep compose in sync — otherwise Global Compose is left without a launch button
+        composeSoftware: (latest.composeSoftware || []).filter((k: string) => k !== softwareKey && k !== composeKey),
       });
 
       // Trigger tree refresh
@@ -1396,21 +1408,32 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               <div className="flex gap-3 items-center">
                 <div className="flex-1">
                   <label className="block text-sm font-medium mb-1.5">Project Name</label>
-                  <input
-                    type="text"
-                    value={nameInput}
-                    onChange={(e) => setNameInput(e.target.value)}
-                    onBlur={() => {
-                      const trimmed = nameInput.trim();
-                      if (trimmed && trimmed !== project.name) {
-                        const { renameProject } = useProjectStore.getState();
-                        renameProject(project, trimmed).catch(() => setNameInput(project.name));
-                      } else {
-                        setNameInput(project.name);
-                      }
-                    }}
-                    className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-border-secondary"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={nameInput}
+                      onKeyDown={projectNameInput.onKeyDown}
+                      onChange={(e) => setNameInput(projectNameInput.sanitize(e.target.value))}
+                      onBlur={() => {
+                        const trimmed = nameInput.trim();
+                        if (trimmed && trimmed !== project.name) {
+                          const { renameProject } = useProjectStore.getState();
+                          renameProject(project, trimmed).catch(() => setNameInput(project.name));
+                        } else {
+                          setNameInput(project.name);
+                        }
+                      }}
+                      className={`w-full bg-sidebar-bg rounded-button px-3 py-2 pr-9 text-sm focus:outline-none transition-colors ${
+                        projectNameInput.rejected
+                          ? 'border border-red-500'
+                          : 'border border-border-primary focus:border-border-secondary'
+                      }`}
+                    />
+                    {projectNameInput.rejected && (
+                      <IconAlertCircle size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500" />
+                    )}
+                  </div>
+                  <CollapsibleHint show={projectNameInput.rejected}>{PROJECT_NAME_HINT}</CollapsibleHint>
                 </div>
               </div>
 

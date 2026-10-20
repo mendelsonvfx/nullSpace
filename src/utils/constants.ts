@@ -22,4 +22,6 @@ export const SOFTWARE_OPTIONS = [
   // 'Cinema 4D', 'Substance', 'Unreal', 'Unity', 'ZBrush', 'Marmoset'
 ] as const;
 
+// Selecting one in ComposeSoftwareModal auto-enables it in the project.
+// If the key can't be derived from the name, add it to nameToKey in ComposeSoftwareModal.
 export const COMPOSE_SOFTWARE_OPTIONS = ['After Effects'] as const;

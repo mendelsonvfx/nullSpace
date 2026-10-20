@@ -329,6 +329,14 @@ fn get_software_folder_name(software: &str) -> &str {
     }
 }
 
+/// Must match isValidProjectName in src/utils/fileNaming.ts
+fn validate_project_name(name: &str) -> Result<(), String> {
+    if name.trim().is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '-') {
+        return Err("Project name may contain only Latin letters, digits, spaces and hyphens".to_string());
+    }
+    Ok(())
+}
+
 fn read_project_metadata(project_path: &PathBuf) -> Result<Project, String> {
     let metadata_path = project_path.join(".project-metadata.json");
     let metadata_content = fs::read_to_string(&metadata_path)
@@ -487,6 +495,7 @@ fn create_folder_item(base_path: &PathBuf, item: &FolderItem) -> Result<(), Stri
 
 #[tauri::command]
 async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
+    validate_project_name(&input.name)?;
     let project_path = PathBuf::from(&input.path);
     fs::create_dir_all(&project_path)
         .map_err(|e| format!("Failed to create project directory: {}", e))?;
@@ -516,10 +525,8 @@ async fn create_project(input: CreateProjectInput) -> Result<Project, String> {
     }
 
     // Common folders
-    let mut common_folders = vec!["_GlobalReferences", "_GlobalAssets"];
-    if has_scenes {
-        common_folders.push("_GlobalCompose");
-    }
+    // _GlobalCompose is created only when the user enables Compose (see create_global_compose_shot_folders)
+    let common_folders = vec!["_GlobalReferences", "_GlobalAssets"];
     for folder in common_folders {
         fs::create_dir_all(project_path.join(folder))
             .map_err(|e| format!("Failed to create common folder {}: {}", folder, e))?;
@@ -722,6 +729,10 @@ async fn update_project(project: Project) -> Result<(), String> {
 async fn rename_project_folder(old_path: String, new_path: String) -> Result<String, String> {
     let old = PathBuf::from(&old_path);
     let new_p = PathBuf::from(&new_path);
+
+    // Folder name is the project name without spaces
+    let folder_name = new_p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    validate_project_name(folder_name)?;
 
     if new_p.exists() {
         return Err(format!("Folder already exists: {}", new_path));
@@ -4646,6 +4657,11 @@ async fn get_project_outputs(
     let is_compose_context = special_context.as_deref() == Some("compose");
     let global_compose_dir = project_dir.join("_GlobalCompose");
     if !is_compose_context { return Ok(group_sequences(outputs)); }
+    // Label compose outputs with the project's compose software (folder-style name, like other software labels)
+    let compose_label = match project.compose_software.as_ref().and_then(|keys| keys.first()) {
+        Some(key) => get_software_folder_name(key).to_string(),
+        None => return Ok(group_sequences(outputs)),
+    };
     if global_compose_dir.exists() {
         if let Ok(entries) = fs::read_dir(&global_compose_dir) {
             for entry in entries.flatten() {
@@ -4657,12 +4673,12 @@ async fn get_project_outputs(
 
                 let preview_dir = entry_path.join("Output").join("Preview");
                 if preview_dir.exists() {
-                    scan_output_dir_recursive(&preview_dir, "AfterEffects", "preview", &mut outputs, 0, &None, &None);
+                    scan_output_dir_recursive(&preview_dir, &compose_label, "preview", &mut outputs, 0, &None, &None);
                 }
 
                 let final_dir = entry_path.join("Output").join("Final");
                 if final_dir.exists() {
-                    scan_output_dir_recursive(&final_dir, "AfterEffects", "final", &mut outputs, 0, &None, &None);
+                    scan_output_dir_recursive(&final_dir, &compose_label, "final", &mut outputs, 0, &None, &None);
                 }
             }
         }
@@ -4725,10 +4741,12 @@ fn create_scene_folders(input: CreateSceneFoldersInput) -> Result<(), String> {
         }
     }
 
-    // Create scene folder in _GlobalCompose
-    let global_compose_scene = project_path.join("_GlobalCompose").join(&scene_folder_name);
-    fs::create_dir_all(&global_compose_scene)
-        .map_err(|e| format!("Failed to create scene folder in _GlobalCompose: {}", e))?;
+    // Create scene folder in _GlobalCompose — only if Compose is enabled for this project
+    if project.compose_software.as_ref().map_or(false, |v| !v.is_empty()) {
+        let global_compose_scene = project_path.join("_GlobalCompose").join(&scene_folder_name);
+        fs::create_dir_all(&global_compose_scene)
+            .map_err(|e| format!("Failed to create scene folder in _GlobalCompose: {}", e))?;
+    }
 
     Ok(())
 }

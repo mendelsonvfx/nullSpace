@@ -626,7 +626,13 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                   <div className="mt-5">
                     <div className="text-xs text-zinc-500 uppercase tracking-wide mb-4">Project Breakdown:</div>
                     <div className="space-y-2">
-                      {pendingProjects.slice(0, 3).map((project: any) => {
+                      {[...pendingProjects]
+                      .sort((a: any, b: any) => {
+                        const amt = (p: any) => convertCurrency(p.displayAmount || p.cost || 0, p.currency || 'USD', baseCurrency);
+                        return amt(b) - amt(a);
+                      })
+                      .slice(0, 3)
+                      .map((project: any) => {
                         const originalCurrency = project.currency || 'USD';
                         const originalAmount = project.displayAmount || project.cost;
 
@@ -883,7 +889,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
             {/* Total Projects */}
             <div data-finance-container className="bg-card-bg rounded-xl p-6 border border-border-primary">
               <p className="text-sm text-zinc-500 mb-3">Total Projects</p>
-              <p className="text-4xl font-bold text-blue-400 mb-3 tracking-tight">{projects.length}</p>
+              <p className="text-4xl font-bold text-blue-400 mb-3 tracking-tight">{allProjects.length}</p>
               <div className="flex gap-3 text-xs">
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-green-400"></div>
