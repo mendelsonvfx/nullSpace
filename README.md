@@ -32,70 +32,46 @@ nullSpace keeps a freelance or small-studio VFX project organized from first fil
   <img src="docs/screenshots/time.png" width="49%" alt="Time analytics: software breakdown and weekly timeline">
 </p>
 
-## Features
+## Highlights
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
-**📁 Projects & shots**
-- Scene / shot structure with auto-generated folders per software
-- Statuses, categories, favorites and search
-- Shot rename that propagates to every file on disk
-- Shared `_GlobalAssets` and `_GlobalCompose` folders
+### 🚀 One click from shot to scene
+Pick a shot, hit **Blender**, and you're in: the right folder, the next version already created, paths set up. No *Save As*, no hunting for `v017`.
 
 </td>
 <td width="50%" valign="top">
 
-**🎞️ Versions & renders**
-- Launching a shot creates the next versioned scene file
-- Render browser with image-sequence detection and frame ranges
-- Preview / Final and per-software filters
-- File watcher refreshes versions and outputs live
+### ⏱️ Time tracking without a timer
+nullSpace notices when Blender, Houdini or After Effects is running and tells focused work apart from idle time. Nothing to start, nothing to forget.
 
 </td>
 </tr>
 <tr>
 <td valign="top">
 
-**⏱️ Time tracking**
-- Automatic tracking by the running software process
-- Manual entries and per-shot history
-- Weekly timeline and per-software breakdown
-- Break reminders
+### 🖼️ Previews without opening anything
+Thumbnails of `.blend`, `.psd` and `.c4d` files are read straight from the files, so every version is visible at a glance without launching the software.
 
 </td>
 <td valign="top">
 
-**💰 Finance**
-- Clients and multi-currency with live exchange rates
-- Paid / prepaid / unpaid with prepayment amounts
-- Hourly and daily rate calculations
-- Project reports in PDF, CSV, JSON or Markdown
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**✅ Tasks & notes**
-- Tasks per project and shot with priority, deadline and attachments
-- Markdown notes and reference links
-- Deadline notifications
-- File tree with folder colors and F2 rename
-
-</td>
-<td valign="top">
-
-**🧰 Workflow**
-- Tool Launcher for any extra app or script
-- NullConverter actions in the render context menu
-- Built-in auto-updater
-- Full data export / import
+### 📂 Your files stay yours
+No cloud, no account. Projects are plain, human-readable folders that make sense without nullSpace, and the project data lives right next to your files. Copy a project to another drive or machine and nullSpace picks it up automatically.
 
 </td>
 </tr>
 </table>
+
+### Also inside
+- **Deep integrations:** Resolve scripts that save `.drp` versions, Substance Painter auto-saving under the version name, Unreal projects created on first launch.
+- **Money tied to time:** clients, multi-currency, prepayments, revenue analytics and your real hourly rate.
+- **Renders:** image sequences grouped with frame ranges, Preview / Final filters, NullConverter in the context menu.
+- **Safe shot rename:** every file and folder on disk is updated, and an interrupted rename is recovered.
+- **Tasks & notes:** priorities, deadlines, attachments, Markdown notes and links.
+- **One portable exe** with a built-in auto-updater.
 
 ## Supported software
 
