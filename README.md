@@ -22,20 +22,15 @@ Shots, versions, renders, time and money — in one place, wired into the tools 
 
 ## About
 
-nullSpace keeps a freelance or small-studio VFX project organized from first file to final payment. It builds the folder structure, names and versions your scene files, launches the right software for the right shot, tracks how long you spend in it, and turns that into invoices-ready numbers.
-
-<!--
-## Screenshots
+nullSpace keeps a freelance or small-studio VFX project organized from first file to final payment. It builds the folder structure, names and versions your scene files, launches the right software for the right shot, tracks how long you spend in it, and turns it into clear financial reports.
 
 <p align="center">
-  <img src="docs/screenshots/projects.png" width="49%" alt="Projects">
-  <img src="docs/screenshots/shots.png" width="49%" alt="Shots">
+  <img src="docs/screenshots/project.png" alt="Project view: shots browser, tasks, versions and software launcher">
 </p>
 <p align="center">
-  <img src="docs/screenshots/time.png" width="49%" alt="Time analytics">
-  <img src="docs/screenshots/finance.png" width="49%" alt="Finance">
+  <img src="docs/screenshots/finance.png" width="49%" alt="Finance: revenue, pending payments and statistics">
+  <img src="docs/screenshots/time.png" width="49%" alt="Time analytics: software breakdown and weekly timeline">
 </p>
--->
 
 ## Features
 
@@ -53,7 +48,7 @@ nullSpace keeps a freelance or small-studio VFX project organized from first fil
 <td width="50%" valign="top">
 
 **🎞️ Versions & renders**
-- Versioned scene files with one-click "new version"
+- Launching a shot creates the next versioned scene file
 - Render browser with image-sequence detection and frame ranges
 - Preview / Final and per-software filters
 - File watcher refreshes versions and outputs live
@@ -73,7 +68,7 @@ nullSpace keeps a freelance or small-studio VFX project organized from first fil
 <td valign="top">
 
 **💰 Finance**
-- Clients, budgets, multi-currency with live exchange rates
+- Clients and multi-currency with live exchange rates
 - Paid / prepaid / unpaid with prepayment amounts
 - Hourly and daily rate calculations
 - Project reports in PDF, CSV, JSON or Markdown
@@ -94,7 +89,7 @@ nullSpace keeps a freelance or small-studio VFX project organized from first fil
 
 **🧰 Workflow**
 - Tool Launcher for any extra app or script
-- [NullConverter](https://github.com/mendelsonvfx) actions in the render context menu
+- NullConverter actions in the render context menu
 - Built-in auto-updater
 - Full data export / import
 
@@ -109,22 +104,13 @@ Every app below gets launch-from-shot, versioned file naming and automatic time 
 | | Software | Extra integration |
 |:-:|---|---|
 | <img src="public/logos/blender.png" width="20"> | **Blender** | Relative paths set up on file creation · `.blend` thumbnails |
-| <img src="public/logos/houdini.png" width="20"> | **Houdini** | `.hip` / `.hiplc` / `.hipnc` picked by license |
+| <img src="public/logos/houdini.png" width="20"> | **Houdini** | `.hip` / `.hiplc` / `.hipnc` picked by edition (FX / Indie / Apprentice) |
 | <img src="public/logos/cinema4d.png" width="20"> | **Cinema 4D** | Render path and frame range set up on file creation · `.c4d` thumbnails |
 | <img src="public/logos/substance.png" width="20"> | **Substance Painter** | New projects auto-saved under the version name |
 | <img src="public/logos/unreal.png" width="20"> | **Unreal Engine** | `.uproject` created on first launch |
 | <img src="public/logos/after-effects.png" width="20"> | **After Effects** | Starts from a clean template · Global Compose |
 | <img src="public/logos/davinci.png" width="20"> | **DaVinci Resolve** | Open Project / Save Version scripts, `.drp` versions · Global Compose |
 | <img src="public/logos/photoshop.png" width="20"> | **Photoshop** | `.psd` / `.psb` thumbnails |
-
-## Tech stack
-
-| Layer | |
-|---|---|
-| Shell | Tauri 1 · Rust |
-| UI | React 19 · TypeScript · Vite 7 |
-| Styling | Tailwind CSS |
-| State | Zustand |
 
 ## Build from source
 
