@@ -4,7 +4,7 @@
 
 # nullSpace
 
-**Desktop project manager for 3D & VFX artists**
+**Desktop project manager for artists**
 
 Shots, versions, renders, time and money — in one place, wired into the tools you already use.
 
