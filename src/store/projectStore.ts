@@ -6,10 +6,12 @@ import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, Time
 import { thumbnailCache } from '../utils/thumbnailCache';
 import { versionsCache } from '../utils/versionsCache';
 import { indexedDBThumbnailCache } from '../utils/indexedDBCache';
-import { useTimeStatsStore, useTimeTrackingStore } from '../features/time-tracking';
+import { useTimeStatsStore, useTimeTrackingStore, normalizeSoftwareName, formatSoftwareName } from '../features/time-tracking';
 import { generateProjectColor, generateBrightColor } from '../utils/colorUtils';
 import { findNextAvailableShotNumber, isShotNumberAvailable } from '../utils/shotNumbering';
 import { isValidProjectName, PROJECT_NAME_HINT } from '../utils/fileNaming';
+import { davinciProjectName } from '../utils/davinciProjectName';
+import { isComposeOnlySoftware } from '../utils/constants';
 
 // Sanitize scene name for folder name (remove spaces and special characters)
 const sanitizeFolderName = (name: string): string => {
@@ -387,6 +389,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   createProject: async (input: CreateProjectCommand) => {
     set({ isLoading: true, error: null });
     try {
+      // Shot-based projects use compose-only software (DaVinci Resolve) in Compose, never as project software
+      const shotBased = !!(input.hasScenes || input.hasShots);
+      input = {
+        ...input,
+        software: input.software.filter(sw => !isComposeOnlySoftware(normalizeSoftwareName(sw), shotBased)),
+      };
       const project = await invoke<Project>('create_project', { input });
 
       // Generate random color for project
@@ -597,9 +605,25 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         launchingStatus: { ...state.launchingStatus, [statusKey]: 'launching' }
       }));
 
+      // DaVinci Resolve: name of the Resolve project, unique among nullSpace projects
+      const launchedProject = get().projects.find(p => p.path === input.projectPath);
+      if (launchedProject && normalizeSoftwareName(input.software) === 'davinci') {
+        input = { ...input, resolveProjectName: davinciProjectName(launchedProject, get().projects) };
+      }
+
       console.log('Launching software with input:', input);
-      const result = await invoke<{ file_name: string; pid: number }>('launch_software', { input });
+      const result = await invoke<{ file_name: string; pid: number; hint: string | null }>('launch_software', { input });
       console.log('Software launched successfully, created file:', result.file_name, 'PID:', result.pid);
+
+      // What the user has to do in the DCC (Substance Painter: File → New; DaVinci Resolve: run the RayHub menu script)
+      if (result.hint && typeof (window as any).showNotification === 'function') {
+        (window as any).showNotification(
+          'info',
+          result.hint,
+          `${formatSoftwareName(input.software)} opened`,
+          10000
+        );
+      }
 
       // Set success status
       set((state) => ({
@@ -1952,6 +1976,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           if (typeof (window as any).clearAllPsdThumbnailCache === 'function') {
             (window as any).clearAllPsdThumbnailCache();
           }
+          if (typeof (window as any).clearAllC4dThumbnailCache === 'function') {
+            (window as any).clearAllC4dThumbnailCache();
+          }
 
           // Invalidate versions cache so VersionsOverview re-fetches renamed files
           versionsCache.invalidate(project.path);
@@ -2444,8 +2471,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const entryId = crypto.randomUUID();
     const timestamp = new Date(date).toISOString();
 
-    // Normalize software name to lowercase to prevent duplicates
-    const normalizedSoftware = software.toLowerCase() as SoftwareName;
+    // The form passes display names ('Unreal Engine') — store the canonical key ('unreal') like auto-tracked sessions
+    const normalizedSoftware = normalizeSoftwareName(software);
 
     const newEntry: TimeEntry = {
       id: entryId,
@@ -2706,6 +2733,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       if (typeof (window as any).clearAllPsdThumbnailCache === 'function') {
         (window as any).clearAllPsdThumbnailCache();
       }
+      if (typeof (window as any).clearAllC4dThumbnailCache === 'function') {
+        (window as any).clearAllC4dThumbnailCache();
+      }
 
       if (typeof (window as any).showNotification === 'function') {
         (window as any).showNotification(
@@ -2756,6 +2786,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
       if (typeof (window as any).clearAllPsdThumbnailCache === 'function') {
         (window as any).clearAllPsdThumbnailCache();
+      }
+      if (typeof (window as any).clearAllC4dThumbnailCache === 'function') {
+        (window as any).clearAllC4dThumbnailCache();
       }
 
       window.dispatchEvent(new CustomEvent('version-created', { detail: { projectPath: project.path } }));

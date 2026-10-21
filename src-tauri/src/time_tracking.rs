@@ -401,11 +401,12 @@ pub fn check_active_windows() {
 
         // Check if process has any visible windows (not in background)
         // Adaptive grace period:
-        // - Young sessions (<60 sec): 30 sec grace period (slow app startup like After Effects)
-        // - Mature sessions (≥60 sec): 5 sec grace period (quick detection after window closes)
+        // - Young sessions: startup grace (30 sec for slow apps like After Effects, longer for UE's splash-only shader compile)
+        // - Mature sessions: 5 sec grace period (quick detection after window closes)
         let session_age = now.signed_duration_since(session.start_time);
-        let is_young_session = session_age.num_seconds() < 60;
-        let grace_period_seconds = if is_young_session { 30 } else { 5 };
+        let startup_grace = startup_grace_seconds(&session.software);
+        let is_young_session = session_age.num_seconds() < startup_grace + 30;
+        let grace_period_seconds = if is_young_session { startup_grace } else { 5 };
 
         let has_window = has_visible_window(session.pid);
 
@@ -561,6 +562,34 @@ pub fn check_process_alive(pid: u32) -> bool {
     is_process_alive(pid)
 }
 
+/// Process name fragments for software whose executables don't match its key
+fn software_process_patterns(software: &str) -> Vec<&'static str> {
+    match software.to_lowercase().as_str() {
+        "houdini" => vec!["houdin", "hindie", "happrentice"],  // houdinifx.exe, houdini.exe, hindie.steam.exe, happrentice.exe
+        "unreal" | "unreal engine" => vec!["unrealeditor", "ue4editor"],  // UnrealEditor.exe (UE5), UE4Editor.exe
+        "cinema4d" | "cinema 4d" => vec!["cinema 4d"],  // "Cinema 4D.exe" — the key has no space, the process name does
+        // "Adobe Substance 3D Painter.exe" / older "Substance Painter.exe"
+        "substance" | "substance painter" => vec!["substance 3d painter", "substance painter"],
+        "davinci" | "davinci resolve" => vec!["resolve.exe"],  // Resolve.exe; ".exe" keeps other "resolve" processes out
+        _ => vec![],
+    }
+}
+
+/// How long a fresh session may have no main window (splash-only startup).
+/// UE shows only a splash screen while compiling shaders on first open, which can take many minutes.
+fn startup_grace_seconds(software: &str) -> i64 {
+    match software.to_lowercase().as_str() {
+        "unreal" | "unreal engine" => 900,
+        // First launch waits for the Maxon license before showing a window
+        "cinema4d" | "cinema 4d" => 120,
+        // Splash-only loading takes 20-40 s
+        "substance" | "substance painter" => 60,
+        // Splash while the project database and plugins load
+        "davinci" | "davinci resolve" => 90,
+        _ => 30,
+    }
+}
+
 /// Tauri command to check if a process is alive AND belongs to the expected software.
 /// Prevents false positives from PID reuse after system restart.
 #[tauri::command]
@@ -574,7 +603,8 @@ pub fn check_process_alive_for_software(pid: u32, software: String) -> bool {
         let process_name = process.name().to_lowercase();
         let software_lower = software.to_lowercase();
         let base_name = software_lower.trim_end_matches(".exe");
-        process_name == base_name
+        software_process_patterns(base_name).iter().any(|p| process_name.contains(p))
+            || process_name == base_name
             || process_name == format!("{}.exe", base_name)
             || process_name.contains(base_name)
     } else {
@@ -635,11 +665,8 @@ fn find_process_by_name_and_parent(name: &str, parent_pid: u32) -> Option<u32> {
 
     let name_lower = name.to_lowercase();
 
-    // Map software names to process name patterns (for software with multiple executables)
-    let patterns: Vec<&str> = match name_lower.as_str() {
-        "houdini" => vec!["houdin", "hindie", "happrentice"],  // houdinifx.exe, houdini.exe, hindie.steam.exe, happrentice.exe
-        _ => vec![],  // Empty vec means use default name matching
-    };
+    // Software with multiple executables; empty vec means use default name matching
+    let patterns = software_process_patterns(&name_lower);
 
     for child_pid in children {
         if let Some(process) = system.process(Pid::from_u32(child_pid)) {
@@ -706,11 +733,7 @@ fn find_recent_process_by_name(software_name: &str) -> Option<u32> {
     let name_lower = software_name.to_lowercase();
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-    // Map software names to process name patterns
-    let patterns: Vec<&str> = match name_lower.as_str() {
-        "houdini" => vec!["houdin", "hindie"],  // houdinifx.exe, houdini.exe, hindie.steam.exe
-        _ => vec![],
-    };
+    let patterns = software_process_patterns(&name_lower);
 
     let mut candidates: Vec<(u32, u64)> = Vec::new();
 

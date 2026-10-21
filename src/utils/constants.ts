@@ -17,11 +17,20 @@ export const STATUS_LABELS = {
 export const STATUS_CYCLE: ProjectStatus[] = ['active', 'paused', 'completed'];
 
 export const SOFTWARE_OPTIONS = [
-  'Blender', 'Houdini', 'After Effects', 'Photoshop',
+  'Blender', 'Houdini', 'After Effects', 'Photoshop', 'Unreal Engine', 'Cinema 4D', 'Substance Painter',
+  'DaVinci Resolve', // projects without shots only — see isComposeOnlySoftware
   // 'Maya',
-  // 'Cinema 4D', 'Substance', 'Unreal', 'Unity', 'ZBrush', 'Marmoset'
+  // 'Unity', 'ZBrush', 'Marmoset'
 ] as const;
 
-// Selecting one in ComposeSoftwareModal auto-enables it in the project.
+// Selecting one in ComposeSoftwareModal auto-enables it in the project (except COMPOSE_ONLY_SOFTWARE).
 // If the key can't be derived from the name, add it to nameToKey in ComposeSoftwareModal.
-export const COMPOSE_SOFTWARE_OPTIONS = ['After Effects'] as const;
+export const COMPOSE_SOFTWARE_OPTIONS = ['After Effects', 'DaVinci Resolve'] as const;
+
+// Keys of software that shot-based projects use only in Global Compose: never added to the project's
+// software list, own flat folder (no scenes) created when chosen in Compose, launch button only in Compose.
+// Projects without shots have no Compose and treat it as regular software
+export const COMPOSE_ONLY_SOFTWARE: ReadonlySet<string> = new Set(['davinci']);
+
+export const isComposeOnlySoftware = (key: string, shotBased: boolean): boolean =>
+  shotBased && COMPOSE_ONLY_SOFTWARE.has(key);

@@ -4,6 +4,7 @@ mod time_tracking;
 mod file_naming;
 mod blend_thumbnail;
 mod psd_thumbnail;
+mod c4d_thumbnail;
 mod updater;
 mod nullconverter;
 
@@ -38,6 +39,14 @@ lazy_static! {
 const TEMPLATE_AEP: &[u8] = include_bytes!("../templates/empty.aep");
 // Embedded Blender setup script
 const BLENDER_SETUP_PY: &str = include_str!("../templates/blender_setup.py");
+// Embedded Cinema 4D setup script (run with c4dpy)
+const C4D_SETUP_PY: &str = include_str!("../templates/c4d_setup.py");
+// Embedded Substance Painter startup script (saves a new project under the RayHub version name)
+const PAINTER_AUTOSAVE_PY: &str = include_str!("../templates/rayhub_painter_autosave.py");
+// Embedded DaVinci Resolve menu scripts (Workspace → Scripts): written as context + common part + script body
+const RESOLVE_COMMON_LUA: &str = include_str!("../templates/resolve_common.lua");
+const RESOLVE_OPEN_PROJECT_LUA: &str = include_str!("../templates/resolve_open_project.lua");
+const RESOLVE_SAVE_VERSION_LUA: &str = include_str!("../templates/resolve_save_version.lua");
 
 // Window startup configuration for instant maximize on preferred monitor
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -310,6 +319,9 @@ struct LaunchSoftwareInput {
     special_context: Option<String>,
     #[serde(rename = "assetName")]
     asset_name: Option<String>,
+    // DaVinci Resolve project name, unique among nullSpace projects (computed by the frontend)
+    #[serde(rename = "resolveProjectName")]
+    resolve_project_name: Option<String>,
 }
 
 fn get_software_folder_name(software: &str) -> &str {
@@ -321,10 +333,11 @@ fn get_software_folder_name(software: &str) -> &str {
         "photoshop" => "Photoshop",
         "cinema4d" | "cinema 4d" => "Cinema4D",
         "substance" | "substance painter" => "Substance",
-        "unreal" | "unreal engine" => "Unreal",
+        "unreal" | "unreal engine" => "UnrealEngine",
         "unity" => "Unity",
         "zbrush" => "ZBrush",
         "marmoset" | "marmoset toolbag" => "Marmoset",
+        "davinci" | "davinci resolve" => "DaVinci",
         _ => software,
     }
 }
@@ -345,9 +358,10 @@ fn read_project_metadata(project_path: &PathBuf) -> Result<Project, String> {
         .map_err(|e| format!("Failed to parse project metadata: {}", e))
 }
 
-fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> Vec<FolderItem> {
+fn get_folder_template(software: &str, has_scenes: bool, _has_shots: bool) -> Vec<FolderItem> {
     match software.to_lowercase().as_str() {
-        "blender" => vec![
+        // Cinema 4D shares Blender's layout; it also looks for textures in tex/ next to the document
+        "blender" | "cinema4d" | "cinema 4d" => vec![
             FolderItem::Nested {
                 name: "Geo".to_string(),
                 subfolders: vec![
@@ -441,6 +455,43 @@ fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> V
                 ],
             },
         ],
+        // One flat media folder for the whole project. Shot-based projects use DaVinci in Compose only:
+        // no Output — renders and .drp versions go to _GlobalCompose. Projects without shots treat it as
+        // regular software: versions and renders (Output) live in the DaVinci folder
+        "davinci" | "davinci resolve" => {
+            let mut folders = vec![
+                FolderItem::Nested {
+                    name: "Footage".to_string(),
+                    subfolders: vec![
+                        FolderItem::Simple("Renders".to_string()),
+                        FolderItem::Simple("Plates".to_string()),
+                        FolderItem::Simple("Stock".to_string()),
+                    ],
+                },
+                FolderItem::Nested {
+                    name: "Assets".to_string(),
+                    subfolders: vec![
+                        FolderItem::Simple("Logos".to_string()),
+                        FolderItem::Simple("Graphics".to_string()),
+                        FolderItem::Simple("Audio".to_string()),
+                    ],
+                },
+            ];
+            if !has_scenes {
+                folders.push(FolderItem::Nested {
+                    name: "Output".to_string(),
+                    subfolders: vec![
+                        FolderItem::Simple("Preview".to_string()),
+                        FolderItem::Simple("Final".to_string()),
+                    ],
+                });
+            }
+            folders.push(FolderItem::Nested {
+                name: "Cache".to_string(),
+                subfolders: vec![FolderItem::Simple("Temp".to_string())],
+            });
+            folders
+        }
         "photoshop" => vec![
             FolderItem::Nested {
                 name: "Source".to_string(),
@@ -465,6 +516,49 @@ fn get_folder_template(software: &str, _has_scenes: bool, _has_shots: bool) -> V
             FolderItem::Simple("images".to_string()),
             FolderItem::Simple("cache".to_string()),
             FolderItem::Simple("sourceimages".to_string()),
+        ],
+        // Substance Painter: meshes in, texture sets out (Tex/Export is also Painter's export path), Iray renders
+        "substance" | "substance painter" => vec![
+            FolderItem::Nested {
+                name: "Geo".to_string(),
+                subfolders: vec![FolderItem::Simple("Import".to_string())],
+            },
+            FolderItem::Nested {
+                name: "Tex".to_string(),
+                subfolders: vec![FolderItem::Simple("Export".to_string())],
+            },
+            FolderItem::Nested {
+                name: "Render".to_string(),
+                subfolders: vec![
+                    FolderItem::Simple("Preview".to_string()),
+                    FolderItem::Simple("Final".to_string()),
+                ],
+            },
+        ],
+        // The UE project itself lives in UnrealEngine/_Project (created on first launch);
+        // scene folders only hold exchange and render folders
+        "unreal" | "unreal engine" => vec![
+            FolderItem::Nested {
+                name: "Geo".to_string(),
+                subfolders: vec![
+                    FolderItem::Simple("Export".to_string()),
+                    FolderItem::Simple("Import".to_string()),
+                ],
+            },
+            FolderItem::Nested {
+                name: "Tex".to_string(),
+                subfolders: vec![
+                    FolderItem::Simple("Export".to_string()),
+                    FolderItem::Simple("Import".to_string()),
+                ],
+            },
+            FolderItem::Nested {
+                name: "Render".to_string(),
+                subfolders: vec![
+                    FolderItem::Simple("Preview".to_string()),
+                    FolderItem::Simple("Final".to_string()),
+                ],
+            },
         ],
         _ => vec![
             FolderItem::Simple("Assets".to_string()),
@@ -767,6 +861,143 @@ fn find_hython_path(houdinifx_path: &str) -> Result<PathBuf, String> {
     }
 }
 
+/// Install the RayHub autosave script into Substance Painter's python/startup folder.
+/// Rewritten on every new-version launch so it always matches this RayHub build.
+/// It only acts when Painter is started with RAYHUB_SPP_TARGET, so regular Painter launches are unaffected.
+fn install_painter_autosave(exe_path: &str) -> Result<(), String> {
+    let documents = dirs::document_dir().ok_or("Could not determine Documents directory")?;
+    let exe_name = Path::new(exe_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    // "Adobe Substance 3D Painter.exe" (2021+) vs the older Allegorithmic "Substance Painter.exe"
+    let prefs_dir = if exe_name.contains("adobe") {
+        documents.join("Adobe").join("Adobe Substance 3D Painter")
+    } else {
+        documents.join("Allegorithmic").join("Substance Painter")
+    };
+    let startup_dir = prefs_dir.join("python").join("startup");
+    fs::create_dir_all(&startup_dir)
+        .map_err(|e| format!("Failed to create Painter startup folder: {}", e))?;
+    fs::write(startup_dir.join("rayhub_painter_autosave.py"), PAINTER_AUTOSAVE_PY)
+        .map_err(|e| format!("Failed to install Painter autosave script: {}", e))?;
+    Ok(())
+}
+
+/// Create a new .c4d via c4dpy (Cinema 4D R23+), like Houdini via hython.
+/// The script sets the render path for the shot and the frame range, then saves the document.
+/// Blocking (waits up to 90 s) — call through spawn_blocking.
+#[cfg(target_os = "windows")]
+fn create_c4d_file(exe_path: &Path, file_path: &Path, shot_number: Option<u32>) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Stdio;
+    use std::time::Instant;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let c4dpy = exe_path.parent()
+        .map(|dir| dir.join("c4dpy.exe"))
+        .filter(|p| p.exists())
+        .ok_or("c4dpy.exe not found next to Cinema 4D.exe — Cinema 4D R23 or newer (full version) is required")?;
+
+    let templates_dir = dirs::document_dir()
+        .ok_or("Could not determine Documents directory")?
+        .join("nullSpace")
+        .join("templates");
+    fs::create_dir_all(&templates_dir)
+        .map_err(|e| format!("Failed to create templates directory: {}", e))?;
+
+    let script_path = templates_dir.join("c4d_setup.py");
+    fs::write(&script_path, C4D_SETUP_PY)
+        .map_err(|e| format!("Failed to write Cinema 4D setup script: {}", e))?;
+
+    // Output goes to a file, not a pipe: an unread pipe can fill up and hang c4dpy
+    let log_path = templates_dir.join("c4d_setup.log");
+    let log_out = fs::File::create(&log_path)
+        .map_err(|e| format!("Failed to create c4dpy log: {}", e))?;
+    let log_err = log_out.try_clone()
+        .map_err(|e| format!("Failed to create c4dpy log: {}", e))?;
+
+    let mut cmd = Command::new(&c4dpy);
+    cmd.arg(&script_path).arg(file_path);
+    if let Some(shot) = shot_number {
+        cmd.arg(format!("{:03}", shot));
+    }
+    let mut child = cmd
+        .stdout(Stdio::from(log_out))
+        .stderr(Stdio::from(log_err))
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+        .map_err(|e| format!("Failed to run c4dpy: {}", e))?;
+
+    let file_ready = || fs::metadata(file_path).map_or(false, |m| m.len() > 0);
+    let log_tail = || {
+        fs::read_to_string(&log_path)
+            .map(|log| {
+                let lines: Vec<&str> = log.lines().collect();
+                lines[lines.len().saturating_sub(8)..].join("\n")
+            })
+            .unwrap_or_default()
+    };
+
+    let timeout = Duration::from_secs(90);
+    let started = Instant::now();
+    let mut file_seen_at: Option<Instant> = None;
+
+    let failure: Option<String> = loop {
+        match child.try_wait() {
+            // The saved file is what matters; some c4dpy builds return a non-zero code on shutdown
+            Ok(Some(status)) => {
+                if file_ready() {
+                    if !status.success() {
+                        println!("[C4D] c4dpy exited with {} but the file was saved", status);
+                    }
+                    break None;
+                }
+                break Some(format!(
+                    "c4dpy failed to create the Cinema 4D file ({}). Log: {}\n{}",
+                    status, log_path.display(), log_tail()
+                ));
+            }
+            Ok(None) => {}
+            Err(e) => {
+                let _ = child.kill();
+                break Some(format!("Failed to wait for c4dpy: {}", e));
+            }
+        }
+
+        // File saved but c4dpy keeps running — give it a moment, then stop it (same as the Blender setup)
+        if file_ready() {
+            let seen = *file_seen_at.get_or_insert_with(Instant::now);
+            if seen.elapsed() > Duration::from_secs(5) {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+        }
+
+        if started.elapsed() > timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            break Some(format!(
+                "c4dpy did not finish in 90 s. It needs a Maxon license: sign in via Maxon App / Cinema 4D, or run c4dpy.exe once from a terminal to sign in. Log: {}",
+                log_path.display()
+            ));
+        }
+
+        std::thread::sleep(Duration::from_millis(500));
+    };
+
+    if let Some(error) = failure {
+        // Don't leave a broken or partial .c4d behind — it would be listed as a version and opened next time
+        let _ = fs::remove_file(file_path);
+        return Err(error);
+    }
+
+    println!("[C4D] Created {}", file_path.display());
+    Ok(())
+}
+
 /// Determine the correct Houdini file extension based on the executable name.
 /// - hindie.exe / hindie.steam.exe -> .hiplc (Indie edition)
 /// - happrentice.exe -> .hipnc (Apprentice/Non-Commercial edition)
@@ -791,6 +1022,9 @@ fn determine_houdini_extension(executable_path: &str) -> &'static str {
 struct LaunchResult {
     file_name: String,
     pid: u32,
+    // What the user has to do in the DCC, shown as a notification (Substance Painter: File → New;
+    // DaVinci Resolve: run the RayHub menu script)
+    hint: Option<String>,
 }
 
 /// Find PID of a process that has a specific file open
@@ -900,6 +1134,22 @@ impl SoftwareLaunchConfig {
                 needs_pid_lookup: true,
                 process_name: "photoshop", // Matches "Photoshop.exe"
             },
+            "uproject" => SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: "unrealeditor|ue4editor", // UE5 "UnrealEditor.exe", UE4 "UE4Editor.exe"
+            },
+            "c4d" => SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: "cinema 4d", // Matches "Cinema 4D.exe"
+            },
+            "spp" => SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                // "Adobe Substance 3D Painter.exe" / older "Substance Painter.exe" (plain "painter" would match other apps)
+                process_name: "substance 3d painter|substance painter",
+            },
             _ => SoftwareLaunchConfig {
                 use_explorer: false,
                 needs_pid_lookup: false,
@@ -934,6 +1184,30 @@ impl SoftwareLaunchConfig {
                 use_explorer: false,
                 needs_pid_lookup: true,
                 process_name: "blender",
+            }
+        } else if software_lower == "unreal" || software_lower == "unreal engine" {
+            SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: "unrealeditor|ue4editor",
+            }
+        } else if software_lower == "cinema4d" || software_lower == "cinema 4d" {
+            SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: "cinema 4d",
+            }
+        } else if software_lower == "substance" || software_lower == "substance painter" {
+            SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: "substance 3d painter|substance painter",
+            }
+        } else if software_lower == "davinci" || software_lower == "davinci resolve" {
+            SoftwareLaunchConfig {
+                use_explorer: false,
+                needs_pid_lookup: true,
+                process_name: RESOLVE_PROCESS,
             }
         } else {
             SoftwareLaunchConfig {
@@ -1056,6 +1330,744 @@ impl SoftwareLaunchConfig {
         println!("[SoftwareLauncher] ==> FINAL PID: {}", final_pid);
         Ok(final_pid)
     }
+
+    /// Launch without a file, with extra arguments and environment variables (used when the DCC
+    /// creates the file itself, e.g. Substance Painter). Same PID lookup as `launch`.
+    fn launch_with(&self, executable_path: &str, args: &[String], envs: &[(&str, String)]) -> Result<u32, String> {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let mut cmd = Command::new(executable_path);
+        cmd.args(args).creation_flags(CREATE_NO_WINDOW);
+        for (key, value) in envs {
+            cmd.env(key, value);
+        }
+        let child = cmd.spawn().map_err(|e| format!("Failed to launch software: {}", e))?;
+        let initial_pid = child.id();
+
+        let final_pid = if self.needs_pid_lookup {
+            find_process_with_file("", self.process_name).unwrap_or(initial_pid)
+        } else {
+            initial_pid
+        };
+        println!("[SoftwareLauncher] launch_with ==> FINAL PID: {}", final_pid);
+        Ok(final_pid)
+    }
+}
+
+// ==================== Unreal Engine ====================
+
+/// UE project name: UE accepts only letters, digits and underscores and needs a leading letter.
+/// Capped at 20 chars (UE new-project wizard limit, also keeps deep UE paths shorter).
+fn unreal_project_name(project_name: &str) -> String {
+    let mut name: String = project_name.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+    if name.chars().next().map_or(true, |c| c.is_ascii_digit()) {
+        name = format!("UE{}", name);
+    }
+    name.truncate(20);
+    name
+}
+
+/// EngineAssociation for a new .uproject, derived from the editor executable.
+/// Launcher installs use "5.4"-style values; source builds are registered by GUID, so they get "".
+fn unreal_engine_association(exe_path: &Path) -> String {
+    // exe -> Win64 -> Binaries -> Engine
+    if let Some(engine_dir) = exe_path.ancestors().nth(3) {
+        if let Ok(content) = fs::read_to_string(engine_dir.join("Build").join("Build.version")) {
+            if let Ok(build) = serde_json::from_str::<serde_json::Value>(&content) {
+                let is_source_build = build.get("IsLicenseeVersion")
+                    .map(|v| v.as_i64().map(|n| n != 0).or_else(|| v.as_bool()).unwrap_or(false))
+                    .unwrap_or(false);
+                if is_source_build {
+                    return String::new();
+                }
+                let major = build.get("MajorVersion").and_then(|v| v.as_i64());
+                let minor = build.get("MinorVersion").and_then(|v| v.as_i64());
+                if let (Some(major), Some(minor)) = (major, minor) {
+                    return format!("{}.{}", major, minor);
+                }
+            }
+        }
+    }
+
+    // Fallback: install folder named like "UE_5.4"
+    for ancestor in exe_path.ancestors() {
+        if let Some(version) = ancestor.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_prefix("UE_")) {
+            let parts: Vec<&str> = version.split('.').collect();
+            let is_number = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
+            if parts.len() >= 2 && is_number(parts[0]) && is_number(parts[1]) {
+                return format!("{}.{}", parts[0], parts[1]);
+            }
+        }
+    }
+
+    String::new()
+}
+
+/// Find an existing .uproject in UnrealEngine/_Project or one level deeper
+/// (the UE wizard always creates a subfolder named after the project).
+/// Prefers a root-level file, then one matching `preferred_name`, then the newest.
+fn find_uproject(ue_dir: &Path, preferred_name: &str) -> Option<PathBuf> {
+    let is_uproject = |p: &Path| p.is_file() && p.extension().map_or(false, |e| e.eq_ignore_ascii_case("uproject"));
+
+    let mut candidates: Vec<(PathBuf, bool)> = Vec::new();
+    for entry in fs::read_dir(ue_dir).ok()?.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Ok(sub_entries) = fs::read_dir(&path) {
+                for sub in sub_entries.flatten() {
+                    let sub_path = sub.path();
+                    if is_uproject(&sub_path) {
+                        candidates.push((sub_path, false));
+                    }
+                }
+            }
+        } else if is_uproject(&path) {
+            candidates.push((path, true));
+        }
+    }
+
+    candidates
+        .into_iter()
+        .max_by_key(|(path, is_root)| {
+            let name_matches = path.file_stem()
+                .and_then(|s| s.to_str())
+                .map_or(false, |s| s.eq_ignore_ascii_case(preferred_name));
+            let modified = fs::metadata(path).and_then(|m| m.modified()).ok();
+            (*is_root, name_matches, modified)
+        })
+        .map(|(path, _)| path)
+}
+
+/// Give a copied DefaultGame.ini its own ProjectID instead of the template's
+fn replace_unreal_project_id(content: &str) -> String {
+    let new_id = uuid::Uuid::new_v4().simple().to_string().to_uppercase();
+    let mut result = content
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("ProjectID=") {
+                format!("ProjectID={}", new_id)
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\r\n");
+    if content.ends_with('\n') {
+        result.push_str("\r\n");
+    }
+    result
+}
+
+/// Copy the Blank template's Config/ the way the UE wizard does:
+/// skip TemplateDefs.ini, rename the template in .ini files, regenerate ProjectID
+fn copy_unreal_template_config(src: &Path, dst: &Path, ue_name: &str) -> Result<(), String> {
+    fs::create_dir_all(dst).map_err(|e| format!("Failed to create {}: {}", dst.display(), e))?;
+
+    let entries = fs::read_dir(src).map_err(|e| format!("Failed to read {}: {}", src.display(), e))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let target = dst.join(entry.file_name());
+
+        if path.is_dir() {
+            copy_unreal_template_config(&path, &target, ue_name)?;
+            continue;
+        }
+
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        if file_name.eq_ignore_ascii_case("TemplateDefs.ini") {
+            continue;
+        }
+
+        let is_ini = path.extension().map_or(false, |e| e.eq_ignore_ascii_case("ini"));
+        match fs::read_to_string(&path) {
+            Ok(content) if is_ini => {
+                let mut content = content.replace("TP_BlankBP", ue_name);
+                if file_name.eq_ignore_ascii_case("DefaultGame.ini") {
+                    content = replace_unreal_project_id(&content);
+                }
+                fs::write(&target, content)
+                    .map_err(|e| format!("Failed to write {}: {}", target.display(), e))?;
+            }
+            // Non-ini or non-UTF-8 files are copied as-is
+            _ => {
+                fs::copy(&path, &target)
+                    .map_err(|e| format!("Failed to copy {}: {}", path.display(), e))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Create a new UE project in `ue_dir` from the engine's Blank template (TP_BlankBP),
+/// falling back to a minimal project when the template is missing or unreadable
+fn create_unreal_project(ue_dir: &Path, project_name: &str, exe_path: &Path) -> Result<PathBuf, String> {
+    let ue_name = unreal_project_name(project_name);
+
+    if !ue_dir.to_string_lossy().is_ascii() {
+        println!("[Unreal] Warning: project path contains non-ASCII characters, some UE tools may fail: {}", ue_dir.display());
+    }
+
+    fs::create_dir_all(ue_dir.join("Content"))
+        .map_err(|e| format!("Failed to create Content folder: {}", e))?;
+
+    let config_dir = ue_dir.join("Config");
+    let mut uproject = serde_json::json!({
+        "FileVersion": 3,
+        "EngineAssociation": "",
+        "Category": "",
+        "Description": "",
+        "Plugins": []
+    });
+
+    // exe -> Win64 -> Binaries -> Engine -> <install>/Templates/TP_BlankBP
+    let template_dir = exe_path.ancestors().nth(4).map(|install| install.join("Templates").join("TP_BlankBP"));
+    let mut used_template = false;
+    match template_dir {
+        Some(template) if template.is_dir() => {
+            match copy_unreal_template_config(&template.join("Config"), &config_dir, &ue_name) {
+                Ok(()) => {
+                    used_template = true;
+                    if let Ok(content) = fs::read_to_string(template.join("TP_BlankBP.uproject")) {
+                        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) {
+                            if value.is_object() {
+                                uproject = value;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("[Unreal] Failed to copy Blank template config, creating minimal project: {}", e);
+                    let _ = fs::remove_dir_all(&config_dir);
+                }
+            }
+        }
+        _ => println!("[Unreal] Blank template not found next to {}, creating minimal project", exe_path.display()),
+    }
+
+    if !used_template {
+        fs::create_dir_all(&config_dir)
+            .map_err(|e| format!("Failed to create Config folder: {}", e))?;
+    }
+
+    uproject["EngineAssociation"] = serde_json::Value::String(unreal_engine_association(exe_path));
+
+    let uproject_path = ue_dir.join(format!("{}.uproject", ue_name));
+    let json = serde_json::to_string_pretty(&uproject)
+        .map_err(|e| format!("Failed to serialize .uproject: {}", e))?;
+    fs::write(&uproject_path, json)
+        .map_err(|e| format!("Failed to write .uproject: {}", e))?;
+
+    println!("[Unreal] Created project {} (template: {})", uproject_path.display(), used_template);
+    Ok(uproject_path)
+}
+
+/// Unreal Engine launch: open the single UE project in UnrealEngine/_Project, creating it on first launch
+fn launch_unreal(project_path: &Path, input: &LaunchSoftwareInput) -> Result<LaunchResult, String> {
+    let exe_path = Path::new(&input.executable_path);
+    let exe_name = exe_path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+    if !exe_name.contains("editor") || exe_name.contains("-cmd") {
+        return Err("Select UnrealEditor.exe in Settings → Software (not the Epic Games Launcher or UnrealEditor-Cmd)".to_string());
+    }
+
+    let ue_dir = project_path.join(get_software_folder_name("unreal")).join("_Project");
+    let ue_name = unreal_project_name(&input.project_name);
+
+    let uproject_path = match find_uproject(&ue_dir, &ue_name) {
+        Some(existing) => existing,
+        None => {
+            let existed_before = ue_dir.exists();
+            match create_unreal_project(&ue_dir, &input.project_name, exe_path) {
+                Ok(created) => created,
+                Err(e) => {
+                    // Don't leave a half-built project behind — the next launch starts clean
+                    if !existed_before {
+                        let _ = fs::remove_dir_all(&ue_dir);
+                    }
+                    return Err(format!("Failed to create Unreal Engine project: {}", e));
+                }
+            }
+        }
+    };
+
+    let file_name = uproject_path.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string();
+    let uproject_str = uproject_path.to_str().ok_or("Invalid project path encoding")?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let launcher = SoftwareLaunchConfig::from_software_name(&input.software);
+        let pid = launcher.launch(&input.executable_path, uproject_str)?;
+        return Ok(LaunchResult { file_name, pid, hint: None });
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let child = Command::new(&input.executable_path)
+            .arg(uproject_str)
+            .spawn()
+            .map_err(|e| format!("Failed to launch Unreal Engine: {}", e))?;
+        return Ok(LaunchResult { file_name, pid: child.id(), hint: None });
+    }
+}
+
+#[cfg(test)]
+mod unreal_tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("rayhub_ue_test_{}_{}", name, uuid::Uuid::new_v4().simple()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn project_name_is_sanitized_for_ue() {
+        assert_eq!(unreal_project_name("Promo Cut"), "PromoCut");
+        assert_eq!(unreal_project_name("2024 Promo-Cut"), "UE2024PromoCut");
+        assert_eq!(unreal_project_name(""), "UE");
+        assert_eq!(unreal_project_name("A Very Long Project Name Here"), "AVeryLongProjectName");
+    }
+
+    #[test]
+    fn engine_association_from_build_version() {
+        let root = temp_dir("assoc");
+        let exe = root.join("UE_Custom").join("Engine").join("Binaries").join("Win64").join("UnrealEditor.exe");
+        fs::create_dir_all(root.join("UE_Custom/Engine/Build")).unwrap();
+
+        fs::write(root.join("UE_Custom/Engine/Build/Build.version"), r#"{"MajorVersion":5,"MinorVersion":4,"IsLicenseeVersion":0}"#).unwrap();
+        assert_eq!(unreal_engine_association(&exe), "5.4");
+
+        // Source builds are registered by GUID, not version
+        fs::write(root.join("UE_Custom/Engine/Build/Build.version"), r#"{"MajorVersion":5,"MinorVersion":4,"IsLicenseeVersion":1}"#).unwrap();
+        assert_eq!(unreal_engine_association(&exe), "");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn engine_association_from_install_folder_name() {
+        let exe = PathBuf::from(r"C:\NoSuchDir\Epic Games\UE_5.3\Engine\Binaries\Win64\UnrealEditor.exe");
+        assert_eq!(unreal_engine_association(&exe), "5.3");
+        let exe = PathBuf::from(r"C:\NoSuchDir\MyEngine\Engine\Binaries\Win64\UnrealEditor.exe");
+        assert_eq!(unreal_engine_association(&exe), "");
+    }
+
+    #[test]
+    fn project_id_is_regenerated() {
+        let original = "[/Script/EngineSettings.GeneralProjectSettings]\r\nProjectID=0123456789ABCDEF0123456789ABCDEF\r\n";
+        let replaced = replace_unreal_project_id(original);
+        assert!(!replaced.contains("0123456789ABCDEF0123456789ABCDEF"));
+        let id_line = replaced.lines().find(|l| l.starts_with("ProjectID=")).unwrap();
+        assert_eq!(id_line.len(), "ProjectID=".len() + 32);
+        assert!(replaced.ends_with("\r\n"));
+    }
+
+    #[test]
+    fn find_uproject_prefers_root_then_name() {
+        let dir = temp_dir("find");
+        assert!(find_uproject(&dir, "Promo").is_none());
+
+        // Project created via the UE wizard lands in a subfolder
+        fs::create_dir_all(dir.join("Manual")).unwrap();
+        fs::write(dir.join("Manual/Manual.uproject"), "{}").unwrap();
+        assert_eq!(find_uproject(&dir, "Promo").unwrap(), dir.join("Manual/Manual.uproject"));
+
+        // Root-level file (e.g. kept old name after a RayHub rename) wins
+        fs::write(dir.join("OldName.uproject"), "{}").unwrap();
+        assert_eq!(find_uproject(&dir, "Promo").unwrap(), dir.join("OldName.uproject"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn creates_project_from_blank_template() {
+        let root = temp_dir("template");
+        let exe = root.join("UE_5.4/Engine/Binaries/Win64/UnrealEditor.exe");
+        let template = root.join("UE_5.4/Templates/TP_BlankBP");
+        fs::create_dir_all(template.join("Config")).unwrap();
+        fs::write(template.join("TP_BlankBP.uproject"), r#"{"FileVersion":3,"EngineAssociation":"","Plugins":[{"Name":"ModelingToolsEditorMode","Enabled":true}]}"#).unwrap();
+        fs::write(template.join("Config/DefaultEngine.ini"), "+ActiveGameNameRedirects=(OldGameName=\"/Script/TP_BlankBP\",NewGameName=\"/Script/TP_BlankBP\")\r\n").unwrap();
+        fs::write(template.join("Config/DefaultGame.ini"), "ProjectID=0123456789ABCDEF0123456789ABCDEF\r\n").unwrap();
+        fs::write(template.join("Config/TemplateDefs.ini"), "LocalizedDisplayNames=Blank\r\n").unwrap();
+
+        let ue_dir = root.join("Project/UnrealEngine/_Project");
+        let uproject = create_unreal_project(&ue_dir, "Promo Cut", &exe).unwrap();
+
+        assert_eq!(uproject, ue_dir.join("PromoCut.uproject"));
+        assert!(ue_dir.join("Content").is_dir());
+        assert!(!ue_dir.join("Config/TemplateDefs.ini").exists());
+        let engine_ini = fs::read_to_string(ue_dir.join("Config/DefaultEngine.ini")).unwrap();
+        assert!(!engine_ini.contains("TP_BlankBP") && engine_ini.contains("/Script/PromoCut"));
+        let game_ini = fs::read_to_string(ue_dir.join("Config/DefaultGame.ini")).unwrap();
+        assert!(!game_ini.contains("0123456789ABCDEF0123456789ABCDEF"));
+
+        let json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&uproject).unwrap()).unwrap();
+        assert_eq!(json["EngineAssociation"], "5.4");
+        assert_eq!(json["Plugins"][0]["Name"], "ModelingToolsEditorMode");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn creates_minimal_project_without_template() {
+        let root = temp_dir("minimal");
+        let exe = root.join("NoTemplate/Engine/Binaries/Win64/UnrealEditor.exe");
+        let ue_dir = root.join("Project/UnrealEngine/_Project");
+        let uproject = create_unreal_project(&ue_dir, "Shot", &exe).unwrap();
+
+        assert!(ue_dir.join("Content").is_dir() && ue_dir.join("Config").is_dir());
+        let json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&uproject).unwrap()).unwrap();
+        assert_eq!(json["FileVersion"], 3);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+}
+
+// ==================== DaVinci Resolve ====================
+
+/// Resolve's main process. With ".exe" so other processes with "resolve" in the name don't match
+const RESOLVE_PROCESS: &str = "resolve.exe";
+#[cfg(not(target_os = "windows"))]
+const RESOLVE_WINDOWS_ONLY: &str = "DaVinci Resolve integration is Windows-only";
+
+/// What the nullSpace menu scripts in Resolve act on. Baked into the scripts on every launch: Resolve runs
+/// as a single instance, so environment variables would only reach the first launch
+struct ResolveContext {
+    // Resolve project name first, then names it had before (nullSpace renames), newest first
+    project_names: Vec<String>,
+    version_dir: PathBuf,
+    base_name: String,
+    next_version: u32,
+    render_dir: Option<PathBuf>,
+    import_drp: Option<PathBuf>,
+}
+
+/// Lua long-bracket string literal ([==[...]==]): backslashes and quotes need no escaping.
+/// The level grows until the closing bracket can't occur inside the value
+fn lua_long_string(value: &str) -> String {
+    let mut level = 2;
+    loop {
+        let eq = "=".repeat(level);
+        // value + "]" also catches a value ending in "]==", which would close the string early
+        if !format!("{}]", value).contains(&format!("]{}]", eq)) {
+            return format!("[{}[{}]{}]", eq, value, eq);
+        }
+        level += 1;
+    }
+}
+
+fn resolve_context_lua(ctx: &ResolveContext) -> String {
+    let path = |p: Option<&PathBuf>| p.map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+    let names: Vec<String> = ctx.project_names.iter().map(|n| lua_long_string(n)).collect();
+    format!(
+        "local ctx = {{\n  project_names = {{ {} }},\n  version_dir = {},\n  base_name = {},\n  next_version = {},\n  render_dir = {},\n  import_drp = {},\n}}",
+        names.join(", "),
+        lua_long_string(&ctx.version_dir.to_string_lossy()),
+        lua_long_string(&ctx.base_name),
+        ctx.next_version,
+        lua_long_string(&path(ctx.render_dir.as_ref())),
+        lua_long_string(&path(ctx.import_drp.as_ref())),
+    )
+}
+
+/// Remembered Resolve project names of a nullSpace project, newest first
+const RESOLVE_NAMES_FILE: &str = ".davinci-resolve.json";
+const RESOLVE_NAMES_KEPT: usize = 10;
+
+#[derive(Serialize, Deserialize, Default)]
+struct ResolveNames {
+    names: Vec<String>,
+}
+
+/// Resolve project names to look up: the wanted name first, then earlier ones from the project's history.
+/// The menu script finds the project under any of them and renames it, so renaming the nullSpace project
+/// (or a name getting a category suffix) keeps the work. The wanted name is recorded for next time
+fn resolve_project_names(project_path: &Path, wanted: Option<&str>) -> Result<Vec<String>, String> {
+    let wanted = match wanted.map(str::trim).filter(|n| !n.is_empty()) {
+        Some(name) => name.to_string(),
+        None => read_project_metadata(&project_path.to_path_buf())?.name,
+    };
+    let file = project_path.join(RESOLVE_NAMES_FILE);
+    let history: ResolveNames = fs::read_to_string(&file).ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+
+    let mut names = vec![wanted];
+    for name in history.names {
+        if !names.contains(&name) && names.len() < RESOLVE_NAMES_KEPT {
+            names.push(name);
+        }
+    }
+    let json = serde_json::to_string_pretty(&ResolveNames { names: names.clone() })
+        .map_err(|e| format!("Failed to serialize Resolve project names: {}", e))?;
+    fs::write(&file, json).map_err(|e| format!("Failed to save Resolve project names: {}", e))?;
+    Ok(names)
+}
+
+/// Next free .drp version number for a base name. Compares with the "_v" separator so asset CAR
+/// doesn't pick up CARBON's versions
+fn next_drp_version(dir: &Path, base_name: &str) -> u32 {
+    let prefix = format!("{}_v", base_name);
+    fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| n.starts_with(&prefix) && n.to_lowercase().ends_with(".drp"))
+        .filter_map(|n| file_naming::FileNameComponents::extract_version(&n))
+        .max()
+        .unwrap_or(0)
+        + 1
+}
+
+/// Per-user scripts folder: scripts here appear in Resolve under Workspace → Scripts on every page
+fn resolve_scripts_dir() -> Result<PathBuf, String> {
+    let roaming = dirs::config_dir().ok_or("Could not determine the AppData folder")?;
+    Ok(roaming.join("Blackmagic Design").join("DaVinci Resolve").join("Support")
+        .join("Fusion").join("Scripts").join("Utility"))
+}
+
+/// Write both menu scripts with the context baked in. Rewritten on every launch, so the menu always acts on
+/// the context of the last RayHub button press. Paths go through Rust, so a non-Latin profile path is fine
+fn install_resolve_scripts(ctx: &ResolveContext) -> Result<(), String> {
+    let dir = resolve_scripts_dir()?;
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create Resolve scripts folder: {}", e))?;
+    let context = resolve_context_lua(ctx);
+    for (file, template) in [
+        ("nullSpace - Open Project.lua", RESOLVE_OPEN_PROJECT_LUA),
+        ("nullSpace - Save Version.lua", RESOLVE_SAVE_VERSION_LUA),
+    ] {
+        // UTF-8 without BOM: Lua doesn't accept a BOM
+        fs::write(dir.join(file), format!("{}\n\n{}\n{}", context, RESOLVE_COMMON_LUA, template))
+            .map_err(|e| format!("Failed to install Resolve script {}: {}", file, e))?;
+    }
+    Ok(())
+}
+
+fn resolve_hint(ctx: &ResolveContext) -> String {
+    if ctx.import_drp.is_some() {
+        "In Resolve (with any project open): Workspace → Scripts → nullSpace - Open Project imports this version as a separate project".to_string()
+    } else {
+        "In Resolve (with any project open): Workspace → Scripts → nullSpace - Open Project. Save versions with nullSpace - Save Version".to_string()
+    }
+}
+
+/// Install the menu scripts and start Resolve, or bring the running one to the front.
+/// Blocks for up to 20 s while looking up the PID — call off the async runtime
+#[cfg(target_os = "windows")]
+fn launch_resolve(exe_path: &str, ctx: &ResolveContext, file_name: String) -> Result<LaunchResult, String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let exe_name = Path::new(exe_path).file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase();
+    if exe_name != RESOLVE_PROCESS {
+        return Err("Select Resolve.exe from the DaVinci Resolve install folder in Settings → Software".to_string());
+    }
+    install_resolve_scripts(ctx)?;
+
+    // Resolve is single-instance: a second Resolve.exe only brings the open window to the front and exits,
+    // and the regular PID lookup skips processes older than 60 s — track the running process instead
+    let system = System::new_all();
+    let running = system.processes().iter()
+        .filter(|(_, p)| p.name().to_lowercase() == RESOLVE_PROCESS)
+        .min_by_key(|(_, p)| p.start_time())
+        .map(|(pid, _)| pid.as_u32());
+
+    let pid = match running {
+        Some(pid) => {
+            Command::new(exe_path)
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map_err(|e| format!("Failed to launch DaVinci Resolve: {}", e))?;
+            pid
+        }
+        None => SoftwareLaunchConfig::from_software_name("davinci").launch_with(exe_path, &[], &[])?,
+    };
+    Ok(LaunchResult { file_name, pid, hint: Some(resolve_hint(ctx)) })
+}
+
+/// Folders of Compose-only software (Compose exists only in shot-based projects): its flat media folder
+/// from the template, without Output, and `_GlobalCompose/Output/{Preview,Final}` for whole-project renders.
+/// Existing folders are kept. Returns the Preview render folder
+fn setup_compose_only_folders(project_path: &Path, software: &str) -> Result<PathBuf, String> {
+    let software_path = project_path.join(get_software_folder_name(software));
+    for item in get_folder_template(software, true, true) {
+        create_folder_item(&software_path, &item)?;
+    }
+    let output = project_path.join("_GlobalCompose").join("Output");
+    for sub in ["Preview", "Final"] {
+        fs::create_dir_all(output.join(sub))
+            .map_err(|e| format!("Failed to create compose output folder: {}", e))?;
+    }
+    Ok(output.join("Preview"))
+}
+
+/// Launch button: one Resolve project for the whole nullSpace project. Resolve never opens a file — the
+/// project lives in Resolve's database; versions are .drp snapshots saved by the "nullSpace - Save Version"
+/// menu script. Shot-based projects run it from Compose only (versions and renders in _GlobalCompose);
+/// projects without shots use it as regular software (versions and renders in the DaVinci folder)
+async fn launch_davinci(project_path: &Path, input: &LaunchSoftwareInput) -> Result<LaunchResult, String> {
+    let is_compose = matches!(
+        input.special_context.as_deref().map(|c| c.to_lowercase()).as_deref(),
+        Some("comp") | Some("compose")
+    );
+    let project_base = input.project_name.replace(" ", "").to_uppercase();
+
+    // Both branches also restore the DaVinci folder if it's missing (chosen earlier or deleted by hand)
+    let (version_dir, base_name, render_dir) = if is_compose {
+        let render_dir = setup_compose_only_folders(project_path, "davinci")?;
+        // Same base name as other Compose software without a scene (PROJECT_COMP)
+        (project_path.join("_GlobalCompose"), format!("{}_COMP", project_base), render_dir)
+    } else {
+        let project = read_project_metadata(&project_path.to_path_buf())?;
+        if project.has_scenes.unwrap_or(false) || project.has_shots.unwrap_or(false) {
+            return Err("In shot-based projects DaVinci Resolve runs from Compose".to_string());
+        }
+        let software_path = project_path.join(get_software_folder_name("davinci"));
+        for item in get_folder_template("davinci", false, false) {
+            create_folder_item(&software_path, &item)?;
+        }
+        // Same base name as other software in a project without scenes (PROJECT)
+        let render_dir = software_path.join("Output").join("Preview");
+        (software_path, project_base, render_dir)
+    };
+
+    let project_names = resolve_project_names(project_path, input.resolve_project_name.as_deref())?;
+    let next_version = next_drp_version(&version_dir, &base_name);
+    let file_name = format!("{}_v{:03}.drp", base_name, next_version);
+
+    let ctx = ResolveContext {
+        project_names,
+        version_dir,
+        base_name,
+        next_version,
+        render_dir: Some(render_dir),
+        import_drp: None,
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        let exe = input.executable_path.clone();
+        return tauri::async_runtime::spawn_blocking(move || launch_resolve(&exe, &ctx, file_name))
+            .await
+            .map_err(|e| format!("DaVinci Resolve launch task failed: {}", e))?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (ctx, file_name);
+        Err(RESOLVE_WINDOWS_ONLY.to_string())
+    }
+}
+
+/// Double-click on a .drp version: the "nullSpace - Open Project" menu script imports it as a separate
+/// Resolve project. Passing the .drp to Resolve.exe isn't supported, and the system file association
+/// would import it under the project name stored inside, outside the nullSpace Project Manager folder
+#[tauri::command]
+async fn open_resolve_version(
+    executable_path: String,
+    drp_path: String,
+    project_path: String,
+    resolve_project_name: Option<String>,
+) -> Result<LaunchResult, String> {
+    let drp = PathBuf::from(&drp_path);
+    let file_name = drp.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+    let stem = drp.file_stem().and_then(|n| n.to_str()).unwrap_or("");
+    // PROMOCUT_COMP_v003 → PROMOCUT_COMP
+    let base_name = stem.rfind("_v").map(|i| &stem[..i]).unwrap_or(stem).to_string();
+    let version_dir = drp.parent().ok_or("Invalid version path")?.to_path_buf();
+    let project_names = resolve_project_names(Path::new(&project_path), resolve_project_name.as_deref())?;
+
+    let ctx = ResolveContext {
+        project_names,
+        next_version: next_drp_version(&version_dir, &base_name),
+        version_dir,
+        base_name,
+        render_dir: None,
+        import_drp: Some(drp),
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        return tauri::async_runtime::spawn_blocking(move || launch_resolve(&executable_path, &ctx, file_name))
+            .await
+            .map_err(|e| format!("DaVinci Resolve launch task failed: {}", e))?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (executable_path, ctx, file_name);
+        Err(RESOLVE_WINDOWS_ONLY.to_string())
+    }
+}
+
+#[cfg(test)]
+mod resolve_tests {
+    use super::*;
+
+    #[test]
+    fn long_string_needs_no_escaping() {
+        assert_eq!(lua_long_string(r#"E:\Work\"A"\B"#), r#"[==[E:\Work\"A"\B]==]"#);
+        assert_eq!(lua_long_string(""), "[==[]==]");
+        // The closing bracket inside the value, or a value ending in "]==", bumps the level
+        assert_eq!(lua_long_string("a]==]b"), "[===[a]==]b]===]");
+        assert_eq!(lua_long_string("a]=="), "[===[a]==]===]");
+    }
+
+    #[test]
+    fn next_version_ignores_other_bases_and_extensions() {
+        let dir = std::env::temp_dir().join(format!("rayhub_drp_test_{}", uuid::Uuid::new_v4().simple()));
+        fs::create_dir_all(&dir).unwrap();
+        assert_eq!(next_drp_version(&dir, "P_ASSET_CAR"), 1);
+        for f in ["P_ASSET_CAR_v001.drp", "P_ASSET_CAR_v002.drp", "P_ASSET_CARBON_v007.drp", "P_ASSET_CAR_v009.blend"] {
+            fs::write(dir.join(f), b"").unwrap();
+        }
+        assert_eq!(next_drp_version(&dir, "P_ASSET_CAR"), 3);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn context_block_comes_first_without_bom() {
+        let ctx = ResolveContext {
+            project_names: vec!["Promo Cut (Clients)".to_string(), "Promo Cut".to_string()],
+            version_dir: PathBuf::from(r"E:\Work\Promo Cut\_GlobalCompose"),
+            base_name: "PROMOCUT_COMP".to_string(),
+            next_version: 3,
+            render_dir: None,
+            import_drp: None,
+        };
+        let lua = resolve_context_lua(&ctx);
+        assert!(lua.starts_with("local ctx = {"));
+        assert!(lua.contains("project_names = { [==[Promo Cut (Clients)]==], [==[Promo Cut]==] },"));
+        assert!(lua.contains(r"version_dir = [==[E:\Work\Promo Cut\_GlobalCompose]==],"));
+        assert!(lua.contains("next_version = 3,") && lua.contains("render_dir = [==[]==],"));
+        for t in [RESOLVE_COMMON_LUA, RESOLVE_OPEN_PROJECT_LUA, RESOLVE_SAVE_VERSION_LUA] {
+            assert!(!t.starts_with('\u{feff}'));
+        }
+    }
+
+    #[test]
+    fn project_names_keep_history_newest_first() {
+        let dir = std::env::temp_dir().join(format!("rayhub_resolve_names_{}", uuid::Uuid::new_v4().simple()));
+        fs::create_dir_all(&dir).unwrap();
+
+        assert_eq!(resolve_project_names(&dir, Some("test")).unwrap(), vec!["test"]);
+        // Renamed: the old name stays for lookup, the new one comes first
+        assert_eq!(resolve_project_names(&dir, Some("promo")).unwrap(), vec!["promo", "test"]);
+        // Back to an earlier name: no duplicates
+        assert_eq!(resolve_project_names(&dir, Some(" test ")).unwrap(), vec!["test", "promo"]);
+        for i in 0..20 {
+            resolve_project_names(&dir, Some(&format!("name{}", i))).unwrap();
+        }
+        let names = resolve_project_names(&dir, Some("last")).unwrap();
+        assert_eq!(names.len(), RESOLVE_NAMES_KEPT);
+        assert_eq!(names[..2], ["last", "name19"]);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
 
 #[tauri::command]
@@ -1071,12 +2083,22 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
         "photoshop" => (".psd", "Photoshop"),
         "cinema 4d" | "cinema4d" => (".c4d", "Cinema4D"),
         "substance" | "substance painter" => (".spp", "Substance"),
-        "unreal" | "unreal engine" => (".uproject", "Unreal"),
+        "unreal" | "unreal engine" => (".uproject", "UnrealEngine"),
         "unity" => (".unity", "Unity"),
         "zbrush" => (".zpr", "ZBrush"),
         "marmoset" | "marmoset toolbag" => (".tbscene", "Marmoset"),
         _ => (".txt", "Unknown"), // fallback
     };
+
+    // Unreal Engine has no file versioning: one UE project per RayHub project, scene/shot/context ignored
+    if matches!(input.software.to_lowercase().as_str(), "unreal" | "unreal engine") {
+        return launch_unreal(&project_path, &input);
+    }
+
+    // DaVinci Resolve is Compose-only: one Resolve project per nullSpace project, no software folder
+    if matches!(input.software.to_lowercase().as_str(), "davinci" | "davinci resolve") {
+        return launch_davinci(&project_path, &input).await;
+    }
 
     // Determine target folder based on special context or scene
     let software_path = if let Some(ref context) = input.special_context {
@@ -1139,12 +2161,33 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
     let mut highest_version = 0;
     let mut latest_file: Option<PathBuf> = None;
 
+    // Only this software's own files count as versions — exports (FBX/ABC) and backups (.blend1)
+    // often share the document's name and version number.
+    // Extensions match the version scanner in get_project_versions.
+    let software_key = input.software.to_lowercase();
+    let is_own_file = |file_name: &str| {
+        let file_lower = file_name.to_lowercase();
+        let own_extensions: &[&str] = match software_key.as_str() {
+            "houdini" => &[".hip", ".hiplc", ".hipnc"],
+            "photoshop" => &[".psd", ".psb"],
+            "maya" => &[".ma", ".mb"],
+            _ => &[],
+        };
+        if own_extensions.is_empty() {
+            file_lower.ends_with(&file_extension.to_lowercase())
+        } else {
+            own_extensions.iter().any(|ext| file_lower.ends_with(ext))
+        }
+    };
+
     // Scan software directory for existing version files
     if let Ok(entries) = fs::read_dir(&software_path) {
         for entry in entries.flatten() {
             if let Ok(file_name) = entry.file_name().into_string() {
                 // Check if file matches our base pattern and is versioned
-                if file_name.starts_with(&base_name_with_scene_shot) && file_naming::FileNameComponents::is_versioned(&file_name) {
+                if file_name.starts_with(&base_name_with_scene_shot)
+                    && is_own_file(&file_name)
+                    && file_naming::FileNameComponents::is_versioned(&file_name) {
                     // Extract version number using file_naming module
                     if let Some(version_num) = file_naming::FileNameComponents::extract_version(&file_name) {
                         if version_num > highest_version {
@@ -1333,6 +2376,35 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
             }
         }
 
+        // Substance Painter can't open an empty .spp (a project needs a mesh): open Painter without a file —
+        // the user creates the project via File > New and the RayHub startup script saves it under the version name
+        if (software_lower == "substance" || software_lower == "substance painter") && !file_path.exists() {
+            install_painter_autosave(&input.executable_path)?;
+
+            let export_dir = software_path.join("Tex").join("Export");
+            let _ = fs::create_dir_all(&export_dir);
+
+            let launcher = SoftwareLaunchConfig::from_software_name(&input.software);
+            let pid = launcher.launch_with(
+                &input.executable_path,
+                &["--export-path".to_string(), export_dir.to_string_lossy().to_string()],
+                &[("RAYHUB_SPP_TARGET", file_path.to_string_lossy().to_string())],
+            )?;
+            let hint = format!("Create the project via File → New. nullSpace will save it as {}.", file_name);
+            return Ok(LaunchResult { file_name, pid, hint: Some(hint) });
+        }
+
+        // For Cinema 4D, create the file via c4dpy — an empty .c4d can't be opened.
+        // Up to 90 s of waiting, so it runs off the async runtime
+        if (software_lower == "cinema4d" || software_lower == "cinema 4d") && !file_path.exists() {
+            let exe = PathBuf::from(&input.executable_path);
+            let target = file_path.clone();
+            let shot = input.shot_number;
+            tauri::async_runtime::spawn_blocking(move || create_c4d_file(&exe, &target, shot))
+                .await
+                .map_err(|e| format!("Cinema 4D file creation task failed: {}", e))??;
+        }
+
         // If no software-specific creation ran, create an empty placeholder
         if !file_path.exists() {
             fs::write(&file_path, b"")
@@ -1346,6 +2418,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
         return Ok(LaunchResult {
             file_name,
             pid,
+            hint: None,
         });
     }
 
@@ -1362,6 +2435,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
         return Ok(LaunchResult {
             file_name,
             pid,
+            hint: None,
         });
     }
 
@@ -1377,6 +2451,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
         return Ok(LaunchResult {
             file_name,
             pid,
+            hint: None,
         });
     }
 }
@@ -1958,7 +3033,7 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
     // List of software folders to search
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "DaVinci"
     ];
 
     // Helper function to scan a directory for version files
@@ -1995,11 +3070,12 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
                             "aep" => Some("After Effects"),
                             "psd" | "psb" => Some("Photoshop"),
                             "c4d" => Some("Cinema 4D"),
-                            "spp" => Some("Substance"),
-                            "uproject" => Some("Unreal"),
+                            "spp" => Some("Substance Painter"),
+                            "uproject" => Some("Unreal Engine"),
                             "unity" => Some("Unity"),
                             "zpr" => Some("ZBrush"),
                             "tbscene" => Some("Marmoset"),
+                            "drp" => Some("DaVinci Resolve"),
                             _ => None,
                         };
 
@@ -2066,11 +3142,12 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
             "AfterEffects" => Some("After Effects"),
             "Photoshop" => Some("Photoshop"),
             "Cinema4D" => Some("Cinema 4D"),
-            "Substance" => Some("Substance"),
-            "Unreal" => Some("Unreal"),
+            "Substance" => Some("Substance Painter"),
+            "UnrealEngine" => Some("Unreal Engine"),
             "Unity" => Some("Unity"),
             "ZBrush" => Some("ZBrush"),
             "Marmoset" => Some("Marmoset"),
+            "DaVinci" => Some("DaVinci Resolve"),
             _ => None,
         }
     }
@@ -2164,6 +3241,25 @@ async fn extract_psd_thumbnail(path: String) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+async fn extract_c4d_thumbnail(path: String) -> Result<Option<String>, String> {
+    let ext = std::path::Path::new(&path)
+        .extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if ext != "c4d" {
+        return Err("File must be a .c4d file".to_string());
+    }
+    #[cfg(debug_assertions)]
+    let t = std::time::Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<Option<String>, String> {
+        c4d_thumbnail::extract_c4d_thumbnail(&path)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    #[cfg(debug_assertions)]
+    println!("[PERF] extract_c4d_thumbnail: {}ms", t.elapsed().as_millis());
+    result
+}
+
+#[tauri::command]
 async fn get_file_mtime(path: String) -> Result<u64, String> {
     tauri::async_runtime::spawn_blocking(move || -> Result<u64, String> {
         let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
@@ -2187,7 +3283,7 @@ async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
 
         let software_folders = vec![
             "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-            "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+            "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset"
         ];
 
         for software_folder in software_folders {
@@ -2258,7 +3354,7 @@ async fn delete_shot_files(
     // List of software folders to search
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset"
     ];
 
     // Search in each software folder
@@ -2321,6 +3417,9 @@ async fn delete_shot_files(
         ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
         ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
         ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
+        ("UnrealEngine", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("Cinema4D", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("Substance", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
     ];
 
     for (software, folders) in software_configs {
@@ -2380,7 +3479,7 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
     // List of software folders to search
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset"
     ];
 
     // Search in each software folder
@@ -2426,7 +3525,7 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
     // Delete entire scene folder from each software directory
     let all_software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset"
     ];
 
     for software in all_software_folders {
@@ -2849,7 +3948,7 @@ async fn start_watching_project(
     let project_dir = PathBuf::from(&project_path);
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "DaVinci"
     ];
 
     // Create shutdown signal
@@ -2873,6 +3972,10 @@ async fn start_watching_project(
                         // Collect all changes in batch
                         for event in events {
                             if let Some(path) = event.path.to_str() {
+                                // UE writes thousands of cache files inside its project — not versions, not outputs
+                                if path.contains("\\UnrealEngine\\_Project\\") || path.contains("/UnrealEngine/_Project/") {
+                                    continue;
+                                }
                                 let is_version_file = path.contains("_v") && !path.ends_with(".blend1");
                                 let is_output_file = path.contains("\\Render\\") ||
                                                     path.contains("/Render/") ||
@@ -2892,7 +3995,7 @@ async fn start_watching_project(
                             let project_dir = PathBuf::from(&project_path_clone);
                             let software_folders = vec![
                                 "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-                                "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+                                "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "DaVinci"
                             ];
 
                             if auto_delete_backups {
@@ -3373,7 +4476,7 @@ fn find_shot_files(project_path: &PathBuf, project_name: &str, scene_name: &str,
 
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset"
+        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset"
     ];
 
     for software_folder in software_folders {
@@ -4008,7 +5111,7 @@ async fn count_scene_files(
     // Count version files in software folders
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset", "Nuke"
+        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "Nuke"
     ];
 
     for software_folder in software_folders {
@@ -4069,7 +5172,7 @@ async fn rename_scene_files(
     // Search for all files with old scene name
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset", "Nuke"
+        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "Nuke"
     ];
 
     for software_folder in software_folders {
@@ -4589,7 +5692,7 @@ async fn get_project_outputs(
     // Define software folders to scan
     let software_folders = vec![
         "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-        "Substance", "Unreal", "Unity", "ZBrush", "Marmoset", "Photoshop"
+        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "DaVinci", "Photoshop"
     ];
 
     for software in &software_folders {
@@ -4598,8 +5701,8 @@ async fn get_project_outputs(
             continue;
         }
 
-        // Determine render folder name (Render for most, Output for AfterEffects)
-        let render_folder = if *software == "AfterEffects" { "Output" } else { "Render" };
+        // Determine render folder name (Render for most, Output for AfterEffects and DaVinci in projects without shots)
+        let render_folder = if matches!(*software, "AfterEffects" | "DaVinci") { "Output" } else { "Render" };
 
         if has_scenes {
             // New hierarchy: Software/SCENE_CODE/Render/Preview/
@@ -4663,6 +5766,14 @@ async fn get_project_outputs(
         None => return Ok(group_sequences(outputs)),
     };
     if global_compose_dir.exists() {
+        // Whole-project compose renders: _GlobalCompose/Output (DaVinci Resolve's render folder)
+        for (sub, kind) in [("Preview", "preview"), ("Final", "final")] {
+            let dir = global_compose_dir.join("Output").join(sub);
+            if dir.exists() {
+                scan_output_dir_recursive(&dir, &compose_label, kind, &mut outputs, 0, &None, &None);
+            }
+        }
+
         if let Ok(entries) = fs::read_dir(&global_compose_dir) {
             for entry in entries.flatten() {
                 let entry_path = entry.path();
@@ -4827,6 +5938,14 @@ fn delete_global_compose_shot_folders(
     Ok(())
 }
 
+/// Called when Compose-only software (DaVinci Resolve) is chosen in Compose: its media folder and the
+/// whole-project compose render folders. Also makes sure _GlobalCompose exists before the watcher restarts,
+/// so saved versions show up live
+#[tauri::command]
+fn setup_compose_only_software(project_path: String, software: String) -> Result<(), String> {
+    setup_compose_only_folders(Path::new(&project_path), &software).map(|_| ())
+}
+
 #[tauri::command]
 fn rename_scene_folders(
     project_path: String,
@@ -4911,6 +6030,9 @@ fn rename_shot_folders(
         ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
         ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
         ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
+        ("UnrealEngine", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("Cinema4D", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
+        ("Substance", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
     ];
 
     for (software, folders) in software_configs {
@@ -5573,6 +6695,8 @@ fn main() {
             copy_file_to_clipboard,
             rename_attachment_folder,
             open_file_with_tracking,
+            open_resolve_version,
+            setup_compose_only_software,
             get_folder_structure,
             set_project_thumbnail,
             set_scene_preview,
@@ -5580,6 +6704,7 @@ fn main() {
             get_project_versions,
             extract_blend_thumbnail,
             extract_psd_thumbnail,
+            extract_c4d_thumbnail,
             get_file_mtime,
             cleanup_backup_files,
             delete_shot_files,

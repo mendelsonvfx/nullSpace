@@ -28,6 +28,7 @@ import {
 import { invoke } from '@tauri-apps/api/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import { ComposeSoftwareModal, composeKeyOf } from '../modals/ComposeSoftwareModal';
+import { COMPOSE_ONLY_SOFTWARE } from '../../utils/constants';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
@@ -35,6 +36,7 @@ import { useContextMenu } from '../../hooks/useContextMenu';
 import { extractShotNumber, getScenePattern, extractVersion } from '../../utils/fileNaming';
 import { useBlendThumbnail, isBlendThumbnailCached } from '../../hooks/useBlendThumbnail';
 import { usePsdThumbnail, isPsdThumbnailCached } from '../../hooks/usePsdThumbnail';
+import { useC4dThumbnail, isC4dThumbnailCached } from '../../hooks/useC4dThumbnail';
 import { findNextAvailableShotNumber } from '../../utils/shotNumbering';
 import { versionsCache, type ProjectVersion } from '../../utils/versionsCache';
 import type { SoftwareName } from '../../types/project';
@@ -76,6 +78,7 @@ interface ShotCardProps {
   projectPath: string;
   blendPath?: string;
   psdPath?: string;
+  c4dPath?: string;
   onClick: () => void;
   onStatusChange: (shotId: string) => void;
   onContextMenu: (e: React.MouseEvent, shotId: string, type: 'preview' | 'name') => void;
@@ -97,6 +100,7 @@ const ShotCard: React.FC<ShotCardProps> = ({
   projectPath,
   blendPath,
   psdPath,
+  c4dPath,
   onClick,
   onStatusChange,
   onContextMenu,
@@ -117,7 +121,8 @@ const ShotCard: React.FC<ShotCardProps> = ({
   });
   const autoBlendSrc = useBlendThumbnail(!shot.preview && blendPreviewsEnabled ? blendPath : undefined);
   const autoPsdSrc = usePsdThumbnail(!shot.preview && blendPreviewsEnabled ? psdPath : undefined);
-  const displaySrc = shotPreviewSrc || autoBlendSrc || autoPsdSrc;
+  const autoC4dSrc = useC4dThumbnail(!shot.preview && blendPreviewsEnabled ? c4dPath : undefined);
+  const displaySrc = shotPreviewSrc || autoBlendSrc || autoPsdSrc || autoC4dSrc;
   const wasImageReadyOnMount = useRef(!!displaySrc);
 
   // When blendPath first becomes defined, check memory cache synchronously.
@@ -135,6 +140,15 @@ const ShotCard: React.FC<ShotCardProps> = ({
   if (psdPath !== prevPsdPathRef.current) {
     prevPsdPathRef.current = psdPath;
     if (psdPath && isPsdThumbnailCached(psdPath)) {
+      wasImageReadyOnMount.current = true;
+    }
+  }
+
+  // Same suppression for C4D path
+  const prevC4dPathRef = useRef<string | undefined>(c4dPath);
+  if (c4dPath !== prevC4dPathRef.current) {
+    prevC4dPathRef.current = c4dPath;
+    if (c4dPath && isC4dThumbnailCached(c4dPath)) {
       wasImageReadyOnMount.current = true;
     }
   }
@@ -382,6 +396,7 @@ interface SceneCardProps {
   onShotsAreaHoverChange?: (isHovered: boolean) => void;
   shotBlendPaths: Map<string, string>;
   shotPsdPaths: Map<string, string>;
+  shotC4dPaths: Map<string, string>;
   versionsLoaded: boolean;
   animatingShotId: string | null;
   editingItem: { type: 'shot' | 'scene' | 'description'; id: string; value: string } | null;
@@ -412,6 +427,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
   onShotsAreaHoverChange,
   shotBlendPaths,
   shotPsdPaths,
+  shotC4dPaths,
   versionsLoaded,
   animatingShotId,
   editingItem,
@@ -608,6 +624,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                   projectPath={project.path}
                   blendPath={shotBlendPaths.get(`${shot.sceneId}_${shot.number}`)}
                   psdPath={shotPsdPaths.get(`${shot.sceneId}_${shot.number}`)}
+                  c4dPath={shotC4dPaths.get(`${shot.sceneId}_${shot.number}`)}
                   onClick={() => onShotSelect(shot.id)}
                   onStatusChange={onShotStatusChange}
                   onContextMenu={onShotContextMenu}
@@ -833,6 +850,7 @@ const SceneCard: React.FC<SceneCardProps> = ({
                 projectPath={project.path}
                 blendPath={shotBlendPaths.get(`${shot.sceneId}_${shot.number}`)}
                 psdPath={shotPsdPaths.get(`${shot.sceneId}_${shot.number}`)}
+                c4dPath={shotC4dPaths.get(`${shot.sceneId}_${shot.number}`)}
                 onClick={() => onShotSelect(shot.id)}
                 onStatusChange={onShotStatusChange}
                 onContextMenu={onShotContextMenu}
@@ -958,6 +976,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
 
   // Header context menu
   const [headerMenuPosition, setHeaderMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [composeMenuPosition, setComposeMenuPosition] = useState<{ x: number; y: number } | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   type SortOrder = 'created-asc' | 'created-desc' | 'number-asc' | 'number-desc';
@@ -1773,29 +1792,32 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
   }, [allVersions, project?.shots, project?.scenes, project?.name, project?.path]);
 
   // Maps of latest versioned file path per shot — one pass, split by software
-  const { shotLatestBlendPaths, shotLatestPsdPaths } = useMemo(() => {
+  const { shotLatestBlendPaths, shotLatestPsdPaths, shotLatestC4dPaths } = useMemo(() => {
     const blendMap  = new Map<string, string>();
     const psdMap    = new Map<string, string>();
+    const c4dMap    = new Map<string, string>();
     const bestBlend = new Map<string, number>();
     const bestPsd   = new Map<string, number>();
+    const bestC4d   = new Map<string, number>();
 
     if (!project?.shots || !allVersions.length) {
-      return { shotLatestBlendPaths: blendMap, shotLatestPsdPaths: psdMap };
+      return { shotLatestBlendPaths: blendMap, shotLatestPsdPaths: psdMap, shotLatestC4dPaths: c4dMap };
     }
 
     allVersions.forEach(version => {
       if (!version.is_versioned) return;
       const isBlender   = version.software.includes('Blender');
       const isPhotoshop = version.software.includes('Photoshop');
-      if (!isBlender && !isPhotoshop) return;
+      const isC4d       = version.software.includes('Cinema 4D');
+      if (!isBlender && !isPhotoshop && !isC4d) return;
 
       const shotNumber = extractShotNumber(version.name);
       if (shotNumber === null) return;
       const versionNum = extractVersion(version.name);
       if (!versionNum) return;
 
-      const targetMap  = isBlender ? blendMap  : psdMap;
-      const targetBest = isBlender ? bestBlend : bestPsd;
+      const targetMap  = isBlender ? blendMap  : isPhotoshop ? psdMap  : c4dMap;
+      const targetBest = isBlender ? bestBlend : isPhotoshop ? bestPsd : bestC4d;
 
       const matchingShots = project.shots?.filter((s: any) => s.number === shotNumber) || [];
 
@@ -1823,7 +1845,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
       }
     });
 
-    return { shotLatestBlendPaths: blendMap, shotLatestPsdPaths: psdMap };
+    return { shotLatestBlendPaths: blendMap, shotLatestPsdPaths: psdMap, shotLatestC4dPaths: c4dMap };
   }, [allVersions, project?.shots, project?.scenes, project?.name, project?.hasScenes]);
 
   // Get scenes and shots from project
@@ -2181,6 +2203,11 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                 setSpecialContext(projectId, 'compose');
               }
             }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setComposeMenuPosition({ x: e.clientX, y: e.clientY });
+            }}
             className={`flex items-center justify-center gap-1.5 px-2 py-2 text-xs select-none transition-all cursor-pointer rounded-badge ${
               project?.currentSpecialContextId &&
               project?.specialContexts?.find((c: any) => c.id === project.currentSpecialContextId)?.type === 'compose' &&
@@ -2251,6 +2278,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                     onShotsAreaHoverChange={setIsShotsAreaHovered}
                     shotBlendPaths={shotLatestBlendPaths}
                     shotPsdPaths={shotLatestPsdPaths}
+                    shotC4dPaths={shotLatestC4dPaths}
                     versionsLoaded={versionsLoaded}
                     hoverDelay={hoverDelay}
                     hideDelay={hideDelay}
@@ -2290,6 +2318,7 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
                       projectPath={project.path}
                       blendPath={shotLatestBlendPaths.get(`${shot.sceneId || ''}_${shot.number}`)}
                       psdPath={shotLatestPsdPaths.get(`${shot.sceneId || ''}_${shot.number}`)}
+                      c4dPath={shotLatestC4dPaths.get(`${shot.sceneId || ''}_${shot.number}`)}
                       versionsLoaded={versionsLoaded}
                       onClick={() => handleShotSelect(shot.id)}
                       onStatusChange={handleShotStatusChange}
@@ -2694,17 +2723,43 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
         </ContextMenuItem>
       </ContextMenu>
 
+      <ContextMenu
+        isOpen={!!composeMenuPosition}
+        position={composeMenuPosition || { x: 0, y: 0 }}
+        onClose={() => setComposeMenuPosition(null)}
+        menuId="shotsbrowser-compose"
+      >
+        <ContextMenuItem
+          icon={<IconStack2 size={16} className="text-text-secondary" />}
+          onClick={() => {
+            setComposeMenuPosition(null);
+            setShowComposeSoftwareModal(true);
+          }}
+        >
+          Change Compose Software…
+        </ContextMenuItem>
+      </ContextMenu>
+
       {showComposeSoftwareModal && (
         <ComposeSoftwareModal
+          initialSelected={project?.composeSoftware || []}
           onConfirm={async (selected) => {
             const current = useProjectStore.getState().projects.find(p => p.id === projectId);
             if (current) {
-              // Auto-enable selected compose software that isn't in the project yet — otherwise Global Compose has no launch button
+              // Auto-enable selected compose software that isn't in the project yet — otherwise Global Compose has no launch button.
+              // Compose-only software (DaVinci Resolve) is never added to the project: its button exists only in Compose
               const existingKeys = new Set(current.software.map((sw: any) => composeKeyOf(sw.name)));
-              const missing = selected.filter(s => !existingKeys.has(s.key));
+              const missing = selected.filter(s => !existingKeys.has(s.key) && !COMPOSE_ONLY_SOFTWARE.has(s.key));
               for (const sw of missing) {
                 try {
                   await invoke('add_software_to_project', { projectPath: current.path, softwareName: sw.key });
+                } catch (e) { console.error(`Failed to create folders for ${sw.name}:`, e); }
+              }
+              // Compose-only software gets its own flat media folder and the _GlobalCompose/Output render folders —
+              // before the watcher restart below, so a project without scenes watches _GlobalCompose from the start
+              for (const sw of selected.filter(s => COMPOSE_ONLY_SOFTWARE.has(s.key))) {
+                try {
+                  await invoke('setup_compose_only_software', { projectPath: current.path, software: sw.key });
                 } catch (e) { console.error(`Failed to create folders for ${sw.name}:`, e); }
               }
 

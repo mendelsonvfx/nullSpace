@@ -16,6 +16,7 @@ Place PNG logo files (preferably 512x512px or higher) with the following names:
 - `unity.png` - Unity
 - `zbrush.png` - Pixologic ZBrush
 - `marmoset.png` - Marmoset Toolbag
+- `davinci.png` - DaVinci Resolve
 
 ## Logo Guidelines
 
@@ -40,7 +41,7 @@ You can download official logos from:
 
 ## Fallback
 
-If a logo file is missing, the application will display a gradient icon with the first letter of the software name.
+If a logo file is missing, the application displays a badge with the software's abbreviation (e.g. "UE") on its brand gradient from `SOFTWARE_META` (`src/utils/softwareMeta.ts`).
 
 ## Adding New Software
 
@@ -48,3 +49,7 @@ To add a new software logo:
 1. Add the PNG file to this directory
 2. Update the `logoMap` in `src/components/SoftwareIcon.tsx`
 3. The filename should match the pattern: `software-name.png`
+
+4. Add `logoPath` to the software's entry in `SOFTWARE_META` (`src/utils/softwareMeta.ts`) — Settings, Welcome and launcher tiles read it from there
+
+**Tree folder icon:** add `public/icons/folders/<key>_fol.png` (lowercase name — the built app's asset paths are case-sensitive) and import it into `SOFTWARE_FOLDER_ICONS` in `src/components/project/TreeView.tsx`, keyed by the lowercase software folder name (e.g. `unrealengine`).

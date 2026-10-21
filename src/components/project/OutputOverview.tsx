@@ -9,6 +9,8 @@ import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextM
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { useNullConverter } from '../../hooks/useNullConverter';
 import { NullConverterMenuItem } from '../ui/NullConverterMenuItem';
+// Output labels are folder names ("AfterEffects", "UnrealEngine"); the shared helper maps them to display names
+import { formatSoftwareName } from '../../features/time-tracking/utils/softwareUtils';
 
 interface OutputFile {
   name: string;
@@ -80,17 +82,6 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   const { isOpen: isFileMenuOpen, position: fileMenuPosition, data: fileMenuData, openMenu: openFileMenu, closeMenu: closeFileMenu } = useContextMenu<OutputFile>();
   const { isOpen: isGroupMenuOpen, position: groupMenuPosition, data: groupMenuData, openMenu: openGroupMenu, closeMenu: closeGroupMenu } = useContextMenu<{ groupPath: string; renderType: 'preview' | 'final' }>();
   const isRestoringStateRef = useRef(false); // Track if we're restoring state programmatically
-
-  // Format software name for display
-  const formatSoftwareName = (software: string): string => {
-    if (software === 'after-effects') {
-      return 'After Effects';
-    }
-    return software
-      .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
 
   // Save selected software and persist to cache
   const updateSelectedSoftware = (software: SoftwareName) => {

@@ -32,12 +32,17 @@ import SimpleBar from 'simplebar-react';
 import { isVersioned, extractVersion } from '../../utils/fileNaming';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuColorPicker } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { openResolveVersion } from '../../utils/openResolveVersion';
 
 // Import folder icons
 import blenderFolIcon from '/icons/folders/blender_fol.png';
 import houdiniFolIcon from '/icons/folders/houdini_fol.png';
 import photoshopFolIcon from '/icons/folders/photoshop_fol.png';
 import afterEffectsFolIcon from '/icons/folders/after-effects_fol.png';
+import cinema4dFolIcon from '/icons/folders/cinema4d_fol.png';
+import substanceFolIcon from '/icons/folders/substance_fol.png';
+import unrealFolIcon from '/icons/folders/unreal_fol.png';
+import davinciFolIcon from '/icons/folders/davinci_fol.png';
 
 // Module-level caches for tree structure and directory size, keyed by project path.
 // Persists across component unmount/remount; avoids redundant IPC calls on project switch.
@@ -102,11 +107,23 @@ interface TreeViewProps {
 
 const AUTO_HIDDEN_NAMES = ['backup', '_attachments'];
 
+// Software folder icons, keyed by lowercase folder name (get_software_folder_name in Rust)
+const SOFTWARE_FOLDER_ICONS: Record<string, string> = {
+  blender: blenderFolIcon,
+  houdini: houdiniFolIcon,
+  aftereffects: afterEffectsFolIcon,
+  photoshop: photoshopFolIcon,
+  cinema4d: cinema4dFolIcon,
+  substance: substanceFolIcon,
+  unrealengine: unrealFolIcon,
+  davinci: davinciFolIcon,
+};
+
 const PROJECT_FILE_EXTENSIONS = [
   'blend', 'hip', 'hiplc', 'hipnc',
   'ma', 'mb', 'aep', 'psd', 'psb',
   'c4d', 'spp', 'uproject', 'unity',
-  'zpr', 'tbscene'
+  'zpr', 'tbscene', 'drp'
 ];
 
 const sanitizeFolderName = (name: string): string =>
@@ -125,7 +142,7 @@ const getSoftwareDirName = (software: string): string => {
     case 'substance':
     case 'substance painter': return 'Substance';
     case 'unreal':
-    case 'unreal engine': return 'Unreal';
+    case 'unreal engine': return 'UnrealEngine';
     case 'unity': return 'Unity';
     case 'zbrush': return 'ZBrush';
     case 'marmoset':
@@ -768,6 +785,13 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       try {
         // Detect software from file extension
         const ext = node.path.toLowerCase().split('.').pop() || '';
+
+        // .drp snapshots are imported by RayHub's menu script in Resolve, never opened by file association
+        if (ext === 'drp') {
+          await openResolveVersion(project, node.path);
+          return;
+        }
+
         const extToSoftware: Record<string, { name: string; key: SoftwareName }> = {
           'blend': { name: 'Blender', key: 'blender' },
           'aep': { name: 'After Effects', key: 'after-effects' },
@@ -781,8 +805,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           'c4d': { name: 'Cinema 4D', key: 'cinema4d' },
           'uproject': { name: 'Unreal Engine', key: 'unreal' },
           'unity': { name: 'Unity', key: 'unity' },
+          // .sbs (Substance Designer) is intentionally absent: the 'substance' key is Painter,
+          // so it opens with the default application instead of launching Painter
           'spp': { name: 'Substance Painter', key: 'substance' },
-          'sbs': { name: 'Substance Designer', key: 'substance' },
           'ztl': { name: 'ZBrush', key: 'zbrush' },
           'zpr': { name: 'ZBrush', key: 'zbrush' },
           'tbscene': { name: 'Marmoset', key: 'marmoset' }
@@ -947,31 +972,24 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       case 'c4d':
         return 'Cinema 4D';
       case 'spp':
-        return 'Substance';
+        return 'Substance Painter';
       case 'uproject':
-        return 'Unreal';
+        return 'Unreal Engine';
       case 'unity':
         return 'Unity';
       case 'zpr':
         return 'ZBrush';
       case 'tbscene':
         return 'Marmoset';
+      case 'drp':
+        return 'DaVinci Resolve';
       default:
         return null;
     }
   };
 
-  const getSoftwareFolderIcon = (folderName: string) => {
-    const name = folderName.toLowerCase();
-
-    // Map folder names to custom icon file names
-    if (name === 'blender') return blenderFolIcon;
-    if (name === 'aftereffects') return afterEffectsFolIcon;
-    if (name === 'photoshop') return photoshopFolIcon;
-    if (name === 'houdini') return houdiniFolIcon;
-    // For folders without custom icons, return null
-    return null;
-  };
+  // For folders without a custom icon, returns null
+  const getSoftwareFolderIcon = (folderName: string) => SOFTWARE_FOLDER_ICONS[folderName.toLowerCase()] ?? null;
 
   const toggleVersionGroup = (groupPath: string) => {
     setExpandedVersionGroups(prev => {

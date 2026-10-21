@@ -36,6 +36,7 @@ import { AssetNameModal } from '../modals/AssetNameModal';
 import { RenameSceneConfirmModal } from '../modals/RenameSceneConfirmModal';
 import { useProjectStore } from '../../store/projectStore';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
+import { normalizeSoftwareName } from '../../features/time-tracking/utils/softwareUtils';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuColorPicker } from '../ui/ContextMenu';
@@ -94,6 +95,8 @@ const ALL_SOFTWARE: { name: SoftwareName; displayName: string; executablePath: s
   { name: 'houdini',       displayName: 'Houdini',       executablePath: '' },
   { name: 'after-effects', displayName: 'After Effects', executablePath: '' },
   { name: 'photoshop',     displayName: 'Photoshop',     executablePath: '' },
+  { name: 'cinema4d',      displayName: 'Cinema 4D',     executablePath: '' },
+  { name: 'substance',     displayName: 'Substance Painter', executablePath: '' },
 ];
 
 const FIXED_ASSET_TAGS = ['Character', 'Prop', 'Environment', 'VFX'] as const;
@@ -589,7 +592,8 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
         return;
       }
 
-      const softwareKey = softwareName.toLowerCase().replace(/\s+/g, '-');
+      // Normalize the display name ('Cinema 4D' → 'cinema4d') — paths are keyed by software key
+      const softwareKey = normalizeSoftwareName(softwareName);
       const projectPaths: Record<string, string> = JSON.parse(
         localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
       );

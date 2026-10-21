@@ -4,7 +4,8 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { selectProjectDirectory } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import { SoftwareIcon } from '../SoftwareIcon';
-import { generateBrightColor, SOFTWARE_OPTIONS } from '../../utils';
+import { generateBrightColor, SOFTWARE_OPTIONS, isComposeOnlySoftware } from '../../utils';
+import { normalizeSoftwareName } from '../../features/time-tracking/utils/softwareUtils';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import { useProjectNameInput } from '../../hooks/useProjectNameInput';
 import { PROJECT_NAME_HINT } from '../../utils/fileNaming';
@@ -277,7 +278,15 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
               <span className="text-sm whitespace-nowrap">Shot-based</span>
               <button
                 type="button"
-                onClick={() => setFormData(prev => ({ ...prev, shotBased: !prev.shotBased }))}
+                onClick={() => setFormData(prev => {
+                  const shotBased = !prev.shotBased;
+                  // Shot-based projects use compose-only software (DaVinci Resolve) in Compose: drop it from the selection
+                  return {
+                    ...prev,
+                    shotBased,
+                    software: prev.software.filter(sw => !isComposeOnlySoftware(normalizeSoftwareName(sw), shotBased)),
+                  };
+                })}
                 className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${
                   formData.shotBased ? 'bg-accent' : 'bg-border-secondary'
                 }`}
@@ -698,20 +707,27 @@ export function CreateProjectModal({ onClose, onCreate, onProjectCreated }: Crea
           <div>
             <label className="block text-sm font-medium mb-2">Software Tools</label>
             <div className="grid grid-cols-4 gap-2">
-              {SOFTWARE_OPTIONS.map(sw => (
-                <button
-                  key={sw}
-                  onClick={() => toggleSoftware(sw)}
-                  className={`px-3 py-2 rounded-lg border transition-colors text-sm flex items-center gap-2 ${
-                    formData.software.includes(sw)
-                      ? 'bg-accent border-accent'
-                      : 'bg-sidebar-bg border-border-primary hover:border-border-secondary'
-                  }`}
-                >
-                  <SoftwareIcon name={sw} />
-                  <span className="truncate">{sw}</span>
-                </button>
-              ))}
+              {SOFTWARE_OPTIONS.map(sw => {
+                const locked = isComposeOnlySoftware(normalizeSoftwareName(sw), formData.shotBased);
+                return (
+                  <button
+                    key={sw}
+                    onClick={() => toggleSoftware(sw)}
+                    disabled={locked}
+                    title={locked ? `Shot-based projects use ${sw} in Compose` : undefined}
+                    className={`px-3 py-2 rounded-lg border transition-colors text-sm flex items-center gap-2 ${
+                      locked
+                        ? 'bg-sidebar-bg border-border-primary opacity-40 cursor-not-allowed'
+                        : formData.software.includes(sw)
+                          ? 'bg-accent border-accent'
+                          : 'bg-sidebar-bg border-border-primary hover:border-border-secondary'
+                    }`}
+                  >
+                    <SoftwareIcon name={sw} />
+                    <span className="truncate">{sw}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

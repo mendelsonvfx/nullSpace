@@ -25,8 +25,10 @@ const DEFAULT_SOFTWARE: Array<{ name: SoftwareName; displayName: string }> = [
   // { name: 'maya', displayName: 'Maya' },
   { name: 'after-effects', displayName: 'After Effects' },
   { name: 'photoshop', displayName: 'Photoshop' },
-  // { name: 'cinema4d', displayName: 'Cinema 4D' },
-  // { name: 'substance', displayName: 'Substance Painter' },
+  { name: 'unreal', displayName: 'Unreal Engine' },
+  { name: 'cinema4d', displayName: 'Cinema 4D' },
+  { name: 'substance', displayName: 'Substance Painter' },
+  { name: 'davinci', displayName: 'DaVinci Resolve' },
 ];
 
 const STEP_LABELS = ['Projects', 'Currency', 'Software', 'Ready'];

@@ -50,7 +50,8 @@ const initialState: TimeStats = {
     'unreal': 0,
     'unity': 0,
     'zbrush': 0,
-    'marmoset': 0
+    'marmoset': 0,
+    'davinci': 0
   }
 };
 
@@ -59,28 +60,31 @@ export const useTimeStatsStore = create<TimeStatsStore>()(
     (set, get) => ({
       ...initialState,
 
+      // Keys are normalized here so callers passing display names ('Unreal Engine') can't create duplicate keys
       addSoftwareTime: (software: SoftwareName, minutes: number) => {
+        const key = normalizeSoftwareName(software);
         set(state => ({
           softwareMinutes: {
             ...state.softwareMinutes,
-            [software]: (state.softwareMinutes[software] || 0) + minutes
+            [key]: (state.softwareMinutes[key] || 0) + minutes
           }
         }));
-        console.log(`[TimeStats] Added ${minutes}m to ${software}. New total: ${get().softwareMinutes[software]}m`);
+        console.log(`[TimeStats] Added ${minutes}m to ${key}. New total: ${get().softwareMinutes[key]}m`);
       },
 
       removeSoftwareTime: (software: SoftwareName, minutes: number) => {
+        const key = normalizeSoftwareName(software);
         set(state => ({
           softwareMinutes: {
             ...state.softwareMinutes,
-            [software]: Math.max(0, (state.softwareMinutes[software] || 0) - minutes)
+            [key]: Math.max(0, (state.softwareMinutes[key] || 0) - minutes)
           }
         }));
-        console.log(`[TimeStats] Removed ${minutes}m from ${software}. New total: ${get().softwareMinutes[software]}m`);
+        console.log(`[TimeStats] Removed ${minutes}m from ${key}. New total: ${get().softwareMinutes[key]}m`);
       },
 
       getSoftwareTime: (software: SoftwareName) => {
-        return get().softwareMinutes[software] || 0;
+        return get().softwareMinutes[normalizeSoftwareName(software)] || 0;
       },
 
       resetStats: () => {

@@ -1,5 +1,67 @@
 # Changelog
 
+## [1.9.45] - 2026-10-21
+
+### Added
+- Unreal Engine support: selectable on project creation, in Settings → Software and the first-run wizard
+  - Folder `UnrealEngine/` with `Geo/{Export,Import}`, `Tex/{Export,Import}` and per-shot `Render/{Preview,Final,Passes}` (Movie Render Queue target), like other software
+  - One UE project per nullSpace project in `UnrealEngine/_Project`, created on first launch from the engine's Blank template (`TP_BlankBP`): template config copied with the project name substituted and a fresh `ProjectID`, template plugins kept; minimal project as fallback when the template is missing
+  - Engine version for `EngineAssociation` read from `Engine/Build/Build.version` (source builds left unassociated), install folder name as fallback
+  - Existing `.uproject` reused on every launch, including one created manually via the UE Project Browser or kept under an old name after a project rename
+  - Clear error when the Epic Games Launcher or `UnrealEditor-Cmd.exe` is selected instead of the editor
+  - Time tracking: PID lookup and process detection for `UnrealEditor.exe` / `UE4Editor.exe`; 15-minute startup grace so splash-only shader compilation doesn't end the session
+  - Extra warning in the remove-software dialog: removing Unreal Engine deletes the UE project too
+  - Unreal Engine logo in launch buttons, Settings, the first-run wizard and Project Details, plus a project tree folder icon
+- Cinema 4D support: selectable on project creation, in Settings → Software, the first-run wizard and the Assets Library
+  - Folder layout same as Blender (`Geo`, `Tex`, `Cache`, `Render`); C4D finds textures in `tex/` next to the document
+  - New versions created via `c4dpy` (Cinema 4D R23+), like Houdini via `hython`: render path set to `Render/Preview/<shot>/$prj` and frame range 1001–1250, like the Blender setup
+  - Clear errors when `c4dpy` is missing (Cinema 4D Lite / older versions) or times out waiting for a Maxon license sign-in; no empty `.c4d` left behind
+  - Time tracking: PID lookup and process detection for `Cinema 4D.exe`; 2-minute startup grace for the license check on first launch
+  - Cinema 4D logo in launch buttons, Settings, the first-run wizard and Project Details, plus a project tree folder icon
+  - Version previews: the document preview embedded in `.c4d` files is shown in Versions Overview, shot cards and the shots table, like Blender and Photoshop (files created by `c4dpy` have no preview until saved from Cinema 4D)
+- Substance Painter support: selectable on project creation, in Settings → Software, the first-run wizard and the Assets Library
+  - Folders `Geo/Import`, `Tex/Export` and `Render/{Preview,Final}`; per-shot render folders like other software
+  - New versions: Painter opens without a file and nullSpace shows a hint; after File → New, a nullSpace startup script inside Painter saves the project as `PROJ_…_v001.spp` in the right folder (once per launch, only for new projects, never overwrites). The script lives in Painter's `python/startup` folder and does nothing when Painter isn't launched by nullSpace
+  - Texture export path defaults to the version folder's `Tex/Export` (`--export-path`)
+  - Time tracking: PID lookup and process detection for `Adobe Substance 3D Painter.exe` / `Substance Painter.exe`; 1-minute startup grace
+  - Substance Painter logo in launch buttons, Settings, the first-run wizard and Project Details, plus a project tree folder icon
+  - No version previews: `.spp` is an HDF5 container without an extractable project thumbnail (like After Effects and Houdini)
+- DaVinci Resolve support (Windows); path in Settings → Software and the first-run wizard
+  - **Shot-based projects — Compose only:** chosen in the Compose software window, not added to the project's software list, launch button only in Global Compose. Choosing it creates a `DaVinci/` media folder (`Footage`, `Assets`, `Cache`, no per-scene split; restored on launch if missing); versions `_GlobalCompose/PROJ_COMP_vNNN.drp`, renders `_GlobalCompose/Output/Preview`. On project creation the DaVinci Resolve card is locked (and unchecked) while "Shot-based" is on; in Project Settings its card is locked and follows the Compose choice (its project path stays editable)
+  - **Projects without shots — regular software:** selectable on creation and in Project Settings; folder `DaVinci/{Footage,Assets,Output,Cache}`, versions `DaVinci/PROJ_vNNN.drp`, renders `DaVinci/Output/Preview` (shown in Versions Overview and Output Overview)
+  - One Resolve project per nullSpace project, kept in a `nullSpace` folder of the Resolve Project Manager under the plain project name (`<project> (<category>)` when two nullSpace projects share a name). Timelines are left to the user
+  - Renaming the nullSpace project keeps the work: earlier names are remembered in `.davinci-resolve.json` in the project folder, and Open Project renames the Resolve project found under an old name
+  - The launch button starts Resolve (or brings the running one to the front) and installs two menu scripts under Workspace → Scripts, with the launch context baked in: **nullSpace - Open Project** opens or creates the project and points Deliver at `_GlobalCompose/Output/Preview` with the file name `PROJ_COMP`; **nullSpace - Save Version** exports the project as the next `_GlobalCompose/PROJ_COMP_vNNN.drp` (never overwrites, refuses other projects and imported snapshots). Both show a confirmation window
+  - Versions: `.drp` snapshots in Versions Overview (Compose); double-click (also in the file tree) imports the snapshot as a separate project `<project> vNNN` via nullSpace - Open Project, leaving the working project untouched; Project Manager returns to the folder the user was in (any depth)
+  - Time tracking: PID of the already running `Resolve.exe` is reused (Resolve is single-instance); 90-second startup grace
+  - DaVinci Resolve logo in the Compose launch button, the Compose software window, Settings, the first-run wizard and the Tool Launcher; cyan `#13D4F2` from the logo as its color
+  - Limitations: the project is looked up in the `nullSpace` folder of the current Resolve database (moving it out, renaming the folder or switching databases creates a new empty one; `.drp` versions are the restore points); if a nullSpace project is renamed and another one takes the old name before Open Project runs, the second can pick up the first one's Resolve project; Save Version can't tell a same-named project from another Project Manager folder; a scene named "Output" shares its `_GlobalCompose` folder with the compose render folder; turning a snapshot back into the working project is done manually in Project Manager; removing DaVinci from Compose or deleting the project leaves the Resolve project in Resolve's database
+- Compose: "Change Compose Software…" in the right-click menu of the Compose button — reopens the Compose software window with the current choice checked (the window used to appear only on the first visit)
+- Output Overview (Compose) also shows whole-project compose renders from `_GlobalCompose/Output/{Preview,Final}`
+- Versions Overview hidden for projects whose software has no file versioning (e.g. Unreal Engine only); still shown in Asset/Compose contexts, and rendered outputs keep updating live
+
+### Changed
+- Launch hints: `launch_software` returns a `hint` text instead of the Substance Painter-specific `awaiting_new_project` flag; the notification title names the software
+- Software folder icons in the project tree redrawn in one style (folder with the software logo); new icons for Houdini, Unreal Engine, Cinema 4D, Substance Painter and DaVinci Resolve
+- Settings: "Blender File Previews" renamed to "Project File Previews" — the toggle covers Blender, Photoshop and Cinema 4D previews
+- Substance Painter and Cinema 4D colors (launch buttons, stats, badges) match their logos: lime `#99E83F` and indigo `#5C6BE0` instead of orange and light blue
+- Software icons without a logo show their abbreviation on the brand gradient from `SOFTWARE_META` instead of a generic first letter
+- Time tracking: process name patterns unified in one helper (Houdini Apprentice now also matched in global process search)
+
+### Fixed
+- Compose context lists compose software whose key doesn't match its display name (e.g. "DaVinci Resolve" → `davinci`)
+- Outputs: software chips show display names ("After Effects", "Unreal Engine") instead of folder names ("AfterEffects")
+- File watcher ignores Unreal Engine cache writes inside `UnrealEngine/_Project` — no spurious version/output reloads while UE is open
+- Time tracking: manual time entries store the canonical software key (e.g. `unreal`, `after-effects`) instead of the lowercased display name — no duplicate rows in Software Breakdown, and deleting a manual entry now subtracts its time from the right software
+- Time tracking: global software statistics normalize software names on add/remove/read, so any caller passing a display name lands in the right bucket
+- Time tracking: manual entry history colors entries by software even when they were saved under a display name
+- Launch: the latest version is picked only among the software's own file types — an FBX/ABC export or a `.blend1` backup saved under the document's name no longer gets opened instead of the scene, and an asset's launch no longer opens another software's file with the same name
+- Shots table: previews for shots whose latest version is a Photoshop or Cinema 4D file (the latest file of any software was sent to the Blender extractor and failed); Photoshop previews added to the table
+- Versions: double-clicking a `.spp` version starts time tracking (versions reported "Substance" while the project software is "Substance Painter")
+- Tree: `.sbs` (Substance Designer) files open with the default application instead of launching Substance Painter
+- Versions / Assets: opening a version uses the canonical software key, so the executable path is found for software whose display name differs from its key (e.g. "Cinema 4D")
+- Unreal Engine accent color changed from near-black to light neutral — visible in Software Breakdown, Settings and launch button/tile highlights on the dark UI
+
 ## [1.9.35] - 2026-10-20
 
 ### Added

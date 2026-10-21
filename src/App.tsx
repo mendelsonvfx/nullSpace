@@ -2026,12 +2026,14 @@ function App() {
                       'Unity': 'unity',
                       'ZBrush': 'zbrush',
                       'Marmoset': 'marmoset',
-                      'Photoshop': 'photoshop'
+                      'Photoshop': 'photoshop',
+                      'DaVinci Resolve': 'davinci'
                     };
                     const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
 
                     // If in asset context - show dialog to enter asset name
-                    if (specialContext?.type === 'asset') {
+                    // (not for Unreal Engine: it always opens the project's single UE project)
+                    if (specialContext?.type === 'asset' && softwareKey !== 'unreal') {
                       setAssetNameDialog({
                         software: sw,
                         projectName: selectedProject.name,

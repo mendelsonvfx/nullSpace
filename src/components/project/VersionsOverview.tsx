@@ -5,12 +5,16 @@ import { SoftwareIcon } from '../SoftwareIcon';
 import { versionsCache } from '../../utils/versionsCache';
 import { versionMarksCache, type MarkColor } from '../../utils/versionMarksCache';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
+import { normalizeSoftwareName } from '../../features/time-tracking/utils/softwareUtils';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { FolderOpen, Copy, RefreshCw, Check } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { getScenePattern, getShotPattern, parseFileName, hasSuffix } from '../../utils/fileNaming';
 import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
 import { usePsdThumbnail } from '../../hooks/usePsdThumbnail';
+import { useC4dThumbnail } from '../../hooks/useC4dThumbnail';
+import { useProjectWatcher } from '../../hooks/useProjectWatcher';
+import { openResolveVersion } from '../../utils/openResolveVersion';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuColorPicker, VERSION_MARK_COLORS } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
 
@@ -133,7 +137,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
     }
   };
 
-  // Load all versions and start watcher when project changes
+  // Load all versions when project changes
   useEffect(() => {
     // Reset context menu when project changes
     closeContextMenuHook();
@@ -141,27 +145,11 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
     setSubmenuAction(null);
 
     loadVersions();
-
-    // ✅ RE-ENABLED: File watcher now has proper shutdown mechanism
-    // Debounce watcher start: intermediate projects during rapid switching don't need a watcher
-    const watcherTimer = setTimeout(() => {
-      const autoDeleteWatcher = localStorage.getItem('autoDeleteBlend1Backups') === 'true';
-      invoke('start_watching_project', {
-        projectPath: project.path,
-        autoDeleteBackups: autoDeleteWatcher
-      }).catch((err) => {
-        console.error('Failed to start watching project:', err);
-      });
-    }, 150);
-
-    // Cleanup watcher on unmount
-    return () => {
-      clearTimeout(watcherTimer);
-      invoke('stop_watching_project').catch((err) => {
-        console.error('Failed to stop watching project:', err);
-      });
-    };
   }, [project.path]);
+
+  // File watcher lives while Versions Overview is mounted
+  // (ProjectDetails runs it instead when this block is hidden but outputs are shown)
+  useProjectWatcher(project.path);
 
   useEffect(() => {
     return () => {
@@ -416,6 +404,12 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
       // Determine which software to use (prefer first in list)
       const softwareName = softwareList.length > 0 ? softwareList[0] : 'Blender';
 
+      // .drp snapshots are imported by RayHub's menu script in Resolve, never opened by file association
+      if (normalizeSoftwareName(softwareName) === 'davinci') {
+        await openResolveVersion(project, versionPath, currentShot?.id);
+        return;
+      }
+
       // Get software info from project
       const softwareInfo = project.software?.find((s: any) => s.name === softwareName);
       if (!softwareInfo) {
@@ -425,7 +419,8 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
       }
 
       // Resolve executable path — same priority as Launch button: per-project → global → stored in object
-      const softwareKey = softwareName.toLowerCase().replace(/\s+/g, '-');
+      // Normalize the display name ('Cinema 4D' → 'cinema4d') — paths and sessions are keyed by software key
+      const softwareKey = normalizeSoftwareName(softwareName);
 
       const projectPaths: Record<string, string> = JSON.parse(
         localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
@@ -746,22 +741,25 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
   };
 
   // Version Card Component with optional Blender thumbnail
-  const VersionCard = ({ version, isBlendFile, isPsdFile, versionMark, onDoubleClick, onContextMenu }: {
+  const VersionCard = ({ version, isBlendFile, isPsdFile, isC4dFile, versionMark, onDoubleClick, onContextMenu }: {
     version: ProjectVersion;
     isBlendFile: boolean;
     isPsdFile: boolean;
+    isC4dFile: boolean;
     versionMark?: MarkColor;
     onDoubleClick: () => void;
     onContextMenu: (e: React.MouseEvent) => void;
   }) => {
     const willShowBlendThumb = isBlendFile && blendPreviewsEnabled;
     const willShowPsdThumb   = isPsdFile  && blendPreviewsEnabled;
-    const willShowThumbnail  = willShowBlendThumb || willShowPsdThumb;
+    const willShowC4dThumb   = isC4dFile  && blendPreviewsEnabled;
+    const willShowThumbnail  = willShowBlendThumb || willShowPsdThumb || willShowC4dThumb;
 
     const blendThumbnail  = useBlendThumbnail(willShowBlendThumb ? version.path : undefined);
     const psdThumbnail    = usePsdThumbnail(willShowPsdThumb ? version.path : undefined);
-    const thumbnail       = blendThumbnail || psdThumbnail;
-    const softwareForIcon = isBlendFile ? 'Blender' : 'Photoshop';
+    const c4dThumbnail    = useC4dThumbnail(willShowC4dThumb ? version.path : undefined);
+    const thumbnail       = blendThumbnail || psdThumbnail || c4dThumbnail;
+    const softwareForIcon = isBlendFile ? 'Blender' : isPsdFile ? 'Photoshop' : 'Cinema 4D';
 
     // Build tooltip with file dates
     const tooltip = `${version.name}\nCreated: ${formatDateTime(version.created_at)}\nModified: ${formatDateTime(version.modified_at)}`;
@@ -904,12 +902,14 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
               {filteredVersions.map((version) => {
                 const isBlendFile = version.software.includes('Blender');
                 const isPsdFile   = version.software.includes('Photoshop');
+                const isC4dFile   = version.software.includes('Cinema 4D');
                 return (
                   <VersionCard
                     key={version.path}
                     version={version}
                     isBlendFile={isBlendFile}
                     isPsdFile={isPsdFile}
+                    isC4dFile={isC4dFile}
                     versionMark={versionMarks[version.path]}
                     onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
                     onContextMenu={(e) => handleContextMenu(e, version)}

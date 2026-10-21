@@ -41,9 +41,10 @@ const DEFAULT_SOFTWARE: Array<{ name: SoftwareName; displayName: string }> = [
   // { name: 'maya', displayName: 'Maya' },
   { name: 'after-effects', displayName: 'After Effects' },
   { name: 'photoshop', displayName: 'Photoshop' },
-  // { name: 'cinema4d', displayName: 'Cinema 4D' },
-  // { name: 'substance', displayName: 'Substance Painter' },
-  // { name: 'unreal', displayName: 'Unreal Engine' },
+  { name: 'cinema4d', displayName: 'Cinema 4D' },
+  { name: 'substance', displayName: 'Substance Painter' },
+  { name: 'unreal', displayName: 'Unreal Engine' },
+  { name: 'davinci', displayName: 'DaVinci Resolve' },
   // { name: 'unity', displayName: 'Unity' },
   // { name: 'zbrush', displayName: 'ZBrush' },
   // { name: 'marmoset', displayName: 'Marmoset Toolbag' },
@@ -1563,11 +1564,11 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
         </button>
       </div>
 
-      {/* Blender File Previews */}
+      {/* Project File Previews (Blender, Photoshop, Cinema 4D) */}
       <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
         <div>
-          <div className="text-sm font-semibold mb-0.5">Blender File Previews</div>
-          <p className="text-xs text-text-muted">Show thumbnail previews for .blend files in Versions Overview</p>
+          <div className="text-sm font-semibold mb-0.5">Project File Previews</div>
+          <p className="text-xs text-text-muted">Show thumbnails embedded in Blender, Photoshop and Cinema 4D files in versions and shots</p>
         </div>
         <button
           onClick={() => {

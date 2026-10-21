@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { useBlendThumbnail } from '../../hooks/useBlendThumbnail';
+import { usePsdThumbnail } from '../../hooks/usePsdThumbnail';
+import { useC4dThumbnail } from '../../hooks/useC4dThumbnail';
 import { useProjectStore } from '../../store/projectStore';
 import { IconCircleCheckFilled, IconClock, IconMoon, IconCircle } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
@@ -60,24 +62,31 @@ export function ShotsOverviewTable({ projectId, projectPath, projectName, curren
     }).catch(() => {});
   }, [projectId]);
 
-  const shotLatestBlendPaths = useMemo(() => {
-    const bestNum = new Map<string, number>();
-    const pathMap = new Map<string, string>();
-    if (!allVersions.length || !currentScene) return pathMap;
+  // Latest versioned file per shot, split by preview type — each goes to its own thumbnail extractor
+  // (a single "latest of any software" path sent to the Blender extractor failed for .psd/.c4d)
+  const shotLatestPreviewPaths = useMemo(() => {
+    const maps = { blend: new Map<string, string>(), psd: new Map<string, string>(), c4d: new Map<string, string>() };
+    const best = { blend: new Map<string, number>(), psd: new Map<string, number>(), c4d: new Map<string, number>() };
+    if (!allVersions.length || !currentScene) return maps;
     allVersions.forEach(version => {
       if (!version.is_versioned) return;
+      const kind = version.software.includes('Blender') ? 'blend'
+        : version.software.includes('Photoshop') ? 'psd'
+        : version.software.includes('Cinema 4D') ? 'c4d'
+        : null;
+      if (!kind) return;
       const shotNumber = extractShotNumber(version.name);
       if (shotNumber === null) return;
       const versionNum = extractVersion(version.name);
       if (!versionNum) return;
       if (!version.name.startsWith(getScenePattern(projectName, currentScene.name))) return;
       const key = String(shotNumber);
-      if (versionNum > (bestNum.get(key) ?? 0)) {
-        bestNum.set(key, versionNum);
-        pathMap.set(key, version.path);
+      if (versionNum > (best[kind].get(key) ?? 0)) {
+        best[kind].set(key, versionNum);
+        maps[kind].set(key, version.path);
       }
     });
-    return pathMap;
+    return maps;
   }, [allVersions, currentScene, projectName]);
 
   // Sort shots by number
@@ -118,7 +127,9 @@ export function ShotsOverviewTable({ projectId, projectPath, projectName, curren
                 shot={shot}
                 projectId={projectId}
                 projectPath={projectPath}
-                blendPath={shotLatestBlendPaths.get(String(shot.number))}
+                blendPath={shotLatestPreviewPaths.blend.get(String(shot.number))}
+                psdPath={shotLatestPreviewPaths.psd.get(String(shot.number))}
+                c4dPath={shotLatestPreviewPaths.c4d.get(String(shot.number))}
                 onClick={() => handleShotClick(shot.id)}
               />
             ))
@@ -134,17 +145,23 @@ interface ShotRowProps {
   projectId: string;
   projectPath: string;
   blendPath?: string;
+  psdPath?: string;
+  c4dPath?: string;
   onClick: () => void;
 }
 
-function ShotRow({ shot, projectId: _projectId, projectPath, blendPath, onClick }: ShotRowProps) {
+function ShotRow({ shot, projectId: _projectId, projectPath, blendPath, psdPath, c4dPath, onClick }: ShotRowProps) {
   const previewSrc = useThumbnail(projectPath, shot.preview);
   const [blendPreviewsEnabled] = useState<boolean>(() => {
     const saved = localStorage.getItem('blendPreviewsEnabled');
     return saved !== null ? JSON.parse(saved) : true;
   });
-  const autoBlendSrc = useBlendThumbnail(!shot.preview && blendPreviewsEnabled ? blendPath : undefined);
-  const displaySrc = previewSrc || autoBlendSrc;
+  const autoEnabled = !shot.preview && blendPreviewsEnabled;
+  const autoBlendSrc = useBlendThumbnail(autoEnabled ? blendPath : undefined);
+  const autoPsdSrc = usePsdThumbnail(autoEnabled ? psdPath : undefined);
+  const autoC4dSrc = useC4dThumbnail(autoEnabled ? c4dPath : undefined);
+  // Same priority as the shot cards in ShotsBrowser
+  const displaySrc = previewSrc || autoBlendSrc || autoPsdSrc || autoC4dSrc;
   const wasImageReadyOnMount = useRef(!!displaySrc);
 
   const getStatusBadge = () => {

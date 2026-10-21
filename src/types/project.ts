@@ -13,7 +13,8 @@ export type SoftwareName =
   | 'unreal'
   | 'unity'
   | 'zbrush'
-  | 'marmoset';
+  | 'marmoset'
+  | 'davinci';
 
 export type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
@@ -300,16 +301,32 @@ export const FOLDER_TEMPLATES: Record<SoftwareName, FolderTemplate> = {
     subfolders: ['scenes', 'images', 'cache', 'sourceimages']
   },
   cinema4d: {
+    // Same layout as Blender (Rust get_folder_template shares the branch); C4D also looks for textures in tex/
     name: 'Cinema4D',
-    subfolders: ['scenes', 'tex', 'render', 'cache']
+    subfolders: [
+      { name: 'Geo', subfolders: ['Export', 'Import'] },
+      { name: 'Tex', subfolders: ['Export', 'Import', 'Plates'] },
+      { name: 'Cache', subfolders: ['Temp', 'Sim', 'Bake'] },
+      { name: 'Render', subfolders: ['Preview', 'Final'] }
+    ]
   },
   substance: {
+    // Substance Painter: meshes in, texture sets out (Tex/Export is also Painter's export path), Iray renders
     name: 'Substance',
-    subfolders: ['exports', 'sources', 'references']
+    subfolders: [
+      { name: 'Geo', subfolders: ['Import'] },
+      { name: 'Tex', subfolders: ['Export'] },
+      { name: 'Render', subfolders: ['Preview', 'Final'] }
+    ]
   },
   unreal: {
-    name: 'Unreal',
-    subfolders: ['Content', 'Saved', 'Intermediate']
+    // The UE project itself lives in UnrealEngine/_Project, created on first launch
+    name: 'UnrealEngine',
+    subfolders: [
+      { name: 'Geo', subfolders: ['Export', 'Import'] },
+      { name: 'Tex', subfolders: ['Export', 'Import'] },
+      { name: 'Render', subfolders: ['Preview', 'Final'] }
+    ]
   },
   unity: {
     name: 'Unity',
@@ -322,6 +339,16 @@ export const FOLDER_TEMPLATES: Record<SoftwareName, FolderTemplate> = {
   marmoset: {
     name: 'Marmoset',
     subfolders: ['Scenes', 'Exports', 'Textures']
+  },
+  davinci: {
+    // Compose-only (COMPOSE_ONLY_SOFTWARE): one flat media folder, created when chosen in Compose (no scenes).
+    // The Resolve project lives in Resolve's database; .drp versions and renders go to _GlobalCompose
+    name: 'DaVinci',
+    subfolders: [
+      { name: 'Footage', subfolders: ['Renders', 'Plates', 'Stock'] },
+      { name: 'Assets', subfolders: ['Logos', 'Graphics', 'Audio'] },
+      { name: 'Cache', subfolders: ['Temp'] }
+    ]
   }
 };
 
@@ -355,6 +382,7 @@ export interface LaunchSoftwareCommand {
   shotNumber?: number;
   specialContext?: string;
   assetName?: string; // Custom name for asset context (e.g., "CAR", "01")
+  resolveProjectName?: string; // DaVinci Resolve project name, filled in by launchSoftware
 }
 
 export interface StartTimeTrackingCommand {

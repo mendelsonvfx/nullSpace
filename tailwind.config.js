@@ -51,13 +51,14 @@ export default {
           ae: '#9333ea',
           houdini: '#ff4713',
           maya: '#0faded',
-          cinema4d: '#0099d8',
-          substance: '#f37a3a',
-          unreal: '#313131',
+          cinema4d: '#5c6be0',
+          substance: '#99e83f',
+          unreal: '#C8CDD6',
           unity: '#000000',
           zbrush: '#f37021',
           photoshop: '#31a8ff',
           marmoset: '#ff6b00',
+          davinci: '#13d4f2',
         }
       },
       textColor: {

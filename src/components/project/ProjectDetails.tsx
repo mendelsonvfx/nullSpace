@@ -9,7 +9,7 @@ import { AssetsLibrary, type AssetStats } from './AssetsLibrary';
 import { OutputOverview } from './OutputOverview';
 import { ShotsOverviewTable } from './ShotsOverviewTable';
 import { SoftwareIcon } from '../SoftwareIcon';
-import { STATUS_LABELS, SOFTWARE_OPTIONS } from '../../utils';
+import { STATUS_LABELS, SOFTWARE_OPTIONS, COMPOSE_ONLY_SOFTWARE, isComposeOnlySoftware } from '../../utils';
 import { InlineTimer, TimeInfoBar } from '../time';
 import { ManualTimeEntryModal } from '../modals/ManualTimeEntryModal';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
@@ -18,6 +18,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import { useProjectNameInput } from '../../hooks/useProjectNameInput';
+import { useProjectWatcher } from '../../hooks/useProjectWatcher';
+import { hasVersionedSoftware, formatSoftwareName } from '../../features/time-tracking/utils/softwareUtils';
 import { PROJECT_NAME_HINT } from '../../utils/fileNaming';
 import { composeKeyOf } from '../modals/ComposeSoftwareModal';
 import SimpleBar from 'simplebar-react';
@@ -274,6 +276,17 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   };
 
   const context = getCurrentContext();
+
+  // Versions / Outputs blocks — both hidden when only a scene (no shot) is selected
+  const overviewsVisible = !(context.isScene && !context.isShot);
+  // Asset/Compose contexts list files from shared folders, which can come from software outside
+  // project.software (Assets Library creates assets in any software) — keep Versions there
+  const showVersions = overviewsVisible && (hasVersionedSoftware(project.software) || context.isSpecialContext);
+  const showOutputs = overviewsVisible && context.specialContextType !== 'asset';
+  // Versions Overview normally runs the file watcher; when it's hidden (e.g. UE-only project),
+  // keep the watcher here so rendered outputs still appear live
+  useProjectWatcher(showOutputs && !showVersions ? project.path : null);
+
   const tasks = useTasks(project.id, context);
   const attachmentSubdir = getAttachmentSubdir(context, project);
   const isLastTaskWithAttachments = tasks.todos.filter(t => (t.attachments?.length ?? 0) > 0).length === 1;
@@ -415,12 +428,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
     'Maya': 'maya',
     'After Effects': 'after-effects',
     'Cinema 4D': 'cinema4d',
-    'Substance': 'substance',
-    'Unreal': 'unreal',
+    'Substance Painter': 'substance',
+    'Unreal Engine': 'unreal',
     'Unity': 'unity',
     'ZBrush': 'zbrush',
     'Photoshop': 'photoshop',
-    'Marmoset': 'marmoset'
+    'Marmoset': 'marmoset',
+    'DaVinci Resolve': 'davinci'
   };
 
   const openToolEditor = (key: string) => {
@@ -847,19 +861,26 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 'Maya': 'maya',
                 'After Effects': 'after-effects',
                 'Cinema 4D': 'cinema4d',
-                'Substance': 'substance',
-                'Unreal': 'unreal',
+                'Substance Painter': 'substance',
+                'Unreal Engine': 'unreal',
                 'Unity': 'unity',
                 'ZBrush': 'zbrush',
-                'Marmoset': 'marmoset'
+                'Marmoset': 'marmoset',
+                'DaVinci Resolve': 'davinci'
               };
-              return ((context.isSpecialContext && context.specialContextType === 'compose')
-                ? project.software.filter((sw: any) => {
-                    const key = sw.name.toLowerCase().replace(/\s+/g, '-');
-                    return (project.composeSoftware || []).some((cs: string) => cs === key || cs === sw.name);
-                  })
-                : project.software
-              ).map((sw: any) => {
+              const keyOf = (sw: any) => nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+              const composeKeys: string[] = project.composeSoftware || [];
+              const launchList = (context.isSpecialContext && context.specialContextType === 'compose')
+                ? [
+                    // composeSoftware stores keys ('davinci'), which a display name doesn't always collapse to
+                    ...project.software.filter((sw: any) => composeKeys.some(cs => cs === keyOf(sw) || cs === sw.name)),
+                    // Compose-only software isn't in the project's software list: build its entry from the key
+                    ...composeKeys
+                      .filter(key => COMPOSE_ONLY_SOFTWARE.has(key) && !project.software.some((sw: any) => keyOf(sw) === key))
+                      .map(key => ({ name: formatSoftwareName(key), executablePath: '' })),
+                  ]
+                : project.software.filter((sw: any) => !isComposeOnlySoftware(keyOf(sw), !!(project.hasShots || project.hasScenes)));
+              return launchList.map((sw: any) => {
               const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
               const executablePath = projectPathsMap[softwareKey] || pathsMap[softwareKey] || sw.executablePath;
 
@@ -881,12 +902,13 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 'after-effects': '#9999FF',
                 'photoshop': '#31A8FF',
                 'maya': '#0FADED',
-                'cinema4d': '#0099D8',
-                'substance': '#F37A3A',
-                'unreal': '#313131',
+                'cinema4d': '#5C6BE0',
+                'substance': '#99E83F',
+                'unreal': '#C8CDD6',
                 'unity': '#000000',
                 'zbrush': '#F37021',
-                'marmoset': '#FF6B00'
+                'marmoset': '#FF6B00',
+                'davinci': '#13D4F2'
               };
               const softwareColor = softwareColors[softwareKey] || '#6366f1';
 
@@ -1085,8 +1107,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         </div>
         )}
 
-        {/* Versions Overview - hidden when only scene is selected (without shot) */}
-        {!(context.isScene && !context.isShot) && (
+        {/* Versions Overview - hidden when only scene is selected (without shot) or the project has no versioned software */}
+        {showVersions && (
         <VersionsOverview
           project={project}
           currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
@@ -1097,7 +1119,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         )}
 
         {/* Output Overview - hidden when only scene is selected (without shot) or in asset context */}
-        {!(context.isScene && !context.isShot) && context.specialContextType !== 'asset' && (
+        {showOutputs && (
         <OutputOverview
           project={project}
           currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
@@ -1905,10 +1927,15 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                         const key = nameToKey[sw] || sw.toLowerCase().replace(/\s+/g, '-');
                         const effective = projectPaths[key] ?? globalPaths[key] ?? '';
                         const isEdited = !!projectPaths[key] && projectPaths[key] !== (globalPaths[key] ?? '');
-                        const isSelected = latestProject.software.some((pSw: any) => {
-                          const existingKey = nameToKey[pSw.name] || pSw.name.toLowerCase().replace(/\s+/g, '-');
-                          return existingKey === key;
-                        });
+                        // Shot-based projects use compose-only software (DaVinci Resolve) in Compose: can't be toggled
+                        // here, "selected" follows the Compose choice, its project path is still editable
+                        const composeOnly = isComposeOnlySoftware(key, !!(latestProject.hasShots || latestProject.hasScenes));
+                        const isSelected = composeOnly
+                          ? (latestProject.composeSoftware || []).includes(key)
+                          : latestProject.software.some((pSw: any) => {
+                              const existingKey = nameToKey[pSw.name] || pSw.name.toLowerCase().replace(/\s+/g, '-');
+                              return existingKey === key;
+                            });
 
                         return (
                           <div
@@ -1916,12 +1943,14 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             onClick={() => {
                               if (toolEditMode && isSelected) {
                                 openToolEditor(key);
-                              } else {
+                              } else if (!composeOnly) {
                                 handleToggleSoftware(sw);
                               }
                             }}
-                            title={effective || sw}
-                            className={`relative flex items-center gap-[9px] h-[42px] px-[11px] rounded-lg cursor-pointer bg-card-bg border ${isSelected ? 'border-border-secondary' : 'border-border-secondary/50'} hover:border-border-hover transition-colors`}
+                            title={composeOnly && !toolEditMode
+                              ? `In shot-based projects ${sw} runs in Compose — right-click Compose → Change Compose Software…`
+                              : effective || sw}
+                            className={`relative flex items-center gap-[9px] h-[42px] px-[11px] rounded-lg ${composeOnly && !(toolEditMode && isSelected) ? 'cursor-not-allowed' : 'cursor-pointer'} bg-card-bg border ${isSelected ? 'border-border-secondary' : 'border-border-secondary/50'} hover:border-border-hover transition-colors`}
                           >
                             <span style={{ opacity: isSelected ? 1 : 0.35 }} className="flex-none">
                               <SoftwareIcon name={sw} className="w-[22px] h-[22px]" />
@@ -2142,6 +2171,11 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 <p className="text-sm text-yellow-200/90">
                   <strong>Warning:</strong> Removing software will delete its folder and all contents from the project directory. This action cannot be undone.
                 </p>
+                {(nameToKey[softwareToRemove] || softwareToRemove.toLowerCase().replace(/\s+/g, '-')) === 'unreal' && (
+                  <p className="text-sm text-red-400 mt-2">
+                    The Unreal Engine project (UnrealEngine/_Project) with all levels and assets will be deleted too.
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-3 justify-end">

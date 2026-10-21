@@ -9,6 +9,7 @@ const nameToKey: Record<string, string> = {
   'Blender': 'blender',
   'Houdini': 'houdini',
   'Photoshop': 'photoshop',
+  'DaVinci Resolve': 'davinci',
 };
 
 export const composeKeyOf = (name: string) =>
@@ -22,11 +23,16 @@ export interface ComposeSoftwareSelection {
 export function ComposeSoftwareModal({
   onConfirm,
   onClose,
+  initialSelected = [],
 }: {
   onConfirm: (selected: ComposeSoftwareSelection[]) => Promise<void> | void;
   onClose: () => void;
+  /** Keys already chosen (when changing the compose software) */
+  initialSelected?: string[];
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(COMPOSE_SOFTWARE_OPTIONS.filter(name => initialSelected.includes(composeKeyOf(name))))
+  );
   const [submitting, setSubmitting] = useState(false);
   const blurClass = useModalBlur();
 
