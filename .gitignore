@@ -40,3 +40,10 @@ temp_shots_list.txt
 *.njsproj
 *.sln
 *.sw?
+
+# Local notes (kept on disk, not in the repo)
+BACKLOG.md
+CHANGELOG.md
+DESIGN-GUIDE.md
+*.bak
+_LOCALBUILDS/
