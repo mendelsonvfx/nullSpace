@@ -1,9 +1,10 @@
 // src/features/time-tracking/components/ManualTimeEntry/TimeEntryForm.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { Project, SoftwareName } from '../../../../types/project';
-import { formatSoftwareName } from '../../utils';
+import { formatSoftwareName, normalizeSoftwareName } from '../../utils';
 import { CustomSelect } from '../../../../components/ui/CustomSelect';
+import { COMPOSE_ONLY_SOFTWARE } from '../../../../utils/constants';
 
 interface TimeEntryFormProps {
   project: Project;
@@ -37,11 +38,23 @@ export const TimeEntryForm: React.FC<TimeEntryFormProps> = ({
   const [selectedShotId, setSelectedShotId] = useState<string>('');
   const [countInStats, setCountInStats] = useState<boolean>(true);
 
+  // Project software plus Compose-only software (DaVinci Resolve in shot-based projects), which isn't in
+  // the project's software list. addManualTimeEntry normalizes both display names and keys
+  const softwareOptions = useMemo(() => {
+    const projectKeys = new Set(project.software.map(sw => normalizeSoftwareName(sw.name)));
+    return [
+      ...project.software.map(sw => ({ value: sw.name as string, label: formatSoftwareName(sw.name) })),
+      ...(project.composeSoftware || [])
+        .filter(key => COMPOSE_ONLY_SOFTWARE.has(key) && !projectKeys.has(key as SoftwareName))
+        .map(key => ({ value: key, label: formatSoftwareName(key) })),
+    ];
+  }, [project.software, project.composeSoftware]);
+
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
-      if (project.software.length > 0) {
-        setSelectedSoftware(project.software[0].name);
+      if (softwareOptions.length > 0) {
+        setSelectedSoftware(softwareOptions[0].value as SoftwareName);
       }
       setSelectedDate(new Date().toISOString().split('T')[0]);
       setHours(0);
@@ -49,7 +62,7 @@ export const TimeEntryForm: React.FC<TimeEntryFormProps> = ({
       setSelectedShotId('');
       setCountInStats(true);
     }
-  }, [isOpen, project.software]);
+  }, [isOpen, softwareOptions]);
 
   const handleSubmit = () => {
     const totalMinutes = (hours * 60) + minutes;
@@ -97,10 +110,7 @@ export const TimeEntryForm: React.FC<TimeEntryFormProps> = ({
           <CustomSelect
             value={selectedSoftware}
             onChange={(val) => setSelectedSoftware(val as SoftwareName)}
-            options={project.software.map(sw => ({
-              value: sw.name,
-              label: formatSoftwareName(sw.name),
-            }))}
+            options={softwareOptions}
           />
         </div>
 
