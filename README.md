@@ -52,8 +52,8 @@ nullSpace notices when Blender, Houdini or After Effects is running and tells fo
 <tr>
 <td valign="top">
 
-### 🖼️ Previews without opening anything
-Thumbnails of `.blend`, `.psd` and `.c4d` files are read straight from the files, so every version is visible at a glance without launching the software.
+### 📊 Stats that build themselves
+Every tracked hour and every payment feeds the analytics on its own: revenue by month, project and client, pending payments, your real hourly rate, time per software and per week. No spreadsheets.
 
 </td>
 <td valign="top">
@@ -67,7 +67,8 @@ No cloud, no account. Projects are plain, human-readable folders that make sense
 
 ### Also inside
 - **Deep integrations:** Resolve scripts that save `.drp` versions, Substance Painter auto-saving under the version name, Unreal projects created on first launch.
-- **Money tied to time:** clients, multi-currency, prepayments, revenue analytics and your real hourly rate.
+- **Previews without opening the software:** `.blend`, `.psd` and `.c4d` thumbnails are read straight from the files.
+- **Finance:** clients, multi-currency, prepayments, project reports in PDF, CSV, JSON or Markdown.
 - **Renders:** image sequences grouped with frame ranges, Preview / Final filters, NullConverter in the context menu.
 - **Safe shot rename:** every file and folder on disk is updated, and an interrupted rename is recovered.
 - **Tasks & notes:** priorities, deadlines, attachments, Markdown notes and links.
