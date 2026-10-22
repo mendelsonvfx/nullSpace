@@ -854,6 +854,7 @@ function SoftwareSettings({
                   </div>
                 )
               ) : (
+                // Path not set: dashed frame; the logo inside is dimmed (abbreviation when there's no logo)
                 <div
                   className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none select-none font-bold"
                   style={{
@@ -863,7 +864,11 @@ function SoftwareSettings({
                     fontSize: meta.abbr.length === 1 ? 18 : 14,
                   }}
                 >
-                  {meta.abbr}
+                  {meta.logoPath ? (
+                    <img src={meta.logoPath} alt={meta.display} style={{ width: 26, height: 26, objectFit: 'contain', opacity: 0.55 }} />
+                  ) : (
+                    meta.abbr
+                  )}
                 </div>
               )}
 
