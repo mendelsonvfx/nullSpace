@@ -1773,14 +1773,15 @@ function App() {
                         {/* Description / Orphaned info */}
                         {project._isOrphaned ? (
                           <div className="flex items-center justify-between gap-2 mt-1">
-                            <span className="text-xs text-zinc-600 select-none">Project folder not found</span>
+                            <span className="text-xs text-zinc-600 select-none flex-shrink-0">Project folder not found</span>
                             {project.clientId && clientsById.get(project.clientId) && (
                               <span
-                                className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 flex-shrink-0"
+                                className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 min-w-0 overflow-hidden"
                                 style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
+                                title={clientsById.get(project.clientId)!.name}
                               >
-                                {showTagIcons && <IconUser stroke={1.5} className="w-3 h-3 fill-current opacity-40" />}
-                                {clientsById.get(project.clientId)!.name}
+                                {showTagIcons && <IconUser stroke={1.5} className="w-3 h-3 fill-current opacity-40 flex-shrink-0" />}
+                                <span className="truncate">{clientsById.get(project.clientId)!.name}</span>
                               </span>
                             )}
                           </div>
@@ -1833,14 +1834,15 @@ function App() {
                               {/* Bottom section */}
                               <div className="flex items-center justify-between gap-2">
                                 {/* Left: Client */}
-                                <div className="flex gap-1.5 flex-wrap flex-1 min-w-0">
+                                <div className="flex gap-1.5 flex-1 min-w-0">
                                   {hasClient && (
                                     <span
-                                      className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 flex-shrink-0"
+                                      className="px-2 py-1 rounded-button text-badge font-medium flex items-center gap-1 min-w-0 overflow-hidden"
                                       style={{ backgroundColor: darkenColor(hslStringToHex(clientsById.get(project.clientId)!.color || '#808080'), 60), color: '#ffffff' }}
+                                      title={clientsById.get(project.clientId)!.name}
                                     >
-                                      {showTagIcons && <IconUser stroke={1.5} className="w-3 h-3 fill-current opacity-40" />}
-                                      {clientsById.get(project.clientId)!.name}
+                                      {showTagIcons && <IconUser stroke={1.5} className="w-3 h-3 fill-current opacity-40 flex-shrink-0" />}
+                                      <span className="truncate">{clientsById.get(project.clientId)!.name}</span>
                                     </span>
                                   )}
                                 </div>

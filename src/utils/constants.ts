@@ -1,5 +1,10 @@
 export type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
+// "Support nullSpace" card: brand colors, independent of the user's accent color
+export const SUPPORT_COLOR = '#6303C4';
+export const SUPPORT_COLOR_DARK = '#4F029D';
+export const SUPPORT_COLOR_LIGHT = '#c084fc'; // Readable on the dark card, where SUPPORT_COLOR isn't
+
 export const STATUS_COLORS = {
   active: 'bg-green-500',
   paused: 'bg-yellow-500',

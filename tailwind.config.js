@@ -67,7 +67,7 @@ export default {
         'glow-green': '0 0 8px rgba(16, 185, 129, 0.5)',
         'glow-yellow': '0 0 8px rgba(245, 158, 11, 0.5)',
         'glow-blue': '0 0 8px rgba(59, 130, 246, 0.5)',
-        'glow-accent': '0 0 8px rgba(139, 92, 246, 0.5)',
+        'glow-accent': '0 0 8px var(--accent-color-border)',
         'card-hover': '0 4px 12px rgba(0, 0, 0, 0.3)',
       },
       fontSize: {

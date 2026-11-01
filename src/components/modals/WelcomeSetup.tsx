@@ -7,6 +7,7 @@ import { useProjectStore } from '../../store/projectStore';
 import type { SoftwareName } from '../../types/project';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import { getSoftwareMeta } from '../../utils/softwareMeta';
+import { SUPPORT_COLOR, SUPPORT_COLOR_LIGHT } from '../../utils/constants';
 import appIcon from '../../appIcon';
 
 interface WelcomeSetupProps {
@@ -445,7 +446,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                     style={{ animation: 'wzStepIn 0.3s ease-out 0.15s both' }}
                   >
                     <div className="flex items-center justify-center gap-2 mb-2">
-                      <Heart className="w-4 h-4 text-accent fill-accent" />
+                      <Heart className="w-4 h-4" style={{ color: SUPPORT_COLOR_LIGHT, fill: SUPPORT_COLOR_LIGHT }} />
                       <span className="font-semibold text-text-primary">Support nullSpace</span>
                     </div>
                     <p className="text-text-muted text-xs mb-3 text-center">
@@ -453,7 +454,8 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                     </p>
                     <button
                       onClick={() => open('https://mendelsonvfx.com').catch(() => {})}
-                      className="w-full h-[38px] bg-accent text-white font-bold rounded-button text-[13px] hover:brightness-110 transition-all"
+                      className="w-full h-[38px] text-white font-bold rounded-button text-[13px] hover:brightness-110 transition-all"
+                      style={{ backgroundColor: SUPPORT_COLOR }}
                     >
                       Support Development
                     </button>

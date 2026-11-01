@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Check, Heart, X } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
+import { SUPPORT_COLOR, SUPPORT_COLOR_DARK, SUPPORT_COLOR_LIGHT } from '../../utils/constants';
 
 interface Props {
   version: string;
@@ -56,20 +57,20 @@ export function PostUpdateNotification({ version, onClose }: Props) {
 
         {/* Donation card — animated gradient border wrapper */}
         <div className="relative w-full rounded-card overflow-hidden mb-5 p-[1px]" style={{
-          boxShadow: '0 0 18px color-mix(in srgb, var(--accent-color) 35%, transparent)',
+          boxShadow: `0 0 18px color-mix(in srgb, ${SUPPORT_COLOR} 35%, transparent)`,
         }}>
           {/* Spinning conic gradient — creates the animated border */}
           <div style={{
             position: 'absolute',
             inset: '-100%',
-            background: 'conic-gradient(from 0deg, transparent 0deg, var(--accent-color) 60deg, #c084fc 90deg, transparent 150deg)',
+            background: `conic-gradient(from 0deg, transparent 0deg, ${SUPPORT_COLOR} 60deg, ${SUPPORT_COLOR_LIGHT} 90deg, transparent 150deg)`,
             animation: 'spin-border 3s linear infinite',
             filter: 'blur(6px)',
             zIndex: 0,
           }} />
           <div className="relative bg-sidebar-bg rounded-[11px] px-5 py-4" style={{ zIndex: 1 }}>
             <div className="flex items-center justify-center gap-2 mb-2">
-              <Heart className="w-4 h-4 text-accent fill-accent" />
+              <Heart className="w-4 h-4" style={{ color: SUPPORT_COLOR_LIGHT, fill: SUPPORT_COLOR_LIGHT }} />
               <span className="font-semibold">Support nullSpace</span>
             </div>
             <p className="text-text-muted text-xs mb-3 text-center">
@@ -77,7 +78,8 @@ export function PostUpdateNotification({ version, onClose }: Props) {
             </p>
             <button
               onClick={() => invoke('open_url', { url: 'https://t.me/mendelsonvfx' })}
-              className="w-full py-2 bg-gradient-to-br from-accent to-accent-hover rounded-button font-semibold text-white text-sm transition-opacity hover:opacity-90"
+              className="w-full py-2 rounded-button font-semibold text-white text-sm transition-opacity hover:opacity-90"
+              style={{ background: `linear-gradient(to bottom right, ${SUPPORT_COLOR}, ${SUPPORT_COLOR_DARK})` }}
             >
               Support Development
             </button>

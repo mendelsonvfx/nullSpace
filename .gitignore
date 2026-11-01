@@ -47,3 +47,4 @@ CHANGELOG.md
 DESIGN-GUIDE.md
 *.bak
 _LOCALBUILDS/
+graphify-out/
