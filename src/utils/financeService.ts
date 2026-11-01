@@ -47,6 +47,23 @@ export const getPaymentStatusUpdate = (
   return {};
 };
 
+/**
+ * A prepaid project whose prepayment covers the whole cost is fully paid: nothing is pending.
+ * Returns the project marked paid (paidAt = completedAt — the money came with the prepayment,
+ * so the chart shows one full point on that date), or the same object when nothing changes.
+ */
+export const settlePrepaidIfCovered = <T extends Project>(project: T): T => {
+  if (
+    project.paymentStatus !== 'prepaid' ||
+    !project.cost || project.cost <= 0 ||
+    project.prepaymentAmount == null || project.prepaymentAmount < project.cost
+  ) {
+    return project;
+  }
+  const completedAt = project.completedAt || new Date().toISOString();
+  return { ...project, paymentStatus: 'paid', completedAt, paidAt: completedAt };
+};
+
 // === CHART DATA POINTS ===
 
 export interface ChartDataPoint {

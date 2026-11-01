@@ -324,6 +324,31 @@ struct LaunchSoftwareInput {
     resolve_project_name: Option<String>,
 }
 
+/// Every software folder a project can have (values of get_software_folder_name).
+/// Used where all software folders are scanned: versions, outputs, file watcher, backup cleanup
+const SOFTWARE_FOLDERS: [&str; 12] = [
+    "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
+    "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "DaVinci",
+];
+
+/// Software folders with per-scene structure, for scene/shot file operations (delete, rename, count).
+/// DaVinci is left out: its folder is one shared media folder, and footage named like shot files
+/// (renders dropped into DaVinci/Footage) must not be deleted or renamed with a shot
+const SCENE_SOFTWARE_FOLDERS: [&str; 11] = [
+    "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
+    "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset",
+];
+
+/// Per-shot render/output subfolders of each software folder (shot delete and rename)
+const SOFTWARE_RENDER_FOLDERS: [(&str, &[&str]); 6] = [
+    ("Blender", &["Render/Preview", "Render/Final", "Render/Passes"]),
+    ("Houdini", &["Render/Preview", "Render/Final", "Render/Passes"]),
+    ("AfterEffects", &["Output/Preview", "Output/Final"]),
+    ("UnrealEngine", &["Render/Preview", "Render/Final", "Render/Passes"]),
+    ("Cinema4D", &["Render/Preview", "Render/Final", "Render/Passes"]),
+    ("Substance", &["Render/Preview", "Render/Final", "Render/Passes"]),
+];
+
 fn get_software_folder_name(software: &str) -> &str {
     match software.to_lowercase().as_str() {
         "blender" => "Blender",
@@ -803,8 +828,9 @@ async fn load_projects(projects_dir: String) -> Result<Vec<Project>, String> {
 }
 
 #[tauri::command]
-async fn update_project(project: Project) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+/// Writes the project metadata; returns the `updated_at` it stamped so the frontend copy stays in sync
+async fn update_project(project: Project) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
         let project_path = PathBuf::from(&project.path);
         let metadata_path = project_path.join(".project-metadata.json");
         let mut updated_project = project.clone();
@@ -813,7 +839,7 @@ async fn update_project(project: Project) -> Result<(), String> {
             .map_err(|e| format!("Failed to serialize project: {}", e))?;
         fs::write(metadata_path, json)
             .map_err(|e| format!("Failed to write metadata: {}", e))?;
-        Ok(())
+        Ok(updated_project.updated_at)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -1018,6 +1044,166 @@ fn determine_houdini_extension(executable_path: &str) -> &'static str {
     }
 }
 
+/// Houdini from Steam (Houdini Indie): Steam's app id file sits next to the exe
+fn is_steam_build(executable_path: &str) -> bool {
+    Path::new(executable_path).with_file_name("steam_appid.txt").exists()
+}
+
+fn is_steam_client(process_name: &str) -> bool {
+    process_name.eq_ignore_ascii_case("steam.exe")
+}
+
+/// The Steam client is running: the PID Steam registers for this user belongs to a live steam.exe,
+/// or (no registration, e.g. portable Steam) any steam.exe is running
+#[cfg(target_os = "windows")]
+fn steam_running() -> bool {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+
+    let mut system = System::new();
+    let registered = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Valve\Steam\ActiveProcess")
+        .and_then(|key| key.get_value::<u32, _>("pid"))
+        .ok()
+        .filter(|&pid| pid != 0);
+    if let Some(pid) = registered.map(sysinfo::Pid::from_u32) {
+        if system.refresh_process(pid) && system.process(pid).map_or(false, |p| is_steam_client(p.name())) {
+            return true;
+        }
+    }
+    system.refresh_processes();
+    system.processes().values().any(|p| is_steam_client(p.name()))
+}
+
+/// Command that starts `program` (Houdini or its hython) with Houdini's environment: HOME/HFS so Houdini
+/// finds the user prefs, and — for the Steam build with Steam running — Houdini's bin as the working
+/// folder, as Steam itself starts it. Steam's app id file is found there, so Houdini runs as this process
+/// instead of asking Steam to relaunch it: no Steam launch dialogs, and time tracking follows one process.
+/// With Steam closed it's started as before, and the relaunch through Steam is what starts Steam.
+#[cfg(target_os = "windows")]
+fn houdini_command(program: &Path, houdini_exe: &str) -> Command {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let bin = Path::new(houdini_exe).parent();
+    let hfs_path = bin.and_then(|p| p.parent()).map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+
+    // Major.minor from the install folder ("Houdini 20.0.653" -> "20.0") for HOUDINI_USER_PREF_DIR;
+    // none for "Houdini Indie" (Steam) — HOME already points Houdini to Documents\houdiniX.Y
+    let version = Path::new(&hfs_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .and_then(|name| {
+            name.split(|c: char| !c.is_ascii_digit() && c != '.')
+                .find_map(|part| {
+                    let ver: Vec<&str> = part.split('.').collect();
+                    (part.contains('.') && ver.len() >= 2).then(|| format!("{}.{}", ver[0], ver[1]))
+                })
+        });
+
+    // HOME is critical - Houdini uses $HOME to find preferences on Windows
+    let home_docs = format!("{}\\Documents", std::env::var("USERPROFILE").unwrap_or_default());
+
+    let mut cmd = Command::new(program);
+    cmd.creation_flags(CREATE_NO_WINDOW).env("HOME", &home_docs);
+    if !hfs_path.is_empty() {
+        cmd.env("HFS", &hfs_path);
+    }
+    if let Some(ver) = &version {
+        cmd.env("HOUDINI_USER_PREF_DIR", format!("{}\\houdini{}", home_docs, ver));
+    }
+    let direct = is_steam_build(houdini_exe) && steam_running();
+    if let (true, Some(bin)) = (direct, bin) {
+        cmd.current_dir(bin);
+    }
+    println!("[Houdini] {} HFS={} HOME={} pref_dir={:?} steam_direct={}",
+        program.display(), hfs_path, home_docs, version, direct);
+    cmd
+}
+
+/// Create a new .hip/.hiplc/.hipnc via hython. Blocking (waits up to 120 s) — call through spawn_blocking.
+#[cfg(target_os = "windows")]
+fn create_hip_file(hython: &Path, houdini_exe: &str, file_path: &Path) -> Result<(), String> {
+    use std::process::Stdio;
+    use std::time::Instant;
+
+    let file_path_str = file_path.to_str()
+        .ok_or("Invalid file path encoding")?
+        .replace("\\", "/"); // Forward slashes — unambiguous in Python/Houdini on Windows
+
+    let templates_dir = dirs::document_dir()
+        .ok_or("Could not determine Documents directory")?
+        .join("nullSpace")
+        .join("templates");
+    fs::create_dir_all(&templates_dir)
+        .map_err(|e| format!("Failed to create templates directory: {}", e))?;
+    let log_path = templates_dir.join("hython_create.log");
+    let log_out = fs::File::create(&log_path)
+        .map_err(|e| format!("Failed to create hython log: {}", e))?;
+    let log_err = log_out.try_clone()
+        .map_err(|e| format!("Failed to create hython log: {}", e))?;
+
+    let mut child = houdini_command(hython, houdini_exe)
+        .arg("-c")
+        .arg(format!("import hou; hou.hipFile.save(r'{}')", file_path_str))
+        .stdout(Stdio::from(log_out))
+        .stderr(Stdio::from(log_err))
+        .spawn()
+        .map_err(|e| format!("Failed to execute hython: {}", e))?;
+
+    let file_ready = || fs::metadata(file_path).map_or(false, |m| m.len() > 0);
+    let log_tail = || {
+        fs::read_to_string(&log_path)
+            .map(|log| {
+                let lines: Vec<&str> = log.lines().collect();
+                lines[lines.len().saturating_sub(8)..].join("\n")
+            })
+            .unwrap_or_default()
+    };
+
+    let timeout = Duration::from_secs(120);
+    let started = Instant::now();
+    let failure: Option<String> = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if file_ready() {
+                    break None;
+                }
+                break Some(format!("hython didn't create the Houdini file ({}). Log: {}\n{}", status, log_path.display(), log_tail()));
+            }
+            Ok(None) => {}
+            Err(e) => {
+                let _ = child.kill();
+                break Some(format!("Failed to wait for hython: {}", e));
+            }
+        }
+        if started.elapsed() > timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            break Some(format!(
+                "hython didn't finish in 120 s. Houdini Indie from Steam needs Steam running and signed in. Log: {}",
+                log_path.display()
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    };
+
+    if let Some(error) = failure {
+        // A partial file would be listed as a version and opened next time; antivirus may hold it briefly
+        for attempt in 0..3 {
+            if !file_path.exists() || fs::remove_file(file_path).is_ok() {
+                break;
+            }
+            if attempt < 2 {
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        }
+        return Err(error);
+    }
+    println!("[Houdini] Created {}", file_path.display());
+    Ok(())
+}
+
 #[derive(Serialize)]
 struct LaunchResult {
     file_name: String,
@@ -1052,8 +1238,10 @@ fn find_process_with_file(_file_path: &str, process_name: &str) -> Option<u32> {
 
         for (pid, process) in system.processes() {
             let proc_name = process.name().to_lowercase();
-            // Check if process name matches ANY of the patterns
-            if patterns.iter().any(|pattern| proc_name.contains(&pattern.to_lowercase())) {
+            // Check if process name matches ANY of the patterns (Houdini's launcher/installer match "houdin" but aren't Houdini)
+            if patterns.iter().any(|pattern| proc_name.contains(&pattern.to_lowercase()))
+                && !time_tracking::is_houdini_tool_exe(&proc_name)
+                && !time_tracking::is_nullspace_process(pid.as_u32(), &proc_name) {
                 let start_time = process.start_time();
                 // If process was started recently (within last 60 seconds for slow-starting apps like Houdini)
                 // Use checked subtraction to avoid underflow if start_time > now
@@ -1226,8 +1414,10 @@ impl SoftwareLaunchConfig {
         println!("[SoftwareLauncher] use_explorer: {}, needs_pid_lookup: {}, process_name: '{}'",
             self.use_explorer, self.needs_pid_lookup, self.process_name);
 
+        let is_houdini = self.process_name.contains("houdin") || self.process_name.contains("hindie") || self.process_name.contains("happrentice");
+
         // Step 1: Spawn the process
-        let child = if self.use_explorer {
+        let mut child = if self.use_explorer {
             println!("[SoftwareLauncher] Launching via explorer.exe: {}", file_path);
             Command::new("explorer")
                 .arg(file_path)
@@ -1236,78 +1426,45 @@ impl SoftwareLaunchConfig {
                 .map_err(|e| format!("Failed to open file via explorer: {}", e))?
         } else {
             // For Houdini: launch with proper environment variables for user preferences
-            if self.process_name.contains("houdin") || self.process_name.contains("hindie") || self.process_name.contains("happrentice") {
+            if is_houdini {
                 println!("[SoftwareLauncher] Launching Houdini with env setup: {} {}", executable_path, file_path);
-
-                // Extract version from executable path (e.g., "Houdini 20.0.653" -> "20.0")
-                let hfs_path = std::path::Path::new(executable_path)
-                    .parent()  // bin
-                    .and_then(|p| p.parent())  // Houdini X.X.XXX
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_default();
-
-                // Try to extract major.minor version for HOUDINI_USER_PREF_DIR
-                let version = std::path::Path::new(&hfs_path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .and_then(|name| {
-                        // Extract version like "20.0" from "Houdini 20.0.653" or "Houdini Indie"
-                        let parts: Vec<&str> = name.split(|c: char| !c.is_ascii_digit() && c != '.').collect();
-                        for part in parts {
-                            if part.contains('.') {
-                                let ver_parts: Vec<&str> = part.split('.').collect();
-                                if ver_parts.len() >= 2 {
-                                    return Some(format!("{}.{}", ver_parts[0], ver_parts[1]));
-                                }
-                            }
-                        }
-                        None
-                    });
-
-                let user_pref_dir = if let Some(ver) = &version {
-                    let home = std::env::var("USERPROFILE").unwrap_or_default();
-                    format!("{}\\Documents\\houdini{}", home, ver)
-                } else {
-                    String::new()
-                };
-
-                // HOME is critical - Houdini uses $HOME to find preferences on Windows
-                let home = std::env::var("USERPROFILE").unwrap_or_default();
-                let home_docs = format!("{}\\Documents", home);
-
-                println!("[SoftwareLauncher] HFS={}", hfs_path);
-                println!("[SoftwareLauncher] HOME={}", home_docs);
-                println!("[SoftwareLauncher] HOUDINI_USER_PREF_DIR={}", user_pref_dir);
-
-                let mut cmd = Command::new(executable_path);
-                cmd.arg(file_path)
-                   .creation_flags(CREATE_NO_WINDOW);
-
-                // Set critical environment variables for Houdini to find user preferences
-                // HOME is the most important - Houdini looks for $HOME/houdiniX.Y/
-                cmd.env("HOME", &home_docs);
-
-                if !hfs_path.is_empty() {
-                    cmd.env("HFS", &hfs_path);
-                }
-                if !user_pref_dir.is_empty() {
-                    cmd.env("HOUDINI_USER_PREF_DIR", &user_pref_dir);
-                }
-
-                cmd.spawn()
-                   .map_err(|e| format!("Failed to launch Houdini: {}", e))?
+                houdini_command(Path::new(executable_path), executable_path)
+                    .arg(file_path)
+                    .spawn()
+                    .map_err(|e| format!("Failed to launch Houdini: {}", e))?
             } else {
                 println!("[SoftwareLauncher] Launching directly: {} {}", executable_path, file_path);
                 Command::new(executable_path)
                     .arg(file_path)
                     .creation_flags(CREATE_NO_WINDOW)
                     .spawn()
-                    .map_err(|e| format!("Failed to launch software: {}", e))?
+                    .map_err(|e| format!("Couldn't start {}: {}", executable_path, e))?
             }
         };
 
         let initial_pid = child.id();
         println!("[SoftwareLauncher] Initial PID from spawn: {}", initial_pid);
+
+        // Houdini is the process just started. If it exits at once, it handed over to Steam (Steam build,
+        // Steam closed) — the time-tracking session waits for the relaunched process (relaunch_wait_seconds),
+        // so the launch doesn't block on a PID search while Steam shows its launch dialogs
+        let exe_name = Path::new(executable_path).file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if is_houdini && !self.use_explorer && !time_tracking::is_houdini_tool_exe(exe_name) {
+            let deadline = std::time::Instant::now() + Duration::from_millis(1500);
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        println!("[SoftwareLauncher] Houdini PID {} exited at once ({}): relaunch through Steam", initial_pid, status);
+                        break;
+                    }
+                    Ok(None) if std::time::Instant::now() >= deadline => break,
+                    Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+                    Err(_) => break,
+                }
+            }
+            println!("[SoftwareLauncher] ==> FINAL PID: {} (Houdini)", initial_pid);
+            return Ok(initial_pid);
+        }
 
         // Step 2: Find real PID if needed
         let final_pid = if self.needs_pid_lookup {
@@ -1342,7 +1499,7 @@ impl SoftwareLaunchConfig {
         for (key, value) in envs {
             cmd.env(key, value);
         }
-        let child = cmd.spawn().map_err(|e| format!("Failed to launch software: {}", e))?;
+        let child = cmd.spawn().map_err(|e| format!("Couldn't start {}: {}", executable_path, e))?;
         let initial_pid = child.id();
 
         let final_pid = if self.needs_pid_lookup {
@@ -1914,7 +2071,7 @@ async fn launch_davinci(project_path: &Path, input: &LaunchSoftwareInput) -> Res
         input.special_context.as_deref().map(|c| c.to_lowercase()).as_deref(),
         Some("comp") | Some("compose")
     );
-    let project_base = input.project_name.replace(" ", "").to_uppercase();
+    let project_base = file_naming::sanitize_folder_name(&input.project_name);
 
     // Both branches also restore the DaVinci folder if it's missing (chosen earlier or deleted by hand)
     let (version_dir, base_name, render_dir) = if is_compose {
@@ -1973,6 +2130,7 @@ async fn open_resolve_version(
     project_path: String,
     resolve_project_name: Option<String>,
 ) -> Result<LaunchResult, String> {
+    ensure_executable(&executable_path)?;
     let drp = PathBuf::from(&drp_path);
     let file_name = drp.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
     let stem = drp.file_stem().and_then(|n| n.to_str()).unwrap_or("");
@@ -2001,6 +2159,32 @@ async fn open_resolve_version(
     {
         let _ = (executable_path, ctx, file_name);
         Err(RESOLVE_WINDOWS_ONLY.to_string())
+    }
+}
+
+#[cfg(test)]
+mod houdini_launch_tests {
+    use super::*;
+
+    #[test]
+    fn steam_build_is_detected_by_the_app_id_file() {
+        let dir = std::env::temp_dir().join(format!("nullspace_houdini_test_{}", std::process::id()));
+        let bin = dir.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let exe = bin.join("hindie.steam.exe");
+        let exe = exe.to_str().unwrap();
+        assert!(!is_steam_build(exe));
+        fs::write(bin.join("steam_appid.txt"), "0").unwrap();
+        assert!(is_steam_build(exe));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn steam_client_is_steam_exe_only() {
+        assert!(is_steam_client("steam.exe"));
+        assert!(is_steam_client("Steam.exe"));
+        assert!(!is_steam_client("steamwebhelper.exe"));
+        assert!(!is_steam_client("SteamService.exe"));
     }
 }
 
@@ -2070,8 +2254,24 @@ mod resolve_tests {
     }
 }
 
+/// Clear error instead of "os error 2" when the configured executable is gone (app uninstalled or moved)
+fn ensure_executable(executable_path: &str) -> Result<(), String> {
+    if executable_path.trim().is_empty() {
+        return Err("No executable path set. Set it in Settings → Software.".to_string());
+    }
+    if !Path::new(executable_path).exists() {
+        return Err(format!(
+            "Executable not found: {}\nThe app may have been uninstalled or moved. Set the path in Settings → Software, \
+             or reset this project's own path in Project Settings → Software Tools.",
+            executable_path
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, String> {
+    ensure_executable(&input.executable_path)?;
     let project_path = PathBuf::from(&input.project_path);
 
     // Determine file extension and software folder based on software
@@ -2138,13 +2338,13 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
         components.get_base_name()
     } else if let Some(ref context) = input.special_context {
         // Special context without scene/shot: PROJECT_CONTEXT or PROJECT_CONTEXT_ASSETNAME
-        let project_base = input.project_name.replace(" ", "").to_uppercase();
+        let project_base = file_naming::sanitize_folder_name(&input.project_name);
         let context_suffix = context.to_uppercase();
         if let Some(ref asset_name) = input.asset_name {
             // Sanitize: remove anything except alphanumeric
             let clean_name: String = asset_name
                 .chars()
-                .filter(|c| c.is_alphanumeric())
+                .filter(|c| c.is_ascii_alphanumeric())
                 .collect::<String>()
                 .to_uppercase();
             // PROJECT_CONTEXT_ASSETNAME (e.g., NEW20_ASSET_CAR)
@@ -2155,7 +2355,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
         }
     } else {
         // Fallback to simple project name if no scene/shot
-        input.project_name.replace(" ", "").to_uppercase()
+        file_naming::sanitize_folder_name(&input.project_name)
     };
 
     let mut highest_version = 0;
@@ -2184,8 +2384,8 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
     if let Ok(entries) = fs::read_dir(&software_path) {
         for entry in entries.flatten() {
             if let Ok(file_name) = entry.file_name().into_string() {
-                // Check if file matches our base pattern and is versioned
-                if file_name.starts_with(&base_name_with_scene_shot)
+                // Base name followed by the version separator: asset CAR must not pick up CARBON's files
+                if file_name.starts_with(&format!("{}_v", base_name_with_scene_shot))
                     && is_own_file(&file_name)
                     && file_naming::FileNameComponents::is_versioned(&file_name) {
                     // Extract version number using file_naming module
@@ -2270,7 +2470,7 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
                 // Add scene and shot codes if available (new format: just scene name and shot number)
                 if let (Some(scene_name), Some(shot_num)) = (&input.scene_name, input.shot_number) {
                     // Pass scene name directly (no SC_ prefix)
-                    let scene_normalized = scene_name.replace(" ", "").to_uppercase();
+                    let scene_normalized = file_naming::sanitize_folder_name(scene_name);
 
                     // Pass shot number as 3-digit string (no SH prefix)
                     let shot_str = format!("{:03}", shot_num);
@@ -2334,46 +2534,19 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
         println!("About to launch {} with file: {:?}", software_lower, file_path);
         println!("File exists before launch: {}", file_path.exists());
 
-        // For Houdini, create project using hython if it doesn't exist
+        // For Houdini, create project using hython if it doesn't exist.
+        // Up to 120 s of waiting, so it runs off the async runtime
         if software_lower == "houdini" && !file_path.exists() {
-            let hython_path = find_hython_path(&input.executable_path)?;
-
-            // Create Python script to save empty hip file
-            let file_path_str = file_path.to_str()
-                .ok_or("Invalid file path encoding")?
-                .replace("\\", "/"); // Forward slashes — unambiguous in Python/Houdini on Windows
-
-            let python_script = format!("import hou; hou.hipFile.save(r'{}')", file_path_str);
-
-            // Execute hython to create the file (CREATE_NO_WINDOW hides console)
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            let output = Command::new(&hython_path)
-                .arg("-c")
-                .arg(&python_script)
-                .creation_flags(CREATE_NO_WINDOW)
-                .output()
-                .map_err(|e| format!("Failed to execute hython: {}", e))?;
-
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(format!("hython failed to create project: {}", stderr));
+            // hython of the Steam build is licensed through Steam — without it, it never finishes
+            if is_steam_build(&input.executable_path) && !steam_running() {
+                return Err("Houdini Indie from Steam needs Steam to create a new version: start Steam and try again".to_string());
             }
-
-            // Wait for file to be visible on disk (Houdini may buffer writes)
-            let timeout = Duration::from_secs(15);
-            let start = std::time::Instant::now();
-            loop {
-                if file_path.exists() {
-                    println!("✓ Houdini file created successfully");
-                    break;
-                }
-                if start.elapsed() > timeout {
-                    println!("⚠ Timeout waiting for Houdini file creation");
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(200));
-            }
+            let hython = find_hython_path(&input.executable_path)?;
+            let exe = input.executable_path.clone();
+            let target = file_path.clone();
+            tauri::async_runtime::spawn_blocking(move || create_hip_file(&hython, &exe, &target))
+                .await
+                .map_err(|e| format!("Houdini file creation task failed: {}", e))??;
         }
 
         // Substance Painter can't open an empty .spp (a project needs a mesh): open Painter without a file —
@@ -2458,55 +2631,18 @@ async fn launch_software(input: LaunchSoftwareInput) -> Result<LaunchResult, Str
 
 #[tauri::command]
 async fn launch_software_without_project(executable_path: String, software: String) -> Result<(), String> {
+    ensure_executable(&executable_path)?;
     println!("[LAUNCH_NO_PROJECT] Launching {} without project context", software);
 
     #[cfg(target_os = "windows")]
     {
         let software_lower = software.to_lowercase();
 
-        // Special handling for Houdini - launch directly with configured executable and env vars
+        // Special handling for Houdini - launch directly with configured executable and env vars (same as project launch)
         if software_lower == "houdini" {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-            // Set up environment variables (same as project launch)
-            let hfs_path = std::path::Path::new(&*executable_path)
-                .parent().and_then(|p| p.parent())
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default();
-
-            let version = std::path::Path::new(&hfs_path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .and_then(|name| {
-                    let parts: Vec<&str> = name.split(|c: char| !c.is_ascii_digit() && c != '.').collect();
-                    for part in parts {
-                        if part.contains('.') {
-                            let ver_parts: Vec<&str> = part.split('.').collect();
-                            if ver_parts.len() >= 2 {
-                                return Some(format!("{}.{}", ver_parts[0], ver_parts[1]));
-                            }
-                        }
-                    }
-                    None
-                });
-
-            let home = std::env::var("USERPROFILE").unwrap_or_default();
-            let home_docs = format!("{}\\Documents", home);
-
-            let mut cmd = Command::new(&executable_path);
-            cmd.creation_flags(CREATE_NO_WINDOW)
-               .env("HOME", &home_docs);
-
-            if !hfs_path.is_empty() {
-                cmd.env("HFS", &hfs_path);
-            }
-            if let Some(ver) = &version {
-                cmd.env("HOUDINI_USER_PREF_DIR", format!("{}\\houdini{}", home_docs, ver));
-            }
-
-            cmd.spawn()
-               .map_err(|e| format!("Failed to launch Houdini: {}", e))?;
+            houdini_command(Path::new(&executable_path), &executable_path)
+                .spawn()
+                .map_err(|e| format!("Failed to launch Houdini: {}", e))?;
 
             println!("[LAUNCH_NO_PROJECT] Successfully launched Houdini: {}", executable_path);
             Ok(())
@@ -2714,6 +2850,7 @@ fn rename_attachment_folder(project_path: String, old_subdir: String, new_subdir
 
 #[tauri::command]
 async fn open_file_with_tracking(file_path: String, executable_path: String) -> Result<OpenFileResult, String> {
+    ensure_executable(&executable_path)?;
     use std::path::Path;
 
     let path = Path::new(&file_path);
@@ -3025,16 +3162,13 @@ async fn get_project_versions(project_path: String) -> Result<Vec<ProjectVersion
 
     // Get project metadata
     let project = read_project_metadata(&project_dir)?;
-    let base_name = project.name.replace(" ", "").to_uppercase();
+    let base_name = file_naming::sanitize_folder_name(&project.name);
     let has_scenes = project.has_scenes.unwrap_or(false);
 
     let mut versions = Vec::new();
 
     // List of software folders to search
-    let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "DaVinci"
-    ];
+    let software_folders = SOFTWARE_FOLDERS;
 
     // Helper function to scan a directory for version files
     fn scan_directory_for_versions(
@@ -3281,10 +3415,7 @@ async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
         let project_dir = PathBuf::from(&project_path);
         let mut deleted_count = 0u32;
 
-        let software_folders = vec![
-            "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-            "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset"
-        ];
+        let software_folders = SOFTWARE_FOLDERS;
 
         for software_folder in software_folders {
             let software_dir = project_dir.join(software_folder);
@@ -3344,43 +3475,11 @@ async fn delete_shot_files(
         return Err("Project metadata not found".to_string());
     };
 
-    // Build shot pattern using file_naming module: PROJECT_SCENE_SHOT_
-    let shot_pattern = file_naming::FileNameComponents::shot_pattern(
-        &project_name,
-        &scene_name,
-        shot_number
-    );
-
-    // List of software folders to search
-    let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset"
-    ];
-
-    // Search in each software folder
-    for software_folder in software_folders {
-        let software_dir = project_dir.join(software_folder);
-        if !software_dir.exists() {
-            continue;
-        }
-
-        if let Ok(entries) = fs::read_dir(&software_dir) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        let file_name = entry.file_name();
-                        let file_name_str = file_name.to_string_lossy();
-                        let file_path = entry.path();
-
-                        // Check if file matches shot pattern (PROJECT_SCENE_SHOT_)
-                        if file_name_str.contains(&shot_pattern) {
-                            if fs::remove_file(&file_path).is_ok() {
-                                deleted_count += 1;
-                            }
-                        }
-                    }
-                }
-            }
+    // Version files of the shot: same search as shot renumbering — versions live in Software/SCENE/,
+    // so a scan of the software folder root alone found nothing
+    for file_path in find_shot_files(&project_dir, &project_name, &scene_name, shot_number)? {
+        if fs::remove_file(&file_path).is_ok() {
+            deleted_count += 1;
         }
     }
 
@@ -3413,14 +3512,7 @@ async fn delete_shot_files(
         None // shots-only mode
     };
 
-    let software_configs = vec![
-        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
-        ("UnrealEngine", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("Cinema4D", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("Substance", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-    ];
+    let software_configs = SOFTWARE_RENDER_FOLDERS;
 
     for (software, folders) in software_configs {
         let software_path = project_dir.join(software);
@@ -3477,10 +3569,7 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
     let scene_pattern = file_naming::FileNameComponents::scene_pattern(&project_name, &scene_name);
 
     // List of software folders to search
-    let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset"
-    ];
+    let software_folders = SCENE_SOFTWARE_FOLDERS;
 
     // Search in each software folder
     for software_folder in software_folders {
@@ -3523,10 +3612,7 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
     let scene_code = file_naming::sanitize_folder_name(&scene_name);
 
     // Delete entire scene folder from each software directory
-    let all_software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Photoshop", "Cinema4D",
-        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset"
-    ];
+    let all_software_folders = SCENE_SOFTWARE_FOLDERS;
 
     for software in all_software_folders {
         let scene_folder = project_dir.join(software).join(&scene_code);
@@ -3946,10 +4032,7 @@ async fn start_watching_project(
     stop_watching_project().await?;
 
     let project_dir = PathBuf::from(&project_path);
-    let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "DaVinci"
-    ];
+    let software_folders = SOFTWARE_FOLDERS;
 
     // Create shutdown signal
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -3993,10 +4076,7 @@ async fn start_watching_project(
                         // Clean up backup files only if version files changed
                         if has_version_changes {
                             let project_dir = PathBuf::from(&project_path_clone);
-                            let software_folders = vec![
-                                "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-                                "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "DaVinci"
-                            ];
+                            let software_folders = SOFTWARE_FOLDERS;
 
                             if auto_delete_backups {
                                 for software_folder in &software_folders {
@@ -4474,10 +4554,7 @@ fn find_shot_files(project_path: &PathBuf, project_name: &str, scene_name: &str,
 
     println!("🔍 Looking for files with pattern: {}", shot_pattern);
 
-    let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset"
-    ];
+    let software_folders = SCENE_SOFTWARE_FOLDERS;
 
     for software_folder in software_folders {
         let software_dir = project_path.join(software_folder);
@@ -4667,26 +4744,22 @@ async fn rename_shot_thumbnails(
     let thumbnails_dir = project_dir.join(".thumbnails");
     let mut found_thumbnails = Vec::new();
 
-    // Get scene name and old shot number from metadata
+    // Scene number and old shot number from metadata (called before the store saves the new number)
     let metadata_path = project_dir.join(".project-metadata.json");
-    let (scene_name, old_shot_number) = if let Ok(content) = fs::read_to_string(&metadata_path) {
+    let (scene_number, old_shot_number) = if let Ok(content) = fs::read_to_string(&metadata_path) {
         if let Ok(project) = serde_json::from_str::<Project>(&content) {
             // Find the shot by ID (not by number!)
             let shot = project.shots
                 .and_then(|shots| shots.into_iter().find(|s| s.id == shot_id))
                 .ok_or("Shot not found")?;
 
-            // Find the scene by ID (if shot has a scene)
-            let scene_name = if let Some(scene_id) = &shot.scene_id {
-                project.scenes
-                    .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id))
-                    .map(|scene| scene.name)
-                    .unwrap_or_default()
-            } else {
-                String::new()
-            };
+            let scene_number = shot.scene_id.as_ref()
+                .and_then(|scene_id| project.scenes
+                    .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id)))
+                .map(|scene| scene.number)
+                .unwrap_or(0);
 
-            (scene_name, shot.number)
+            (scene_number, shot.number)
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -4694,37 +4767,15 @@ async fn rename_shot_thumbnails(
         return Err("Project metadata not found".to_string());
     };
 
-    // Search for thumbnails in all software directories
-    let software_folders = vec!["blender", "houdini", "aftereffects", "nuke", "maya", "cinema4d"];
-
-    for software in software_folders {
-        let software_dir = thumbnails_dir.join(software);
-        if !software_dir.exists() {
-            continue;
-        }
-
-        if let Ok(entries) = fs::read_dir(&software_dir) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        let file_name = entry.file_name();
-                        let file_name_str = file_name.to_string_lossy().to_string();
-
-                        // Pattern: shot{old_number}_*.png or sceneName_shot{old_number}_*.png
-                        let old_pattern = format!("shot{}_", format_shot_number(old_shot_number));
-                        let matches_shot = file_name_str.contains(&old_pattern);
-                        let matches_scene = if !scene_name.is_empty() {
-                            file_name_str.starts_with(&format!("{}_", file_naming::sanitize_folder_name(&scene_name)))
-                        } else {
-                            // Shots-only mode - match all thumbnails with this shot number
-                            true
-                        };
-
-                        if matches_shot && matches_scene {
-                            found_thumbnails.push(entry.path());
-                        }
-                    }
-                }
+    // Shot previews: .thumbnails/scene{N}/shot{number}_<timestamp>.<ext> (written by set_shot_preview).
+    // Left under the old number, a later preview or deletion of the new shot with that number would erase it
+    let old_prefix = format!("shot{}_", format_shot_number(old_shot_number));
+    if let Ok(entries) = fs::read_dir(thumbnails_dir.join(format!("scene{:03}", scene_number))) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_file()).unwrap_or(false)
+                && entry.file_name().to_string_lossy().starts_with(&old_prefix)
+            {
+                found_thumbnails.push(entry.path());
             }
         }
     }
@@ -4741,9 +4792,8 @@ async fn rename_shot_thumbnails(
     // Rename each thumbnail with WAL tracking
     for (index, thumb_path) in found_thumbnails.iter().enumerate() {
         let file_name = thumb_path.file_name().unwrap().to_string_lossy();
-        let old_pattern = format!("shot{}_", format_shot_number(old_shot_number));
         let new_pattern = format!("shot{}_", format_shot_number(new_shot_number));
-        let new_name = file_name.replace(&old_pattern, &new_pattern);
+        let new_name = file_name.replacen(&old_prefix, &new_pattern, 1);
         let new_path = thumb_path.with_file_name(new_name.as_str());
 
         match rename_with_wal(&mut wal, thumb_path, &new_path) {
@@ -4772,13 +4822,11 @@ async fn count_shot_files(
     project_path: String,
     shot_id: String,
 ) -> Result<SceneFileCount, String> {
-    let project_dir = Path::new(&project_path);
-    let mut version_files = 0u32;
-    let mut thumbnails = 0u32;
+    let project_dir = PathBuf::from(&project_path);
 
     // Read metadata to find the shot by ID
     let metadata_path = project_dir.join(".project-metadata.json");
-    let (_project_name, scene_name, shot_number) = if let Ok(content) = fs::read_to_string(&metadata_path) {
+    let (project_name, scene_name, scene_number, shot_number) = if let Ok(content) = fs::read_to_string(&metadata_path) {
         if let Ok(project) = serde_json::from_str::<Project>(&content) {
             // Find the shot by ID
             let shot = project.shots
@@ -4786,16 +4834,11 @@ async fn count_shot_files(
                 .ok_or("Shot not found")?;
 
             // Find the scene by ID (if shot has a scene)
-            let scene_name = if let Some(scene_id) = &shot.scene_id {
-                project.scenes
-                    .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id))
-                    .map(|scene| scene.name)
-                    .unwrap_or_default()
-            } else {
-                String::new()
-            };
+            let scene = shot.scene_id.as_ref().and_then(|scene_id| project.scenes
+                .and_then(|scenes| scenes.into_iter().find(|s| s.id == *scene_id)));
+            let (scene_name, scene_number) = scene.map(|s| (s.name, s.number)).unwrap_or_default();
 
-            (project.name, scene_name, shot.number)
+            (project.name, scene_name, scene_number, shot.number)
         } else {
             return Err("Failed to parse project metadata".to_string());
         }
@@ -4803,73 +4846,16 @@ async fn count_shot_files(
         return Err("Project metadata not found".to_string());
     };
 
-    // Build pattern that includes scene context for accurate counting
-    let shot_pattern = format!("_SH{}_", format_shot_number(shot_number));
-    let scene_pattern = if !scene_name.is_empty() {
-        format!("_{}_", file_naming::sanitize_folder_name(&scene_name))
-    } else {
-        String::new()
-    };
+    // The files rename_shot_files would rename
+    let version_files = find_shot_files(&project_dir, &project_name, &scene_name, shot_number)?.len() as u32;
 
-    // Count version files - only count files that match both scene and shot patterns
-    for entry in WalkDir::new(project_dir)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
-            if let Some(file_name) = entry.file_name().to_str() {
-                // For scenes mode: file must contain both scene and shot patterns
-                // For shots-only mode: file must contain shot pattern and NOT contain any scene pattern
-                let matches_shot = file_name.contains(&shot_pattern);
-                let matches_scene = if !scene_pattern.is_empty() {
-                    file_name.contains(&scene_pattern)
-                } else {
-                    // Shots-only mode: file should NOT contain any _SC pattern
-                    !file_name.contains("_SC")
-                };
-
-                if matches_shot && matches_scene {
-                    version_files += 1;
-                }
-            }
-        }
-    }
-
-    // Count thumbnails
-    let thumbnails_dir = project_dir.join(".thumbnails");
-    let software_folders = vec!["blender", "houdini", "aftereffects", "nuke", "maya", "cinema4d"];
-    let thumbnail_pattern = format!("shot{}_", format_shot_number(shot_number));
-
-    for software in software_folders {
-        let software_dir = thumbnails_dir.join(software);
-        if !software_dir.exists() {
-            continue;
-        }
-
-        if let Ok(entries) = fs::read_dir(&software_dir) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        let file_name = entry.file_name();
-                        let file_name_str = file_name.to_string_lossy().to_string();
-                        // Thumbnails use scene prefix: sceneName_shot001_...
-                        let matches_thumbnail = file_name_str.contains(&thumbnail_pattern);
-                        let matches_scene = if !scene_name.is_empty() {
-                            file_name_str.starts_with(&format!("{}_", file_naming::sanitize_folder_name(&scene_name)))
-                        } else {
-                            // Shots-only mode
-                            true
-                        };
-
-                        if matches_thumbnail && matches_scene {
-                            thumbnails += 1;
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // Shot previews: .thumbnails/scene{N}/shot{number}_*
+    let thumbnail_prefix = format!("shot{}_", format_shot_number(shot_number));
+    let thumbnails = fs::read_dir(project_dir.join(".thumbnails").join(format!("scene{:03}", scene_number)))
+        .map(|entries| entries.flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with(&thumbnail_prefix))
+            .count() as u32)
+        .unwrap_or(0);
 
     Ok(SceneFileCount {
         version_files,
@@ -5094,7 +5080,6 @@ async fn count_scene_files(
 ) -> Result<SceneFileCount, String> {
     let project_dir = Path::new(&project_path);
     let mut version_files = 0u32;
-    let mut thumbnails = 0u32;
 
     // Get project name from metadata
     let metadata_path = project_dir.join(".project-metadata.json");
@@ -5109,10 +5094,7 @@ async fn count_scene_files(
     };
 
     // Count version files in software folders
-    let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "Nuke"
-    ];
+    let software_folders = SCENE_SOFTWARE_FOLDERS;
 
     for software_folder in software_folders {
         let software_path = project_dir.join(software_folder);
@@ -5135,27 +5117,11 @@ async fn count_scene_files(
         }
     }
 
-    // Count thumbnails
-    let thumbnails_dir = project_dir.join(".thumbnails");
-    if thumbnails_dir.exists() {
-        let scene_pattern = format!("_{}_", scene_name);
-
-        for software in vec!["blender", "houdini", "aftereffects", "nuke", "maya", "cinema4d"] {
-            let software_dir = thumbnails_dir.join(software);
-            if let Ok(entries) = fs::read_dir(&software_dir) {
-                for entry in entries.flatten() {
-                    let file_name = entry.file_name().to_string_lossy().to_string();
-                    if file_name.contains(&scene_pattern) {
-                        thumbnails += 1;
-                    }
-                }
-            }
-        }
-    }
-
+    // Scene and shot previews are keyed by scene number (.thumbnails/scene{N}), not by name:
+    // a rename never renames them, so there are no thumbnails to confirm
     Ok(SceneFileCount {
         version_files,
-        thumbnails,
+        thumbnails: 0,
     })
 }
 
@@ -5170,10 +5136,7 @@ async fn rename_scene_files(
     let mut files_to_rename = Vec::new();
 
     // Search for all files with old scene name
-    let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "Nuke"
-    ];
+    let software_folders = SCENE_SOFTWARE_FOLDERS;
 
     for software_folder in software_folders {
         let software_path = project_dir.join(software_folder);
@@ -5236,72 +5199,51 @@ async fn rename_scene_files(
     Ok(renamed_count)
 }
 
+/// Move a scene's previews (.thumbnails/scene{N}: the scene preview and its shot previews) when the scene
+/// number changes. The store rewrites the preview paths in the same metadata update. Returns files moved
 #[tauri::command]
 async fn rename_scene_thumbnails(
     app_handle: tauri::AppHandle,
     project_path: String,
-    old_scene_name: String,
-    new_scene_name: String,
+    old_scene_number: u32,
+    new_scene_number: u32,
 ) -> Result<u32, String> {
     let thumbnails_dir = Path::new(&project_path).join(".thumbnails");
-    let mut found_thumbnails = Vec::new();
+    let old_dir = thumbnails_dir.join(format!("scene{:03}", old_scene_number));
+    let new_dir = thumbnails_dir.join(format!("scene{:03}", new_scene_number));
 
-    if !thumbnails_dir.exists() {
-        return Ok(0); // No thumbnails directory
+    if old_scene_number == new_scene_number || !old_dir.exists() {
+        return Ok(0);
     }
 
-    // Search for thumbnails containing old scene name
-    let old_pattern = format!("_{}_", old_scene_name);
-    let software_folders = vec!["blender", "houdini", "aftereffects", "nuke", "maya", "cinema4d"];
+    let files: Vec<PathBuf> = fs::read_dir(&old_dir)
+        .map_err(|e| format!("Failed to read scene previews: {}", e))?
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .map(|e| e.path())
+        .collect();
 
-    for software in software_folders {
-        let software_dir = thumbnails_dir.join(software);
-        if let Ok(entries) = fs::read_dir(&software_dir) {
-            for entry in entries.flatten() {
-                let file_name = entry.file_name().to_string_lossy().to_string();
-                if file_name.contains(&old_pattern) {
-                    found_thumbnails.push(entry.path());
-                }
-            }
-        }
+    // Usual case: the folder for the new number doesn't exist — move the folder in one step
+    if !new_dir.exists() {
+        fs::rename(&old_dir, &new_dir).map_err(|e| format!("Failed to move scene previews: {}", e))?;
+        return Ok(files.len() as u32);
     }
 
-    if found_thumbnails.is_empty() {
-        return Ok(0); // No thumbnails to rename
-    }
-
-    // Create WAL for transaction safety
+    // A leftover folder for that number exists: move the files into it one by one, with rollback
     let mut wal = create_wal(&project_path, "rename_scene_thumbnails")?;
-    let total = found_thumbnails.len();
-    let mut renamed_count = 0u32;
-
-    // Rename each thumbnail with WAL tracking
-    for (index, thumb_path) in found_thumbnails.iter().enumerate() {
-        let file_name = thumb_path.file_name().unwrap().to_string_lossy();
-        let old_pattern = format!("_{}_", old_scene_name);
-        let new_pattern = format!("_{}_", new_scene_name);
-        let new_name = file_name.replace(&old_pattern, &new_pattern);
-        let new_path = thumb_path.with_file_name(new_name.as_str());
-
-        match rename_with_wal(&mut wal, thumb_path, &new_path) {
-            Ok(_) => {
-                renamed_count += 1;
-                println!("✓ Renamed scene thumbnail: {} -> {}", file_name, new_name);
-                emit_progress(&app_handle, index + 1, total);
-            }
-            Err(e) => {
-                println!("❌ Error renaming thumbnail, rolling back...");
-                rollback_from_wal(&wal)?;
-                delete_wal(&wal)?;
-                return Err(e);
-            }
+    let total = files.len();
+    for (index, file_path) in files.iter().enumerate() {
+        let new_path = new_dir.join(file_path.file_name().unwrap());
+        if let Err(e) = rename_with_wal(&mut wal, file_path, &new_path) {
+            rollback_from_wal(&wal)?;
+            delete_wal(&wal)?;
+            return Err(e);
         }
+        emit_progress(&app_handle, index + 1, total);
     }
-
     delete_wal(&wal)?;
-    println!("✅ Successfully renamed {} scene thumbnails", renamed_count);
-
-    Ok(renamed_count)
+    let _ = fs::remove_dir(&old_dir);
+    Ok(total as u32)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -5588,17 +5530,17 @@ fn scan_output_dir_recursive(
                         // If both scene and shot filters are present, check they appear in correct order
                         if scene_filter.is_some() && shot_filter.is_some() {
                             if let (Some(ref scene), Some(ref shot)) = (scene_filter, shot_filter) {
-                                let scene_normalized = scene.to_uppercase().replace(" ", "");
-                                let shot_normalized = shot.to_uppercase().replace(" ", "");
+                                let scene_normalized = file_naming::sanitize_folder_name(scene);
+                                let shot_normalized = file_naming::sanitize_folder_name(shot);
 
                                 // Find indices of scene and shot folders
                                 let scene_index = path_components.iter().position(|&component| {
-                                    let comp_normalized = component.to_uppercase().replace(" ", "");
+                                    let comp_normalized = file_naming::sanitize_folder_name(component);
                                     comp_normalized == scene_normalized
                                 });
 
                                 let shot_index = path_components.iter().position(|&component| {
-                                    let comp_normalized = component.to_uppercase().replace(" ", "");
+                                    let comp_normalized = file_naming::sanitize_folder_name(component);
                                     // Match exact folder name (e.g., "001")
                                     comp_normalized == shot_normalized
                                 });
@@ -5614,10 +5556,10 @@ fn scan_output_dir_recursive(
 
                             // Check scene filter if present
                             if let Some(ref scene) = scene_filter {
-                                let scene_normalized = scene.to_uppercase().replace(" ", "");
+                                let scene_normalized = file_naming::sanitize_folder_name(scene);
 
                                 let has_scene_folder = path_components.iter().any(|&component| {
-                                    let comp_normalized = component.to_uppercase().replace(" ", "");
+                                    let comp_normalized = file_naming::sanitize_folder_name(component);
                                     comp_normalized == scene_normalized
                                 });
 
@@ -5629,10 +5571,10 @@ fn scan_output_dir_recursive(
                             // Check shot filter if present
                             if matches && shot_filter.is_some() {
                                 if let Some(ref shot) = shot_filter {
-                                    let shot_normalized = shot.to_uppercase().replace(" ", "");
+                                    let shot_normalized = file_naming::sanitize_folder_name(shot);
 
                                     let has_shot_folder = path_components.iter().any(|&component| {
-                                        let comp_normalized = component.to_uppercase().replace(" ", "");
+                                        let comp_normalized = file_naming::sanitize_folder_name(component);
                                         // Match exact folder name (e.g., "001")
                                         comp_normalized == shot_normalized
                                     });
@@ -5690,10 +5632,7 @@ async fn get_project_outputs(
     let has_scenes = project.has_scenes.unwrap_or(false);
 
     // Define software folders to scan
-    let software_folders = vec![
-        "Blender", "Houdini", "Maya", "AfterEffects", "Cinema4D",
-        "Substance", "UnrealEngine", "Unity", "ZBrush", "Marmoset", "DaVinci", "Photoshop"
-    ];
+    let software_folders = SOFTWARE_FOLDERS;
 
     for software in &software_folders {
         let software_dir = project_dir.join(software);
@@ -5822,6 +5761,19 @@ struct CreateShotFoldersInput {
     shot_code: String,  // e.g., "001", "010" (no SH prefix, just 3-digit number)
 }
 
+/// Mirrors validateSceneName in src/utils/fileNaming.ts (defense for any other caller): an empty name would
+/// put scene folders straight into the software folder root, and folders starting with "_" are skipped by the
+/// version/output scanners ("_PROJECT" would also land in UnrealEngine/_Project on Windows)
+fn validate_scene_folder_name(folder_name: &str) -> Result<(), String> {
+    if folder_name.is_empty() {
+        return Err("Scene name needs at least one Latin letter or digit".to_string());
+    }
+    if folder_name.starts_with('_') {
+        return Err("Scene name can't start with \"_\"".to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn create_scene_folders(input: CreateSceneFoldersInput) -> Result<(), String> {
     let project_path = PathBuf::from(&input.project_path);
@@ -5830,6 +5782,7 @@ fn create_scene_folders(input: CreateSceneFoldersInput) -> Result<(), String> {
     let project = read_project_metadata(&project_path)?;
 
     let scene_folder_name = file_naming::sanitize_folder_name(&input.scene_code);
+    validate_scene_folder_name(&scene_folder_name)?;
 
     // Create scene folder inside each software folder with full hierarchy
     for software in &project.software {
@@ -5960,6 +5913,7 @@ fn rename_scene_folders(
 
     let old_name = file_naming::sanitize_folder_name(&old_folder_name);
     let new_name = file_naming::sanitize_folder_name(&new_folder_name);
+    validate_scene_folder_name(&new_name)?;
 
     // New hierarchy: scene folders are at Software/SCENE_CODE/ level
     for software in &project.software {
@@ -6026,14 +5980,7 @@ fn rename_shot_folders(
     let mut renamed_count = 0;
 
     // List of software and their render/output folders
-    let software_configs = vec![
-        ("Blender", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("Houdini", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("AfterEffects", vec!["Output/Preview", "Output/Final"]),
-        ("UnrealEngine", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("Cinema4D", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-        ("Substance", vec!["Render/Preview", "Render/Final", "Render/Passes"]),
-    ];
+    let software_configs = SOFTWARE_RENDER_FOLDERS;
 
     for (software, folders) in software_configs {
         let software_path = project_path.join(software);
@@ -6300,13 +6247,20 @@ async fn rename_category_folder(
     Ok(())
 }
 
+#[derive(Serialize)]
+struct ProjectScan {
+    projects: Vec<Project>,
+    /// Project folders whose .project-metadata.json exists but couldn't be read or parsed
+    unreadable: Vec<String>,
+}
+
 #[tauri::command]
-async fn scan_projects_in_folder(folder_path: String, category_name: Option<String>) -> Result<Vec<Project>, String> {
+async fn scan_projects_in_folder(folder_path: String, category_name: Option<String>) -> Result<ProjectScan, String> {
     let path = PathBuf::from(&folder_path);
-    let mut projects = Vec::new();
+    let mut scan = ProjectScan { projects: Vec::new(), unreadable: Vec::new() };
 
     if !path.exists() {
-        return Ok(projects);
+        return Ok(scan);
     }
 
     if let Ok(entries) = fs::read_dir(&path) {
@@ -6314,35 +6268,43 @@ async fn scan_projects_in_folder(folder_path: String, category_name: Option<Stri
             if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
                 let metadata_path = entry.path().join(".project-metadata.json");
                 if metadata_path.exists() {
-                    if let Ok(content) = fs::read_to_string(&metadata_path) {
-                        if let Ok(mut project) = serde_json::from_str::<Project>(&content) {
-                            let actual_path = entry.path().to_string_lossy().to_string();
+                    let actual_path = entry.path().to_string_lossy().to_string();
+                    let parsed = fs::read_to_string(&metadata_path)
+                        .map_err(|e| e.to_string())
+                        .and_then(|content| serde_json::from_str::<Project>(&content).map_err(|e| e.to_string()));
+                    let mut project = match parsed {
+                        Ok(project) => project,
+                        Err(e) => {
+                            // Reported to the UI instead of silently hiding the project
+                            println!("[Scan] Unreadable project metadata in {}: {}", actual_path, e);
+                            scan.unreadable.push(actual_path);
+                            continue;
+                        }
+                    };
 
-                            // Check if path changed (project was moved manually)
-                            let path_changed = project.path != actual_path;
+                    // Check if path changed (project was moved manually)
+                    let path_changed = project.path != actual_path;
 
-                            // Update path from actual folder location
-                            project.path = actual_path;
+                    // Update path from actual folder location
+                    project.path = actual_path;
 
-                            // Set category from folder name, not from metadata
-                            project.category = category_name.clone();
+                    // Set category from folder name, not from metadata
+                    project.category = category_name.clone();
 
-                            // Save updated metadata if path changed
-                            if path_changed {
-                                if let Ok(json) = serde_json::to_string_pretty(&project) {
-                                    let _ = fs::write(&metadata_path, json);
-                                }
-                            }
-
-                            projects.push(project);
+                    // Save updated metadata if path changed
+                    if path_changed {
+                        if let Ok(json) = serde_json::to_string_pretty(&project) {
+                            let _ = fs::write(&metadata_path, json);
                         }
                     }
+
+                    scan.projects.push(project);
                 }
             }
         }
     }
 
-    Ok(projects)
+    Ok(scan)
 }
 
 #[tauri::command]
@@ -6532,6 +6494,116 @@ fn get_archived_backups(app_handle: tauri::AppHandle) -> Result<Vec<serde_json::
     }
 
     Ok(backups)
+}
+
+/// Move archived-project backups of a renamed or removed category: `category` and the category part of `path`.
+/// Without this, backups of the old category disappear from Finance and would reappear in a new
+/// category with the old name. Returns how many backups were changed
+fn move_backups_category_in(backup_dir: &Path, projects_dir: &str, old_category: &str, new_category: &str) -> Result<u32, String> {
+    if !backup_dir.exists() {
+        return Ok(0);
+    }
+    let old_prefix = format!("{}\\{}\\", projects_dir.trim_end_matches(['\\', '/']), old_category).to_lowercase();
+    let new_prefix = format!("{}\\{}\\", projects_dir.trim_end_matches(['\\', '/']), new_category);
+
+    let mut moved = 0u32;
+    let entries = fs::read_dir(backup_dir).map_err(|e| format!("Failed to read backup directory: {}", e))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(content) = fs::read_to_string(&path) else { continue };
+        let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&content) else { continue };
+        if value.get("category").and_then(|c| c.as_str()) != Some(old_category) {
+            continue;
+        }
+        value["category"] = serde_json::Value::String(new_category.to_string());
+        if let Some(project_path) = value.get("path").and_then(|p| p.as_str()) {
+            // Windows paths: compare the prefix case-insensitively, keep the rest as is
+            // Split by characters of the original string: lowercasing can change byte lengths
+            let split = project_path.char_indices().nth(old_prefix.chars().count()).map(|(i, _)| i);
+            if let Some(split) = split {
+                if project_path[..split].to_lowercase() == old_prefix {
+                    let rest = &project_path[split..];
+                    value["path"] = serde_json::Value::String(format!("{}{}", new_prefix, rest));
+                }
+            }
+        }
+        let json = serde_json::to_string(&value).map_err(|e| format!("Failed to serialize backup: {}", e))?;
+        fs::write(&path, json).map_err(|e| format!("Failed to write backup: {}", e))?;
+        moved += 1;
+    }
+    Ok(moved)
+}
+
+#[cfg(test)]
+mod software_folder_tests {
+    use super::*;
+
+    #[test]
+    fn folder_lists_are_consistent() {
+        let all: std::collections::HashSet<_> = SOFTWARE_FOLDERS.iter().collect();
+        assert_eq!(all.len(), SOFTWARE_FOLDERS.len(), "duplicate in SOFTWARE_FOLDERS");
+        // Scene folders = every software folder except DaVinci's shared media folder
+        assert!(!SCENE_SOFTWARE_FOLDERS.contains(&"DaVinci"));
+        assert_eq!(SCENE_SOFTWARE_FOLDERS.len() + 1, SOFTWARE_FOLDERS.len());
+        assert!(SCENE_SOFTWARE_FOLDERS.iter().all(|f| SOFTWARE_FOLDERS.contains(f)));
+        assert!(SOFTWARE_RENDER_FOLDERS.iter().all(|(f, _)| SOFTWARE_FOLDERS.contains(f)));
+    }
+
+    #[test]
+    fn scene_folder_names_are_validated() {
+        assert!(validate_scene_folder_name("SCENE001").is_ok());
+        assert!(validate_scene_folder_name("").is_err());
+        assert!(validate_scene_folder_name("_PROJECT").is_err());
+    }
+}
+
+#[cfg(test)]
+mod backup_tests {
+    use super::*;
+
+    #[test]
+    fn moves_category_and_path_of_matching_backups_only() {
+        let dir = std::env::temp_dir().join(format!("rayhub_backups_{}", uuid::Uuid::new_v4().simple()));
+        fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, category: &str, path: &str| {
+            let json = serde_json::json!({ "id": name, "category": category, "path": path });
+            fs::write(dir.join(format!("{}.json", name)), json.to_string()).unwrap();
+        };
+        write("a", "Clients", r"E:\Projects\clients\Promo");
+        write("b", "Personal", r"E:\Projects\Personal\Logo");
+        write("c", "Clients", r"D:\Elsewhere\Old");
+
+        assert_eq!(move_backups_category_in(&dir, r"E:\Projects\", "Clients", "Studio").unwrap(), 2);
+
+        let read = |name: &str| -> serde_json::Value {
+            serde_json::from_str(&fs::read_to_string(dir.join(format!("{}.json", name))).unwrap()).unwrap()
+        };
+        assert_eq!(read("a")["category"], "Studio");
+        assert_eq!(read("a")["path"], r"E:\Projects\Studio\Promo"); // case-insensitive prefix match
+        assert_eq!(read("b")["category"], "Personal");
+        assert_eq!(read("c")["category"], "Studio");
+        assert_eq!(read("c")["path"], r"D:\Elsewhere\Old"); // outside the projects dir: path kept
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+#[tauri::command]
+fn move_backups_category(
+    projects_dir: String,
+    old_category: String,
+    new_category: String,
+    app_handle: tauri::AppHandle,
+) -> Result<u32, String> {
+    let backup_dir = app_handle
+        .path_resolver()
+        .app_data_dir()
+        .ok_or("Failed to get app data dir")?
+        .join("project-backups");
+    move_backups_category_in(&backup_dir, &projects_dir, &old_category, &new_category)
 }
 
 #[tauri::command]
@@ -6772,6 +6844,7 @@ fn main() {
             backup_project_json,
             get_archived_backups,
             delete_project_backup,
+            move_backups_category,
             updater::check_for_update,
             updater::install_portable_update,
             get_exe_icon,
@@ -6781,4 +6854,33 @@ fn main() {
 
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+#[cfg(test)]
+mod perf_tests {
+    use super::*;
+    use std::time::Instant;
+
+    /// Manual timing on real projects: `cargo test perf_real_projects -- --ignored --nocapture`
+    /// (set NULLSPACE_PROJECTS_DIR, default E:\Projects\nullSpace)
+    #[test]
+    #[ignore]
+    fn perf_real_projects() {
+        let root = std::env::var("NULLSPACE_PROJECTS_DIR").unwrap_or_else(|_| r"E:\Projects\nullSpace".to_string());
+        for category in fs::read_dir(&root).unwrap().flatten().filter(|e| e.path().is_dir()) {
+            let cat_path = category.path().to_string_lossy().to_string();
+            let t = Instant::now();
+            let scan = tauri::async_runtime::block_on(scan_projects_in_folder(cat_path.clone(), None)).unwrap();
+            println!("[PERF] scan {}: {} projects, {} unreadable, {} ms",
+                cat_path, scan.projects.len(), scan.unreadable.len(), t.elapsed().as_millis());
+            for p in &scan.projects {
+                let t = Instant::now();
+                let versions = tauri::async_runtime::block_on(get_project_versions(p.path.clone())).map(|v| v.len());
+                let tv = t.elapsed().as_millis();
+                let t = Instant::now();
+                let outputs = tauri::async_runtime::block_on(get_project_outputs(p.path.clone(), None, None, None)).map(|o| o.len());
+                let to = t.elapsed().as_millis();
+                println!("[PERF]   {:<24} versions {:?} {} ms | outputs {:?} {} ms", p.name, versions, tv, outputs, to);
+            }
+        }
+    }
 }

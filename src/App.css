@@ -42,13 +42,6 @@
   --status-paused: #f59e0b;
   --status-completed: #3b82f6;
   --status-archived: #71717a;
-
-  /* Software colors (for gradients) */
-  --sw-blender: #f97316;
-  --sw-ae: #9333ea;
-  --sw-houdini: #ff4713;
-  --sw-maya: #0faded;
-  --sw-cinema4d: #5c6be0;
 }
 
 /* Animations disabled state */
@@ -389,6 +382,123 @@ body.fullscreen #root {
 @keyframes launcherItemEnter {
   from { opacity: 0; transform: translateY(14px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+/* Software launch card (LaunchStatus.tsx).
+   Base styles are each element's final state and animations run "from" it, so with animations off
+   (body.animations-disabled, reduced motion) every state still reads correctly. */
+.launch-rim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.launch-rim rect {
+  fill: none;
+  stroke-width: 3; /* centered on the edge: the outer half is clipped by the card */
+}
+.launch-rim-trail rect {
+  stroke-linecap: round;
+  animation: launch-comet 1.8s linear infinite;
+}
+.launch-rim-still { opacity: 0; }
+.launch-rim-flash {
+  opacity: 0;
+  animation: launch-rim-flash 0.6s ease-out backwards;
+}
+.launch-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  animation: launch-glow 0.7s ease-out backwards;
+}
+.launch-arc {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 25 75;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: launch-arc-spin 0.8s linear infinite;
+}
+.launch-ring {
+  fill: none;
+  stroke: #22c55e;
+  stroke-width: 2;
+  stroke-dasharray: 100 0;
+  animation: launch-arc-close 0.25s ease-out backwards;
+}
+.launch-check {
+  fill: none;
+  stroke: #22c55e;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+  animation: launch-check-draw 0.3s ease-out 0.2s backwards;
+}
+.launch-pop {
+  transform-origin: center;
+  animation: launch-pop 0.3s ease-out 0.42s;
+}
+.launch-dot { animation: launch-dot 1s ease-in-out infinite; }
+.launch-in { animation: launch-in 0.2s ease-out backwards; }
+.launch-out {
+  opacity: 0;
+  transform: translateY(-6px);
+  animation: launch-out 0.25s ease-in backwards;
+}
+.launch-fade {
+  opacity: 0;
+  animation: launch-fade 0.25s ease-in backwards;
+}
+
+/* Animations off: an even border instead of a frozen piece of the trail */
+body.animations-disabled .launch-rim-trail { display: none; }
+body.animations-disabled .launch-rim-still { opacity: 0.5; }
+@media (prefers-reduced-motion: reduce) {
+  .launch-rim-trail { display: none; }
+  .launch-rim-still { opacity: 0.5; }
+  .launch-arc, .launch-dot { animation: none; }
+}
+
+@keyframes launch-comet {
+  from { stroke-dashoffset: var(--o0); }
+  to   { stroke-dashoffset: var(--o1); }
+}
+@keyframes launch-rim-flash {
+  25% { opacity: 0.9; }
+}
+@keyframes launch-glow {
+  30% { opacity: 1; }
+}
+@keyframes launch-arc-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes launch-arc-close {
+  from { stroke-dasharray: 25 75; stroke: var(--sw); }
+}
+@keyframes launch-check-draw {
+  from { stroke-dashoffset: 100; }
+}
+@keyframes launch-pop {
+  50% { transform: scale(1.12); }
+}
+@keyframes launch-dot {
+  0%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+@keyframes launch-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@keyframes launch-out {
+  from { opacity: 1; transform: translateY(0); }
+}
+@keyframes launch-fade {
+  from { opacity: 1; }
 }
 
 .status-glow-green {

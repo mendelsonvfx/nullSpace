@@ -91,7 +91,7 @@ export class WorkSessionService {
 
     // 4. Clear WorkSession from project (fire-and-forget)
     const { useProjectStore } = await import('../../../store/projectStore');
-    const project = useProjectStore.getState().projects.find(p => p.id === projectId);
+    const project = useProjectStore.getState().getProjectById(projectId);
 
     if (project) {
       const updatedProject = {
@@ -195,7 +195,7 @@ export class WorkSessionService {
 
       // Update on-disk TimeEntries for persistence
       const { useProjectStore } = await import('../../../store/projectStore');
-      const currentProject = useProjectStore.getState().projects.find(p => p.id === session.projectId);
+      const currentProject = useProjectStore.getState().getProjectById(session.projectId);
       if (currentProject) {
         const updatedTimeEntries = (currentProject.timeEntries || []).map((e: TimeEntry) =>
           aliveSessions.includes(e.id) ? { ...e, workSessionId: updatedSession.id } : e

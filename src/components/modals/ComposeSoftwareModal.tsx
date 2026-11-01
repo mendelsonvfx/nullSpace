@@ -2,18 +2,10 @@ import { useState, useEffect } from 'react';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { COMPOSE_SOFTWARE_OPTIONS } from '../../utils';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { normalizeSoftwareName } from '../../features/time-tracking/utils/softwareUtils';
 
-// Only needed when the key can't be derived from the display name (e.g. 'Cinema 4D' -> 'cinema4d')
-const nameToKey: Record<string, string> = {
-  'After Effects': 'after-effects',
-  'Blender': 'blender',
-  'Houdini': 'houdini',
-  'Photoshop': 'photoshop',
-  'DaVinci Resolve': 'davinci',
-};
-
-export const composeKeyOf = (name: string) =>
-  nameToKey[name] ?? name.toLowerCase().replace(/\s+/g, '-');
+/** Software key of a compose software display name ('DaVinci Resolve' → 'davinci') */
+export const composeKeyOf = (name: string): string => normalizeSoftwareName(name);
 
 export interface ComposeSoftwareSelection {
   key: string;

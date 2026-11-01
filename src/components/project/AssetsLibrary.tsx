@@ -75,21 +75,6 @@ function getAssetColor(name: string) {
   return ASSET_COLORS[h % ASSET_COLORS.length];
 }
 
-const NAME_TO_SW_KEY: Record<string, string> = {
-  'Blender': 'blender',
-  'Houdini': 'houdini',
-  'Maya': 'maya',
-  'After Effects': 'after-effects',
-  'Cinema 4D': 'cinema4d',
-  'Substance Painter': 'substance',
-  'Substance Designer': 'substance',
-  'Unreal Engine': 'unreal',
-  'Unity': 'unity',
-  'ZBrush': 'zbrush',
-  'Marmoset': 'marmoset',
-  'Photoshop': 'photoshop',
-};
-
 const ALL_SOFTWARE: { name: SoftwareName; displayName: string; executablePath: string }[] = [
   { name: 'blender',       displayName: 'Blender',       executablePath: '' },
   { name: 'houdini',       displayName: 'Houdini',       executablePath: '' },
@@ -542,7 +527,7 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
 
   const handleCreateAsset = async (assetName: string, software?: any) => {
     if (!software) return;
-    const softwareKey = NAME_TO_SW_KEY[software.name] || software.name.toLowerCase().replace(/\s+/g, '-');
+    const softwareKey = normalizeSoftwareName(software.name);
 
     let executablePath: string = software.executablePath || '';
     if (!executablePath) {
@@ -618,7 +603,7 @@ export function AssetsLibrary({ project, showNotification, onStatsChange }: Asse
         executablePath,
       });
 
-      const swKey = (NAME_TO_SW_KEY[softwareName] || 'blender') as SoftwareName;
+      const swKey = normalizeSoftwareName(softwareName);
       await useTimeTrackingStore.getState().startSession({
         projectId: project.id,
         projectPath: project.path,

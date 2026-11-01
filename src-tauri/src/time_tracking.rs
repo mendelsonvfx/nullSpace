@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use parking_lot::Mutex;
 use chrono::{DateTime, Utc};
@@ -31,6 +31,10 @@ pub struct ActiveSession {
     pub last_cpu_usage: f32,
     pub last_input_time: DateTime<Utc>,    // Last time user interacted with this window
     pub window_disappeared_at: Option<DateTime<Utc>>,  // When window disappeared (for adaptive grace period)
+    #[serde(default)]
+    pub pid_lost_at: Option<DateTime<Utc>>,  // Process gone while starting up — waiting for its relaunch (Houdini via Steam)
+    #[serde(default)]
+    pub window_seen: bool,  // The followed process has shown its main window (a handover to Steam happens before that)
 }
 
 /// Single focus check entry
@@ -254,6 +258,8 @@ pub fn start_time_tracking(
         last_cpu_usage: 0.0,
         last_input_time: now,
         window_disappeared_at: None,  // Initialize - window is visible at start
+        pid_lost_at: None,
+        window_seen: false,
     };
 
     let mut sessions = ACTIVE_SESSIONS.lock();
@@ -384,12 +390,54 @@ pub fn check_active_windows() {
         println!("[TimeTracking] Checking {} active sessions", sessions.len());
     }
 
+    // PIDs followed by sessions — a relaunched process must not be taken from another session
+    let mut tracked_pids: HashSet<u32> = sessions.values().map(|s| s.pid).collect();
+
     // First pass: update activity status for all sessions
     for (entry_id, session) in sessions.iter_mut() {
         println!("[TimeTracking] Checking session {} (PID: {}, software: {})", entry_id, session.pid, session.software);
 
+        // A session must never follow nullSpace itself
+        if pid_is_nullspace(session.pid) {
+            if session.process_alive {
+                println!("[TimeTracking] PID {} is nullSpace, not {} — marking session {} as dead", session.pid, session.software, entry_id);
+                session.process_alive = false;
+                session.last_cpu_check = now;
+                session.pid_lost_at = None;
+                session.window_disappeared_at = None;
+            }
+            continue;
+        }
+
         // Check if process is alive
         if !is_process_alive(session.pid) {
+            // Houdini from Steam with Steam closed hands over to a process Steam starts after its launch
+            // dialogs — keep the session alive while it comes up, then follow it. Only before the process
+            // showed its window: a Houdini the user closes is gone for good
+            let wait = relaunch_wait_seconds(&session.software);
+            let age = now.signed_duration_since(session.start_time).num_seconds();
+            let starting = age < startup_grace_seconds(&session.software) && !session.window_seen;
+            if wait > 0 && session.process_alive && (session.pid_lost_at.is_some() || starting) {
+                let lost_at = *session.pid_lost_at.get_or_insert(now);
+                let anchor = launch_anchor_secs(session.start_time);
+                let now_secs = now.timestamp().max(0) as u64;
+                if let Some(new_pid) = pick_replacement(&houdini_candidates(anchor), anchor, now_secs, true, &tracked_pids) {
+                    println!("[TimeTracking] 🔄 PID {} relaunched as {}, session {} follows it", session.pid, new_pid, entry_id);
+                    session.pid = new_pid;
+                    session.pid_lost_at = None;
+                    session.window_disappeared_at = None;
+                    session.window_seen = false;
+                    tracked_pids.insert(new_pid);
+                    continue;
+                }
+                if now.signed_duration_since(lost_at).num_seconds() < wait {
+                    println!("[TimeTracking] PID {} gone, waiting for its relaunch ({}/{}s)",
+                        session.pid, now.signed_duration_since(lost_at).num_seconds(), wait);
+                    continue;
+                }
+                println!("[TimeTracking] No relaunch of PID {} after {}s", session.pid, wait);
+            }
+
             if session.process_alive {
                 println!("[TimeTracking] Process {} died, marking session {} as dead", session.pid, entry_id);
                 session.process_alive = false;
@@ -398,6 +446,7 @@ pub fn check_active_windows() {
             }
             continue;
         }
+        session.pid_lost_at = None;
 
         // Check if process has any visible windows (not in background)
         // Adaptive grace period:
@@ -436,6 +485,8 @@ pub fn check_active_windows() {
             }
             continue;
         }
+
+        session.window_seen = true;
 
         // Window is visible - reset disappearance tracking
         if session.window_disappeared_at.is_some() {
@@ -586,8 +637,127 @@ fn startup_grace_seconds(software: &str) -> i64 {
         "substance" | "substance painter" => 60,
         // Splash while the project database and plugins load
         "davinci" | "davinci resolve" => 90,
+        // Splash and license check; through Steam (Steam closed) also Steam's launch dialogs and cloud sync
+        "houdini" => 180,
         _ => 30,
     }
+}
+
+/// How long a starting session waits for its process to come back as another one.
+/// Houdini from Steam with Steam closed exits right away and is started again by Steam 3–60 s later
+/// (Steam starts, shows its launch dialogs, syncs the cloud).
+fn relaunch_wait_seconds(software: &str) -> i64 {
+    if software.eq_ignore_ascii_case("houdini") { 120 } else { 0 }
+}
+
+/// Houdini's own tools match the "houdin" pattern but aren't the app; both sit in Houdini's bin
+const HOUDINI_TOOL_EXES: [&str; 2] = ["houdini_launcher", "houdini_installer"];
+
+pub fn is_houdini_tool_exe(process_name: &str) -> bool {
+    let name = process_name.to_lowercase();
+    HOUDINI_TOOL_EXES.iter().any(|tool| name.contains(tool))
+}
+
+/// Executables of the Houdini app itself (all editions, Steam build included) — matched by full name,
+/// so nothing else that merely has "houdini" in its name is mistaken for Houdini
+const HOUDINI_APP_EXES: [&str; 7] = ["houdini", "houdinifx", "houdinicore", "hindie", "hindie.steam", "happrentice", "hescape"];
+
+fn is_houdini_app_exe(process_name: &str) -> bool {
+    let name = process_name.to_lowercase();
+    let stem = name.strip_suffix(".exe").unwrap_or(&name);
+    HOUDINI_APP_EXES.contains(&stem)
+}
+
+/// nullSpace itself, or another running nullSpace (installed next to a test build) — never the tracked software
+pub fn is_nullspace_process(pid: u32, process_name: &str) -> bool {
+    pid == std::process::id() || process_name.to_lowercase().contains("nullspace")
+}
+
+/// The tracked PID belongs to nullSpace (uses the process list from the last refresh)
+fn pid_is_nullspace(pid: u32) -> bool {
+    if pid == std::process::id() {
+        return true;
+    }
+    let system = SYSTEM.lock();
+    system.process(Pid::from_u32(pid)).map_or(false, |p| is_nullspace_process(pid, p.name()))
+}
+
+/// Earliest start time (seconds since epoch) of a process that belongs to a launch: Houdini's launch
+/// returns ~1.5 s after the process starts, plus IPC until the session is registered
+const LAUNCH_ANCHOR_SLACK_SECS: i64 = 10;
+
+fn launch_anchor_secs(session_start: DateTime<Utc>) -> u64 {
+    (session_start.timestamp() - LAUNCH_ANCHOR_SLACK_SECS).max(0) as u64
+}
+
+/// A running process that could replace a session's lost one
+struct ReplacementCandidate {
+    pid: u32,
+    name: String,
+    start_secs: u64,
+    has_window: bool,
+}
+
+/// The process a Houdini session follows when its own is gone: started after the launch, not followed
+/// by another session, not one of Houdini's tools. Once the session is past startup, only a process
+/// started in the last 30 s — so it doesn't jump to a Houdini opened by hand for another project.
+/// A process with a main window first, then the earliest.
+fn pick_replacement(
+    candidates: &[ReplacementCandidate],
+    anchor_secs: u64,
+    now_secs: u64,
+    startup_phase: bool,
+    excluded: &HashSet<u32>,
+) -> Option<u32> {
+    candidates.iter()
+        .filter(|c| !excluded.contains(&c.pid))
+        .filter(|c| is_houdini_app_exe(&c.name) && !is_nullspace_process(c.pid, &c.name))
+        .filter(|c| c.start_secs >= anchor_secs)
+        .filter(|c| startup_phase || now_secs.saturating_sub(c.start_secs) < 30)
+        .min_by_key(|c| (!c.has_window, c.start_secs))
+        .map(|c| c.pid)
+}
+
+/// Houdini app processes started at or after `anchor_secs`, with their main-window state
+fn houdini_candidates(anchor_secs: u64) -> Vec<ReplacementCandidate> {
+    let found: Vec<(u32, String, u64)> = {
+        let mut system = SYSTEM.lock();
+        system.refresh_processes();
+        system.processes().iter()
+            .filter_map(|(pid, process)| {
+                let name = process.name().to_lowercase();
+                let start = process.start_time();
+                (is_houdini_app_exe(&name) && !is_nullspace_process(pid.as_u32(), &name) && start >= anchor_secs)
+                    .then(|| (pid.as_u32(), name, start))
+            })
+            .collect()
+    }; // SYSTEM is released before the window checks
+    found.into_iter()
+        .map(|(pid, name, start_secs)| ReplacementCandidate { pid, name, start_secs, has_window: has_visible_window(pid) })
+        .collect()
+}
+
+/// Houdini's replacement for the frontend migration: anchored to the launch of the session that
+/// follows `old_pid`, never `old_pid` itself (a live Houdini without a window would renew its grace forever)
+fn houdini_replacement_for(old_pid: u32) -> Option<u32> {
+    let now = Utc::now();
+    let now_secs = now.timestamp().max(0) as u64;
+    let (session, mut excluded) = {
+        let sessions = ACTIVE_SESSIONS.lock();
+        let session = sessions.values().find(|s| s.pid == old_pid).map(|s| (s.start_time, s.window_seen));
+        (session, sessions.values().map(|s| s.pid).collect::<HashSet<u32>>())
+    }; // ACTIVE_SESSIONS is released before SYSTEM is taken
+    excluded.insert(old_pid);
+    let (anchor, startup_phase) = match session {
+        // Still starting up: no window shown yet (a closed Houdini isn't replaced by an older one)
+        Some((start, window_seen)) => (
+            launch_anchor_secs(start),
+            !window_seen && now.signed_duration_since(start).num_seconds() < startup_grace_seconds("houdini"),
+        ),
+        // Not found: a mature session the tick already removed — only processes from the last 30 s
+        None => (now_secs.saturating_sub(30), false),
+    };
+    pick_replacement(&houdini_candidates(anchor), anchor, now_secs, startup_phase, &excluded)
 }
 
 /// Tauri command to check if a process is alive AND belongs to the expected software.
@@ -601,6 +771,9 @@ pub fn check_process_alive_for_software(pid: u32, software: String) -> bool {
     system.refresh_processes();
     if let Some(process) = system.process(Pid::from_u32(pid)) {
         let process_name = process.name().to_lowercase();
+        if is_nullspace_process(pid, &process_name) {
+            return false;
+        }
         let software_lower = software.to_lowercase();
         let base_name = software_lower.trim_end_matches(".exe");
         software_process_patterns(base_name).iter().any(|p| process_name.contains(p))
@@ -631,6 +804,8 @@ pub fn update_session_pid(entry_id: String, new_pid: u32) -> Result<(), String> 
             session.pid = new_pid;
             session.process_alive = true;
             session.window_disappeared_at = None;  // Reset grace period
+            session.pid_lost_at = None;
+            session.window_seen = false;  // A new process: its window is yet to show
             Ok(())
         }
         None => Err(format!("Session {} not found", entry_id))
@@ -671,6 +846,9 @@ fn find_process_by_name_and_parent(name: &str, parent_pid: u32) -> Option<u32> {
     for child_pid in children {
         if let Some(process) = system.process(Pid::from_u32(child_pid)) {
             let process_name = process.name().to_lowercase();
+            if is_nullspace_process(child_pid, &process_name) {
+                continue;
+            }
 
             // If we have specific patterns, check them first
             if !patterns.is_empty() {
@@ -703,6 +881,13 @@ fn migrate_to_child_process_internal(old_pid: u32, software_name: &str) -> Optio
         .to_lowercase()
         .trim_end_matches(".exe")
         .to_string();
+
+    // Houdini has its own rules (launch anchor, other sessions' PIDs, its tools in the same bin)
+    if base_name == "houdini" {
+        let found = houdini_replacement_for(old_pid);
+        println!("[TimeTracking] Houdini replacement for PID {}: {:?}", old_pid, found);
+        return found;
+    }
 
     // Try to find a child process matching the software name
     if let Some(child_pid) = find_process_by_name_and_parent(&base_name, old_pid) {
@@ -740,6 +925,9 @@ fn find_recent_process_by_name(software_name: &str) -> Option<u32> {
     for (pid, process) in system.processes() {
         let proc_name = process.name().to_lowercase();
         let start_time = process.start_time();
+        if is_nullspace_process(pid.as_u32(), &proc_name) {
+            continue;
+        }
 
         // Check if started recently (within last 30 seconds)
         let is_recent = if let Some(age) = now.checked_sub(start_time) {
@@ -803,5 +991,115 @@ pub fn get_focus_summary(entry_id: String) -> Result<FocusSummary, String> {
                 total_checks: 0,
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cand(pid: u32, name: &str, start_secs: u64, has_window: bool) -> ReplacementCandidate {
+        ReplacementCandidate { pid, name: name.to_string(), start_secs, has_window }
+    }
+
+    const ANCHOR: u64 = 1_000;
+    const NOW: u64 = 1_100;
+
+    #[test]
+    fn replacement_must_start_after_the_launch() {
+        let c = [cand(1, "hindie.steam.exe", ANCHOR - 1, true), cand(2, "hindie.steam.exe", ANCHOR, false)];
+        assert_eq!(pick_replacement(&c, ANCHOR, NOW, true, &HashSet::new()), Some(2));
+    }
+
+    #[test]
+    fn replacement_skips_followed_pids_and_houdini_tools() {
+        let excluded: HashSet<u32> = [1].into_iter().collect();
+        let c = [
+            cand(1, "hindie.steam.exe", ANCHOR + 5, true),
+            cand(2, "houdini_launcher.exe", ANCHOR + 5, true),
+            cand(3, "houdini_installer.exe", ANCHOR + 5, true),
+        ];
+        assert_eq!(pick_replacement(&c, ANCHOR, NOW, true, &excluded), None);
+    }
+
+    #[test]
+    fn mature_session_takes_only_fresh_processes() {
+        let c = [cand(1, "hindie.steam.exe", NOW - 60, true)];
+        assert_eq!(pick_replacement(&c, ANCHOR, NOW, false, &HashSet::new()), None);
+        assert_eq!(pick_replacement(&c, ANCHOR, NOW, true, &HashSet::new()), Some(1));
+        let fresh = [cand(2, "hindie.steam.exe", NOW - 10, false)];
+        assert_eq!(pick_replacement(&fresh, ANCHOR, NOW, false, &HashSet::new()), Some(2));
+    }
+
+    #[test]
+    fn replacement_prefers_a_window_then_the_earliest() {
+        let c = [
+            cand(1, "hindie.steam.exe", ANCHOR + 1, false),
+            cand(2, "houdinifx.exe", ANCHOR + 9, true),
+            cand(3, "houdinifx.exe", ANCHOR + 5, true),
+        ];
+        assert_eq!(pick_replacement(&c, ANCHOR, NOW, true, &HashSet::new()), Some(3));
+        let no_windows = [cand(4, "hindie.steam.exe", ANCHOR + 7, false), cand(5, "hindie.steam.exe", ANCHOR + 2, false)];
+        assert_eq!(pick_replacement(&no_windows, ANCHOR, NOW, true, &HashSet::new()), Some(5));
+        assert_eq!(pick_replacement(&[], ANCHOR, NOW, true, &HashSet::new()), None);
+    }
+
+    #[test]
+    fn houdini_waits_others_unchanged() {
+        assert_eq!(startup_grace_seconds("houdini"), 180);
+        assert_eq!(relaunch_wait_seconds("houdini"), 120);
+        assert_eq!(relaunch_wait_seconds("Houdini"), 120);
+        for other in ["blender", "photoshop", "after-effects", "zbrush", "davinci", "unreal", "cinema4d", "substance"] {
+            assert_eq!(relaunch_wait_seconds(other), 0, "{other}");
+        }
+        assert_eq!(startup_grace_seconds("unreal"), 900);
+        assert_eq!(startup_grace_seconds("cinema4d"), 120);
+        assert_eq!(startup_grace_seconds("substance"), 60);
+        assert_eq!(startup_grace_seconds("davinci"), 90);
+        assert_eq!(startup_grace_seconds("blender"), 30);
+    }
+
+    #[test]
+    fn launch_anchor_allows_for_the_launch() {
+        let start = DateTime::from_timestamp(10_000, 0).unwrap();
+        assert_eq!(launch_anchor_secs(start), 10_000 - 10);
+        assert_eq!(launch_anchor_secs(DateTime::from_timestamp(5, 0).unwrap()), 0);
+    }
+
+    #[test]
+    fn houdini_app_exes_match_by_full_name() {
+        for app in ["hindie.steam.exe", "houdinifx.exe", "HoudiniCore.exe", "houdini.exe", "hindie.exe", "happrentice.exe", "hescape.exe"] {
+            assert!(is_houdini_app_exe(app), "{app}");
+        }
+        for other in ["nullSpace-v1.9.47-test-houdini.exe", "houdini_launcher.exe", "houdini_installer.exe", "hmaster.exe", "hython.exe", "hindie.test.exe"] {
+            assert!(!is_houdini_app_exe(other), "{other}");
+        }
+    }
+
+    #[test]
+    fn nullspace_is_never_the_tracked_software() {
+        assert!(is_nullspace_process(std::process::id(), "anything.exe"));
+        assert!(is_nullspace_process(1, "nullSpace.exe"));
+        assert!(is_nullspace_process(1, "nullSpace-v1.9.47-test-blender.exe"));
+        assert!(!is_nullspace_process(1, "blender.exe"));
+        assert!(!is_nullspace_process(1, "hindie.steam.exe"));
+    }
+
+    #[test]
+    fn replacement_never_takes_nullspace() {
+        let c = [
+            cand(std::process::id(), "hindie.steam.exe", ANCHOR + 1, true),
+            cand(7, "nullspace-houdini.exe", ANCHOR + 1, true),
+            cand(8, "hindie.steam.exe", ANCHOR + 9, false),
+        ];
+        assert_eq!(pick_replacement(&c, ANCHOR, NOW, true, &HashSet::new()), Some(8));
+    }
+
+    #[test]
+    fn houdini_tool_names() {
+        assert!(is_houdini_tool_exe("houdini_launcher.exe"));
+        assert!(is_houdini_tool_exe("Houdini_Installer.exe"));
+        assert!(!is_houdini_tool_exe("hindie.steam.exe"));
+        assert!(!is_houdini_tool_exe("houdinifx.exe"));
     }
 }

@@ -33,16 +33,13 @@ import { useContextMenuStore } from '../../store/contextMenuStore';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
-import { extractShotNumber, getScenePattern, extractVersion } from '../../utils/fileNaming';
+import { extractShotNumber, getScenePattern, extractVersion, sanitizeFolderName } from '../../utils/fileNaming';
 import { useBlendThumbnail, isBlendThumbnailCached } from '../../hooks/useBlendThumbnail';
 import { usePsdThumbnail, isPsdThumbnailCached } from '../../hooks/usePsdThumbnail';
 import { useC4dThumbnail, isC4dThumbnailCached } from '../../hooks/useC4dThumbnail';
 import { findNextAvailableShotNumber } from '../../utils/shotNumbering';
 import { versionsCache, type ProjectVersion } from '../../utils/versionsCache';
 import type { SoftwareName } from '../../types/project';
-
-const sanitizeFolderName = (name: string) =>
-  name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
 
 
 // Local types for component
@@ -2664,7 +2661,9 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
             <p className="text-zinc-400 mb-6">
               {deleteConfirm.type === 'scene' && deleteConfirm.shotCount
                 ? `Are you sure you want to delete scene "${deleteConfirm.name}" and its ${deleteConfirm.shotCount} shot(s)? This action cannot be undone.`
-                : `Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone.`
+                : deleteConfirm.type === 'shot'
+                  ? `Are you sure you want to delete "${deleteConfirm.name}" and its version files? This action cannot be undone.`
+                  : `Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone.`
               }
             </p>
             <div className="flex gap-3 justify-end">

@@ -159,15 +159,15 @@ impl FileNameComponents {
     /// Get project pattern for searching: PROJECT_*
     #[allow(dead_code)]
     pub fn project_pattern(project_name: &str) -> String {
-        format!("{}_", project_name.replace(" ", "").to_uppercase())
+        format!("{}_", sanitize_folder_name(project_name))
     }
 
     /// Get scene pattern for searching: PROJECT_SCENE_*
     pub fn scene_pattern(project_name: &str, scene_name: &str) -> String {
         format!(
             "{}_{}_",
-            project_name.replace(" ", "").to_uppercase(),
-            scene_name.replace(" ", "").to_uppercase()
+            sanitize_folder_name(project_name),
+            sanitize_folder_name(scene_name)
         )
     }
 
@@ -175,8 +175,8 @@ impl FileNameComponents {
     pub fn shot_pattern(project_name: &str, scene_name: &str, shot_number: u32) -> String {
         format!(
             "{}_{}_{}_",
-            project_name.replace(" ", "").to_uppercase(),
-            scene_name.replace(" ", "").to_uppercase(),
+            sanitize_folder_name(project_name),
+            sanitize_folder_name(scene_name),
             format!("SH{:0width$}", shot_number, width = SHOT_DIGITS)
         )
     }

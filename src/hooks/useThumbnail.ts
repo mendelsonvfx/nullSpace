@@ -9,6 +9,37 @@ const USE_INDEXED_DB = true;
 // Global in-memory cache for instant thumbnail access
 const memoryCache = new Map<string, string>();
 
+/** Bytes → data URL without a byte-by-byte string loop, which blocks the UI on a 2 MB PNG */
+function toDataUrl(bytes: Uint8Array, mimeType: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(new Blob([bytes], { type: mimeType }));
+  });
+}
+
+/**
+ * Copy thumbnails from IndexedDB into the memory cache, so cards mount with their image instead of
+ * popping it in a moment later. Waits at most `maxWaitMs`; whatever isn't ready by then loads in useThumbnail.
+ */
+export async function warmThumbnails(projects: { path: string; thumbnail?: string }[], maxWaitMs = 50): Promise<void> {
+  if (!USE_INDEXED_DB) return;
+  const loads = projects
+    .filter(p => p.thumbnail && !memoryCache.has(`${p.path}::${p.thumbnail}`))
+    .map(async ({ path, thumbnail }) => {
+      const cached = await indexedDBThumbnailCache.get(path, thumbnail!).catch(() => null);
+      if (cached) memoryCache.set(`${path}::${thumbnail}`, cached);
+    });
+  if (loads.length === 0) return;
+  await Promise.race([Promise.all(loads), new Promise(resolve => setTimeout(resolve, maxWaitMs))]);
+}
+
+/** Forget every thumbnail held in memory (the persistent caches are cleared separately) */
+export function clearThumbnailMemoryCache() {
+  memoryCache.clear();
+}
+
 export function useThumbnail(projectPath: string, thumbnail: string | undefined) {
   // Memoize cache key to prevent unnecessary recalculations
   const cacheKey = useMemo(() =>
@@ -82,11 +113,7 @@ export function useThumbnail(projectPath: string, thumbnail: string | undefined)
         };
         const mimeType = mimeTypes[extension || 'jpg'] || 'image/jpeg';
 
-        // Convert to base64
-        const base64 = btoa(
-          fileData.reduce((data, byte) => data + String.fromCharCode(byte), '')
-        );
-        const dataUrl = `data:${mimeType};base64,${base64}`;
+        const dataUrl = await toDataUrl(fileData, mimeType);
 
         // Store in all caches
         if (USE_INDEXED_DB) {

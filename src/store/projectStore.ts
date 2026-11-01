@@ -1,22 +1,22 @@
 // src/store/projectStore.ts
-import { create } from 'zustand';
+import { create, type StoreApi } from 'zustand';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import type { Project, CreateProjectCommand, LaunchSoftwareCommand, Client, TimeEntry, SoftwareName, Transaction, TodoItem } from '../types/project';
 import { thumbnailCache } from '../utils/thumbnailCache';
 import { versionsCache } from '../utils/versionsCache';
 import { indexedDBThumbnailCache } from '../utils/indexedDBCache';
+import { warmThumbnails } from '../hooks/useThumbnail';
 import { useTimeStatsStore, useTimeTrackingStore, normalizeSoftwareName, formatSoftwareName } from '../features/time-tracking';
 import { generateProjectColor, generateBrightColor } from '../utils/colorUtils';
 import { findNextAvailableShotNumber, isShotNumberAvailable } from '../utils/shotNumbering';
-import { isValidProjectName, PROJECT_NAME_HINT } from '../utils/fileNaming';
+import {
+  isValidProjectName, PROJECT_NAME_HINT, sanitizeFolderName,
+  validateSceneName, sceneNumberFromName, nextSceneNumber, defaultSceneName
+} from '../utils/fileNaming';
 import { davinciProjectName } from '../utils/davinciProjectName';
 import { isComposeOnlySoftware } from '../utils/constants';
-
-// Sanitize scene name for folder name (remove spaces and special characters)
-const sanitizeFolderName = (name: string): string => {
-  return name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
-};
+import { settlePrepaidIfCovered } from '../utils/financeService';
 
 // Sanitize for _attachments subfolder names — matches ProjectDetails.tsx sanitizeDirName
 const sanitizeDirName = (name: string): string => {
@@ -43,13 +43,16 @@ interface ProjectStore {
   // State
   projects: Project[];
   selectedProject: Project | null;
-  isLoading: boolean;
+  isLoading: boolean; // initial load only — switching categories keeps the current list until the new one is ready
   error: string | null;
-  projectsDirectory: string;
   defaultProjectsPath: string;
   clients: Client[];
   categories: string[];
-  selectedCategory: string;
+  selectedCategory: string; // the category `projects` belongs to
+  pendingCategory: string | null; // clicked, still loading — only highlights the tab
+  // Projects of categories left during this session. Each project lives either in `projects` or here,
+  // so time tracking keeps writing to a project of another category
+  offscreenProjects: Record<string, Project[]>;
   launchingStatus: Record<string, 'idle' | 'launching' | 'success'>; // track launch status per software
   isRenaming: boolean;
   renameProgress: { current: number; total: number } | null;
@@ -58,13 +61,16 @@ interface ProjectStore {
   loadProjects: () => Promise<void>;
   createProject: (input: CreateProjectCommand) => Promise<void>;
   updateProject: (project: Project) => Promise<void>;
+  // Merge fields into the latest copy of the project at write time (no stale spreads of a component's `project`)
+  patchProject: (projectId: string, patch: Partial<Project>) => Promise<void>;
+  // A project of the open category or of one left earlier
+  getProjectById: (projectId: string) => Project | undefined;
   renameProject: (project: Project, newName: string) => Promise<void>;
   deleteProject: (projectPath: string) => Promise<void>;
   selectProject: (project: Project | null) => void;
   launchSoftware: (input: LaunchSoftwareCommand) => Promise<void>;
   launchSoftwareWithoutProject: (executablePath: string, software: string) => Promise<void>;
   openInExplorer: (path: string) => Promise<void>;
-  setProjectsDirectory: (dir: string) => void;
   setDefaultProjectsPath: (path: string) => void;
   addNote: (projectId: string, content: string) => void;
   updateNote: (projectId: string, noteId: string, content: string) => void;
@@ -93,7 +99,6 @@ interface ProjectStore {
   removeCategory: (name: string) => Promise<void>;
   renameCategory: (oldName: string, newName: string) => Promise<void>;
   setSelectedCategory: (category: string) => Promise<void>;
-  loadProjectsFromCategory: (category: string) => Promise<void>;
   // Migration
   migrateProjectToScenes: (project: Project) => Project;
   // Scene management
@@ -168,6 +173,8 @@ interface ProjectStore {
   removeOtherTransaction: (transactionId: string) => void;
   // Archived project backups (orphaned - folder deleted but backup exists)
   archivedBackups: Project[];
+  // Folders of the current category whose metadata couldn't be read — their backups aren't orphans
+  unreadableProjectPaths: string[];
   loadArchivedBackups: () => Promise<void>;
   deleteBackup: (projectId: string) => Promise<void>;
 }
@@ -175,17 +182,220 @@ interface ProjectStore {
 // Private update queue to prevent race conditions
 let updateQueue: Promise<void> = Promise.resolve();
 
+// Result of scan_projects_in_folder
+interface ProjectScan {
+  projects: Project[];
+  unreadable: string[]; // folders whose .project-metadata.json couldn't be read
+}
+
+// Unreadable folders already reported this session — a category is scanned on every visit
+const reportedUnreadable = new Set<string>();
+
+/** Tell the user about project folders that were skipped because their metadata is broken */
+function reportUnreadableProjects(paths: string[]) {
+  const fresh = paths.filter(p => !reportedUnreadable.has(p));
+  fresh.forEach(p => reportedUnreadable.add(p));
+  if (fresh.length === 0 || typeof (window as any).showNotification !== 'function') return;
+  const names = fresh.map(p => p.split(/[\\/]/).pop()).join(', ');
+  (window as any).showNotification('warning', `Couldn't read project metadata: ${names}`, 'Projects skipped', 10000);
+}
+
+type StoreSet = StoreApi<ProjectStore>['setState'];
+type StoreGet = StoreApi<ProjectStore>['getState'];
+
+function findProject(state: ProjectStore, projectId: string): Project | undefined {
+  const current = state.projects.find(p => p.id === projectId);
+  if (current) return current;
+  for (const list of Object.values(state.offscreenProjects)) {
+    const found = list.find(p => p.id === projectId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** Put an updated project back where it lives: the open category or a category left earlier */
+function placeProject(state: ProjectStore, updated: Project): Partial<ProjectStore> {
+  if (state.projects.some(p => p.id === updated.id)) {
+    return { projects: state.projects.map(p => p.id === updated.id ? updated : p) };
+  }
+  for (const [category, list] of Object.entries(state.offscreenProjects)) {
+    if (list.some(p => p.id === updated.id)) {
+      return { offscreenProjects: { ...state.offscreenProjects, [category]: list.map(p => p.id === updated.id ? updated : p) } };
+    }
+  }
+  return {};
+}
+
+/** Backups of the category's archived projects whose folders are gone */
+function orphanedBackupsFor(backups: Project[], category: string, projects: Project[], unreadablePaths: string[]): Project[] {
+  const currentProjectIds = new Set(projects.map(p => p.id));
+  // The folder is still there, only its metadata is broken — not "folder deleted"
+  // Compare normalized: separators, doubled or trailing backslashes, case
+  const normPath = (p: string) => p.replace(/[\\/]+/g, '\\').replace(/\\$/, '').toLowerCase();
+  const unreadable = new Set(unreadablePaths.map(normPath));
+  return backups
+    .filter(b => !currentProjectIds.has(b.id) && b.category === category)
+    .filter(b => !unreadable.has(normPath(b.path || '')))
+    .map(b => ({ ...b, _isOrphaned: true }));
+}
+
+// The latest category request: an older one that finishes later is dropped
+let categoryLoadToken = 0;
+
+/**
+ * Show another category in one store update: the current list stays on screen until the new one is
+ * ready, so there's no spinner or empty frame in between. Runs as a step of updateQueue — every earlier
+ * write is on disk before the scan, and later writes apply to the new list.
+ * keepCurrent: false when the current list's paths are no longer valid (its category was renamed or removed).
+ */
+function switchCategory(category: string, keepCurrent: boolean, set: StoreSet, get: StoreGet): Promise<void> {
+  const token = ++categoryLoadToken;
+  set({ pendingCategory: category });
+
+  updateQueue = updateQueue
+    .then(async () => {
+      if (token !== categoryLoadToken) return;
+      try {
+        const projectsDir = get().defaultProjectsPath;
+        await invoke('ensure_category_folder', { projectsDir, categoryName: category })
+          .catch(err => console.error('Failed to ensure category folder:', err));
+
+        // Scan category folder - category is determined by folder, not metadata
+        const [{ projects, unreadable }, backups] = await Promise.all([
+          invoke<ProjectScan>('scan_projects_in_folder', { folderPath: `${projectsDir}\\${category}`, categoryName: category }),
+          invoke<Project[]>('get_archived_backups').catch(err => {
+            console.warn('[Backup] Failed to load archived backups:', err);
+            return [] as Project[];
+          }),
+        ]);
+
+        // Migrate projects to scene-based structure if needed; settle prepaid projects that are fully covered
+        const migratedProjects = projects.map(project => settlePrepaidIfCovered(get().migrateProjectToScenes(project)));
+        await Promise.all(
+          migratedProjects
+            .filter((project, index) => project !== projects[index]) // Only save if migrated
+            .map(project => invoke('update_project', { project }).catch(err =>
+              console.error(`[Migration] Failed to save ${project.name}:`, err)))
+        );
+
+        // Cards mount with their thumbnails instead of popping them in
+        await warmThumbnails(migratedProjects);
+
+        if (token !== categoryLoadToken) return;
+        reportUnreadableProjects(unreadable);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('selectedCategory', category);
+        }
+        // One store update for the switch: every update re-renders the whole app
+        set(state => {
+          const offscreenProjects = { ...state.offscreenProjects };
+          if (keepCurrent) offscreenProjects[state.selectedCategory] = state.projects;
+          delete offscreenProjects[category];
+          return {
+            selectedCategory: category,
+            projects: migratedProjects,
+            archivedBackups: orphanedBackupsFor(backups, category, migratedProjects, unreadable),
+            unreadableProjectPaths: unreadable,
+            offscreenProjects,
+            pendingCategory: null,
+          };
+        });
+      } catch (error) {
+        console.error('Failed to load projects from category:', error);
+        if (token === categoryLoadToken) set({ pendingCategory: null, error: String(error) });
+      }
+    })
+    .catch(err => console.error('[switchCategory] ❌ Queue error:', err));
+  return updateQueue;
+}
+
+/**
+ * Move a category's Finance data to another category: archived-project backups (category and path)
+ * and "Other Project" transactions, which are keyed by the category folder path.
+ * Used when a category is renamed (to the new name) or removed (to Personal).
+ */
+async function moveCategoryFinanceData(projectsDir: string, from: string, to: string, set: StoreSet): Promise<void> {
+  try {
+    await invoke('move_backups_category', { projectsDir, oldCategory: from, newCategory: to });
+  } catch (err) {
+    console.warn('[Backup] Failed to move backups to the new category:', err);
+  }
+
+  const fromKey = `${projectsDir}\\${from}`;
+  const toKey = `${projectsDir}\\${to}`;
+  set(state => {
+    const moving = state.otherProjectTransactions[fromKey];
+    if (!moving) return {};
+    const updated = { ...state.otherProjectTransactions };
+    updated[toKey] = [...(updated[toKey] || []), ...moving];
+    delete updated[fromKey];
+    localStorage.setItem('otherProjectTransactionsByPath', JSON.stringify(updated));
+    return { otherProjectTransactions: updated };
+  });
+}
+
+/**
+ * Write one project: local state, metadata on disk, archive backup. Runs inside updateQueue only,
+ * so every write — including backup create/delete — happens in call order.
+ */
+async function persistProject(project: Project, set: StoreSet, get: StoreGet): Promise<void> {
+  try {
+    const oldProject = findProject(get(), project.id);
+
+    // A prepayment that covers the whole cost leaves nothing pending
+    const settled = settlePrepaidIfCovered(project);
+    if (settled !== project) {
+      project = settled;
+      if (typeof (window as any).showNotification === 'function') {
+        (window as any).showNotification('info', 'Prepayment covers the full cost — marked as Paid', project.name);
+      }
+    }
+
+    // Clear thumbnail cache if thumbnail changed
+    if (oldProject && oldProject.thumbnail !== project.thumbnail && oldProject.thumbnail) {
+      thumbnailCache.clear(oldProject.path, oldProject.thumbnail);
+    }
+
+    // Stamp updated_at here (the backend stamps the same moment) so the in-memory copy is current
+    // without a second store update after the write — every update re-renders the whole app
+    const saved: Project = { ...project, updatedAt: new Date().toISOString() };
+    project = saved;
+
+    // First update local state synchronously
+    set(state => ({
+      ...placeProject(state, saved),
+      selectedProject: state.selectedProject?.id === saved.id ? saved : state.selectedProject
+    }));
+
+    // Then save to backend
+    await invoke<string>('update_project', { project: saved });
+
+    // The archive backup follows the status — in queue order, so a stale archived write can't recreate it
+    if (project.status === 'archived') {
+      await invoke('backup_project_json', { projectId: project.id, jsonData: JSON.stringify(project) })
+        .catch(err => console.warn('[Backup] Failed to backup archived project:', err));
+    } else if (oldProject?.status === 'archived') {
+      await invoke('delete_project_backup', { projectId: project.id })
+        .catch(err => console.warn('[Backup] Failed to remove backup:', err));
+    }
+  } catch (error) {
+    set({ error: String(error) });
+    console.error('[updateProject] ❌ Failed to update project:', error);
+  }
+}
+
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   // Initial state
   projects: [],
   selectedProject: null,
-  isLoading: false,
+  isLoading: true, // the app loads projects on startup — show placeholders, not "No projects found", until then
   error: null,
-  projectsDirectory: '',
   defaultProjectsPath: typeof window !== 'undefined' ? (localStorage.getItem('defaultProjectsPath') || 'E:\\Projects\\Personal') : 'E:\\Projects\\Personal',
   clients: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('clients') || '[]') : [],
   categories: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('categories') || '["Commercial", "Personal"]') : ['Commercial', 'Personal'],
   selectedCategory: typeof window !== 'undefined' ? (localStorage.getItem('selectedCategory') || 'Personal') : 'Personal',
+  pendingCategory: null,
+  offscreenProjects: {},
   launchingStatus: {},
   isRenaming: false,
   renameProgress: null,
@@ -228,10 +438,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   // Load all projects
   loadProjects: async () => {
-    set({ isLoading: true, error: null });
+    // A full reload supersedes a category switch in flight; projects of other categories may be from another folder
+    categoryLoadToken++;
+    set({ isLoading: true, error: null, pendingCategory: null, offscreenProjects: {} });
     try {
       const state = get();
-      const projectsDir = state.projectsDirectory || state.defaultProjectsPath;
+      const projectsDir = state.defaultProjectsPath;
       console.log('Loading projects from:', projectsDir);
 
       // Ensure default category folders exist
@@ -252,24 +464,28 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const categoryPath = `${projectsDir}\\${selectedCategory}`;
 
       // Scan category folder - category is determined by folder, not metadata
-      const projects = await invoke<Project[]>('scan_projects_in_folder', {
+      const { projects, unreadable } = await invoke<ProjectScan>('scan_projects_in_folder', {
         folderPath: categoryPath,
         categoryName: selectedCategory
       });
+      reportUnreadableProjects(unreadable);
+      set({ unreadableProjectPaths: unreadable });
 
       console.log('Loaded projects from category:', selectedCategory, projects.length);
 
-      // Migrate projects to scene-based structure if needed
-      const migratedProjects = projects.map(project => get().migrateProjectToScenes(project));
+      // Migrate projects to scene-based structure if needed; settle prepaid projects that are fully covered
+      const migratedProjects = projects.map(project => settlePrepaidIfCovered(get().migrateProjectToScenes(project)));
 
       // Save migrated projects back to disk
       const migrationPromises = migratedProjects
         .filter((project, index) => project !== projects[index]) // Only save if migrated
-        .map(project => invoke('update_project', { project }));
+        .map(project => invoke('update_project', { project }).catch(err =>
+          // A locked or read-only project folder must not abort loading the category
+          console.error(`[Migration] Failed to save ${project.name}:`, err)));
 
       if (migrationPromises.length > 0) {
         await Promise.all(migrationPromises);
-        console.log(`[Migration] Migrated ${migrationPromises.length} projects to scene-based structure`);
+        console.log(`[Migration] Migrated ${migrationPromises.length} projects`);
       }
 
       // Clean up stale active sessions (processes that no longer exist)
@@ -371,6 +587,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         }
       });
 
+      // Cards mount with their thumbnails instead of popping them in
+      await warmThumbnails(normalizedProjects);
+
       set({ projects: normalizedProjects, isLoading: false });
       console.log('[ProjectStore] Projects loaded successfully');
 
@@ -387,7 +606,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   // Create new project
   createProject: async (input: CreateProjectCommand) => {
-    set({ isLoading: true, error: null });
+    set({ error: null });
     try {
       // Shot-based projects use compose-only software (DaVinci Resolve) in Compose, never as project software
       const shotBased = !!(input.hasScenes || input.hasShots);
@@ -474,16 +693,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         project.currentShotId = firstShot.id;
       }
 
+      // A prepayment covering the whole cost makes the new project paid right away
+      const created = settlePrepaidIfCovered(project);
+
       // Save the updated project with color (and Shot 001 if applicable)
-      await invoke('update_project', { project });
+      const updatedAt = await invoke<string>('update_project', { project: created });
+      const saved = { ...created, updatedAt };
 
       set(state => ({
-        projects: [project, ...state.projects],
-        selectedProject: project,
-        isLoading: false
+        projects: [saved, ...state.projects],
+        selectedProject: saved
       }));
     } catch (error) {
-      set({ error: String(error), isLoading: false });
+      set({ error: String(error) });
       throw error;
     }
   },
@@ -492,38 +714,26 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   updateProject: async (project: Project) => {
     // Queue updates to prevent race conditions (multiple parallel writes)
     updateQueue = updateQueue
-      .then(async () => {
-        try {
-          // Clear thumbnail cache if thumbnail changed
-          const oldProject = get().projects.find(p => p.id === project.id);
-          if (oldProject && oldProject.thumbnail !== project.thumbnail) {
-            if (oldProject.thumbnail) {
-              thumbnailCache.clear(oldProject.path, oldProject.thumbnail);
-            }
-          }
-
-          // First update local state synchronously
-          set(state => ({
-            projects: state.projects.map(p =>
-              p.id === project.id ? project : p
-            ),
-            selectedProject: state.selectedProject?.id === project.id
-              ? project
-              : state.selectedProject
-          }));
-
-          // Then save to backend asynchronously
-          await invoke('update_project', { project });
-        } catch (error) {
-          set({ error: String(error) });
-          console.error('[updateProject] ❌ Failed to update project:', error);
-        }
-      })
+      .then(() => persistProject(project, set, get))
       .catch(err => console.error('[updateProject] ❌ Queue error:', err));
 
     // Wait for the queued update to complete
     return updateQueue;
   },
+
+  patchProject: async (projectId: string, patch: Partial<Project>) => {
+    // The patch is applied to the latest copy when this queue step runs, after every earlier write
+    updateQueue = updateQueue
+      .then(() => {
+        const latest = findProject(get(), projectId);
+        if (!latest) return;
+        return persistProject({ ...latest, ...patch }, set, get);
+      })
+      .catch(err => console.error('[patchProject] ❌ Queue error:', err));
+    return updateQueue;
+  },
+
+  getProjectById: (projectId: string) => findProject(get(), projectId),
 
   // Rename project and its folder on disk
   renameProject: async (project: Project, newName: string) => {
@@ -553,41 +763,46 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   // Delete project
-  deleteProject: async (projectPath: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      // Clear all thumbnails for this project from cache
-      thumbnailCache.clearProject(projectPath);
+  deleteProject: (projectPath: string) => {
+    const run = async () => {
+      set({ error: null });
       try {
-        await indexedDBThumbnailCache.clearProject(projectPath);
-      } catch (cacheErr) {
-        console.warn('[Cache] Failed to clear IndexedDB cache:', cacheErr);
-      }
-
-      await invoke('delete_project', { projectPath });
-
-      // Deleting from RayHub is intentional — drop the archive backup too, otherwise the project
-      // comes back as an orphaned "folder deleted" entry (and in Finance) after the next reload
-      const deletedId = get().projects.find(p => p.path === projectPath)?.id;
-      if (deletedId) {
+        // Clear all thumbnails for this project from cache
+        thumbnailCache.clearProject(projectPath);
         try {
-          await invoke('delete_project_backup', { projectId: deletedId });
-        } catch (err) {
-          console.warn('[Backup] Failed to remove backup of deleted project:', err);
+          await indexedDBThumbnailCache.clearProject(projectPath);
+        } catch (cacheErr) {
+          console.warn('[Cache] Failed to clear IndexedDB cache:', cacheErr);
         }
-      }
 
-      set(state => ({
-        projects: state.projects.filter(p => p.path !== projectPath),
-        selectedProject: state.selectedProject?.path === projectPath
-          ? null
-          : state.selectedProject,
-        isLoading: false
-      }));
-    } catch (error) {
-      set({ error: String(error), isLoading: false });
-      throw error;
-    }
+        await invoke('delete_project', { projectPath });
+
+        // Deleting from RayHub is intentional — drop the archive backup too, otherwise the project
+        // comes back as an orphaned "folder deleted" entry (and in Finance) after the next reload
+        const deletedId = get().projects.find(p => p.path === projectPath)?.id;
+        if (deletedId) {
+          try {
+            await invoke('delete_project_backup', { projectId: deletedId });
+          } catch (err) {
+            console.warn('[Backup] Failed to remove backup of deleted project:', err);
+          }
+        }
+
+        set(state => ({
+          projects: state.projects.filter(p => p.path !== projectPath),
+          selectedProject: state.selectedProject?.path === projectPath
+            ? null
+            : state.selectedProject
+        }));
+      } catch (error) {
+        set({ error: String(error) });
+        throw error;
+      }
+    };
+    // In queue order, so a category scan that started earlier can't bring the project back
+    const step = updateQueue.then(run);
+    updateQueue = step.catch(() => {});
+    return step;
   },
 
   // Select project
@@ -757,17 +972,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  // Set projects directory
-  setProjectsDirectory: (dir: string) => {
-    set({ projectsDirectory: dir });
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('projectsDirectory', dir);
-    }
-  },
-
   // Set default projects path
   setDefaultProjectsPath: (path: string) => {
-    set({ defaultProjectsPath: path });
+    // Projects of other categories belong to the old folder
+    set({ defaultProjectsPath: path, offscreenProjects: {} });
     if (typeof window !== 'undefined') {
       localStorage.setItem('defaultProjectsPath', path);
     }
@@ -846,20 +1054,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         ? (project.completedAt || new Date().toISOString())
         : project.completedAt;
       const updated = { ...project, status, completedAt };
+      // updateProject writes or removes the archive backup as the status changes (in queue order)
       get().updateProject(updated);
-
-      // Backup when archiving (raw JSON to preserve all fields)
-      if (status === 'archived') {
-        invoke('backup_project_json', {
-          projectId: project.id,
-          jsonData: JSON.stringify(updated)
-        }).catch(err => console.warn('[Backup] Failed to backup archived project:', err));
-      }
-      // Remove backup when un-archiving
-      else if (project.status === 'archived') {
-        invoke('delete_project_backup', { projectId: project.id })
-          .catch(err => console.warn('[Backup] Failed to remove backup:', err));
-      }
     }
   },
 
@@ -1111,13 +1307,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   addScene: async (projectId: string, name?: string) => {
     const project = get().projects.find(p => p.id === projectId);
     if (project && project.hasScenes) {
-      // Count existing numbered scenes (exclude 'Main' scene which has number 0)
-      const numberedScenes = (project.scenes || []).filter(s => s.number > 0);
-      const sceneNumber = numberedScenes.length + 1;
+      // Max + 1, not count + 1: after a deletion count + 1 reuses a live scene's number and folder
+      const scenes = project.scenes || [];
+      const sceneNumber = nextSceneNumber(scenes);
+      const sceneName = name || defaultSceneName(sceneNumber);
+      const nameError = name ? validateSceneName(name, scenes) : null;
+      if (nameError) {
+        if (typeof (window as any).showNotification === 'function') {
+          (window as any).showNotification('error', nameError, 'Invalid scene name');
+        }
+        return;
+      }
       const newScene = {
         id: crypto.randomUUID(),
-        number: sceneNumber,
-        name: name || `Scene ${sceneNumber.toString().padStart(3, '0')}`,
+        number: name ? sceneNumberFromName(name, sceneNumber) : sceneNumber,
+        name: sceneName,
         description: undefined,
         todos: [],
         notes: [],
@@ -1256,6 +1460,16 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const scene = (project.scenes || []).find(s => s.id === sceneId);
       if (!scene) return;
 
+      const nameError = validateSceneName(newName, project.scenes || [], sceneId);
+      if (nameError) {
+        if (typeof (window as any).showNotification === 'function') {
+          (window as any).showNotification('error', nameError, 'Invalid scene name');
+        }
+        return;
+      }
+      // The number comes from the name's digits ("Scene 007" → 7) and keys .thumbnails/sceneNNN
+      let newNumber = sceneNumberFromName(newName, scene.number);
+
       // Generate sanitized folder names for old and new scene names
       const oldFolderName = sanitizeFolderName(scene.name);
       const newFolderName = sanitizeFolderName(newName);
@@ -1328,20 +1542,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               newSceneName: newFolderName
             });
 
-            // 6. Rename thumbnails
-            const thumbnailsRenamed = await invoke<number>('rename_scene_thumbnails', {
-              projectPath: project.path,
-              oldSceneName: oldFolderName,
-              newSceneName: newFolderName
-            });
-
-            console.log(`✅ Scene renamed: ${filesRenamed} files, ${thumbnailsRenamed} thumbnails`);
+            console.log(`✅ Scene renamed: ${filesRenamed} files`);
 
             // Show success notification
             if (typeof (window as any).showNotification === 'function') {
               (window as any).showNotification(
                 'success',
-                `Renamed ${filesRenamed} files and ${thumbnailsRenamed} thumbnails`,
+                `Renamed ${filesRenamed} files`,
                 'Scene renamed successfully'
               );
             }
@@ -1383,25 +1590,51 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         }
       }
 
-      // Update metadata only after successful rename (or if no rename was needed)
+      // Scene and shot previews live in .thumbnails/scene{number}: move them along with a new number.
+      // If that fails, keep the old number so the previews stay consistent with their folder
+      if (newNumber !== scene.number) {
+        try {
+          await invoke('rename_scene_thumbnails', {
+            projectPath: project.path,
+            oldSceneNumber: scene.number,
+            newSceneNumber: newNumber
+          });
+        } catch (error) {
+          console.warn('Failed to move scene previews, keeping the scene number:', error);
+          newNumber = scene.number;
+        }
+      }
+      const oldPreviewDir = `.thumbnails/scene${String(scene.number).padStart(3, '0')}/`;
+      const newPreviewDir = `.thumbnails/scene${String(newNumber).padStart(3, '0')}/`;
+      const movePreview = (preview?: string) =>
+        preview && preview.startsWith(oldPreviewDir) ? newPreviewDir + preview.slice(oldPreviewDir.length) : preview;
+
+      // Update metadata only after successful rename (or if no rename was needed).
+      // Built from the latest copy: the awaits above can take a while (time tracking keeps writing)
+      const latest = get().projects.find(p => p.id === projectId) ?? project;
       const updated = {
-        ...project,
-        scenes: (project.scenes || []).map(s => {
+        ...latest,
+        scenes: (latest.scenes || []).map(s => {
           if (s.id === sceneId) {
-            // Extract number from new name (e.g., "Scene 777" -> 777)
-            const match = newName.match(/\d+/);
-            const newNumber = match ? parseInt(match[0]) : s.number;
-            return { ...s, name: newName, number: newNumber, todos: rewriteTodos(s.todos, oldAttachDir, newAttachDir) };
+            return {
+              ...s,
+              name: newName,
+              number: newNumber,
+              preview: movePreview(s.preview),
+              todos: rewriteTodos(s.todos, oldAttachDir, newAttachDir)
+            };
           }
           return s;
         }),
-        ...(project.shots ? {
-          shots: project.shots.map(s =>
-            s.sceneId === sceneId ? { ...s, todos: rewriteTodos(s.todos, oldAttachDir, newAttachDir) } : s
+        ...(latest.shots ? {
+          shots: latest.shots.map(s =>
+            s.sceneId === sceneId
+              ? { ...s, preview: movePreview(s.preview), todos: rewriteTodos(s.todos, oldAttachDir, newAttachDir) }
+              : s
           ),
         } : {}),
-        ...(project.specialContexts ? {
-          specialContexts: project.specialContexts.map(sc =>
+        ...(latest.specialContexts ? {
+          specialContexts: latest.specialContexts.map(sc =>
             sc.sceneId === sceneId ? { ...sc, todos: rewriteTodos(sc.todos, oldAttachDir, newAttachDir) } : sc
           ),
         } : {}),
@@ -2019,11 +2252,22 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const sceneDirForAttach = sceneForAttach ? sanitizeDirName(sceneForAttach.name) : '';
       const oldShotDir = [sceneDirForAttach, `SH${oldNumber.toString().padStart(3, '0')}`].filter(Boolean).join('/');
       const newShotDir = [sceneDirForAttach, `SH${finalNumber.toString().padStart(3, '0')}`].filter(Boolean).join('/');
+      // rename_shot_thumbnails renamed .thumbnails/sceneNNN/shot{old}_* to shot{new}_*: follow it in the path
+      const oldPreviewPart = `/shot${oldNumber.toString().padStart(3, '0')}_`;
+      const newPreviewPart = `/shot${finalNumber.toString().padStart(3, '0')}_`;
+      // Built from the latest copy: the renames above can take a while (time tracking keeps writing)
+      const latest = get().projects.find(p => p.id === projectId) ?? project;
       const updated = {
-        ...project,
-        shots: (project.shots || []).map(s => {
+        ...latest,
+        shots: (latest.shots || []).map(s => {
           if (s.id === shotId) {
-            return { ...s, name: finalName, number: finalNumber, todos: rewriteTodos(s.todos, oldShotDir, newShotDir) };
+            return {
+              ...s,
+              name: finalName,
+              number: finalNumber,
+              preview: s.preview?.replace(oldPreviewPart, newPreviewPart),
+              todos: rewriteTodos(s.todos, oldShotDir, newShotDir)
+            };
           }
           return s;
         })
@@ -2348,23 +2592,24 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       console.error('Failed to move projects or remove folder:', error);
     }
 
+    // Archived backups and "Other Project" transactions move to Personal along with the projects
+    await moveCategoryFinanceData(state.defaultProjectsPath, name, 'Personal', set);
+
     // Update categories list
     const updatedCategories = state.categories.filter(c => c !== name);
     if (typeof window !== 'undefined') {
       localStorage.setItem('categories', JSON.stringify(updatedCategories));
     }
 
-    // Switch to Personal and reload projects
-    set({
-      categories: updatedCategories,
-      selectedCategory: 'Personal'
+    // The removed category's projects now live in Personal under new paths
+    set(s => {
+      const offscreenProjects = { ...s.offscreenProjects };
+      delete offscreenProjects[name];
+      return { categories: updatedCategories, offscreenProjects };
     });
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedCategory', 'Personal');
-    }
 
-    // Reload projects from Personal category
-    await get().loadProjectsFromCategory('Personal');
+    // Switch to Personal; the current list is stale if it was the removed category
+    await switchCategory('Personal', state.selectedCategory !== name, set, get);
   },
 
   renameCategory: async (oldName: string, newName: string) => {
@@ -2381,77 +2626,29 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       console.error('Failed to rename category folder:', error);
     }
 
+    // Archived backups and "Other Project" transactions follow the renamed category
+    await moveCategoryFinanceData(state.defaultProjectsPath, oldName, newName, set);
+
     // Update category list
     const updatedCategories = state.categories.map(c => c === oldName ? newName : c);
     if (typeof window !== 'undefined') {
       localStorage.setItem('categories', JSON.stringify(updatedCategories));
     }
 
-    // Update selected category if needed
-    const newSelectedCategory = state.selectedCategory === oldName ? newName : state.selectedCategory;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedCategory', newSelectedCategory);
-    }
-
-    set({
-      categories: updatedCategories,
-      selectedCategory: newSelectedCategory
+    // Projects of the renamed category have new paths
+    set(s => {
+      const offscreenProjects = { ...s.offscreenProjects };
+      delete offscreenProjects[oldName];
+      return { categories: updatedCategories, offscreenProjects };
     });
 
-    // Reload projects from renamed category if it was selected
+    // Reload the renamed category if it was open; selectedCategory changes together with its projects
     if (state.selectedCategory === oldName) {
-      await get().loadProjectsFromCategory(newName);
+      await switchCategory(newName, false, set, get);
     }
   },
 
-  setSelectedCategory: async (category: string) => {
-    const state = get();
-
-    // Ensure category folder exists
-    try {
-      await invoke('ensure_category_folder', {
-        projectsDir: state.defaultProjectsPath,
-        categoryName: category
-      });
-    } catch (error) {
-      console.error('Failed to ensure category folder:', error);
-    }
-
-    set({ selectedCategory: category });
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedCategory', category);
-    }
-
-    // Load projects from this category
-    await get().loadProjectsFromCategory(category);
-  },
-
-  loadProjectsFromCategory: async (category: string) => {
-    const state = get();
-    set({ isLoading: true });
-
-    try {
-      const categoryPath = `${state.defaultProjectsPath}\\${category}`;
-
-      // Scan category folder - category is determined by folder, not metadata
-      const projects = await invoke<Project[]>('scan_projects_in_folder', {
-        folderPath: categoryPath,
-        categoryName: category
-      });
-
-      // Migrate projects to scene-based structure if needed
-      const migratedProjects = projects.map(project => get().migrateProjectToScenes(project));
-
-      // Drop the previous category's backups right away so they aren't mixed with the new projects while reloading
-      set({ projects: migratedProjects, archivedBackups: [], isLoading: false });
-
-      // Load archived backups for this category
-      get().loadArchivedBackups();
-    } catch (error) {
-      console.error('Failed to load projects from category:', error);
-      set({ isLoading: false, error: String(error) });
-    }
-  },
+  setSelectedCategory: (category: string) => switchCategory(category, true, set, get),
 
   // Time tracking - project data management only
   // Session management moved to src/features/time-tracking
@@ -3112,20 +3309,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   // Archived project backups
   archivedBackups: [],
+  unreadableProjectPaths: [],
 
   loadArchivedBackups: async () => {
     try {
       const backups = await invoke<Project[]>('get_archived_backups');
       const state = get();
-      const currentProjectIds = new Set(state.projects.map(p => p.id));
-      const selectedCategory = state.selectedCategory;
-
-      // Keep only orphaned backups (folder deleted) for the current category
-      const orphaned = backups
-        .filter(b => !currentProjectIds.has(b.id) && b.category === selectedCategory)
-        .map(b => ({ ...b, _isOrphaned: true }));
-
-      set({ archivedBackups: orphaned });
+      set({ archivedBackups: orphanedBackupsFor(backups, state.selectedCategory, state.projects, state.unreadableProjectPaths) });
     } catch (err) {
       console.warn('[Backup] Failed to load archived backups:', err);
     }
@@ -3156,8 +3346,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
 // Subscribe to timeTrackingStore to sync timeEntry updates to projectStore
 useTimeTrackingStore.subscribe((state) => {
-  const projectStoreState = useProjectStore.getState();
-
   // Get all active sessions from timeTrackingStore
   const activeSessions = Array.from(state.sessions.values()).filter(s => s.isActive);
 
@@ -3170,7 +3358,8 @@ useTimeTrackingStore.subscribe((state) => {
 
   // Update each project that has active sessions
   sessionsByProject.forEach((sessions, projectId) => {
-    const project = projectStoreState.projects.find(p => p.id === projectId);
+    // The project may be in a category left earlier — the session keeps running there
+    const project = findProject(useProjectStore.getState(), projectId);
 
     if (project) {
       // Update all active entries for this project
@@ -3218,16 +3407,8 @@ useTimeTrackingStore.subscribe((state) => {
           currentProjectTime
         };
 
-        // ✅ OPTIMIZATION: Use functional update to maintain array reference stability
-        // Only the affected project is updated, rest remain the same object references
-        useProjectStore.setState((prev) => ({
-          projects: prev.projects.map(p =>
-            p.id === project.id ? updatedProject : p
-          )
-        }));
-
-        // Update local reference for next iteration
-        projectStoreState.projects = useProjectStore.getState().projects;
+        // Only the affected project is replaced, the rest keep their object references
+        useProjectStore.setState((prev) => placeProject(prev, updatedProject));
       }
     }
   });

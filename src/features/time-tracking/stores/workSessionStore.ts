@@ -216,7 +216,7 @@ export const useWorkSessionStore = create<WorkSessionStore>((set, get) => ({
       const { useProjectStore } = await import('../../../store/projectStore');
       const timeTrackingStore = useTimeTrackingStore.getState();
       const projectStore = useProjectStore.getState();
-      const project = projectStore.projects.find(p => p.id === session.projectId);
+      const project = projectStore.getProjectById(session.projectId);
 
       if (project) {
         // Update timeEntries with new softwareMinutes AND durationMinutes

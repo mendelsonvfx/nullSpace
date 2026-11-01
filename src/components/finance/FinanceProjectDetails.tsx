@@ -23,7 +23,7 @@ export function FinanceProjectDetails({
   convertCurrency,
   onClose
 }: FinanceProjectDetailsProps) {
-  const { clients } = useProjectStore();
+  const clients = useProjectStore(state => state.clients);
 
   const projectCurrency = project.currency || 'USD';
   const projectRevenue = project.cost || 0;

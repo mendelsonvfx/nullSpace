@@ -197,7 +197,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
     try {
       const { useProjectStore } = await import('../../../store/projectStore');
       const projectStore = useProjectStore.getState();
-      const project = projectStore.projects.find(p => p.id === params.projectId);
+      const project = projectStore.getProjectById(params.projectId);
 
       if (project) {
         const updatedEntries = [...(project.timeEntries || []), entry];
@@ -231,7 +231,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
       try {
         const { useProjectStore } = await import('../../../store/projectStore');
         const projectStore = useProjectStore.getState();
-        const project = projectStore.projects.find(p => p.id === params.projectId);
+        const project = projectStore.getProjectById(params.projectId);
 
         if (project) {
           const updatedEntries = (project.timeEntries || []).map(e =>
@@ -292,7 +292,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
     // Use saved durationMinutes from project store (updated every minute by incrementMinute)
     // DO NOT use now - startTime — it includes hours when app was closed for restored sessions
     const { useProjectStore } = await import('../../../store/projectStore');
-    const projectData = useProjectStore.getState().projects.find(p => p.id === entry.projectId);
+    const projectData = useProjectStore.getState().getProjectById(entry.projectId);
     const savedEntry = projectData?.timeEntries?.find(e => e.id === entryId);
     // For brand-new sessions (first minute, durationMinutes=0 on disk), fall back to startTime calc
     const finalMinutes = (savedEntry?.durationMinutes && savedEntry.durationMinutes > 0)
@@ -360,7 +360,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
       try {
         const { useProjectStore } = await import('../../../store/projectStore');
         const projectStore = useProjectStore.getState();
-        const project = projectStore.projects.find(p => p.id === entry.projectId);
+        const project = projectStore.getProjectById(entry.projectId);
 
         if (project) {
           const updatedEntry = get().sessions.get(entryId);
@@ -490,7 +490,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
 
             // Stop this session properly (records time to totalMinutesSpent)
             const { useProjectStore } = await import('../../../store/projectStore');
-            const currentProject = useProjectStore.getState().projects.find(p => p.id === project.id);
+            const currentProject = useProjectStore.getState().getProjectById(project.id);
 
             if (currentProject && existingEntry.workSessionId) {
               // Find the WorkSession

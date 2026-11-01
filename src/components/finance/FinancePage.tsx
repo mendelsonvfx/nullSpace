@@ -4,6 +4,7 @@ import { Plus, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
 import { IconClockHour3, IconCurrencyDollar, IconSortAscendingLetters, IconUser } from '@tabler/icons-react';
 import { CustomSelect } from '../ui/CustomSelect';
 import { useProjectStore } from '../../store/projectStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { ProjectBreakdownCard } from './ProjectBreakdownCard';
 import { FinanceProjectDetails } from './FinanceProjectDetails';
@@ -14,6 +15,7 @@ import { TimeAnalytics } from '../time';
 import { ManualTransactionModal } from '../modals/ManualTransactionModal';
 import { Currency } from '../../types/project';
 import { getProjectColor, createSoftGradient } from '../../utils/colorUtils';
+import { settlePrepaidIfCovered } from '../../utils/financeService';
 import { useTimeTrackingFeature } from '../../hooks/useTimeTrackingFeature';
 import SimpleBar from 'simplebar-react';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
@@ -29,7 +31,11 @@ interface FinancePageProps {
 export const FinancePage = React.memo(function FinancePage({ projects, selectedProjectId, onClose }: FinancePageProps) {
   // Include orphaned backup projects in financial calculations
   const archivedBackups = useProjectStore(state => state.archivedBackups);
-  const allProjects = useMemo(() => [...projects, ...archivedBackups], [projects, archivedBackups]);
+  // Prepaid projects whose prepayment covers the cost count as paid — also orphaned backups, which are never re-saved
+  const allProjects = useMemo(
+    () => [...projects, ...archivedBackups].map(settlePrepaidIfCovered),
+    [projects, archivedBackups]
+  );
 
   const renderStart = performance.now();
   const renderCountRef = React.useRef(0);
@@ -107,7 +113,17 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const [hoveredMonthIndex, setHoveredMonthIndex] = useState<number | null>(null);
 
   const selectedProject = selectedProjectId ? allProjects.find(p => p.id === selectedProjectId) : null;
-  const { updateProject, otherProjectTransactions, addOtherTransaction, removeOtherTransaction, selectedCategory, defaultProjectsPath } = useProjectStore();
+  // Selected fields only: this page stays mounted while hidden, a whole-store subscription re-rendered it on every store update
+  const { updateProject, otherProjectTransactions, addOtherTransaction, removeOtherTransaction, selectedCategory, defaultProjectsPath } = useProjectStore(
+    useShallow(state => ({
+      updateProject: state.updateProject,
+      otherProjectTransactions: state.otherProjectTransactions,
+      addOtherTransaction: state.addOtherTransaction,
+      removeOtherTransaction: state.removeOtherTransaction,
+      selectedCategory: state.selectedCategory,
+      defaultProjectsPath: state.defaultProjectsPath,
+    }))
+  );
 
   // Get transactions for current folder path only
   const currentFolderPath = `${defaultProjectsPath}\\${selectedCategory}`;
@@ -341,7 +357,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   };
 
   // Simple calculations without useMemo - computed on every render (as before refactoring)
-  const { clients } = useProjectStore();
+  const clients = useProjectStore(state => state.clients);
 
   // Sorted/filtered projects for full list + Other Project transactions
   const otherProjectItems = currentCategoryTransactions.map((transaction: any) => ({
@@ -396,7 +412,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
   const sortedFilteredProjects = [...filtered].sort((a, b) => {
     if (sortBy === 'amount') {
-      return ((b.displayAmount || b.cost) || 0) - ((a.displayAmount || a.cost) || 0);
+      return ((b.displayAmount ?? b.cost) || 0) - ((a.displayAmount ?? a.cost) || 0);
     } else if (sortBy === 'date') {
       return getLatestPaymentDate(b) - getLatestPaymentDate(a);
     } else if (sortBy === 'client') {
@@ -456,17 +472,17 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const top3Projects = paidProjects
     .sort((a: any, b: any) => {
       const amountA = convertToBaseCurrency && a.currency !== baseCurrency
-        ? convertCurrency(((a.displayAmount || a.cost) || 0), a.currency || 'USD', baseCurrency)
-        : ((a.displayAmount || a.cost) || 0);
+        ? convertCurrency(((a.displayAmount ?? a.cost) || 0), a.currency || 'USD', baseCurrency)
+        : ((a.displayAmount ?? a.cost) || 0);
       const amountB = convertToBaseCurrency && b.currency !== baseCurrency
-        ? convertCurrency(((b.displayAmount || b.cost) || 0), b.currency || 'USD', baseCurrency)
-        : ((b.displayAmount || b.cost) || 0);
+        ? convertCurrency(((b.displayAmount ?? b.cost) || 0), b.currency || 'USD', baseCurrency)
+        : ((b.displayAmount ?? b.cost) || 0);
       return amountB - amountA;
     })
     .slice(0, 3)
     .map((project: any) => {
       const originalCurrency = project.currency || 'USD';
-      const originalAmount = project.displayAmount || project.cost || 0;
+      const originalAmount = (project.displayAmount ?? project.cost) || 0;
       const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
         ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
         : originalAmount;
@@ -478,7 +494,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   // Pie chart data for projects
   const projectsPieChartData = paidProjects.map((project: any) => {
     const originalCurrency = project.currency || 'USD';
-    const originalAmount = project.displayAmount || project.cost || 0;
+    const originalAmount = (project.displayAmount ?? project.cost) || 0;
     const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
       ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
       : originalAmount;
@@ -499,7 +515,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
       const client = clients.find(c => c.id === project.clientId);
       if (!client) return;
       const originalCurrency = project.currency || 'USD';
-      const originalAmount = project.displayAmount || project.cost || 0;
+      const originalAmount = (project.displayAmount ?? project.cost) || 0;
       const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
         ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
         : originalAmount;
@@ -525,7 +541,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
       const client = clients.find(c => c.id === project.clientId);
       if (!client) return;
       const originalCurrency = project.currency || 'USD';
-      const originalAmount = project.displayAmount || project.cost || 0;
+      const originalAmount = (project.displayAmount ?? project.cost) || 0;
       const displayAmount = convertToBaseCurrency && originalCurrency !== baseCurrency
         ? convertCurrency(originalAmount, originalCurrency, baseCurrency)
         : originalAmount;
@@ -591,7 +607,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                       .slice(0, 3)
                       .map((project: any) => {
                         const originalCurrency = project.currency || 'USD';
-                        const originalAmount = project.displayAmount || project.cost;
+                        const originalAmount = project.displayAmount ?? project.cost;
 
                         const displayText = convertToBaseCurrency
                           ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
@@ -628,13 +644,13 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                     <div className="space-y-2">
                       {[...pendingProjects]
                       .sort((a: any, b: any) => {
-                        const amt = (p: any) => convertCurrency(p.displayAmount || p.cost || 0, p.currency || 'USD', baseCurrency);
+                        const amt = (p: any) => convertCurrency((p.displayAmount ?? p.cost) || 0, p.currency || 'USD', baseCurrency);
                         return amt(b) - amt(a);
                       })
                       .slice(0, 3)
                       .map((project: any) => {
                         const originalCurrency = project.currency || 'USD';
-                        const originalAmount = project.displayAmount || project.cost;
+                        const originalAmount = project.displayAmount ?? project.cost;
 
                         const displayText = convertToBaseCurrency
                           ? `${convertCurrency(originalAmount, originalCurrency, baseCurrency).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ${currencySymbols[baseCurrency]}`
@@ -760,7 +776,7 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
                       <div className="space-y-1.5 pr-2">
                     {sortedFilteredProjects.map((project: any) => {
                         const originalCurrency = project.currency || 'USD';
-                        const originalAmount = project.displayAmount || project.cost;
+                        const originalAmount = project.displayAmount ?? project.cost;
                         const showConversion = convertToBaseCurrency && originalCurrency !== baseCurrency;
                         const isPaid = project.paymentStatus === 'paid' || project.isPrepaidProject;
                         const projectDate = project.completedAt || project.createdAt || project.date;

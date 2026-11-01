@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { IconStarFilled, IconStar, IconSettings, IconX, IconCheck, IconFolderOpen, IconCreditCard, IconClock, IconRefresh, IconTrash, IconPlus, IconPencil, IconPlayerPlay, IconAppWindow, IconChevronRight, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react';
+import { IconStarFilled, IconStar, IconSettings, IconX, IconFolderOpen, IconCreditCard, IconClock, IconTrash, IconPlus, IconPencil, IconPlayerPlay, IconAppWindow, IconChevronRight, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api';
 import { selectExecutable } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
@@ -9,6 +9,7 @@ import { AssetsLibrary, type AssetStats } from './AssetsLibrary';
 import { OutputOverview } from './OutputOverview';
 import { ShotsOverviewTable } from './ShotsOverviewTable';
 import { SoftwareIcon } from '../SoftwareIcon';
+import { LaunchCardContent } from './LaunchStatus';
 import { STATUS_LABELS, SOFTWARE_OPTIONS, COMPOSE_ONLY_SOFTWARE, isComposeOnlySoftware } from '../../utils';
 import { InlineTimer, TimeInfoBar } from '../time';
 import { ManualTimeEntryModal } from '../modals/ManualTimeEntryModal';
@@ -19,18 +20,18 @@ import { useThumbnail } from '../../hooks/useThumbnail';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import { useProjectNameInput } from '../../hooks/useProjectNameInput';
 import { useProjectWatcher } from '../../hooks/useProjectWatcher';
-import { hasVersionedSoftware, formatSoftwareName } from '../../features/time-tracking/utils/softwareUtils';
+import { hasVersionedSoftware, formatSoftwareName, normalizeSoftwareName, getSoftwareColor } from '../../features/time-tracking/utils/softwareUtils';
 import { PROJECT_NAME_HINT } from '../../utils/fileNaming';
-import { composeKeyOf } from '../modals/ComposeSoftwareModal';
 import SimpleBar from 'simplebar-react';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { CustomSelect } from '../ui/CustomSelect';
 import { CollapsibleHint } from '../ui/CollapsibleHint';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { useDraftField, numberDraft, parseNumberDraft } from '../../hooks/useDraftField';
 import { getPaymentStatusUpdate } from '../../utils/financeService';
 import { useTasks } from '../../hooks/useTasks';
 import { TaskItem } from '../tasks/TaskItem';
-import type { TaskContext } from '../../types/project';
+import type { TaskContext, Project } from '../../types/project';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
@@ -109,6 +110,19 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const projectNameInput = useProjectNameInput();
   useEffect(() => { setNameInput(project.name); }, [project.id]);
   const contentScrollRef = useRef<HTMLElement | null>(null);
+
+  // Writes go to the latest store copy of the project, never a spread of this (possibly stale) prop
+  const patch = (fields: Partial<Project>) => useProjectStore.getState().patchProject(project.id, fields);
+
+  // Typed fields are saved when editing ends; a modal closing with an unsaved draft saves it too
+  const draftKey = `${project.id}|${showPaymentModal}|${showProjectSettings}`;
+  const costField = useDraftField(numberDraft(project.cost), d => patch({ cost: parseNumberDraft(d) }), draftKey);
+  const prepaymentField = useDraftField(
+    numberDraft(project.prepaymentAmount),
+    d => patch({ prepaymentAmount: parseNumberDraft(d) }),
+    draftKey
+  );
+  const descriptionField = useDraftField(project.description || '', d => patch({ description: d }), draftKey);
 
   // Context menu using centralized hook
   const { isOpen: isContextMenuOpen, position: contextMenuPosition, data: contextMenuData, openMenu: openContextMenu, closeMenu: closeContextMenu } = useContextMenu<{ software: any; executablePath: string }>();
@@ -371,8 +385,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           projectPath: project.path,
           imagePath: text
         });
-        const { updateProject } = useProjectStore.getState();
-        updateProject({ ...project, thumbnail: thumbnailName });
+        patch({ thumbnail: thumbnailName });
       } catch (error) {
         console.error('Failed to set thumbnail from path:', error);
       }
@@ -414,27 +427,10 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       const { removeFile } = await import('@tauri-apps/api/fs');
       await removeFile(tempPath).catch(() => {}); // Ignore errors
 
-      const { updateProject } = useProjectStore.getState();
-      updateProject({ ...project, thumbnail: thumbnailName });
+      patch({ thumbnail: thumbnailName });
     } catch (error) {
       console.error('Failed to process image:', error);
     }
-  };
-
-  // Map display names to internal keys (same as in software launch section)
-  const nameToKey: Record<string, string> = {
-    'Blender': 'blender',
-    'Houdini': 'houdini',
-    'Maya': 'maya',
-    'After Effects': 'after-effects',
-    'Cinema 4D': 'cinema4d',
-    'Substance Painter': 'substance',
-    'Unreal Engine': 'unreal',
-    'Unity': 'unity',
-    'ZBrush': 'zbrush',
-    'Photoshop': 'photoshop',
-    'Marmoset': 'marmoset',
-    'DaVinci Resolve': 'davinci'
   };
 
   const openToolEditor = (key: string) => {
@@ -462,8 +458,12 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const saveToolPath = () => {
     const key = `projectSoftwarePaths_${project.id}`;
     const map: Record<string, string> = JSON.parse(localStorage.getItem(key) || '{}');
-    if (toolWorkingPath) {
-      map[selectedToolKey] = toolWorkingPath;
+    const globalPaths: Record<string, string> = JSON.parse(localStorage.getItem('softwarePaths') || '{}');
+    const path = toolWorkingPath.trim();
+    // Same as the global path (the editor pre-fills it) → no override: saving unchanged must not pin
+    // today's global path to this project, or a later change in Settings would never reach it
+    if (path && path !== (globalPaths[selectedToolKey] ?? '')) {
+      map[selectedToolKey] = path;
     } else {
       delete map[selectedToolKey];
     }
@@ -488,11 +488,11 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   };
 
   const handleToggleSoftware = async (softwareName: string) => {
-    const softwareKey = nameToKey[softwareName] || softwareName.toLowerCase().replace(/\s+/g, '-');
+    const softwareKey = normalizeSoftwareName(softwareName);
     const { projects, updateProject } = useProjectStore.getState();
     const currentProject = projects.find(p => p.id === project.id) || project;
     const isCurrentlySelected = currentProject.software.some((sw: any) => {
-      const existingKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+      const existingKey = normalizeSoftwareName(sw.name);
       return existingKey === softwareKey;
     });
 
@@ -532,9 +532,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   const handleRemoveSoftware = async () => {
     if (!softwareToRemove) return;
 
-    const softwareKey = nameToKey[softwareToRemove] || softwareToRemove.toLowerCase().replace(/\s+/g, '-');
-    // Compose keys come from ComposeSoftwareModal's mapping, which can differ from nameToKey above
-    const composeKey = composeKeyOf(softwareToRemove);
+    const softwareKey = normalizeSoftwareName(softwareToRemove);
     const { updateProject } = useProjectStore.getState();
 
     try {
@@ -549,7 +547,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
       // Remove software from project metadata
       const updatedSoftware = latest.software.filter((sw: any) => {
-        const existingKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+        const existingKey = normalizeSoftwareName(sw.name);
         return existingKey !== softwareKey;
       });
 
@@ -557,7 +555,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
         ...latest,
         software: updatedSoftware,
         // Keep compose in sync — otherwise Global Compose is left without a launch button
-        composeSoftware: (latest.composeSoftware || []).filter((k: string) => k !== softwareKey && k !== composeKey),
+        composeSoftware: (latest.composeSoftware || []).filter((k: string) => k !== softwareKey),
       });
 
       // Trigger tree refresh
@@ -708,8 +706,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     value={descriptionValue}
                     onChange={(e) => setDescriptionValue(e.target.value)}
                     onBlur={() => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, description: descriptionValue });
+                      patch({ description: descriptionValue });
                       setIsEditingDescription(false);
                     }}
                     onKeyDown={(e) => {
@@ -718,8 +715,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                         setIsEditingDescription(false);
                       }
                       if (e.key === 'Enter') {
-                        const { updateProject } = useProjectStore.getState();
-                        updateProject({ ...project, description: descriptionValue });
+                        patch({ description: descriptionValue });
                         setIsEditingDescription(false);
                       }
                     }}
@@ -759,8 +755,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     value={descriptionValue}
                     onChange={(e) => setDescriptionValue(e.target.value)}
                     onBlur={() => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, description: descriptionValue });
+                      patch({ description: descriptionValue });
                       setIsEditingDescription(false);
                     }}
                     onKeyDown={(e) => {
@@ -769,8 +764,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                         setIsEditingDescription(false);
                       }
                       if (e.key === 'Enter') {
-                        const { updateProject } = useProjectStore.getState();
-                        updateProject({ ...project, description: descriptionValue });
+                        patch({ description: descriptionValue });
                         setIsEditingDescription(false);
                       }
                     }}
@@ -855,20 +849,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
               const projectPathsMap: Record<string, string> = JSON.parse(
                 localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}'
               );
-              const nameToKey: Record<string, string> = {
-                'Blender': 'blender',
-                'Houdini': 'houdini',
-                'Maya': 'maya',
-                'After Effects': 'after-effects',
-                'Cinema 4D': 'cinema4d',
-                'Substance Painter': 'substance',
-                'Unreal Engine': 'unreal',
-                'Unity': 'unity',
-                'ZBrush': 'zbrush',
-                'Marmoset': 'marmoset',
-                'DaVinci Resolve': 'davinci'
-              };
-              const keyOf = (sw: any) => nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+              const keyOf = (sw: any) => normalizeSoftwareName(sw.name);
               const composeKeys: string[] = project.composeSoftware || [];
               const launchList = (context.isSpecialContext && context.specialContextType === 'compose')
                 ? [
@@ -881,11 +862,12 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   ]
                 : project.software.filter((sw: any) => !isComposeOnlySoftware(keyOf(sw), !!(project.hasShots || project.hasScenes)));
               return launchList.map((sw: any) => {
-              const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+              const softwareKey = normalizeSoftwareName(sw.name);
               const executablePath = projectPathsMap[softwareKey] || pathsMap[softwareKey] || sw.executablePath;
 
               // Get launch status for this software
-              const statusKey = `${project.path}-${sw.name}`;
+              // projectStore.launchSoftware keys the status by software key, not display name
+              const statusKey = `${project.path}-${softwareKey}`;
               const status = launchingStatus?.[statusKey] || 'idle';
 
               // Find active session for this software (compare with softwareKey, not display name)
@@ -895,22 +877,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                        activeVisibleSessions[e.id] === true;
               });
 
-              // Get software color for gradient
-              const softwareColors: Record<string, string> = {
-                'blender': '#E87D0D',
-                'houdini': '#FF4713',
-                'after-effects': '#9999FF',
-                'photoshop': '#31A8FF',
-                'maya': '#0FADED',
-                'cinema4d': '#5C6BE0',
-                'substance': '#99E83F',
-                'unreal': '#C8CDD6',
-                'unity': '#000000',
-                'zbrush': '#F37021',
-                'marmoset': '#FF6B00',
-                'davinci': '#13D4F2'
-              };
-              const softwareColor = softwareColors[softwareKey] || '#6366f1';
+              // Software color for the card gradient
+              const softwareColor = getSoftwareColor(softwareKey);
 
               return (
                 <button
@@ -954,7 +922,9 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   }}
                   disabled={status === 'launching' || !executablePath}
                   data-launch-software
-                  className="p-4 rounded-xl flex items-center gap-3 transition-all duration-200 group select-none disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
+                  className={`p-4 rounded-xl flex items-center gap-3 transition-all duration-200 group select-none relative overflow-hidden ${
+                    !executablePath ? 'opacity-60 cursor-not-allowed' : status === 'launching' ? 'cursor-wait' : ''
+                  }`}
                   onMouseDown={(e) => {
                     // Применяем эффект прожатия только для ЛКМ (левая кнопка мыши)
                     if (e.button === 0) {
@@ -987,26 +957,15 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                     `;
                   }}
                 >
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center">
-                    <SoftwareIcon name={sw.name} />
-                  </div>
-                  <div className="text-left flex-1">
-                    <div className="font-medium">{sw.name}</div>
-                    <div className="text-xs text-text-muted">
-                      {status === 'launching' ? 'Launching...' : status === 'success' ? 'Launched!' : activeEntry ? 'Running...' : executablePath ? 'Click to launch' : 'Path not set'}
-                    </div>
-                  </div>
-
-                  {/* Inline Timer */}
-                  {timeTrackingEnabled && activeEntry && <InlineTimer activeEntry={activeEntry} />}
-
-                  {/* Status indicator */}
-                  {!activeEntry && status === 'launching' && (
-                    <IconRefresh stroke={1.5} className="w-5 h-5 text-accent animate-spin" />
-                  )}
-                  {!activeEntry && status === 'success' && (
-                    <IconCheck stroke={1.5} className="w-5 h-5 text-green-500 animate-in fade-in zoom-in duration-300" />
-                  )}
+                  <LaunchCardContent
+                    name={sw.name}
+                    icon={<SoftwareIcon name={sw.name} />}
+                    color={softwareColor}
+                    status={status}
+                    sessionVisible={!!activeEntry}
+                    timer={timeTrackingEnabled && activeEntry ? <InlineTimer activeEntry={activeEntry} /> : null}
+                    idleText={executablePath ? 'Click to launch' : 'Path not set'}
+                  />
                 </button>
               );
               });
@@ -1319,19 +1278,14 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 <div className="flex gap-2">
                   <input
                     type="number"
-                    value={project.cost || ''}
-                    onChange={(e) => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, cost: e.target.value ? parseFloat(e.target.value) : undefined });
-                    }}
+                    {...costField}
                     placeholder="0"
                     className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm text-white focus:outline-none focus:border-border-secondary transition-colors"
                   />
                   <CustomSelect
                     value={project.currency || 'USD'}
                     onChange={(val) => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, currency: val as 'USD' | 'RUB' | 'EUR' });
+                      patch({ currency: val as 'USD' | 'RUB' | 'EUR' });
                     }}
                     options={[
                       { value: 'USD', label: 'USD' },
@@ -1348,10 +1302,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 <CustomSelect
                   value={project.paymentStatus || 'unpaid'}
                   onChange={(val) => {
-                    const { updateProject } = useProjectStore.getState();
                     const newStatus = val as 'paid' | 'prepaid' | 'unpaid';
-                    const updates = getPaymentStatusUpdate(project, newStatus);
-                    updateProject({ ...project, ...updates });
+                    patch(getPaymentStatusUpdate(project, newStatus));
                   }}
                   options={[
                     { value: 'unpaid', label: 'Unpaid' },
@@ -1368,11 +1320,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   </label>
                   <input
                     type="number"
-                    value={project.prepaymentAmount || ''}
-                    onChange={(e) => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, prepaymentAmount: e.target.value ? parseFloat(e.target.value) : undefined });
-                    }}
+                    {...prepaymentField}
                     placeholder="0"
                     autoFocus={!project.prepaymentAmount}
                     className={`w-full bg-sidebar-bg border rounded-button px-3 py-2 text-sm text-white focus:outline-none transition-colors ${
@@ -1463,11 +1411,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 <div className="flex-1">
                   <label className="block text-sm font-medium mb-1.5">Description</label>
                   <textarea
-                    value={project.description}
-                    onChange={(e) => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, description: e.target.value });
-                    }}
+                    {...descriptionField}
                     rows={2}
                     className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-border-secondary resize-none h-[60px]"
                   />
@@ -1487,8 +1431,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                       <button
                         type="button"
                         onClick={() => {
-                          const { updateProject } = useProjectStore.getState();
-                          updateProject({ ...project, thumbnail: undefined });
+                          patch({ thumbnail: undefined });
                         }}
                         className="absolute top-1 right-1 w-6 h-6 bg-red-600 hover:bg-red-700 rounded transition-colors text-sm flex items-center justify-center"
                       >
@@ -1507,8 +1450,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                               projectPath: project.path,
                               imagePath
                             });
-                            const { updateProject } = useProjectStore.getState();
-                            updateProject({ ...project, thumbnail: thumbnailName });
+                            patch({ thumbnail: thumbnailName });
                           } catch (error) {
                             console.error('Failed to set thumbnail:', error);
                           }
@@ -1546,8 +1488,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   <CustomSelect
                     value={project.clientId || ''}
                     onChange={(v) => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, clientId: v || undefined });
+                      patch({ clientId: v || undefined });
                     }}
                     options={[
                       { value: '', label: 'No client' },
@@ -1795,19 +1736,14 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   <div className="flex gap-2">
                     <input
                       type="number"
-                      value={project.cost || ''}
-                      onChange={(e) => {
-                        const { updateProject } = useProjectStore.getState();
-                        updateProject({ ...project, cost: e.target.value ? parseFloat(e.target.value) : undefined });
-                      }}
+                      {...costField}
                       placeholder="0"
                       className="flex-1 bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 text-sm focus:outline-none focus:border-border-secondary"
                     />
                     <CustomSelect
                       value={project.currency || 'USD'}
                       onChange={(val) => {
-                        const { updateProject } = useProjectStore.getState();
-                        updateProject({ ...project, currency: val as 'USD' | 'RUB' | 'EUR' });
+                        patch({ currency: val as 'USD' | 'RUB' | 'EUR' });
                       }}
                       options={[
                         { value: 'USD', label: 'USD' },
@@ -1826,10 +1762,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   <CustomSelect
                     value={project.paymentStatus || 'unpaid'}
                     onChange={(val) => {
-                      const { updateProject } = useProjectStore.getState();
                       const newStatus = val as 'paid' | 'prepaid' | 'unpaid';
-                      const updates = getPaymentStatusUpdate(project, newStatus);
-                      updateProject({ ...project, ...updates });
+                      patch(getPaymentStatusUpdate(project, newStatus));
                     }}
                     options={[
                       { value: 'unpaid', label: 'Unpaid' },
@@ -1844,11 +1778,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   </label>
                   <input
                     type="number"
-                    value={project.prepaymentAmount || ''}
-                    onChange={(e) => {
-                      const { updateProject } = useProjectStore.getState();
-                      updateProject({ ...project, prepaymentAmount: e.target.value ? parseFloat(e.target.value) : undefined });
-                    }}
+                    {...prepaymentField}
                     placeholder="0"
                     disabled={project.paymentStatus !== 'prepaid'}
                     className={`w-full bg-sidebar-bg border rounded-button px-3 py-2 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -1924,7 +1854,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                   return (
                     <div className="grid grid-cols-4 gap-2">
                       {SOFTWARE_OPTIONS.map((sw) => {
-                        const key = nameToKey[sw] || sw.toLowerCase().replace(/\s+/g, '-');
+                        const key = normalizeSoftwareName(sw);
                         const effective = projectPaths[key] ?? globalPaths[key] ?? '';
                         const isEdited = !!projectPaths[key] && projectPaths[key] !== (globalPaths[key] ?? '');
                         // Shot-based projects use compose-only software (DaVinci Resolve) in Compose: can't be toggled
@@ -1933,7 +1863,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                         const isSelected = composeOnly
                           ? (latestProject.composeSoftware || []).includes(key)
                           : latestProject.software.some((pSw: any) => {
-                              const existingKey = nameToKey[pSw.name] || pSw.name.toLowerCase().replace(/\s+/g, '-');
+                              const existingKey = normalizeSoftwareName(pSw.name);
                               return existingKey === key;
                             });
 
@@ -1980,7 +1910,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
 
                 {/* Path editor — animates open/close */}
                 {(toolEditorOpen || toolEditorClosing) && (() => {
-                  const selDef = SOFTWARE_OPTIONS.find(sw => (nameToKey[sw] || sw.toLowerCase().replace(/\s+/g, '-')) === selectedToolKey);
+                  const selDef = SOFTWARE_OPTIONS.find(sw => (normalizeSoftwareName(sw)) === selectedToolKey);
                   const globalPaths: Record<string, string> = JSON.parse(localStorage.getItem('softwarePaths') || '{}');
                   const projectPaths: Record<string, string> = JSON.parse(localStorage.getItem(`projectSoftwarePaths_${project.id}`) || '{}');
                   const globalPath = globalPaths[selectedToolKey] ?? '';
@@ -2117,7 +2047,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           >
             <h3 className="text-lg font-semibold mb-2">Delete Shot</h3>
             <p className="text-text-muted mb-6">
-              Are you sure you want to delete "{shotToDelete.name}"? This action cannot be undone.
+              Are you sure you want to delete "{shotToDelete.name}" and its version files? This action cannot be undone.
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -2171,7 +2101,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                 <p className="text-sm text-yellow-200/90">
                   <strong>Warning:</strong> Removing software will delete its folder and all contents from the project directory. This action cannot be undone.
                 </p>
-                {(nameToKey[softwareToRemove] || softwareToRemove.toLowerCase().replace(/\s+/g, '-')) === 'unreal' && (
+                {(normalizeSoftwareName(softwareToRemove)) === 'unreal' && (
                   <p className="text-sm text-red-400 mt-2">
                     The Unreal Engine project (UnrealEngine/_Project) with all levels and assets will be deleted too.
                   </p>
@@ -2284,7 +2214,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           onClick={() => {
             if (!contextMenuData) return;
             if (onLaunchSoftwareWithoutProject) {
-              const softwareKey = nameToKey[contextMenuData.software.name] || contextMenuData.software.name.toLowerCase().replace(/\s+/g, '-');
+              const softwareKey = normalizeSoftwareName(contextMenuData.software.name);
               onLaunchSoftwareWithoutProject(contextMenuData.executablePath, softwareKey);
             }
             closeContextMenu();

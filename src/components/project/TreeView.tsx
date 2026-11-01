@@ -29,7 +29,7 @@ import { writeText } from '@tauri-apps/api/clipboard';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
 import type { SoftwareName } from '../../types/project';
 import SimpleBar from 'simplebar-react';
-import { isVersioned, extractVersion } from '../../utils/fileNaming';
+import { isVersioned, extractVersion, sanitizeFolderName } from '../../utils/fileNaming';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuColorPicker } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { openResolveVersion } from '../../utils/openResolveVersion';
@@ -125,9 +125,6 @@ const PROJECT_FILE_EXTENSIONS = [
   'c4d', 'spp', 'uproject', 'unity',
   'zpr', 'tbscene', 'drp'
 ];
-
-const sanitizeFolderName = (name: string): string =>
-  name.replace(/\s+/g, '').replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
 
 const getSoftwareDirName = (software: string): string => {
   switch (software.toLowerCase()) {

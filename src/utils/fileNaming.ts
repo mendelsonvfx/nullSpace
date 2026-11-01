@@ -31,11 +31,58 @@ export interface FileNameComponents {
 }
 
 /**
- * Normalize string for file name (remove spaces, uppercase)
+ * Name as it appears in folder and file names: only [A-Za-z0-9_-], uppercase.
+ * Must match file_naming::sanitize_folder_name in Rust, which builds every folder and file name
  */
-function normalize(str: string): string {
-  return str.replace(/\s+/g, '').toUpperCase();
+export function sanitizeFolderName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase();
 }
+
+
+interface SceneRef {
+  id: string;
+  name: string;
+  number: number;
+}
+
+/** Scene number taken from the first digits of its name ("Scene 005" → 5), else `fallback` */
+export function sceneNumberFromName(name: string, fallback: number): number {
+  const match = name.match(/\d+/);
+  return match ? parseInt(match[0], 10) : fallback;
+}
+
+/**
+ * Why a scene name can't be used, or null if it can. The name becomes the scene folder in every software
+ * folder, and the scene number (from its digits) keys delete_scene_files and `.thumbnails/sceneNNN`.
+ * `sceneId` is the scene being renamed (excluded from the duplicate checks).
+ */
+export function validateSceneName(name: string, scenes: SceneRef[], sceneId?: string): string | null {
+  const folder = sanitizeFolderName(name);
+  if (!folder) return 'Scene name needs at least one Latin letter or digit';
+  if (folder.startsWith('_')) return 'Scene name can\'t start with "_"';
+
+  const others = scenes.filter(s => s.id !== sceneId);
+  if (others.some(s => sanitizeFolderName(s.name) === folder)) {
+    return `Another scene already uses the folder name ${folder}`;
+  }
+  const current = scenes.find(s => s.id === sceneId);
+  const number = sceneNumberFromName(name, current?.number ?? 0);
+  if (number > 0 && others.some(s => s.number === number)) {
+    return `Scene number ${number} is already used by another scene`;
+  }
+  return null;
+}
+
+/** Number and default name for a new scene: max number + 1, skipping numbers and folders already taken */
+export function nextSceneNumber(scenes: SceneRef[]): number {
+  const numbers = new Set(scenes.map(s => s.number));
+  const folders = new Set(scenes.map(s => sanitizeFolderName(s.name)));
+  let n = Math.max(0, ...scenes.map(s => s.number)) + 1;
+  while (numbers.has(n) || folders.has(sanitizeFolderName(defaultSceneName(n)))) n++;
+  return n;
+}
+
+export const defaultSceneName = (n: number) => `Scene ${n.toString().padStart(3, '0')}`;
 
 /**
  * Build full file name from components
@@ -61,12 +108,12 @@ export function buildFileName(components: FileNameComponents): string {
  * @returns Base name like: PROJECT_SCENE_SHOT or PROJECT_SCENE_SHOT_CONTEXT
  */
 export function getBaseName(components: FileNameComponents): string {
-  const projectName = normalize(components.projectName);
-  const sceneName = normalize(components.sceneName);
+  const projectName = sanitizeFolderName(components.projectName);
+  const sceneName = sanitizeFolderName(components.sceneName);
   const shotStr = `SH${components.shotNumber.toString().padStart(SHOT_DIGITS, '0')}`;
 
   if (components.specialContext) {
-    const context = normalize(components.specialContext);
+    const context = sanitizeFolderName(components.specialContext);
     return `${projectName}_${sceneName}_${shotStr}_${context}`;
   }
 
@@ -184,14 +231,14 @@ export function parseFileName(filename: string): FileNameComponents | null {
  * Get project pattern for filtering: PROJECT_
  */
 export function getProjectPattern(projectName: string): string {
-  return `${normalize(projectName)}_`;
+  return `${sanitizeFolderName(projectName)}_`;
 }
 
 /**
  * Get scene pattern for filtering: PROJECT_SCENE_
  */
 export function getScenePattern(projectName: string, sceneName: string): string {
-  return `${normalize(projectName)}_${normalize(sceneName)}_`;
+  return `${sanitizeFolderName(projectName)}_${sanitizeFolderName(sceneName)}_`;
 }
 
 /**
@@ -203,7 +250,7 @@ export function getShotPattern(
   shotNumber: number
 ): string {
   const shotStr = `SH${shotNumber.toString().padStart(SHOT_DIGITS, '0')}`;
-  return `${normalize(projectName)}_${normalize(sceneName)}_${shotStr}_`;
+  return `${sanitizeFolderName(projectName)}_${sanitizeFolderName(sceneName)}_${shotStr}_`;
 }
 
 /**

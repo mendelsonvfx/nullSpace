@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   IconMinus,
   IconSquare,
@@ -37,6 +37,8 @@ import { AboutPanel } from './components/modals/AboutPanel';
 import { SoftwareIcon } from './components/SoftwareIcon';
 import { DevPerfPanel } from './components/dev/DevPerfPanel';
 import { ProjectCard } from './components/ProjectCard';
+import { ProjectListSkeleton } from './components/ProjectListSkeleton';
+import { useListEnterAnimation } from './hooks/useListEnterAnimation';
 import { appWindow } from '@tauri-apps/api/window';
 import { DeadlineNotification } from './components/DeadlineNotification';
 import { GeneralNotification } from './components/notifications/GeneralNotification';
@@ -51,7 +53,7 @@ import { WelcomeSetup } from './components/modals/WelcomeSetup';
 import { BreakReminderContainer } from './components/time';
 import appIcon from './appIcon';
 import type { BreakReminder } from './components/time';
-import { useTimeTrackingStore, TimerService } from './features/time-tracking';
+import { useTimeTrackingStore, TimerService, normalizeSoftwareName } from './features/time-tracking';
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
 
@@ -126,6 +128,7 @@ function App() {
     deleteClient,
     categories,
     selectedCategory,
+    pendingCategory,
     setSelectedCategory,
     addCategory,
     launchingStatus,
@@ -149,6 +152,7 @@ function App() {
       deleteClient: state.deleteClient,
       categories: state.categories,
       selectedCategory: state.selectedCategory,
+      pendingCategory: state.pendingCategory,
       setSelectedCategory: state.setSelectedCategory,
       addCategory: state.addCategory,
       launchingStatus: state.launchingStatus,
@@ -244,6 +248,7 @@ function App() {
   const [showBottomShadow, setShowBottomShadow] = useState(true);
   const [showTopShadow, setShowTopShadow] = useState(false);
   const projectListRef = useRef<HTMLDivElement>(null);
+  const cardListRef = useRef<HTMLDivElement>(null);
   const titlebarLastClickRef = useRef(0);
 
   // Scene rename confirmation state
@@ -746,7 +751,8 @@ function App() {
             // Only trigger once per threshold when we reach it
             if (minutesWorked >= minutes && !shownReminders.has(reminderKey)) {
               // Find project name — use ref so closure always has the latest projects
-              const project = projectsRef.current.find(p => p.id === session.project_id);
+              // The session's project may be in a category left earlier
+              const project = useProjectStore.getState().getProjectById(session.project_id);
               const projectName = project?.name || 'Unknown Project';
 
               setBreakReminders(prev => [...prev, {
@@ -1216,6 +1222,15 @@ function App() {
     }
   }, []);
 
+  // Another category opens at the top of its list — before paint, so the new list never shows at the old offset
+  useLayoutEffect(() => {
+    if (projectListRef.current) projectListRef.current.scrollTop = 0;
+  }, [selectedCategory]);
+
+  // Cards rise in when the list is replaced (category, filter tab, first load) — after the scroll reset above,
+  // so the visible cards are picked at the top
+  useListEnterAnimation(cardListRef, projectListRef, !isLoading, [selectedCategory, filterView, isLoading]);
+
   // Check scroll position when projects change
   useEffect(() => {
     handleProjectListScroll();
@@ -1483,7 +1498,7 @@ function App() {
         >
           <CategoryTabs
             categories={categories}
-            selectedCategory={selectedCategory}
+            selectedCategory={pendingCategory ?? selectedCategory}
             onSelectCategory={setSelectedCategory}
             onAddCategory={addCategory}
             onDeleteCategory={(categoryName) => {
@@ -1699,16 +1714,14 @@ function App() {
           >
             <div className="px-4 pr-2 pt-4" style={{ paddingBottom: '110px' }}>
               {isLoading ? (
-                <div className="flex items-center justify-center h-32">
-                  <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full" />
-                </div>
+                <ProjectListSkeleton />
               ) : filteredProjects.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-32 text-text-muted text-sm">
+                <div ref={cardListRef} className="flex flex-col items-center justify-center h-32 text-text-muted text-sm">
                   <IconFolder stroke={1.5} className="w-8 h-8 mb-2 opacity-50" />
                   <p>No projects found</p>
                 </div>
               ) : (
-                <div className="space-y-3 pr-2">
+                <div ref={cardListRef} data-card-list className="space-y-3 pr-2">
                   {filteredProjects.map(project => (
                     <div
                       key={project.id}
@@ -2014,22 +2027,7 @@ function App() {
                       : null;
 
                     // Convert display name to SoftwareName key
-                    const nameToKey: Record<string, string> = {
-                      'Blender': 'blender',
-                      'Houdini': 'houdini',
-                      'Maya': 'maya',
-                      'After Effects': 'after-effects',
-                      'Cinema 4D': 'cinema4d',
-                      'Substance Painter': 'substance',
-                      'Substance Designer': 'substance',
-                      'Unreal Engine': 'unreal',
-                      'Unity': 'unity',
-                      'ZBrush': 'zbrush',
-                      'Marmoset': 'marmoset',
-                      'Photoshop': 'photoshop',
-                      'DaVinci Resolve': 'davinci'
-                    };
-                    const softwareKey = nameToKey[sw.name] || sw.name.toLowerCase().replace(/\s+/g, '-');
+                    const softwareKey = normalizeSoftwareName(sw.name);
 
                     // If in asset context - show dialog to enter asset name
                     // (not for Unreal Engine: it always opens the project's single UE project)

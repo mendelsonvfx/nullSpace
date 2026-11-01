@@ -1,5 +1,6 @@
 // src/features/time-tracking/utils/softwareUtils.ts
 import type { SoftwareName } from '../../../types/project';
+import { SOFTWARE_META, getSoftwareMeta } from '../../../utils/softwareMeta';
 
 /**
  * Normalize software name to canonical form
@@ -36,51 +37,17 @@ export const hasVersionedSoftware = (software: { name: string }[]): boolean =>
   software.some(sw => !NON_VERSIONED_SOFTWARE.has(normalizeSoftwareName(sw.name)));
 
 /**
- * Format software name for display (capitalize first letter)
+ * Display name of a software key or name (from SOFTWARE_META)
  */
 export const formatSoftwareName = (software: SoftwareName | string): string => {
   // Normalize software name first to handle any variants
   const normalized = normalizeSoftwareName(software);
-
-  const displayNames: Record<SoftwareName, string> = {
-    'blender': 'Blender',
-    'houdini': 'Houdini',
-    'after-effects': 'After Effects',
-    'photoshop': 'Photoshop',
-    'maya': 'Maya',
-    'cinema4d': 'Cinema 4D',
-    'substance': 'Substance Painter',
-    'unreal': 'Unreal Engine',
-    'unity': 'Unity',
-    'zbrush': 'ZBrush',
-    'marmoset': 'Marmoset Toolbag',
-    'davinci': 'DaVinci Resolve'
-  };
-
-  return displayNames[normalized] || normalized;
+  return SOFTWARE_META[normalized]?.display ?? normalized;
 };
 
 /**
- * Get color for software (for charts)
+ * Brand color of a software (charts, launch cards) — from SOFTWARE_META
  */
-export const getSoftwareColor = (software: SoftwareName | string): string => {
+export const getSoftwareColor = (software: SoftwareName | string): string =>
   // Normalize like formatSoftwareName: entries may store display names ('after effects')
-  const normalized = normalizeSoftwareName(software);
-
-  const colors: Record<SoftwareName, string> = {
-    'blender': '#E87D0D',
-    'houdini': '#FF4713',
-    'after-effects': '#9999FF',
-    'photoshop': '#31A8FF',
-    'maya': '#0FADED',
-    'cinema4d': '#5C6BE0',
-    'substance': '#99E83F',
-    'unreal': '#C8CDD6',
-    'unity': '#000000',
-    'zbrush': '#F37021',
-    'marmoset': '#FF6B00',
-    'davinci': '#13D4F2'
-  };
-
-  return colors[normalized] || '#6366f1';
-};
+  getSoftwareMeta(normalizeSoftwareName(software)).brandColor;

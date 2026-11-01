@@ -39,7 +39,7 @@ interface ShotsOverviewTableProps {
 }
 
 export function ShotsOverviewTable({ projectId, projectPath, projectName, currentScene, shots }: ShotsOverviewTableProps) {
-  const { setCurrentShot } = useProjectStore();
+  const setCurrentShot = useProjectStore(state => state.setCurrentShot);
 
   const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
   const loadVersionsReqRef = useRef(0);
