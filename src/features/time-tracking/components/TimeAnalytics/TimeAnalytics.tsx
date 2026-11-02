@@ -183,6 +183,13 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
     return totalRevenue / (totalMinutesAllProjects / 60);
   }, [totalRevenue, totalMinutesAllProjects]);
 
+  // Same revenue over the focused time of these same projects (the global softwareMinutes span all
+  // categories and deleted projects). Below an hour the rate isn't meaningful, so it isn't shown
+  const focusedHourlyRate = useMemo(() => {
+    const focusedMinutes = allTimeEntries.reduce((sum, entry) => sum + (entry.softwareMinutes || 0), 0);
+    return focusedMinutes >= 60 && totalRevenue > 0 ? totalRevenue / (focusedMinutes / 60) : undefined;
+  }, [allTimeEntries, totalRevenue]);
+
   // Empty state
   if (totalMinutes === 0) {
     return (
@@ -208,6 +215,7 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
         totalMinutesAllProjects={totalMinutesAllProjects}
         totalFocusedMinutes={totalFocusedMinutes}
         globalHourlyRate={globalHourlyRate}
+        focusedHourlyRate={focusedHourlyRate}
         baseCurrency={baseCurrency}
       />
 

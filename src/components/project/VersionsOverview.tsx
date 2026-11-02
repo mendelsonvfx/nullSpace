@@ -35,6 +35,142 @@ interface VersionsOverviewProps {
   showNotification: (type: 'success' | 'error' | 'warning' | 'info', message: string, title?: string, duration?: number) => void;
 }
 
+// Remove file extension from version name
+const getVersionNameWithoutExtension = (fullName: string) => {
+  return fullName.replace(/\.[^/.]+$/, '');
+};
+
+// Extract only version number from full name (remove project name and shot info)
+// For assets with custom name, show "ASSETNAME v001" format
+const getVersionDisplayName = (fullName: string) => {
+  const parsed = parseFileName(fullName);
+  if (parsed) {
+    const versionStr = `v${parsed.version.toString().padStart(3, '0')}`;
+
+    // Show suffix if present (e.g., "v001 TESTEXPORT")
+    if (parsed.suffix) {
+      return `${versionStr} ${parsed.suffix}`;
+    }
+
+    // Show asset/comp name if present (e.g., "CAR v001" instead of just "v001")
+    if (parsed.assetName) {
+      return `${parsed.assetName} ${versionStr}`;
+    }
+    return versionStr;
+  }
+  // Fallback to regex extraction
+  const nameWithoutExt = getVersionNameWithoutExtension(fullName);
+  // Match version with optional suffix: _v001 or _v001_TEST
+  const versionMatch = nameWithoutExt.match(/_v(\d+)(?:[\s_](.+))?$/i);
+  if (versionMatch) {
+    const versionStr = `v${versionMatch[1]}`;
+    // Include suffix if present
+    if (versionMatch[2]) {
+      return `${versionStr} ${versionMatch[2]}`;
+    }
+    return versionStr;
+  }
+  return nameWithoutExt;
+};
+
+// Format timestamp to readable date/time
+const formatDateTime = (timestamp: number) => {
+  if (!timestamp) return 'Unknown';
+  const date = new Date(timestamp * 1000);
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// Version Card Component with optional Blender thumbnail.
+// Lives outside VersionsOverview: declared inside, every re-render would be a new component type,
+// and React would recreate all cards, restarting the hover highlight under the cursor
+const VersionCard = ({ version, isBlendFile, isPsdFile, isC4dFile, previewsEnabled, versionMark, onDoubleClick, onContextMenu }: {
+  version: ProjectVersion;
+  isBlendFile: boolean;
+  isPsdFile: boolean;
+  isC4dFile: boolean;
+  previewsEnabled: boolean;
+  versionMark?: MarkColor;
+  onDoubleClick: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+}) => {
+  const willShowBlendThumb = isBlendFile && previewsEnabled;
+  const willShowPsdThumb   = isPsdFile  && previewsEnabled;
+  const willShowC4dThumb   = isC4dFile  && previewsEnabled;
+  const willShowThumbnail  = willShowBlendThumb || willShowPsdThumb || willShowC4dThumb;
+
+  const blendThumbnail  = useBlendThumbnail(willShowBlendThumb ? version.path : undefined);
+  const psdThumbnail    = usePsdThumbnail(willShowPsdThumb ? version.path : undefined);
+  const c4dThumbnail    = useC4dThumbnail(willShowC4dThumb ? version.path : undefined);
+  const thumbnail       = blendThumbnail || psdThumbnail || c4dThumbnail;
+  const softwareForIcon = isBlendFile ? 'Blender' : isPsdFile ? 'Photoshop' : 'Cinema 4D';
+
+  // Build tooltip with file dates
+  const tooltip = `${version.name}\nCreated: ${formatDateTime(version.created_at)}\nModified: ${formatDateTime(version.modified_at)}`;
+
+  return (
+    <div
+      className={`relative flex flex-col flex-shrink-0 ${willShowThumbnail ? 'w-36' : 'w-32'} cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none`}
+      onDoubleClick={onDoubleClick}
+      onContextMenu={onContextMenu}
+      title={tooltip}
+    >
+      {/* Color mark indicator */}
+      {versionMark && (
+        <div
+          className={`absolute ${willShowThumbnail ? 'top-1 right-1' : 'top-1'} w-1.5 h-1.5 rounded-full ${versionMark === 'red' ? 'bg-red-500' :
+            versionMark === 'green' ? 'bg-green-500' :
+              'bg-blue-500'
+            }`}
+          style={willShowThumbnail ? undefined : { right: '40px' }}
+          title={`Marked as ${versionMark}`}
+        />
+      )}
+
+      {/* Thumbnail preview area (fixed size) or software icons */}
+      {willShowThumbnail ? (
+        <div className="mb-2 rounded overflow-hidden bg-zinc-800 border border-border-primary relative h-16">
+          {thumbnail && (
+            <img
+              src={thumbnail}
+              alt="Preview"
+              className="w-full h-full object-cover"
+              draggable={false}
+            />
+          )}
+          {/* Software icon overlay in bottom-right corner */}
+          <div className="absolute bottom-1 right-1 w-5 h-5">
+            <SoftwareIcon name={softwareForIcon} />
+          </div>
+        </div>
+      ) : (
+        /* Software icons (when no thumbnail) */
+        <div className="flex gap-1 mb-2 justify-center items-center flex-wrap flex-1">
+          {version.software.length > 0 ? (
+            version.software.map((sw) => (
+              <div key={sw} className="w-5 h-5">
+                <SoftwareIcon name={sw} />
+              </div>
+            ))
+          ) : (
+            <div className="w-5 h-5 bg-zinc-700 rounded" />
+          )}
+        </div>
+      )}
+
+      {/* Version name without extension */}
+      <div className="text-xs text-center font-medium truncate" title={version.name}>
+        {getVersionDisplayName(version.name)}
+      </div>
+    </div>
+  );
+};
+
 export const VersionsOverview = memo(function VersionsOverview({ project, currentScene, currentShot, specialContextType, showNotification }: VersionsOverviewProps) {
   const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -667,44 +803,6 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
     );
   }
 
-  // Remove file extension from version name
-  const getVersionNameWithoutExtension = (fullName: string) => {
-    return fullName.replace(/\.[^/.]+$/, '');
-  };
-
-  // Extract only version number from full name (remove project name and shot info)
-  // For assets with custom name, show "ASSETNAME v001" format
-  const getVersionDisplayName = (fullName: string) => {
-    const parsed = parseFileName(fullName);
-    if (parsed) {
-      const versionStr = `v${parsed.version.toString().padStart(3, '0')}`;
-
-      // Show suffix if present (e.g., "v001 TESTEXPORT")
-      if (parsed.suffix) {
-        return `${versionStr} ${parsed.suffix}`;
-      }
-
-      // Show asset/comp name if present (e.g., "CAR v001" instead of just "v001")
-      if (parsed.assetName) {
-        return `${parsed.assetName} ${versionStr}`;
-      }
-      return versionStr;
-    }
-    // Fallback to regex extraction
-    const nameWithoutExt = getVersionNameWithoutExtension(fullName);
-    // Match version with optional suffix: _v001 or _v001_TEST
-    const versionMatch = nameWithoutExt.match(/_v(\d+)(?:[\s_](.+))?$/i);
-    if (versionMatch) {
-      const versionStr = `v${versionMatch[1]}`;
-      // Include suffix if present
-      if (versionMatch[2]) {
-        return `${versionStr} ${versionMatch[2]}`;
-      }
-      return versionStr;
-    }
-    return nameWithoutExt;
-  };
-
   // Get unique software list and sort alphabetically
   const uniqueSoftware = Array.from(
     new Set(versions.flatMap((v) => v.software))
@@ -726,101 +824,6 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
       }
       return true;
     });
-
-  // Format timestamp to readable date/time
-  const formatDateTime = (timestamp: number) => {
-    if (!timestamp) return 'Unknown';
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleString('ru-RU', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  // Version Card Component with optional Blender thumbnail
-  const VersionCard = ({ version, isBlendFile, isPsdFile, isC4dFile, versionMark, onDoubleClick, onContextMenu }: {
-    version: ProjectVersion;
-    isBlendFile: boolean;
-    isPsdFile: boolean;
-    isC4dFile: boolean;
-    versionMark?: MarkColor;
-    onDoubleClick: () => void;
-    onContextMenu: (e: React.MouseEvent) => void;
-  }) => {
-    const willShowBlendThumb = isBlendFile && blendPreviewsEnabled;
-    const willShowPsdThumb   = isPsdFile  && blendPreviewsEnabled;
-    const willShowC4dThumb   = isC4dFile  && blendPreviewsEnabled;
-    const willShowThumbnail  = willShowBlendThumb || willShowPsdThumb || willShowC4dThumb;
-
-    const blendThumbnail  = useBlendThumbnail(willShowBlendThumb ? version.path : undefined);
-    const psdThumbnail    = usePsdThumbnail(willShowPsdThumb ? version.path : undefined);
-    const c4dThumbnail    = useC4dThumbnail(willShowC4dThumb ? version.path : undefined);
-    const thumbnail       = blendThumbnail || psdThumbnail || c4dThumbnail;
-    const softwareForIcon = isBlendFile ? 'Blender' : isPsdFile ? 'Photoshop' : 'Cinema 4D';
-
-    // Build tooltip with file dates
-    const tooltip = `${version.name}\nCreated: ${formatDateTime(version.created_at)}\nModified: ${formatDateTime(version.modified_at)}`;
-
-    return (
-      <div
-        className={`relative flex flex-col flex-shrink-0 ${willShowThumbnail ? 'w-36' : 'w-32'} cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none`}
-        onDoubleClick={onDoubleClick}
-        onContextMenu={onContextMenu}
-        title={tooltip}
-      >
-        {/* Color mark indicator */}
-        {versionMark && (
-          <div
-            className={`absolute ${willShowThumbnail ? 'top-1 right-1' : 'top-1'} w-1.5 h-1.5 rounded-full ${versionMark === 'red' ? 'bg-red-500' :
-              versionMark === 'green' ? 'bg-green-500' :
-                'bg-blue-500'
-              }`}
-            style={willShowThumbnail ? undefined : { right: '40px' }}
-            title={`Marked as ${versionMark}`}
-          />
-        )}
-
-        {/* Thumbnail preview area (fixed size) or software icons */}
-        {willShowThumbnail ? (
-          <div className="mb-2 rounded overflow-hidden bg-zinc-800 border border-border-primary relative h-16">
-            {thumbnail && (
-              <img
-                src={thumbnail}
-                alt="Preview"
-                className="w-full h-full object-cover"
-                draggable={false}
-              />
-            )}
-            {/* Software icon overlay in bottom-right corner */}
-            <div className="absolute bottom-1 right-1 w-5 h-5">
-              <SoftwareIcon name={softwareForIcon} />
-            </div>
-          </div>
-        ) : (
-          /* Software icons (when no thumbnail) */
-          <div className="flex gap-1 mb-2 justify-center items-center flex-wrap flex-1">
-            {version.software.length > 0 ? (
-              version.software.map((sw) => (
-                <div key={sw} className="w-5 h-5">
-                  <SoftwareIcon name={sw} />
-                </div>
-              ))
-            ) : (
-              <div className="w-5 h-5 bg-zinc-700 rounded" />
-            )}
-          </div>
-        )}
-
-        {/* Version name without extension */}
-        <div className="text-xs text-center font-medium truncate" title={version.name}>
-          {getVersionDisplayName(version.name)}
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="mb-6 overflow-hidden">
@@ -905,11 +908,13 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                 const isC4dFile   = version.software.includes('Cinema 4D');
                 return (
                   <VersionCard
-                    key={version.path}
+                    // A changed file gets a new card: its preview is read again (a failed read isn't cached)
+                    key={`${version.path}:${version.modified_at}`}
                     version={version}
                     isBlendFile={isBlendFile}
                     isPsdFile={isPsdFile}
                     isC4dFile={isC4dFile}
+                    previewsEnabled={blendPreviewsEnabled}
                     versionMark={versionMarks[version.path]}
                     onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
                     onContextMenu={(e) => handleContextMenu(e, version)}

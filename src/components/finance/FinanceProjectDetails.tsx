@@ -36,9 +36,8 @@ export function FinanceProjectDetails({
   const displayCurrency = convertToBaseCurrency ? baseCurrency : projectCurrency;
 
   // Calculate hourly rate
-  const completedMinutes = project.totalMinutesSpent || 0;
-  const currentProjectMinutes = project.currentProjectTime || 0;
-  const totalMinutes = completedMinutes + currentProjectMinutes;
+  // totalMinutesSpent includes the running session (updated every minute), same number as the project's Time Spent
+  const totalMinutes = Math.round(project.totalMinutesSpent || 0);
   const totalHours = totalMinutes / 60;
 
   // Priority: target hourly rate > calculated from cost/time
@@ -237,7 +236,7 @@ export function FinanceProjectDetails({
             </div>
             <div className="flex items-center gap-2">
               <p className="text-sm text-zinc-500">
-                {Math.floor(totalHours)}h {Math.round((totalHours % 1) * 60)}m worked
+                {Math.floor(totalMinutes / 60)}h {totalMinutes % 60}m worked
               </p>
               {project.targetHourlyRate && (
                 <span className="text-xs text-accent px-2 py-0.5 bg-accent/10 rounded">

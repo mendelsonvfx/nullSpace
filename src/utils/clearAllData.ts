@@ -6,7 +6,7 @@ import { useTimeStatsStore } from '../features/time-tracking';
  * Clear all time tracking data from the application
  * This includes:
  * - All timeEntries from all projects
- * - totalMinutesSpent and currentProjectTime reset to 0
+ * - totalMinutesSpent reset to 0
  * - All global software statistics
  */
 export async function clearAllTimeTrackingData() {
@@ -23,7 +23,6 @@ export async function clearAllTimeTrackingData() {
         ...project,
         timeEntries: [],
         totalMinutesSpent: 0,
-        currentProjectTime: 0,
         hourlyRate: undefined,
         updatedAt: new Date().toISOString()
       };

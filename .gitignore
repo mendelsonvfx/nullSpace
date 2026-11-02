@@ -43,6 +43,7 @@ temp_shots_list.txt
 
 # Local notes (kept on disk, not in the repo)
 BACKLOG.md
+_plans/
 CHANGELOG.md
 DESIGN-GUIDE.md
 *.bak

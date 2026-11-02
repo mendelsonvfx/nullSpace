@@ -99,7 +99,7 @@ npm run tauri dev      # run in development
 npm run tauri build    # MSI / NSIS installers in src-tauri/target/release/bundle
 ```
 
-> The auto-updater reads `UPDATE_TOKEN` at compile time. Without it the app builds and runs normally, only update checks are disabled.
+> The auto-updater checks the latest release of this repository; dev builds (`tauri dev`) never check for updates.
 > Release builds are produced by [`.github/workflows/release.yml`](.github/workflows/release.yml) on every `v*.*.*` tag.
 
 ## License

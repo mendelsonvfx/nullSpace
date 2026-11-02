@@ -3,12 +3,9 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
-// Embedded at compile time via UPDATE_TOKEN env var (set in GitHub Actions).
-// None in local dev builds → update check silently returns Ok(None).
-// Some("") if Actions secret is missing → treated as None (see token guard below).
-// Scoped via fine-grained PAT to Contents:Read-only on mendelsonvfx/nullSpace-releases ONLY —
-// that repo holds no source code, so embedding this token in the shipped binary is safe by design.
-const GITHUB_TOKEN: Option<&str> = option_env!("UPDATE_TOKEN");
+// Releases of the public source repo: no token needed. Unauthenticated GitHub API allows 60 requests
+// an hour per IP, plenty for update checks
+const RELEASES_API: &str = "https://api.github.com/repos/mendelsonvfx/nullSpace/releases/latest";
 
 #[derive(Deserialize)]
 struct GithubAsset {
@@ -36,12 +33,10 @@ pub struct UpdateInfo {
 
 #[tauri::command]
 pub async fn check_for_update(app_handle: tauri::AppHandle) -> Result<Option<UpdateInfo>, String> {
-    // Guard: token must be present and non-empty.
-    // option_env! returns None if env var unset, Some("") if Actions secret missing.
-    let token = match GITHUB_TOKEN {
-        Some(t) if !t.is_empty() => t,
-        _ => return Ok(None),
-    };
+    // A dev build must never offer to replace itself with a release
+    if cfg!(debug_assertions) {
+        return Ok(None);
+    }
 
     let current = app_handle.package_info().version.to_string();
 
@@ -53,13 +48,12 @@ pub async fn check_for_update(app_handle: tauri::AppHandle) -> Result<Option<Upd
         .map_err(|e| e.to_string())?;
 
     let release: GithubRelease = client
-        .get("https://api.github.com/repos/mendelsonvfx/nullSpace-releases/releases/latest")
-        .header("Authorization", format!("Bearer {}", token))
+        .get(RELEASES_API)
         .header("Accept", "application/vnd.github+json")
         .send()
         .await
         .map_err(|e| e.to_string())?
-        .error_for_status() // returns Err on 4xx/5xx (e.g. 401 expired token, 404 no releases)
+        .error_for_status() // returns Err on 4xx/5xx (e.g. 403 rate limit, 404 no releases)
         .map_err(|e| e.to_string())?
         .json()
         .await
@@ -117,12 +111,10 @@ pub async fn install_portable_update(
     app_handle: tauri::AppHandle,
     download_url: String,
 ) -> Result<(), String> {
-    // Token guard — install_portable_update is only reachable after check_for_update
-    // returned Some(...), which requires a valid token. This is a safety net.
-    let token = match GITHUB_TOKEN {
-        Some(t) if !t.is_empty() => t,
-        _ => return Err("No update token configured".to_string()),
-    };
+    // Safety net: check_for_update never offers an update to a dev build
+    if cfg!(debug_assertions) {
+        return Err("Updates are disabled in dev builds".to_string());
+    }
 
     let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let temp_dir = std::env::temp_dir();
@@ -131,8 +123,6 @@ pub async fn install_portable_update(
     // Download new exe — 5-minute timeout for large file download.
     // download_url is the GitHub API asset URL. GitHub responds with 302 to a
     // pre-signed CDN URL; reqwest follows the redirect automatically.
-    // Authorization header is not forwarded to the CDN (different domain),
-    // but the CDN URL is self-authenticated via query params — no auth needed there.
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300))
         .user_agent("nullSpace-updater/1.0")
@@ -141,7 +131,6 @@ pub async fn install_portable_update(
 
     let mut response = client
         .get(&download_url)
-        .header("Authorization", format!("Bearer {}", token))
         .header("Accept", "application/octet-stream")
         .header("X-GitHub-Api-Version", "2022-11-28")
         .send()
@@ -167,8 +156,7 @@ pub async fn install_portable_update(
     std::thread::sleep(Duration::from_millis(650));
 
     // Sanity check: verify the downloaded bytes are a Windows PE executable.
-    // If the token is expired, GitHub may redirect to an HTML login page (200 OK)
-    // which error_for_status() would not catch. Writing HTML to disk and running
+    // GitHub may answer with an HTML page (200 OK) which error_for_status() would not catch. Writing HTML to disk and running
     // it as an exe causes a silent failure in the PowerShell replacement step.
     if bytes.len() < 2 || bytes[0] != 0x4D || bytes[1] != 0x5A {
         return Err("Downloaded file is not a valid Windows executable (MZ header missing)".to_string());

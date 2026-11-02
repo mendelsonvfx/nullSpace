@@ -6,6 +6,7 @@ interface StatsCardsProps {
   totalMinutesAllProjects: number;
   totalFocusedMinutes: number;
   globalHourlyRate?: number;
+  focusedHourlyRate?: number;
   baseCurrency: string;
 }
 
@@ -16,6 +17,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
   totalMinutesAllProjects,
   totalFocusedMinutes,
   globalHourlyRate,
+  focusedHourlyRate,
   baseCurrency
 }) => {
   const currencySymbols: Record<string, string> = {
@@ -45,6 +47,11 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
           {globalHourlyRate && globalHourlyRate > 0 ? Math.round(globalHourlyRate) : '0'}
           <span className="text-green-400">/h</span>
         </p>
+        {focusedHourlyRate !== undefined && (
+          <p className="text-sm text-zinc-600 mt-2">
+            {currencySymbols[baseCurrency] || '$'}{Math.round(focusedHourlyRate)}/h focused
+          </p>
+        )}
       </div>
     </div>
   );

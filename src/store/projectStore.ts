@@ -541,23 +541,17 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
           if (hasChanges) {
             // DON'T recalculate totalMinutesSpent - it's now updated in real-time!
-            // Only update activeMinutes
-            const activeMinutes = updatedEntries
-              .filter(e => e.isActive)
-              .reduce((sum, e) => sum + e.durationMinutes, 0);
-
             const updatedProject = {
               ...project,
               timeEntries: updatedEntries,
               // Keep existing totalMinutesSpent - it's already up-to-date from real-time updates
-              currentProjectTime: activeMinutes,
               updatedAt: new Date().toISOString()
             };
 
             // Save the updated project
             try {
               await invoke('update_project', { project: updatedProject });
-              console.log(`[TimeTracking] Cleaned up stale sessions for project "${project.name}". Total: ${updatedProject.totalMinutesSpent}m, Active: ${activeMinutes}m`);
+              console.log(`[TimeTracking] Cleaned up stale sessions for project "${project.name}". Total: ${updatedProject.totalMinutesSpent}m`);
               return updatedProject;
             } catch (error) {
               console.error(`[TimeTracking] Failed to save cleaned project:`, error);
@@ -3396,15 +3390,9 @@ useTimeTrackingStore.subscribe((state) => {
       });
 
       if (hasChanges) {
-        // Use durationMinutes from updatedEntries (preserved from projectStore, NOT stale timeTrackingStore value)
-        const currentProjectTime = updatedEntries
-          .filter(e => e.isActive)
-          .reduce((sum, e) => sum + e.durationMinutes, 0);
-
         const updatedProject = {
           ...project,
-          timeEntries: updatedEntries,
-          currentProjectTime
+          timeEntries: updatedEntries
         };
 
         // Only the affected project is replaced, the rest keep their object references

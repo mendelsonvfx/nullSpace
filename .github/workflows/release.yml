@@ -32,8 +32,6 @@ jobs:
 
       - name: Build binary
         working-directory: src-tauri
-        env:
-          UPDATE_TOKEN: ${{ secrets.UPDATE_TOKEN }}
         run: cargo build --release --features custom-protocol
 
       - name: Prepare release files
@@ -46,18 +44,7 @@ jobs:
           Copy-Item $exePath $exeName
           Compress-Archive -Path $exeName -DestinationPath $zipName
 
-      - name: Publish release (for auto-updater)
-        uses: softprops/action-gh-release@v2
-        with:
-          repository: mendelsonvfx/nullSpace-releases
-          token: ${{ secrets.RELEASES_PUBLISH_TOKEN }}
-          tag_name: ${{ github.ref_name }}
-          files: |
-            nullSpace.exe
-            nullSpace-*.zip
-          generate_release_notes: true
-
-      - name: Create GitHub Release (internal archive)
+      - name: Create GitHub Release (also the auto-updater source)
         uses: softprops/action-gh-release@v2
         with:
           files: |

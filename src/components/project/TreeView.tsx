@@ -61,9 +61,15 @@ function cacheGet<T>(map: Map<string, { data: T; ts: number }>, path: string): T
 }
 const treeStructureCache = new Map<string, { data: FileNode[]; ts: number }>();
 const treeSizeCache = new Map<string, { data: number; ts: number }>();
+// A read started before an invalidation must not put its older result back into the cache
+const treeCacheGenerations = new Map<string, number>();
+function treeCacheGeneration(path: string) {
+  return treeCacheGenerations.get(path) ?? 0;
+}
 function invalidateTreeCache(path: string) {
   treeStructureCache.delete(path);
   treeSizeCache.delete(path);
+  treeCacheGenerations.set(path, treeCacheGeneration(path) + 1);
 }
 
 // Folder SVG component
@@ -251,6 +257,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   const maxWaitTimerRef = useRef<number | null>(null);
   const isPendingReloadRef = useRef(false);
   const currentProjectPathRef = useRef(project.path);
+  const treeRequestRef = useRef(0);
+  const sizeRequestRef = useRef(0);
+  const treeOwnerRef = useRef<string | null>(null); // Project of the tree on screen, null when it's empty
   const startSession = useTimeTrackingStore(state => state.startSession);
 
   // Save expanded dirs to localStorage whenever they change
@@ -391,6 +400,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
 
   // Group versioned files into stacks
   const groupVersionsInTree = (nodes: FileNode[]): FileNode[] => {
+    const groups = new Map<string, FileNode>();
     return nodes.map(node => {
       if (node.is_dir && node.children) {
         // Recursively process directories
@@ -406,14 +416,11 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         // Extract base name (without version and extension)
         const baseName = node.name.replace(/_v\d+\.[^.]+$/, '');
 
-        // Find existing group for this base name
-        const existingGroupIndex = acc.findIndex(
-          n => n.isVersionGroup && n.name.startsWith(baseName)
-        );
+        // Find existing group for exactly this base name ("a" and "a_b" are different stacks)
+        const group = groups.get(baseName);
 
-        if (existingGroupIndex !== -1) {
+        if (group) {
           // Add to existing group
-          const group = acc[existingGroupIndex];
           group.versions = [...(group.versions || []), node];
           group.versionCount = group.versions.length;
           // Update group name with new count
@@ -426,14 +433,16 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           });
         } else {
           // Create new group (will be converted back to single file if only 1 version)
-          acc.push({
+          const newGroup: FileNode = {
             name: `${baseName} (1 version)`,
             path: node.path,
             is_dir: false,
             isVersionGroup: true,
             versions: [node],
             versionCount: 1
-          });
+          };
+          groups.set(baseName, newGroup);
+          acc.push(newGroup);
         }
       } else {
         // Non-versioned file or directory
@@ -449,20 +458,27 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     });
   };
 
-  const loadTree = async () => {
-    // Serve from cache immediately if available
-    const projectPathAtCall = currentProjectPathRef.current;
-    const cached = cacheGet(treeStructureCache, projectPathAtCall);
-    if (cached) {
-      setTree(cached);
-      setLoading(false);
-      return;
-    }
+  const showTree = (projectPath: string, nodes: FileNode[]) => {
+    treeOwnerRef.current = nodes.length > 0 ? projectPath : null;
+    setTree(nodes);
+  };
 
-    // Clear any existing timer first
+  const loadTree = async () => {
+    const requestId = ++treeRequestRef.current;
+
+    // Clear any existing timer first: a request it belongs to is now outdated and won't clear it
     if (loadingTimerRef.current !== null) {
       clearTimeout(loadingTimerRef.current);
       loadingTimerRef.current = null;
+    }
+
+    // Serve from cache immediately if available
+    const projectPath = currentProjectPathRef.current;
+    const cached = cacheGet(treeStructureCache, projectPath);
+    if (cached) {
+      showTree(projectPath, cached);
+      setLoading(false);
+      return;
     }
 
     // Remember if this is first load before changing the flag
@@ -472,20 +488,22 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     if (isFirstLoad) {
       setLoading(true);
       isFirstLoadRef.current = false;
-    } else {
-      // Set a delayed loading state to prevent flickering on updates
+    } else if (treeOwnerRef.current !== projectPath) {
+      // Set a delayed loading state to prevent flickering on updates.
+      // A tree of this project stays on screen (with its scroll position) until the new one is ready
       loadingTimerRef.current = window.setTimeout(() => {
         setLoading(true);
         loadingTimerRef.current = null;
       }, 300);
     }
 
+    const generation = treeCacheGeneration(projectPath);
+
     try {
-      const projectPath = currentProjectPathRef.current;
       const result = await invoke<FileNode[]>('get_folder_structure', { path: projectPath });
 
-      // Check if project changed while loading
-      if (projectPath !== currentProjectPathRef.current) {
+      // A newer load (or another project) took over while this one was reading
+      if (requestId !== treeRequestRef.current) {
         return;
       }
 
@@ -510,8 +528,10 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       }
 
       // Cache the processed result and update state
-      cacheSet(treeStructureCache, projectPath, groupedResult);
-      setTree(groupedResult);
+      if (generation === treeCacheGeneration(projectPath)) {
+        cacheSet(treeStructureCache, projectPath, groupedResult);
+      }
+      showTree(projectPath, groupedResult);
 
       // Auto-expand software folders on first load
       if (isFirstLoad) {
@@ -537,6 +557,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       setLoading(false);
     } catch (error) {
       console.error('Failed to load folder structure:', error);
+      if (requestId !== treeRequestRef.current) {
+        return;
+      }
       // Clear the loading timer on error
       if (loadingTimerRef.current !== null) {
         clearTimeout(loadingTimerRef.current);
@@ -641,19 +664,21 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   }, [project.path]);
 
   const loadDirectorySize = async () => {
+    const requestId = ++sizeRequestRef.current;
+
+    // Clear any existing timer first: a request it belongs to is now outdated and won't clear it
+    if (loadingSizeTimerRef.current !== null) {
+      clearTimeout(loadingSizeTimerRef.current);
+      loadingSizeTimerRef.current = null;
+    }
+
     // Serve from cache immediately if available
-    const projectPathAtCall = currentProjectPathRef.current;
-    const cachedSize = cacheGet(treeSizeCache, projectPathAtCall);
+    const projectPath = currentProjectPathRef.current;
+    const cachedSize = cacheGet(treeSizeCache, projectPath);
     if (cachedSize !== null) {
       setDirectorySize(cachedSize);
       setLoadingSize(false);
       return;
-    }
-
-    // Clear any existing timer first
-    if (loadingSizeTimerRef.current !== null) {
-      clearTimeout(loadingSizeTimerRef.current);
-      loadingSizeTimerRef.current = null;
     }
 
     // Only show loading state for first load or after 300ms delay
@@ -669,12 +694,13 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
       }, 300);
     }
 
+    const generation = treeCacheGeneration(projectPath);
+
     try {
-      const projectPath = currentProjectPathRef.current;
       const size = await invoke<number>('get_directory_size', { path: projectPath });
 
-      // Check if project changed while loading
-      if (projectPath !== currentProjectPathRef.current) {
+      // A newer request (or another project) took over while this one was reading
+      if (requestId !== sizeRequestRef.current) {
         return;
       }
 
@@ -684,11 +710,16 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         loadingSizeTimerRef.current = null;
       }
 
-      cacheSet(treeSizeCache, projectPath, size);
+      if (generation === treeCacheGeneration(projectPath)) {
+        cacheSet(treeSizeCache, projectPath, size);
+      }
       setDirectorySize(size);
       setLoadingSize(false);
     } catch (error) {
       console.error('Failed to load directory size:', error);
+      if (requestId !== sizeRequestRef.current) {
+        return;
+      }
       // Clear the loading timer on error
       if (loadingSizeTimerRef.current !== null) {
         clearTimeout(loadingSizeTimerRef.current);
@@ -750,6 +781,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
 
     setIsRefreshing(true);
     try {
+      // A manual rescan always reads the disk: files created outside the app don't invalidate the cache
+      invalidateTreeCache(currentProjectPathRef.current);
       await Promise.all([loadTree(), loadDirectorySize()]);
     } finally {
       // Add a small delay to show the animation
@@ -1308,11 +1341,15 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         </div>
         {node.is_dir && node.children && (
           <div
-            className={`transition-all duration-150 ease-out ${isExpanded ? 'mt-1 max-h-[2000px] opacity-100 overflow-visible' : 'max-h-0 opacity-0 overflow-hidden'
+            className={`grid grid-cols-[minmax(0,1fr)] transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
               }`}
           >
-            <div className="flex flex-col gap-1">
-              {node.children.map(child => renderNode(child, depth + 1))}
+            {/* 2px of room below without moving the layout: a version stack's back card shifts down on hover */}
+            <div className="overflow-hidden pb-0.5 -mb-0.5">
+              {/* The gap lives inside the clipped box so it collapses together with the rows */}
+              <div className="flex flex-col gap-1 pt-1">
+                {node.children.map(child => renderNode(child, depth + 1))}
+              </div>
             </div>
           </div>
         )}
