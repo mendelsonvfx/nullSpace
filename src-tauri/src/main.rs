@@ -7,6 +7,7 @@ mod psd_thumbnail;
 mod c4d_thumbnail;
 mod updater;
 mod nullconverter;
+mod single_instance;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -2776,11 +2777,11 @@ async fn open_file(file_path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        Command::new("cmd")
-            .creation_flags(CREATE_NO_WINDOW)
-            .args(&["/c", "start", "", &file_path])
+        // Through Explorer, as a double-click there: apps like Photos ask "Is this file from a trusted source?"
+        // about a downloaded file when another program hands it over, not when Explorer does.
+        // Explorer also takes the path as one argument, so & ^ % in it are safe (cmd /c start broke on them)
+        Command::new("explorer")
+            .arg(file_path.replace('/', "\\"))
             .spawn()
             .map_err(|e| format!("Failed to open file: {}", e))?;
     }
@@ -6728,14 +6729,25 @@ async fn get_exe_icon(path: String) -> Result<String, String> {
 }
 
 fn main() {
+    let context = tauri::generate_context!();
+    let identifier = context.config().tauri.bundle.identifier.clone();
+
+    // Already running: its window was brought to the front, this copy exits before creating anything
+    if !single_instance::acquire(&identifier) {
+        return;
+    }
+
     // Set WebView2 default background to transparent to prevent white corners
     std::env::set_var("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "00000000");
-    
+
     tauri::Builder::default()
 
-        .setup(|app| {
+        .setup(move |app| {
             let window = app.get_window("main").unwrap();
-            
+
+            // First, so a second launch finds the window as early as possible
+            single_instance::mark_main_window(&window, &identifier);
+
             // Apply startup settings (which may maximize the window)
             apply_window_startup_settings(&window, &app.handle());
             
@@ -6852,7 +6864,7 @@ fn main() {
             nullconverter::launch_null_converter,
         ])
 
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 #[cfg(test)]
