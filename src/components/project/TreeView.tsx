@@ -23,8 +23,15 @@ import { RefreshCw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
 import { listen } from '@tauri-apps/api/event';
 import { useProjectStore } from '../../store/projectStore';
+import { useFileDragOut } from '../../hooks/useFileDragOut';
+import { getCachedThumbnail, isThumbnailImage } from '../../hooks/useImageThumbnail';
+import { useHoverPreview } from '../../hooks/useHoverPreview';
+import { HoverPreviewPopup } from '../ui/HoverPreviewPopup';
+import { ThumbObserverProvider, TreeThumb } from './TreeThumb';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { SoftwareIcon } from '../SoftwareIcon';
+import { getSoftwareMeta, SOFTWARE_BADGE } from '../../utils/softwareMeta';
+import { useSoftwareIcon } from '../../utils/softwareIcons';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { useTimeTrackingStore } from '../../features/time-tracking/stores/timeTrackingStore';
 import type { SoftwareName } from '../../types/project';
@@ -35,14 +42,6 @@ import { useContextMenu } from '../../hooks/useContextMenu';
 import { openResolveVersion } from '../../utils/openResolveVersion';
 
 // Import folder icons
-import blenderFolIcon from '/icons/folders/blender_fol.png';
-import houdiniFolIcon from '/icons/folders/houdini_fol.png';
-import photoshopFolIcon from '/icons/folders/photoshop_fol.png';
-import afterEffectsFolIcon from '/icons/folders/after-effects_fol.png';
-import cinema4dFolIcon from '/icons/folders/cinema4d_fol.png';
-import substanceFolIcon from '/icons/folders/substance_fol.png';
-import unrealFolIcon from '/icons/folders/unreal_fol.png';
-import davinciFolIcon from '/icons/folders/davinci_fol.png';
 
 // Module-level caches for tree structure and directory size, keyed by project path.
 // Persists across component unmount/remount; avoids redundant IPC calls on project switch.
@@ -85,6 +84,53 @@ const FolderIcon = ({ color, size = 16 }: { color: string; size?: number }) => (
   </svg>
 );
 
+// #rrggbb mixed toward black: `amount` of the color is kept (1 = unchanged)
+const shadeHex = (hex: string, amount: number): string => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const ch = (shift: number) => Math.round(((n >> shift) & 255) * amount).toString(16).padStart(2, '0');
+  return `#${ch(16)}${ch(8)}${ch(0)}`;
+};
+
+// One shade for fill and outline: the folder reads as a single dark silhouette
+const FOLDER_SHADE = 0.4;
+
+// Software folder: darkened folder in the app's color with the app's own exe icon inside (abbreviation when
+// the path isn't set). A component, not inline in renderNode, because it reads the icon store through a hook
+const SoftwareFolderIcon = ({ softwareKey, color }: { softwareKey: SoftwareName; color: string }) => {
+  const meta = getSoftwareMeta(softwareKey);
+  const icon = useSoftwareIcon(softwareKey);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  return (
+    <div className="relative w-6 h-6 flex-shrink-0" title={meta.display}>
+      <svg width={24} height={24} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="absolute inset-0">
+        {/* Whole folder darkened, outline included: the bright icon (in the same brand color) stands out on it */}
+        <path
+          d="M3 6C3 4.89543 3.89543 4 5 4H8.67452C9.1637 4 9.40886 4 9.63904 4.05526C9.84311 4.10425 10.0379 4.18526 10.2168 4.29492C10.4186 4.41857 10.5918 4.59182 10.9375 4.9375L12 6H17.8C18.9201 6 19.4798 6 19.9076 6.21799C20.2839 6.40973 20.5905 6.71547 20.7822 7.0918C21.0002 7.51962 21.0002 8.07967 21.0002 9.19978V16.7998C21.0002 17.9199 21.0002 18.48 20.7822 18.9078C20.5905 19.2841 20.2837 19.5905 19.9074 19.7822C19.48 20 18.921 20 17.8031 20H6.19691C5.07899 20 4.5192 20 4.0918 19.7822C3.71547 19.5905 3.40973 19.2839 3.21799 18.9076C3 18.4798 3 17.9201 3 16.8V6Z"
+          fill={shadeHex(color, FOLDER_SHADE)}
+        />
+        <path
+          d="M3 6V16.8C3 17.9201 3 18.4798 3.21799 18.9076C3.40973 19.2839 3.71547 19.5905 4.0918 19.7822C4.5192 20 5.07899 20 6.19691 20H17.8031C18.921 20 19.48 20 19.9074 19.7822C20.2837 19.5905 20.5905 19.2841 20.7822 18.9078C21.0002 18.48 21.0002 17.9199 21.0002 16.7998L21.0002 9.19978C21.0002 8.07967 21.0002 7.51962 20.7822 7.0918C20.5905 6.71547 20.2839 6.40973 19.9076 6.21799C19.4798 6 18.9201 6 17.8 6H12M3 6H12M3 6C3 4.89543 3.89543 4 5 4H8.67452C9.1637 4 9.40886 4 9.63904 4.05526C9.84311 4.10425 10.0379 4.18526 10.2168 4.29492C10.4186 4.41857 10.5918 4.59182 10.9375 4.9375L12 6"
+          stroke={shadeHex(color, FOLDER_SHADE)}
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {/* Centered in the folder body (y 6–20 of 24) */}
+      <div className="absolute flex items-center justify-center" style={{ left: 6, top: 7.5, width: 12, height: 12 }}>
+        {icon && icon !== failedSrc ? (
+          <img src={icon} alt="" draggable={false} className="w-[11px] h-[11px] object-contain" onError={() => setFailedSrc(icon)} />
+        ) : (
+          // Neutral letters: brand-colored ones on the tinted folder would mimic the vendor's icon
+          <span className="font-bold leading-none select-none" style={{ fontSize: 7, color: SOFTWARE_BADGE.color }}>{meta.abbr}</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Predefined folder colors
 const FOLDER_COLORS = [
   { name: 'Red', value: '#ef4444' },
@@ -100,6 +146,8 @@ interface FileNode {
   path: string;
   is_dir: boolean;
   children?: FileNode[];
+  /** Files: last modified, ms (from get_folder_structure); image thumbnails are cached against it */
+  modified?: number;
   isVersionGroup?: boolean;
   versions?: FileNode[];
   versionCount?: number;
@@ -113,16 +161,21 @@ interface TreeViewProps {
 
 const AUTO_HIDDEN_NAMES = ['backup', '_attachments'];
 
-// Software folder icons, keyed by lowercase folder name (get_software_folder_name in Rust)
-const SOFTWARE_FOLDER_ICONS: Record<string, string> = {
-  blender: blenderFolIcon,
-  houdini: houdiniFolIcon,
-  aftereffects: afterEffectsFolIcon,
-  photoshop: photoshopFolIcon,
-  cinema4d: cinema4dFolIcon,
-  substance: substanceFolIcon,
-  unrealengine: unrealFolIcon,
-  davinci: davinciFolIcon,
+// Software folders, by exact lowercase folder name (get_software_folder_name in Rust). Exact on purpose:
+// normalizeSoftwareName would also turn a user's "UE" or "Substance Designer" folder into a software folder
+const SOFTWARE_FOLDER_KEYS: Record<string, SoftwareName> = {
+  blender: 'blender',
+  houdini: 'houdini',
+  maya: 'maya',
+  aftereffects: 'after-effects',
+  photoshop: 'photoshop',
+  cinema4d: 'cinema4d',
+  substance: 'substance',
+  unrealengine: 'unreal',
+  unity: 'unity',
+  zbrush: 'zbrush',
+  marmoset: 'marmoset',
+  davinci: 'davinci',
 };
 
 const PROJECT_FILE_EXTENSIONS = [
@@ -198,6 +251,8 @@ function getExtensionIcon(fileName: string): React.ReactNode | null {
 
 export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps) {
   const { activeMenu, setActiveMenu } = useContextMenuStore();
+  // Drag a file out into Explorer, Discord, … (files only, not folders)
+  const startFileDrag = useFileDragOut();
   const [tree, setTree] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
@@ -301,11 +356,40 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     }
   }, [folderColors, project.path]);
 
-  // Sync autoHideProjectFiles setting from SettingsPanel
+  // Image thumbnails in place of the file icon + a preview on hover (Settings > Appearance)
+  const [treeImagePreviews, setTreeImagePreviews] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('treeImagePreviews');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+  const imagePreview = useHoverPreview<{ name: string; path: string; modified?: number }>();
+  const hideImagePreview = imagePreview.hide;
+  useEffect(() => {
+    if (!treeImagePreviews) hideImagePreview();
+  }, [treeImagePreviews, hideImagePreview]);
+
+  // Thumbnails load only for rows on screen: observed against the tree's own scroll element
+  const simpleBarRef = useRef<any>(null);
+  const [thumbRoot, setThumbRoot] = useState<Element | null>(null);
+  useEffect(() => {
+    const element: Element | null = simpleBarRef.current?.getScrollElement?.() ?? null;
+    setThumbRoot(prev => (prev === element ? prev : element));
+  });
+
+  // Sync settings from SettingsPanel
   useEffect(() => {
     const handler = () => {
       const saved = localStorage.getItem('autoHideProjectFiles');
       setAutoHideProjectFiles(saved !== null ? JSON.parse(saved) : true);
+      try {
+        const previews = localStorage.getItem('treeImagePreviews');
+        setTreeImagePreviews(previews !== null ? JSON.parse(previews) : true);
+      } catch {
+        setTreeImagePreviews(true);
+      }
     };
     window.addEventListener('storage', handler);
     return () => window.removeEventListener('storage', handler);
@@ -1019,7 +1103,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
   };
 
   // For folders without a custom icon, returns null
-  const getSoftwareFolderIcon = (folderName: string) => SOFTWARE_FOLDER_ICONS[folderName.toLowerCase()] ?? null;
+  const getSoftwareFolderKey = (folderName: string): SoftwareName | null => SOFTWARE_FOLDER_KEYS[folderName.toLowerCase()] ?? null;
 
   const toggleVersionGroup = (groupPath: string) => {
     setExpandedVersionGroups(prev => {
@@ -1033,7 +1117,23 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     });
   };
 
-  const renderVersionGroup = (node: FileNode, depth: number = 0) => {
+  /** Icon slot of a file: the image's thumbnail when previews are on, the usual icon otherwise / until ready */
+  const fileIconSlot = (file: FileNode, active: boolean, icon: React.ReactNode) =>
+    treeImagePreviews && isThumbnailImage(file.name)
+      ? <TreeThumb path={file.path} modified={file.modified} active={active} fallback={icon} />
+      : icon;
+
+  /** Hover preview of an image file row */
+  const imagePreviewHandlers = (file: FileNode | undefined) =>
+    file && treeImagePreviews && isThumbnailImage(file.name)
+      ? {
+          onMouseEnter: (e: React.MouseEvent<HTMLElement>) =>
+            imagePreview.show(e.currentTarget, { name: file.name, path: file.path, modified: file.modified }),
+          onMouseLeave: imagePreview.hide,
+        }
+      : {};
+
+  const renderVersionGroup = (node: FileNode, depth: number = 0, ancestorsOpen: boolean = true) => {
     const isExpanded = expandedVersionGroups.has(node.path);
     const topThree = (node.versions || []).slice(0, 3);
     const isGroupHidden = hiddenPaths.has(node.path);
@@ -1081,13 +1181,15 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
                 className="h-[36px] flex items-center gap-2 px-2.5 text-xs select-none bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary cursor-pointer"
                 onDoubleClick={(e) => handleDoubleClick(e, version)}
                 onContextMenu={(e) => handleContextMenu(e, version)}
+                onMouseDown={(e) => startFileDrag(e, version.path)}
+                {...imagePreviewHandlers(version)}
               >
                 <div className="w-[18px] flex items-center justify-center flex-shrink-0">
-                  {getFileIcon(version.name) ? (
+                  {fileIconSlot(version, ancestorsOpen, getFileIcon(version.name) ? (
                     <SoftwareIcon name={getFileIcon(version.name)!} className="w-4 h-4 flex-shrink-0" />
                   ) : (
                     getExtensionIcon(version.name) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
-                  )}
+                  ))}
                 </div>
                 <span className="text-text-primary font-medium flex-1">
                   {version.name.substring(0, version.name.lastIndexOf('.'))}
@@ -1188,13 +1290,21 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         )}
 
         {/* Card 1 (top - newest) */}
-        <div className="relative h-[36px] flex items-center gap-2 px-2.5 text-xs select-none bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary shadow-lg" style={{ zIndex: 10 }}>
+        <div
+          className="relative h-[36px] flex items-center gap-2 px-2.5 text-xs select-none bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary shadow-lg"
+          style={{ zIndex: 10 }}
+          {...imagePreviewHandlers(topThree[0])}
+        >
           <div className="w-[18px] flex items-center justify-center flex-shrink-0">
-            {topThree[0] && getFileIcon(topThree[0].name) ? (
-              <SoftwareIcon name={getFileIcon(topThree[0].name)!} className="w-4 h-4 flex-shrink-0" />
-            ) : (
-              (topThree[0] && getExtensionIcon(topThree[0].name)) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
-            )}
+            {(() => {
+              const icon = topThree[0] && getFileIcon(topThree[0].name) ? (
+                <SoftwareIcon name={getFileIcon(topThree[0].name)!} className="w-4 h-4 flex-shrink-0" />
+              ) : (
+                (topThree[0] && getExtensionIcon(topThree[0].name)) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
+              );
+              // The newest version: the group's own path is the oldest one
+              return topThree[0] ? fileIconSlot(topThree[0], ancestorsOpen, icon) : icon;
+            })()}
           </div>
           <span className="text-text-primary font-medium flex-1">
             {getVersionRange()}
@@ -1223,22 +1333,24 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     );
   };
 
-  const renderNode = (node: FileNode, depth: number = 0) => {
+  // ancestorsOpen: every parent folder is expanded. Rows of a collapsed folder stay mounted (at zero
+  // height, for the expand animation), so thumbnails there must not load
+  const renderNode = (node: FileNode, depth: number = 0, ancestorsOpen: boolean = true) => {
     // Handle version groups
     if (node.isVersionGroup) {
       const versionExt = node.versions?.[0]?.name.split('.').pop()?.toLowerCase() ?? '';
       const isVersionGroupHidden = autoHideProjectFiles && PROJECT_FILE_EXTENSIONS.includes(versionExt);
       if (isVersionGroupHidden && !showHidden) return null;
       if (isVersionGroupHidden && showHidden) {
-        return <div key={node.path} className="opacity-40">{renderVersionGroup(node, depth)}</div>;
+        return <div key={node.path} className="opacity-40">{renderVersionGroup(node, depth, ancestorsOpen)}</div>;
       }
-      return renderVersionGroup(node, depth);
+      return renderVersionGroup(node, depth, ancestorsOpen);
     }
 
     const isExpanded = expandedDirs.has(node.path);
     const hasChildren = node.children && node.children.length > 0;
     const fileIcon = !node.is_dir ? getFileIcon(node.name) : null;
-    const softwareFolderIcon = node.is_dir ? getSoftwareFolderIcon(node.name) : null;
+    const softwareFolderKey = node.is_dir ? getSoftwareFolderKey(node.name) : null;
     const fileExt = !node.is_dir ? node.name.split('.').pop()?.toLowerCase() ?? '' : '';
     const isAutoHiddenFile = !node.is_dir && autoHideProjectFiles && PROJECT_FILE_EXTENSIONS.includes(fileExt);
     const isHidden = hiddenPaths.has(node.path) ||
@@ -1279,15 +1391,16 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             }`}
           onDoubleClick={(e) => handleDoubleClick(e, node)}
           onContextMenu={(e) => handleContextMenu(e, node)}
+          onMouseDown={node.is_dir ? undefined : (e) => startFileDrag(e, node.path)}
+          {...(node.is_dir ? {} : imagePreviewHandlers(node))}
         >
           {/* Icon */}
           {node.is_dir ? (
-            softwareFolderIcon ? (
-              <img
-                src={softwareFolderIcon}
-                alt={node.name}
-                className="w-6 h-6 flex-shrink-0 object-contain"
-                draggable={false}
+            softwareFolderKey ? (
+              // Brand color unless the user set a folder color
+              <SoftwareFolderIcon
+                softwareKey={softwareFolderKey}
+                color={folderColor || getSoftwareMeta(softwareFolderKey).brandColor}
               />
             ) : (
               <div className="w-[18px] flex items-center justify-center flex-shrink-0">
@@ -1296,11 +1409,11 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             )
           ) : (
             <div className="w-[18px] flex items-center justify-center flex-shrink-0">
-              {fileIcon ? (
+              {fileIconSlot(node, ancestorsOpen, fileIcon ? (
                 <SoftwareIcon name={fileIcon} className="w-4 h-4 flex-shrink-0" />
               ) : (
                 getExtensionIcon(node.name) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
-              )}
+              ))}
             </div>
           )}
 
@@ -1348,7 +1461,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             <div className="overflow-hidden pb-0.5 -mb-0.5">
               {/* The gap lives inside the clipped box so it collapses together with the rows */}
               <div className="flex flex-col gap-1 pt-1">
-                {node.children.map(child => renderNode(child, depth + 1))}
+                {node.children.map(child => renderNode(child, depth + 1, ancestorsOpen && isExpanded))}
               </div>
             </div>
           </div>
@@ -1390,7 +1503,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         </button>
       </div>
 
-      <SimpleBar className="custom-scrollbar" autoHide={false} style={{ height: 'calc(100% - 40px)', paddingBottom: '45px' }}>
+      <SimpleBar ref={simpleBarRef} className="custom-scrollbar" autoHide={false} style={{ height: 'calc(100% - 40px)', paddingBottom: '45px' }}>
+        <ThumbObserverProvider root={thumbRoot}>
         <div className="flex flex-col pr-2">
           {tree.length > 0 ? (
             <>
@@ -1416,7 +1530,39 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             <p className="text-xs text-text-muted">No files found</p>
           )}
         </div>
+        </ThumbObserverProvider>
       </SimpleBar>
+
+      {/* Image preview on hover: only once the row's thumbnail is loaded */}
+      {imagePreview.shown && (() => {
+        const { item, anchor } = imagePreview.shown;
+        const thumb = getCachedThumbnail(item.path, item.modified);
+        if (!thumb) return null;
+        // The picture keeps the image's proportions (no bars): up to 224 wide or 224 tall;
+        // the popup is never narrower than its caption needs
+        const MAX_SIDE = 224;
+        const ratio = thumb.width > 0 && thumb.height > 0 ? thumb.width / thumb.height : 1;
+        const imageW = Math.round(ratio >= 1 ? MAX_SIDE : MAX_SIDE * ratio);
+        const imageH = Math.round(ratio >= 1 ? MAX_SIDE / ratio : MAX_SIDE);
+        const popupW = Math.max(imageW, 184) + 16; // p-2 on both sides
+        return (
+          <HoverPreviewPopup anchor={anchor} visible={imagePreview.visible} width={popupW} height={imageH + 16 + 22}>
+            <img
+              src={thumb.data_url}
+              alt=""
+              draggable={false}
+              className="block mx-auto rounded-[7px] object-cover"
+              style={{ width: imageW, height: imageH }}
+            />
+            <div className="flex items-center justify-between gap-2 mt-1.5 px-0.5">
+              <span className="text-[10px] font-mono text-text-secondary truncate">{item.name}</span>
+              <span className="text-[10px] text-text-muted flex-shrink-0">
+                {thumb.width}×{thumb.height} · {formatSize(thumb.size)}
+              </span>
+            </div>
+          </HoverPreviewPopup>
+        );
+      })()}
 
       {/* Project Size Info Bar - Absolute positioned */}
       <div className="absolute -bottom-1 left-0 right-0 pt-2.5">
@@ -1483,7 +1629,8 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             'Copy Path'
           )}
         </ContextMenuItem>
-        {contextMenuNode?.is_dir && !getSoftwareFolderIcon(contextMenuNode.name) && (
+        {/* Every folder, software ones included: their color replaces the brand tint, Clear brings it back */}
+        {contextMenuNode?.is_dir && (
           <>
             <ContextMenuDivider />
             <ContextMenuItem

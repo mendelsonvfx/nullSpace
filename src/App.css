@@ -338,45 +338,185 @@ body.fullscreen #root {
 
 
 
-/* Status glow effects */
-@keyframes pulse-glow-green {
+/* Status glow of a project with a running session: a steady 8px glow plus a 13px one fading in and out.
+   Only opacity animates, which the GPU composites on its own. Animating box-shadow repainted the dot
+   every frame of the whole (transparent) window for as long as the session ran */
+.status-glow-green { --glow: rgb(34 197 94); }
+.status-glow-yellow { --glow: rgb(234 179 8); }
+.status-glow-blue { --glow: rgb(59 130 246); }
 
-  0%,
-  100% {
-    box-shadow: 0 0 8px rgba(34, 197, 94, 1);
-  }
-
-  50% {
-    box-shadow: 0 0 13px rgba(34, 197, 94, 1);
-  }
+.status-glow-green,
+.status-glow-yellow,
+.status-glow-blue {
+  position: relative;
 }
 
-@keyframes pulse-glow-yellow {
-
-  0%,
-  100% {
-    box-shadow: 0 0 8px rgba(234, 179, 8, 1);
-  }
-
-  50% {
-    box-shadow: 0 0 13px rgba(234, 179, 8, 1);
-  }
+.status-glow-green::before,
+.status-glow-yellow::before,
+.status-glow-blue::before,
+.status-glow-green::after,
+.status-glow-yellow::after,
+.status-glow-blue::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
-@keyframes pulse-glow-blue {
+.status-glow-green::before,
+.status-glow-yellow::before,
+.status-glow-blue::before {
+  box-shadow: 0 0 8px var(--glow);
+}
 
-  0%,
-  100% {
-    box-shadow: 0 0 8px rgba(59, 130, 246, 1);
-  }
+.status-glow-green::after,
+.status-glow-yellow::after,
+.status-glow-blue::after {
+  box-shadow: 0 0 13px var(--glow);
+  opacity: 0;
+  will-change: opacity;
+  animation: status-glow-pulse 2s ease-in-out infinite;
+}
 
-  50% {
-    box-shadow: 0 0 13px rgba(59, 130, 246, 1);
+@keyframes status-glow-pulse {
+  50% { opacity: 1; }
+}
+
+/* `body.animations-disabled *` doesn't reach pseudo-elements; with animations off there was no glow at all */
+body.animations-disabled [class*="status-glow-"]::before,
+body.animations-disabled [class*="status-glow-"]::after {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [class*="status-glow-"]::after {
+    animation: none;
   }
 }
 
 @keyframes spin-border {
   to { transform: rotate(360deg); }
+}
+
+/* ===== Support button (SupportButton.tsx) =====
+   One solid button that splits into two light tinted ones. --support / --support-light come from
+   SUPPORT_COLOR / SUPPORT_COLOR_LIGHT. Geometry (width, height, radius) is set inline; its motion is here. */
+.support-split {
+  position: relative;
+  --support-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  transition: height 280ms var(--support-ease);
+}
+.support-half {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  overflow: hidden;
+  isolation: isolate;
+  white-space: nowrap;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--support-light) 30%, white); /* a pale tint of the button color */
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px transparent;
+  pointer-events: none;
+  transition:
+    width 280ms var(--support-ease),
+    height 280ms var(--support-ease),
+    border-radius 280ms var(--support-ease),
+    background-color 200ms ease,
+    box-shadow 200ms ease,
+    color 150ms ease,
+    translate 300ms var(--support-ease), /* vertical: the second row sliding out */
+    transform 160ms ease-out; /* press */
+}
+/* The shared solid fill; dissolves into the tint once split */
+.support-fill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+.support-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(3px);
+  will-change: opacity, transform;
+  transition: opacity 200ms ease-out, transform 220ms var(--support-ease);
+}
+.support-main {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-weight: 600;
+  color: #fff;
+  border-radius: 8px;
+  /* Thin light edge on top: the button reads as slightly raised */
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
+  will-change: opacity, transform;
+  /* Gone before the new labels arrive (they wait 90 ms), so the two texts never overlap */
+  transition: opacity 90ms ease-out, transform 140ms ease-out;
+}
+/* Heart: beats once on hover, a small reward for pointing at it */
+.support-heart { transform-origin: center; }
+@media (hover: hover) and (pointer: fine) {
+  .support-split[data-split="false"]:hover .support-heart {
+    animation: support-heartbeat 700ms ease-out;
+  }
+}
+@keyframes support-heartbeat {
+  0%, 100% { transform: scale(1); }
+  20% { transform: scale(1.22); }
+  40% { transform: scale(0.96); }
+  60% { transform: scale(1.12); }
+}
+.support-split[data-split="true"] .support-main {
+  opacity: 0;
+  transform: translateY(-3px); /* leaves upwards while the new label comes from below */
+  pointer-events: none;
+}
+.support-split[data-split="true"] .support-half {
+  pointer-events: auto;
+  background-color: color-mix(in srgb, var(--support) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--support-light) 28%, transparent);
+}
+.support-split[data-split="true"] .support-fill { opacity: 0; }
+.support-split[data-split="true"] .support-label { opacity: 1; transform: none; }
+@media (hover: hover) and (pointer: fine) {
+  .support-split[data-split="true"] .support-half:hover {
+    color: #fff;
+    background-color: color-mix(in srgb, var(--support) 30%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--support-light) 55%, transparent);
+  }
+}
+.support-split[data-split="true"] .support-half:active { transform: scale(0.97); }
+/* Before the split: hover brightens the shared fill, as the old single button did */
+/* Short dissolve: the mix of solid fill and tint is muddy, so it's passed through quickly */
+.support-fill { transition: opacity 170ms ease-out, filter 150ms ease; }
+@media (hover: hover) and (pointer: fine) {
+  .support-split[data-split="false"]:hover .support-fill { filter: brightness(1.12); }
+}
+.support-split[data-split="true"] .support-half:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--support-light);
+}
+.support-caption p { transition: opacity 160ms ease-out; }
+.support-caption .support-caption-after { opacity: 0; }
+.support-caption[data-split="true"] .support-caption-before { opacity: 0; }
+.support-caption[data-split="true"] .support-caption-after { opacity: 1; transition-delay: 140ms; }
+/* Reduced motion: no movement, only the fades */
+@media (prefers-reduced-motion: reduce) {
+  .support-split { transition: none; }
+  .support-half { transition: background-color 200ms ease, box-shadow 200ms ease, color 150ms ease; }
+  .support-label { transform: none; transition: opacity 200ms ease-out; }
+  .support-split[data-split="true"] .support-main { transform: none; }
+  .support-heart { animation: none !important; }
 }
 
 @keyframes launcherItemEnter {
@@ -499,18 +639,6 @@ body.animations-disabled .launch-rim-still { opacity: 0.5; }
 }
 @keyframes launch-fade {
   from { opacity: 1; }
-}
-
-.status-glow-green {
-  animation: pulse-glow-green 2s ease-in-out infinite !important;
-}
-
-.status-glow-yellow {
-  animation: pulse-glow-yellow 2s ease-in-out infinite !important;
-}
-
-.status-glow-blue {
-  animation: pulse-glow-blue 2s ease-in-out infinite !important;
 }
 
 /* Hide number input arrows */

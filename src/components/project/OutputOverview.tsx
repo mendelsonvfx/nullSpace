@@ -7,6 +7,7 @@ import { writeText } from '@tauri-apps/api/clipboard';
 import { outputsCache } from '../../utils/outputsCache';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { useFileDragOut } from '../../hooks/useFileDragOut';
 import { useNullConverter } from '../../hooks/useNullConverter';
 import { NullConverterMenuItem } from '../ui/NullConverterMenuItem';
 // Output labels are folder names ("AfterEffects", "UnrealEngine"); the shared helper maps them to display names
@@ -36,10 +37,15 @@ interface OutputOverviewProps {
   currentScene: any;
   currentShot: any;
   specialContextType?: 'asset' | 'compose' | null;
+  showNotification?: (type: 'success' | 'error' | 'warning' | 'info', message: string, title?: string, duration?: number) => void;
 }
 
-export function OutputOverview({ project, currentScene, currentShot, specialContextType }: OutputOverviewProps) {
+export function OutputOverview({ project, currentScene, currentShot, specialContextType, showNotification }: OutputOverviewProps) {
   const nullConverter = useNullConverter();
+  // Drag a render out into Explorer, Discord, … (an image sequence goes as its folder)
+  const startFileDrag = useFileDragOut(
+    showNotification ? (message) => showNotification('error', message, "Couldn't drag the file") : undefined
+  );
   const [outputs, setOutputs] = useState<OutputFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -176,17 +182,28 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   useEffect(() => {
     let aborted = false;
     let unlisten: (() => void) | undefined;
+    // A render writes a frame every ~0.5 s and each one arrives here: reload at once on the first event,
+    // then at most every 2 s, with a last reload after the burst so the final frames show
+    const RELOAD_INTERVAL_MS = 2000;
+    let lastReload = 0;
+    let trailing: number | undefined;
+
+    const reload = () => {
+      trailing = undefined;
+      lastReload = Date.now();
+      outputsCache.invalidate(cacheKey);
+      loadOutputs(true);
+    };
 
     // Import listen function
     import('@tauri-apps/api/event').then(({ listen }) => {
       if (aborted) return; // unmounted before dynamic import resolved
       // Listen to output-changed event (specific for output files)
       listen('output-changed', () => {
-        console.log('Output changed detected by file watcher');
-        // Invalidate cache and reload immediately
-        // No additional debounce needed - backend already debounces at 500ms
-        outputsCache.invalidate(cacheKey);
-        loadOutputs(true);
+        if (trailing !== undefined) return;
+        const wait = lastReload + RELOAD_INTERVAL_MS - Date.now();
+        if (wait <= 0) reload();
+        else trailing = window.setTimeout(reload, wait);
       }).then((fn) => {
         if (aborted) fn();
         else unlisten = fn;
@@ -199,6 +216,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
     return () => {
       aborted = true;
+      if (trailing !== undefined) clearTimeout(trailing);
       unlisten?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -745,6 +763,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                         key={output.path}
                         onDoubleClick={() => handleOutputClick(output)}
                         onContextMenu={(e) => handleContextMenu(e, output)}
+                        onMouseDown={(e) => startFileDrag(e, output.path)}
                         className="w-full text-left px-3 py-3 rounded-lg bg-[#181818] hover:bg-[#1e1e1e] transition-colors group"
                       >
                         <div className="flex items-center justify-between gap-3">
@@ -846,6 +865,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
                         key={output.path}
                         onDoubleClick={() => handleOutputClick(output)}
                         onContextMenu={(e) => handleContextMenu(e, output)}
+                        onMouseDown={(e) => startFileDrag(e, output.path)}
                         className="w-full text-left px-3 py-3 rounded-lg bg-[#181818] hover:bg-[#1e1e1e] transition-colors group"
                       >
                         <div className="flex items-center justify-between gap-3">

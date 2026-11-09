@@ -4,8 +4,9 @@ import { IconSettings } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { useProjectStore } from '../../store/projectStore';
-import { getSoftwareMeta } from '../../utils/softwareMeta';
+import { getSoftwareMeta, SOFTWARE_BADGE } from '../../utils/softwareMeta';
 import { getCustomItems, getSoftwareEnabled } from '../../utils/launcherUtils';
+import { useSoftwareIcon } from '../../utils/softwareIcons';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import type { SettingsTab } from '../modals/SettingsPanel';
@@ -17,11 +18,9 @@ interface TileData {
   name: string;
   path: string;
   abbr: string;
-  gradient: string;
-  shadow: string;
   brandColor: string;
-  textColor?: string;
-  logoPath?: string;
+  /** Built-in software: its icon comes from the exe (useSoftwareIcon) */
+  builtIn?: boolean;
   iconBase64?: string;
 }
 
@@ -43,11 +42,8 @@ function buildTiles(): TileData[] {
         name: m.display,
         path,
         abbr: m.abbr,
-        gradient: m.gradient,
-        shadow: m.shadow,
         brandColor: m.brandColor,
-        textColor: m.textColor,
-        logoPath: m.logoPath,
+        builtIn: true,
       };
     });
 
@@ -58,8 +54,6 @@ function buildTiles(): TileData[] {
       name: i.name || 'App',
       path: i.path,
       abbr: (i.name || 'App').slice(0, 2).toUpperCase(),
-      gradient: 'linear-gradient(160deg,#1e1e26,#13131a)',
-      shadow: 'rgba(0,0,0,.30)',
       brandColor: i.brandColor ?? '#6366f1',
       iconBase64: i.iconBase64,
     }));
@@ -77,7 +71,10 @@ function SoftwareTile({ tile, onLaunch, animIndex, onContextMenu }: {
   animIndex?: number;
   onContextMenu?: (e: React.MouseEvent, tile: TileData) => void;
 }) {
-  const [imgError, setImgError] = useState(false);
+  // Built-in tiles: icon of the configured exe (same path the tile launches)
+  const exeIcon = useSoftwareIcon(tile.builtIn ? tile.id : '', tile.builtIn ? tile.path : '');
+  const iconSrc = tile.iconBase64 ?? exeIcon;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const bgDefault = `radial-gradient(circle at 0% 120%, ${tile.brandColor}15 0%, transparent 80%), rgb(20,20,20)`;
   const bgHover   = `radial-gradient(circle at 0% 120%, ${tile.brandColor}40 0%, transparent 100%), rgb(24,24,27)`;
 
@@ -99,23 +96,15 @@ function SoftwareTile({ tile, onLaunch, animIndex, onContextMenu }: {
       onClick={() => onLaunch(tile.path, tile.id)}
       onContextMenu={(e) => onContextMenu?.(e, tile)}
     >
-      {/* Icon: custom base64 > known logoPath > gradient+abbr fallback */}
-      {tile.iconBase64 && !imgError ? (
+      {/* Icon: custom item's stored icon > built-in software's exe icon > neutral letter badge */}
+      {iconSrc && iconSrc !== failedSrc ? (
         <div className="flex items-center justify-center" style={{ width: 44, height: 44 }}>
           <img
-            src={tile.iconBase64}
+            src={iconSrc}
             alt={tile.name}
+            draggable={false}
             style={{ width: 36, height: 36, objectFit: 'contain' }}
-            onError={() => setImgError(true)}
-          />
-        </div>
-      ) : tile.logoPath && !imgError ? (
-        <div className="flex items-center justify-center" style={{ width: 44, height: 44 }}>
-          <img
-            src={tile.logoPath}
-            alt={tile.name}
-            style={{ width: 36, height: 36, objectFit: 'contain' }}
-            onError={() => setImgError(true)}
+            onError={() => setFailedSrc(iconSrc)}
           />
         </div>
       ) : (
@@ -123,9 +112,9 @@ function SoftwareTile({ tile, onLaunch, animIndex, onContextMenu }: {
           className="flex items-center justify-center select-none font-bold"
           style={{
             width: 44, height: 44, borderRadius: 13,
-            background: tile.gradient,
-            boxShadow: `0 6px 14px ${tile.shadow}`,
-            color: tile.textColor ?? '#fff',
+            background: SOFTWARE_BADGE.background,
+            boxShadow: `0 6px 14px ${SOFTWARE_BADGE.shadow}`,
+            color: SOFTWARE_BADGE.color,
             fontSize: tile.abbr.length === 1 ? 20 : 16,
           }}
         >

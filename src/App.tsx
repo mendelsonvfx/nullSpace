@@ -262,8 +262,9 @@ function App() {
     isAsset?: boolean;
   } | null>(null);
 
-  // Add general notification
-  const addGeneralNotification = (
+  // Add general notification. Stable: the effect below (100 ms poll, window.showNotification) depends on
+  // it, and a new function each render tore that effect down on every render, dropping pending prompts
+  const addGeneralNotification = useCallback((
     type: 'success' | 'error' | 'warning' | 'info',
     message: string,
     title?: string,
@@ -272,7 +273,7 @@ function App() {
     const id = `${Date.now()}-${Math.random()}`;
     const notification: GeneralNotificationType = { id, type, message, title, duration };
     setGeneralNotifications(prev => [...prev, notification]);
-  };
+  }, []);
 
   // Remove general notification
   const removeGeneralNotification = (id: string) => {

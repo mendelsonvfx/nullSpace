@@ -106,8 +106,8 @@ export class TimerService {
         }
       }
 
-      // Debug log every 10 seconds
-      if (elapsedSeconds % 10 === 0 && elapsedSeconds > 0) {
+      // Debug log every 10 seconds (dev builds only)
+      if (import.meta.env.DEV && elapsedSeconds % 10 === 0 && elapsedSeconds > 0) {
         console.log(`[TimerService] ⏱️  ${software}: ${elapsedSeconds}s (current minute: ${currentMinute})`);
       }
 

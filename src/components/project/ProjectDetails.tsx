@@ -1084,6 +1084,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           currentScene={context.sceneId ? project.scenes?.find((s: any) => s.id === context.sceneId) : null}
           currentShot={context.isShot && context.shotId ? project.shots?.find((s: any) => s.id === context.shotId) : null}
           specialContextType={context.isSpecialContext ? context.specialContextType : null}
+          showNotification={showNotification}
         />
         )}
 

@@ -1,6 +1,7 @@
 import { thumbnailCache } from '../utils/thumbnailCache';
 import { indexedDBThumbnailCache } from '../utils/indexedDBCache';
 import { clearThumbnailMemoryCache } from './useThumbnail';
+import { clearTreeThumbMemory } from './useImageThumbnail';
 
 // Feature flag - should match useThumbnail.ts
 const USE_INDEXED_DB = true;
@@ -33,6 +34,7 @@ export function useThumbnailCache() {
     // Clear entire cache
     clearAllThumbnails: async () => {
       clearThumbnailMemoryCache();
+      clearTreeThumbMemory();
       if (USE_INDEXED_DB) {
         await indexedDBThumbnailCache.clearAll();
       } else {

@@ -6,12 +6,14 @@ import { X, FolderOpen, Check, AlertCircle, Plus, Settings, Trash2, RefreshCw, D
 import { selectProjectDirectory, selectExecutable } from '../../utils/tauri';
 import { getCustomItems, saveCustomItems, getSoftwareEnabled, saveSoftwareEnabled, getExeIcon, sampleColorFromDataUrl, extractNameFromPath } from '../../utils/launcherUtils';
 import { getSoftwareMeta } from '../../utils/softwareMeta';
+import { SoftwareAppIcon } from '../shared/SoftwareAppIcon';
 import type { CustomLauncherItem } from '../../types/launcher';
 import type { SoftwareName } from '../../types/project';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
 import { CustomSelect } from '../ui/CustomSelect';
 import { ColorPickerPopup } from '../ui/ColorPickerPopup';
 import { getVersion } from '@tauri-apps/api/app';
+import { SupportButton } from '../ui/SupportButton';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import { clearAllTimeTrackingData } from '../../utils/clearAllData';
@@ -217,6 +219,7 @@ export function SettingsPanel({ onClose, onDeleteClient, initialTab }: SettingsP
             </nav>
 
             <div className="mt-auto pt-4">
+              <SupportButton vertical accent className="mb-3 mx-auto w-[150px]" />
               <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', fontFamily: 'monospace' }}>
                 nullSpace v{appVersion || '0.6.0'}
               </div>
@@ -824,7 +827,6 @@ function SoftwareSettings({
 
       <div className="space-y-2">
         {softwarePaths.map((sw, index) => {
-          const meta = getSoftwareMeta(sw.name);
           const valid = isValidExecutablePath(sw.path);
           return (
             <div
@@ -836,41 +838,8 @@ function SoftwareSettings({
               }}
             >
               {/* Icon */}
-              {valid ? (
-                meta.logoPath ? (
-                  <div className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none bg-card-bg">
-                    <img src={meta.logoPath} alt={meta.display} style={{ width: 28, height: 28, objectFit: 'contain' }} />
-                  </div>
-                ) : (
-                  <div
-                    className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none select-none font-bold"
-                    style={{
-                      background: meta.gradient,
-                      color: meta.textColor ?? '#fff',
-                      fontSize: meta.abbr.length === 1 ? 18 : 14,
-                    }}
-                  >
-                    {meta.abbr}
-                  </div>
-                )
-              ) : (
-                // Path not set: dashed frame; the logo inside is dimmed (abbreviation when there's no logo)
-                <div
-                  className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none select-none font-bold"
-                  style={{
-                    background: '#1a1a1f',
-                    border: '1px dashed #3a3a44',
-                    color: meta.brandColor,
-                    fontSize: meta.abbr.length === 1 ? 18 : 14,
-                  }}
-                >
-                  {meta.logoPath ? (
-                    <img src={meta.logoPath} alt={meta.display} style={{ width: 26, height: 26, objectFit: 'contain', opacity: 0.55 }} />
-                  ) : (
-                    meta.abbr
-                  )}
-                </div>
-              )}
+              {/* Icon of the picked exe; path not set → dashed frame with the abbreviation */}
+              <SoftwareAppIcon softwareKey={sw.name} path={sw.path} unset={!valid} box={40} iconSize={28} radius={11} />
 
               {/* Info */}
               <div className="flex-1 min-w-0">
@@ -1181,16 +1150,7 @@ function LauncherSettings() {
               return (
                 <div key={key} className="flex items-center gap-[12px] px-[14px] py-[9px] rounded-[10px] border"
                   style={{ background: '#0f0f12', borderColor: '#202026' }}>
-                  {meta.logoPath ? (
-                    <div className="w-8 h-8 rounded-[9px] flex items-center justify-center flex-none bg-card-bg">
-                      <img src={meta.logoPath} alt={meta.display} style={{ width: 22, height: 22, objectFit: 'contain' }} />
-                    </div>
-                  ) : (
-                    <div className="w-8 h-8 rounded-[9px] flex items-center justify-center flex-none select-none font-bold text-white text-[12px]"
-                      style={{ background: meta.gradient }}>
-                      {meta.abbr}
-                    </div>
-                  )}
+                  <SoftwareAppIcon softwareKey={key} box={32} iconSize={22} radius={9} />
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-semibold text-text-primary">{meta.display}</div>
                   </div>
@@ -1231,6 +1191,10 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
   });
   const [taskAttachmentPreview, setTaskAttachmentPreview] = useState(() => {
     const saved = localStorage.getItem('taskAttachmentPreview');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [treeImagePreviews, setTreeImagePreviews] = useState(() => {
+    const saved = localStorage.getItem('treeImagePreviews');
     return saved !== null ? JSON.parse(saved) : true;
   });
   const [showShotsBrowserSearch, setShowShotsBrowserSearch] = useState(() => {
@@ -1604,6 +1568,25 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
           className={`w-12 h-6 rounded-full relative transition-colors flex-shrink-0 ${taskAttachmentPreview ? 'bg-accent' : 'bg-border-secondary'}`}
         >
           <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${taskAttachmentPreview ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+
+      {/* Project Structure image previews */}
+      <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+        <div>
+          <div className="text-sm font-semibold mb-0.5">Project Structure Image Previews</div>
+          <p className="text-xs text-text-muted">Show image thumbnails and a preview on hover in Project Structure</p>
+        </div>
+        <button
+          onClick={() => {
+            const newValue = !treeImagePreviews;
+            setTreeImagePreviews(newValue);
+            localStorage.setItem('treeImagePreviews', JSON.stringify(newValue));
+            window.dispatchEvent(new Event('storage'));
+          }}
+          className={`w-12 h-6 rounded-full relative transition-colors flex-shrink-0 ${treeImagePreviews ? 'bg-accent' : 'bg-border-secondary'}`}
+        >
+          <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${treeImagePreviews ? 'translate-x-6' : 'translate-x-0.5'}`} />
         </button>
       </div>
 

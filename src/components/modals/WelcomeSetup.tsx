@@ -1,13 +1,13 @@
 // src/components/modals/WelcomeSetup.tsx
 import { useState, useRef, useEffect } from 'react';
 import { FolderOpen, Check, AlertCircle, X, Heart, Rocket } from 'lucide-react';
-import { open } from '@tauri-apps/api/shell';
 import { selectProjectDirectory, selectExecutable } from '../../utils/tauri';
 import { useProjectStore } from '../../store/projectStore';
 import type { SoftwareName } from '../../types/project';
 import { useModalBlur } from '../../hooks/useModalBlur';
-import { getSoftwareMeta } from '../../utils/softwareMeta';
-import { SUPPORT_COLOR, SUPPORT_COLOR_LIGHT } from '../../utils/constants';
+import { SoftwareAppIcon } from '../shared/SoftwareAppIcon';
+import { SUPPORT_COLOR_LIGHT } from '../../utils/constants';
+import { SupportButton } from '../ui/SupportButton';
 import appIcon from '../../appIcon';
 
 interface WelcomeSetupProps {
@@ -336,7 +336,6 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                   </div>
                   <div className="space-y-2">
                     {softwarePaths.map((sw, index) => {
-                      const meta = getSoftwareMeta(sw.name);
                       const valid = isValidExecutablePath(sw.path);
                       return (
                         <div
@@ -347,27 +346,8 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                             borderColor: valid ? '#202026' : '#3a2a18',
                           }}
                         >
-                          {/* Icon — always show the real gradient/logo icon */}
-                          {meta.logoPath ? (
-                            <div className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none bg-card-bg">
-                              <img
-                                src={meta.logoPath}
-                                alt={meta.display}
-                                style={{ width: 28, height: 28, objectFit: 'contain' }}
-                              />
-                            </div>
-                          ) : (
-                            <div
-                              className="w-10 h-10 rounded-[11px] flex items-center justify-center flex-none select-none font-bold"
-                              style={{
-                                background: meta.gradient,
-                                color: meta.textColor ?? '#fff',
-                                fontSize: meta.abbr.length === 1 ? 18 : 14,
-                              }}
-                            >
-                              {meta.abbr}
-                            </div>
-                          )}
+                          {/* Icon of the picked exe; badge until a path is picked */}
+                          <SoftwareAppIcon softwareKey={sw.name} path={sw.path} box={40} iconSize={28} radius={11} />
 
                           {/* Info */}
                           <div className="flex-1 min-w-0">
@@ -452,16 +432,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                     <p className="text-text-muted text-xs mb-3 text-center">
                       If you find nullSpace useful, consider supporting the development to help keep improving and adding new features.
                     </p>
-                    <button
-                      onClick={() => open('https://mendelsonvfx.com').catch(() => {})}
-                      className="w-full h-[38px] text-white font-bold rounded-button text-[13px] hover:brightness-110 transition-all"
-                      style={{ backgroundColor: SUPPORT_COLOR }}
-                    >
-                      Support Development
-                    </button>
-                    <p className="text-text-muted text-[10.5px] mt-2 text-center">
-                      100% optional • Your support is appreciated
-                    </p>
+                    <SupportButton solid />
                   </div>
                 </div>
               )}

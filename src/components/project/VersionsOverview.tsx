@@ -17,6 +17,7 @@ import { useProjectWatcher } from '../../hooks/useProjectWatcher';
 import { openResolveVersion } from '../../utils/openResolveVersion';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, ContextMenuColorPicker, VERSION_MARK_COLORS } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { useFileDragOut } from '../../hooks/useFileDragOut';
 
 interface ProjectVersion {
   name: string;
@@ -89,7 +90,7 @@ const formatDateTime = (timestamp: number) => {
 // Version Card Component with optional Blender thumbnail.
 // Lives outside VersionsOverview: declared inside, every re-render would be a new component type,
 // and React would recreate all cards, restarting the hover highlight under the cursor
-const VersionCard = ({ version, isBlendFile, isPsdFile, isC4dFile, previewsEnabled, versionMark, onDoubleClick, onContextMenu }: {
+const VersionCard = ({ version, isBlendFile, isPsdFile, isC4dFile, previewsEnabled, versionMark, onDoubleClick, onContextMenu, onMouseDown }: {
   version: ProjectVersion;
   isBlendFile: boolean;
   isPsdFile: boolean;
@@ -98,6 +99,7 @@ const VersionCard = ({ version, isBlendFile, isPsdFile, isC4dFile, previewsEnabl
   versionMark?: MarkColor;
   onDoubleClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onMouseDown: (e: React.MouseEvent<HTMLElement>) => void;
 }) => {
   const willShowBlendThumb = isBlendFile && previewsEnabled;
   const willShowPsdThumb   = isPsdFile  && previewsEnabled;
@@ -118,6 +120,7 @@ const VersionCard = ({ version, isBlendFile, isPsdFile, isC4dFile, previewsEnabl
       className={`relative flex flex-col flex-shrink-0 ${willShowThumbnail ? 'w-36' : 'w-32'} cursor-pointer hover:bg-hover-bg rounded-lg p-2 transition-colors select-none`}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
+      onMouseDown={onMouseDown}
       title={tooltip}
     >
       {/* Color mark indicator */}
@@ -172,6 +175,8 @@ const VersionCard = ({ version, isBlendFile, isPsdFile, isC4dFile, previewsEnabl
 };
 
 export const VersionsOverview = memo(function VersionsOverview({ project, currentScene, currentShot, specialContextType, showNotification }: VersionsOverviewProps) {
+  // Drag a version card out into Explorer, Discord, …
+  const startFileDrag = useFileDragOut((message) => showNotification('error', message, "Couldn't drag the file"));
   const [allVersions, setAllVersions] = useState<ProjectVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSoftware, setSelectedSoftware] = useState<string>('all');
@@ -918,6 +923,7 @@ export const VersionsOverview = memo(function VersionsOverview({ project, curren
                     versionMark={versionMarks[version.path]}
                     onDoubleClick={() => handleVersionDoubleClick(version.path, version.software)}
                     onContextMenu={(e) => handleContextMenu(e, version)}
+                    onMouseDown={(e) => startFileDrag(e, version.path)}
                   />
                 );
               })}

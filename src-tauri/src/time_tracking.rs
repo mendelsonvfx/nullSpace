@@ -4,7 +4,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
-use sysinfo::{System, Pid};
+use sysinfo::{System, Pid, ProcessRefreshKind};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(target_os = "windows")]
@@ -35,6 +35,8 @@ pub struct ActiveSession {
     pub pid_lost_at: Option<DateTime<Utc>>,  // Process gone while starting up — waiting for its relaunch (Houdini via Steam)
     #[serde(default)]
     pub window_seen: bool,  // The followed process has shown its main window (a handover to Steam happens before that)
+    #[serde(default)]
+    pub cpu_measured_at: Option<DateTime<Utc>>,  // Last CPU reading; last_cpu_usage is the average since the one before
 }
 
 /// Single focus check entry
@@ -89,29 +91,51 @@ impl FocusHistory {
 lazy_static! {
     static ref ACTIVE_SESSIONS: Arc<Mutex<HashMap<String, ActiveSession>>> =
         Arc::new(Mutex::new(HashMap::new()));
-    static ref SYSTEM: Arc<Mutex<System>> = Arc::new(Mutex::new(System::new_all()));
+    // Starts empty: processes are refreshed one at a time, the whole list only when searching
+    static ref SYSTEM: Arc<Mutex<System>> = Arc::new(Mutex::new(System::new()));
     static ref BACKGROUND_TASK_RUNNING: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
     static ref FOCUS_HISTORIES: Arc<Mutex<HashMap<String, FocusHistory>>> =
         Arc::new(Mutex::new(HashMap::new()));
 }
 
+/// CPU use (percent of one core, averaged over CPU_AVERAGE_SECS) that counts as background work for a
+/// session without focus. An idle app open in the background stays below it (idle Blender: ~2% on
+/// average) and its session ends after 30 minutes; a render or simulation stays far above it
+const BACKGROUND_WORK_CPU: f32 = 5.0;
+/// How often a session's CPU is read; each reading is the average since the previous one
+const CPU_AVERAGE_SECS: i64 = 60;
+
+/// Refreshes the whole process list with names, parents and start times only. Reading everything
+/// (command lines, environments, memory) for ~350 processes every second used most of a CPU core
+fn refresh_process_list(system: &mut System) {
+    system.refresh_processes_specifics(ProcessRefreshKind::new());
+}
+
+/// Refreshes one process. `false` when it has exited (its entry stays in the list, so this bool is
+/// the answer, not `process()`), or when this app may not open it: for that case the whole list is
+/// checked, which also drops exited processes from the list
+fn refresh_one_process(system: &mut System, pid: u32, kind: ProcessRefreshKind) -> bool {
+    let pid = Pid::from_u32(pid);
+    if system.refresh_process_specifics(pid, kind) {
+        return true;
+    }
+    refresh_process_list(system);
+    system.process(pid).is_some()
+}
+
 /// Check if a process is alive
 fn is_process_alive(pid: u32) -> bool {
     let mut system = SYSTEM.lock();
-    system.refresh_processes();
-    system.process(Pid::from_u32(pid)).is_some()
+    refresh_one_process(&mut system, pid, ProcessRefreshKind::new())
 }
 
-/// Get CPU usage for a process (returns percentage 0-100)
+/// CPU use of a process in percent of one core, measured since its previous CPU refresh (about 1 s)
 fn get_cpu_usage(pid: u32) -> f32 {
     let mut system = SYSTEM.lock();
-    system.refresh_processes();
-
-    if let Some(process) = system.process(Pid::from_u32(pid)) {
-        process.cpu_usage()
-    } else {
-        0.0
+    if !refresh_one_process(&mut system, pid, ProcessRefreshKind::new().with_cpu()) {
+        return 0.0;
     }
+    system.process(Pid::from_u32(pid)).map_or(0.0, |process| process.cpu_usage())
 }
 
 /// Check if a window with given PID is currently focused (Windows only)
@@ -260,6 +284,7 @@ pub fn start_time_tracking(
         window_disappeared_at: None,  // Initialize - window is visible at start
         pid_lost_at: None,
         window_seen: false,
+        cpu_measured_at: None,
     };
 
     let mut sessions = ACTIVE_SESSIONS.lock();
@@ -506,9 +531,16 @@ pub fn check_active_windows() {
             continue;
         }
 
-        // Get current CPU usage
-        let cpu_usage = get_cpu_usage(session.pid);
-        session.last_cpu_usage = cpu_usage;
+        // CPU use averaged over CPU_AVERAGE_SECS: sysinfo reports the average since the previous reading.
+        // Per-second readings of an idle Blender jump up to ~8% (average ~2%), so a single busy second
+        // would keep a forgotten session alive
+        let cpu_due = session.cpu_measured_at
+            .map_or(true, |at| now.signed_duration_since(at).num_seconds() >= CPU_AVERAGE_SECS);
+        if cpu_due {
+            session.last_cpu_usage = get_cpu_usage(session.pid);
+            session.cpu_measured_at = Some(now);
+        }
+        let cpu_usage = session.last_cpu_usage;
 
         // Check if window is focused
         let is_focused = is_window_focused(session.pid);
@@ -526,8 +558,8 @@ pub fn check_active_windows() {
 
         // Consider process active if:
         // 1. Window is focused (user is interacting) OR
-        // 2. CPU usage > 0.5% (process is doing work in background)
-        let is_active = is_focused || cpu_usage > 0.5;
+        // 2. CPU usage above BACKGROUND_WORK_CPU (rendering, simulating in the background)
+        let is_active = is_focused || cpu_usage > BACKGROUND_WORK_CPU;
 
         println!("[TimeTracking] PID {} - focused: {}, CPU: {:.1}%, is_active: {}", session.pid, is_focused, cpu_usage, is_active);
 
@@ -673,13 +705,14 @@ pub fn is_nullspace_process(pid: u32, process_name: &str) -> bool {
     pid == std::process::id() || process_name.to_lowercase().contains("nullspace")
 }
 
-/// The tracked PID belongs to nullSpace (uses the process list from the last refresh)
+/// The tracked PID belongs to nullSpace
 fn pid_is_nullspace(pid: u32) -> bool {
     if pid == std::process::id() {
         return true;
     }
-    let system = SYSTEM.lock();
-    system.process(Pid::from_u32(pid)).map_or(false, |p| is_nullspace_process(pid, p.name()))
+    let mut system = SYSTEM.lock();
+    refresh_one_process(&mut system, pid, ProcessRefreshKind::new())
+        && system.process(Pid::from_u32(pid)).map_or(false, |p| is_nullspace_process(pid, p.name()))
 }
 
 /// Earliest start time (seconds since epoch) of a process that belongs to a launch: Houdini's launch
@@ -722,7 +755,7 @@ fn pick_replacement(
 fn houdini_candidates(anchor_secs: u64) -> Vec<ReplacementCandidate> {
     let found: Vec<(u32, String, u64)> = {
         let mut system = SYSTEM.lock();
-        system.refresh_processes();
+        refresh_process_list(&mut system);
         system.processes().iter()
             .filter_map(|(pid, process)| {
                 let name = process.name().to_lowercase();
@@ -768,7 +801,9 @@ pub fn check_process_alive_for_software(pid: u32, software: String) -> bool {
         return is_process_alive(pid);
     }
     let mut system = SYSTEM.lock();
-    system.refresh_processes();
+    if !refresh_one_process(&mut system, pid, ProcessRefreshKind::new()) {
+        return false;
+    }
     if let Some(process) = system.process(Pid::from_u32(pid)) {
         let process_name = process.name().to_lowercase();
         if is_nullspace_process(pid, &process_name) {
@@ -815,7 +850,7 @@ pub fn update_session_pid(entry_id: String, new_pid: u32) -> Result<(), String> 
 /// Find all child processes of a given parent PID
 fn find_child_processes(parent_pid: u32) -> Vec<u32> {
     let mut system = SYSTEM.lock();
-    system.refresh_processes();
+    refresh_process_list(&mut system);
 
     let mut children = Vec::new();
     let parent_pid_sys = Pid::from_u32(parent_pid);
@@ -834,9 +869,9 @@ fn find_child_processes(parent_pid: u32) -> Vec<u32> {
 
 /// Find a process by name among children of a parent PID
 fn find_process_by_name_and_parent(name: &str, parent_pid: u32) -> Option<u32> {
+    // find_child_processes has just refreshed the list
     let children = find_child_processes(parent_pid);
-    let mut system = SYSTEM.lock();
-    system.refresh_processes();
+    let system = SYSTEM.lock();
 
     let name_lower = name.to_lowercase();
 
@@ -913,7 +948,7 @@ fn find_recent_process_by_name(software_name: &str) -> Option<u32> {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     let mut system = SYSTEM.lock();
-    system.refresh_processes();
+    refresh_process_list(&mut system);
 
     let name_lower = software_name.to_lowercase();
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();

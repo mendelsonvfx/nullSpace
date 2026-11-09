@@ -4,6 +4,11 @@ export type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 export const SUPPORT_COLOR = '#6303C4';
 export const SUPPORT_COLOR_DARK = '#4F029D';
 export const SUPPORT_COLOR_LIGHT = '#c084fc'; // Readable on the dark card, where SUPPORT_COLOR isn't
+// Ko-fi takes cards and PayPal in any currency; Russian cards don't work there, they go through Boosty
+export const SUPPORT_LINKS = {
+  international: 'https://ko-fi.com/mendelsonvfx',
+  russianCards: 'https://boosty.to/mendelsonvfx/donate',
+} as const;
 
 export const STATUS_COLORS = {
   active: 'bg-green-500',

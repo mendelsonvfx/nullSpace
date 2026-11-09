@@ -1,7 +1,6 @@
 // src/features/time-tracking/components/TimeAnalytics/TimeAnalytics.tsx
 import React, { useMemo } from 'react';
 import { useTimeStatsStore } from '../../stores/timeStatsStore';
-import { useTimeTrackingStore } from '../../stores/timeTrackingStore';
 import { StatsCards } from './StatsCards';
 import { SoftwareBreakdown } from './SoftwareBreakdown';
 import { WeeklyTimeline } from './WeeklyTimeline';
@@ -34,28 +33,16 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
   totalRevenue = 0
 }) => {
   // Get global software statistics (persisted)
-  const { softwareMinutes } = useTimeStatsStore();
+  const softwareMinutes = useTimeStatsStore(state => state.softwareMinutes);
 
-  // Get sessions from timeTrackingStore for real-time elapsedSeconds
-  const timeTrackingSessions = useTimeTrackingStore(state => state.sessions);
-
-  // Collect all time entries from all projects, with deduplication and real-time data merge
+  // Collect all time entries from all projects, with deduplication. Every figure here is built from
+  // durationMinutes/softwareMinutes, which change once a minute through `projects`; the live seconds of
+  // the timer store aren't read, so this doesn't subscribe to it (it changes every second)
   const allTimeEntries = useMemo(() => {
     const entriesMap = new Map<string, TimeEntry>();
 
     projects.forEach(p => {
       (p.timeEntries || []).forEach(entry => {
-        // For active entries, merge real-time elapsedSeconds from timeTrackingStore
-        if (entry.isActive) {
-          const liveEntry = timeTrackingSessions.get(entry.id);
-          if (liveEntry) {
-            entriesMap.set(entry.id, {
-              ...entry,
-              elapsedSeconds: liveEntry.elapsedSeconds
-            });
-            return;
-          }
-        }
         // Only add if not already present (deduplication)
         if (!entriesMap.has(entry.id)) {
           entriesMap.set(entry.id, entry);
@@ -64,7 +51,7 @@ export const TimeAnalytics: React.FC<TimeAnalyticsProps> = ({
     });
 
     return Array.from(entriesMap.values());
-  }, [projects, timeTrackingSessions]);
+  }, [projects]);
 
   // Calculate total time from GLOBAL statistics (focused time only - persists after project deletion)
   const totalFocusedMinutes = useMemo(() => {

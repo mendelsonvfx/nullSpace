@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Check, Heart, X } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/tauri';
-import { SUPPORT_COLOR, SUPPORT_COLOR_DARK, SUPPORT_COLOR_LIGHT } from '../../utils/constants';
+import { SUPPORT_COLOR, SUPPORT_COLOR_LIGHT } from '../../utils/constants';
+import { SupportButton } from '../ui/SupportButton';
 
 interface Props {
   version: string;
@@ -76,14 +76,7 @@ export function PostUpdateNotification({ version, onClose }: Props) {
             <p className="text-text-muted text-xs mb-3 text-center">
               If you find nullSpace useful, consider supporting the development to help keep improving and adding new features.
             </p>
-            <button
-              onClick={() => invoke('open_url', { url: 'https://t.me/mendelsonvfx' })}
-              className="w-full py-2 rounded-button font-semibold text-white text-sm transition-opacity hover:opacity-90"
-              style={{ background: `linear-gradient(to bottom right, ${SUPPORT_COLOR}, ${SUPPORT_COLOR_DARK})` }}
-            >
-              Support Development
-            </button>
-            <p className="text-text-muted text-xs mt-2 text-center">100% optional • Your support is appreciated</p>
+            <SupportButton />
           </div>
         </div>
 

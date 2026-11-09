@@ -2,6 +2,7 @@ import { X, ExternalLink } from 'lucide-react';
 import { open } from '@tauri-apps/api/shell';
 import appIcon from '../../appIcon';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { SupportButton } from '../ui/SupportButton';
 
 interface AboutPanelProps {
   onClose: () => void;
@@ -97,9 +98,12 @@ export function AboutPanel({ onClose }: AboutPanelProps) {
           </div>
 
           <div className="text-center text-[12px] text-text-muted">
-            <p>Version 1.9.57</p>
+            <p>Version 1.9.58</p>
             <p className="mt-1">Made with passion by MendelsonVFX</p>
           </div>
+
+          <SupportButton heart className="mt-5" />
+
         </div>
       </div>
     </div>

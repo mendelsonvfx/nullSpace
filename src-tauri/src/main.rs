@@ -8,6 +8,9 @@ mod c4d_thumbnail;
 mod updater;
 mod nullconverter;
 mod single_instance;
+mod file_drag;
+mod image_thumbnail;
+mod exe_icon;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -17,7 +20,7 @@ use std::time::Duration;
 use chrono::Utc;
 use uuid::Uuid;
 use scraper::{Html, Selector};
-use sysinfo::System;
+use sysinfo::{CpuRefreshKind, ProcessRefreshKind, System};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode, DebounceEventResult};
@@ -1068,11 +1071,11 @@ fn steam_running() -> bool {
         .ok()
         .filter(|&pid| pid != 0);
     if let Some(pid) = registered.map(sysinfo::Pid::from_u32) {
-        if system.refresh_process(pid) && system.process(pid).map_or(false, |p| is_steam_client(p.name())) {
+        if system.refresh_process_specifics(pid, ProcessRefreshKind::new()) && system.process(pid).map_or(false, |p| is_steam_client(p.name())) {
             return true;
         }
     }
-    system.refresh_processes();
+    system.refresh_processes_specifics(ProcessRefreshKind::new());
     system.processes().values().any(|p| is_steam_client(p.name()))
 }
 
@@ -1223,7 +1226,7 @@ fn find_process_with_file(_file_path: &str, process_name: &str) -> Option<u32> {
     let patterns: Vec<&str> = process_name.split('|').map(|s| s.trim()).collect();
     println!("[PID_SEARCH] Starting search for process matching patterns: {:?}", patterns);
 
-    let mut system = System::new_all();
+    let mut system = System::new();
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
     // Check if this is Photoshop/After Effects (they use launcher processes)
@@ -1232,7 +1235,8 @@ fn find_process_with_file(_file_path: &str, process_name: &str) -> Option<u32> {
     // Wait up to 20 seconds for process to start (Houdini can be very slow)
     for attempt in 0..40 {
         std::thread::sleep(Duration::from_millis(500));
-        system.refresh_all();
+        // Names and start times only: refresh_all also re-read every command line and environment
+        system.refresh_processes_specifics(ProcessRefreshKind::new());
 
         // Find newest process matching the name (started within last 60 seconds)
         let mut candidates: Vec<(u32, u64)> = Vec::new();
@@ -2028,7 +2032,8 @@ fn launch_resolve(exe_path: &str, ctx: &ResolveContext, file_name: String) -> Re
 
     // Resolve is single-instance: a second Resolve.exe only brings the open window to the front and exits,
     // and the regular PID lookup skips processes older than 60 s — track the running process instead
-    let system = System::new_all();
+    let mut system = System::new();
+    system.refresh_processes_specifics(ProcessRefreshKind::new());
     let running = system.processes().iter()
         .filter(|(_, p)| p.name().to_lowercase() == RESOLVE_PROCESS)
         .min_by_key(|(_, p)| p.start_time())
@@ -2639,8 +2644,19 @@ async fn launch_software_without_project(executable_path: String, software: Stri
     {
         let software_lower = software.to_lowercase();
 
-        // Special handling for Houdini - launch directly with configured executable and env vars (same as project launch)
-        if software_lower == "houdini" {
+        // Houdini from Steam: start the exe the way a double click in its folder does (bin as the working
+        // folder, no extra env, no hidden window) — that is what brings Steam up when it's closed
+        if software_lower == "houdini" && is_steam_build(&executable_path) {
+            let bin = Path::new(&executable_path).parent().ok_or("Invalid Houdini path")?;
+            Command::new(&executable_path)
+                .current_dir(bin)
+                .spawn()
+                .map_err(|e| format!("Failed to launch Houdini: {}", e))?;
+
+            println!("[LAUNCH_NO_PROJECT] Launched Houdini (Steam) from {}", bin.display());
+            Ok(())
+        } else if software_lower == "houdini" {
+            // Special handling for Houdini - launch directly with configured executable and env vars (same as project launch)
             houdini_command(Path::new(&executable_path), &executable_path)
                 .spawn()
                 .map_err(|e| format!("Failed to launch Houdini: {}", e))?;
@@ -2906,6 +2922,9 @@ struct FileNode {
     path: String,
     is_dir: bool,
     children: Option<Vec<FileNode>>,
+    /// Files: last modified, ms since the epoch (Project Structure thumbnails check their cache against it)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    modified: Option<u64>,
 }
 
 #[tauri::command]
@@ -2947,11 +2966,22 @@ fn read_dir_recursive(path: &str, max_depth: usize) -> Result<Vec<FileNode>, Str
             None
         };
 
+        // On Windows the directory listing already carries this: no extra disk access
+        let modified = if is_dir {
+            None
+        } else {
+            entry.metadata().ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as u64)
+        };
+
         nodes.push(FileNode {
             name,
             path: path.to_string_lossy().to_string(),
             is_dir,
             children,
+            modified,
         });
     }
 
@@ -4023,6 +4053,60 @@ fn extract_domain_name(url: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
+/// What a changed path in a watched project is: (version file, output). Only the part inside the project
+/// counts, so a project under "D:\Output" or "my_v2" doesn't turn every change into an output or a version.
+/// Output folders come first: render frames are named like versions ("SC01_v001_0001.png"), and counting
+/// them as versions reloaded the versions, the tree and the whole project size twice a second while rendering
+fn classify_watch_path(project_dir: &Path, path: &Path) -> (bool, bool) {
+    let rel = path.strip_prefix(project_dir).unwrap_or(path);
+    let is_output = rel.components().any(|c| {
+        let part = c.as_os_str();
+        part == "Render" || part == "Output"
+    });
+    if is_output {
+        return (false, true);
+    }
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let is_blend1 = path.extension().and_then(|e| e.to_str()).map_or(false, |e| e.eq_ignore_ascii_case("blend1"));
+    // "_v" followed by a digit, as file_naming::is_versioned
+    let is_version = !is_blend1 && name.match_indices("_v")
+        .any(|(i, _)| name.as_bytes().get(i + 2).map_or(false, u8::is_ascii_digit));
+    (is_version, false)
+}
+
+#[cfg(test)]
+mod watch_tests {
+    use super::classify_watch_path;
+    use std::path::Path;
+
+    fn classify(path: &str) -> (bool, bool) {
+        classify_watch_path(Path::new(r"E:\P\Proj"), Path::new(path))
+    }
+
+    #[test]
+    fn render_frames_are_outputs_not_versions() {
+        assert_eq!(classify(r"E:\P\Proj\Blender\SC01\Render\Preview\PROJ_SC01_v001_0001.png"), (false, true));
+        assert_eq!(classify(r"E:\P\Proj\AfterEffects\Output\PROJ_v003.mp4"), (false, true));
+    }
+
+    #[test]
+    fn version_files_by_name() {
+        assert_eq!(classify(r"E:\P\Proj\Blender\SC01\PROJ_SC01_SH010_v001.blend"), (true, false));
+        assert_eq!(classify(r"E:\P\Proj\Blender\PROJ_v010_TEST.blend"), (true, false));
+        assert_eq!(classify(r"E:\P\Proj\Blender\PROJ_v002.blend@"), (true, false));
+        assert_eq!(classify(r"E:\P\Proj\Blender\PROJ_v002.blend1"), (false, false));
+        assert_eq!(classify(r"E:\P\Proj\Blender\Tex\vintage_view.png"), (false, false));
+    }
+
+    #[test]
+    fn folders_above_the_project_dont_count() {
+        let p = |s: &str| classify_watch_path(Path::new(r"D:\Output\my_v2"), Path::new(s));
+        assert_eq!(p(r"D:\Output\my_v2\Blender\notes.txt"), (false, false));
+        assert_eq!(p(r"D:\Output\my_v2\Blender\PROJ_v001.blend"), (true, false));
+        assert_eq!(p(r"D:\Output\my_v2\Blender\Render\f_0001.exr"), (false, true));
+    }
+}
+
 #[tauri::command]
 async fn start_watching_project(
     app_handle: tauri::AppHandle,
@@ -4060,16 +4144,13 @@ async fn start_watching_project(
                                 if path.contains("\\UnrealEngine\\_Project\\") || path.contains("/UnrealEngine/_Project/") {
                                     continue;
                                 }
-                                let is_version_file = path.contains("_v") && !path.ends_with(".blend1");
-                                let is_output_file = path.contains("\\Render\\") ||
-                                                    path.contains("/Render/") ||
-                                                    path.contains("\\Output\\") ||
-                                                    path.contains("/Output/");
+                                let (is_version_file, is_output_file) =
+                                    classify_watch_path(Path::new(&project_path_clone), &event.path);
 
-                                if is_version_file {
-                                    has_version_changes = true;
-                                } else if is_output_file {
+                                if is_output_file {
                                     has_output_changes = true;
+                                } else if is_version_file {
+                                    has_version_changes = true;
                                 }
                             }
                         }
@@ -4211,8 +4292,10 @@ fn save_feedback(feedback: String, app_handle: tauri::AppHandle) -> Result<(), S
     let app_name = app_handle.package_info().name.clone();
 
     // Collect system information
-    let mut sys = System::new_all();
-    sys.refresh_all();
+    // Memory and CPU model only, no process list
+    let mut sys = System::new();
+    sys.refresh_memory();
+    sys.refresh_cpu_specifics(CpuRefreshKind::new());
 
     let os_version = System::long_os_version().unwrap_or_else(|| "Unknown".to_string());
     let kernel_version = System::kernel_version().unwrap_or_else(|| "Unknown".to_string());
@@ -6680,52 +6763,13 @@ fn set_window_corners(_window: tauri::Window, _rounded: bool) {
     // No-op on non-Windows platforms
 }
 
+/// Icon of an executable as a PNG data URL (software tiles, custom launcher items, tree folders)
 #[tauri::command]
-async fn get_exe_icon(path: String) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-        let escaped = path.replace('\'', "''");
-        let script = format!(
-            "$ErrorActionPreference='Stop'; \
-             Add-Type -AssemblyName System.Drawing; \
-             $src = [System.Drawing.Icon]::ExtractAssociatedIcon('{escaped}').ToBitmap(); \
-             $bmp = New-Object System.Drawing.Bitmap(32,32); \
-             $g = [System.Drawing.Graphics]::FromImage($bmp); \
-             $g.Clear([System.Drawing.Color]::Transparent); \
-             $g.DrawImage($src, 0, 0, 32, 32); \
-             $g.Dispose(); \
-             $ms = New-Object System.IO.MemoryStream; \
-             $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); \
-             [System.Convert]::ToBase64String($ms.ToArray())"
-        );
-
-        let output = Command::new("powershell.exe")
-            .args(["-WindowStyle", "Hidden", "-NonInteractive", "-Command", &script])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-            .map_err(|e| e.to_string())?;
-
-        if !output.status.success() {
-            return Err(String::from_utf8_lossy(&output.stderr).to_string());
-        }
-
-        let b64 = String::from_utf8(output.stdout)
-            .map_err(|e| e.to_string())?
-            .trim()
-            .to_string();
-
-        if b64.is_empty() {
-            return Err("Empty icon output".to_string());
-        }
-
-        Ok(format!("data:image/png;base64,{}", b64))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    Err("Icon extraction only supported on Windows".to_string())
+async fn get_exe_icon(path: String, size: Option<u32>) -> Result<String, String> {
+    let size = size.unwrap_or(exe_icon::DEFAULT_ICON_SIZE);
+    tauri::async_runtime::spawn_blocking(move || exe_icon::extract_png_data_url(&path, size))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 fn main() {
@@ -6764,6 +6808,8 @@ fn main() {
 
 
         .invoke_handler(tauri::generate_handler![
+            file_drag::start_file_drag,
+            image_thumbnail::get_image_thumbnail,
             create_project,
             add_software_to_project,
             remove_software_from_project,

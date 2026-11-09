@@ -134,7 +134,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
 
         if (backendSession?.process_alive) {
           // Backend says alive (may be in grace period for window detection) - trust it
-          console.log(`[TimeTrackingStore] ✅ Backend confirms ${session.software} alive (PID: ${backendSession.pid})`);
+          if (import.meta.env.DEV) console.log(`[TimeTrackingStore] ✅ Backend confirms ${session.software} alive (PID: ${backendSession.pid})`);
 
           // Sync PID if backend changed it (defensive check)
           if (backendSession.pid !== session.pid) {
@@ -567,7 +567,7 @@ export const useTimeTrackingStore = create<TimeTrackingState>((set, get) => ({
 
             // Check PID belongs to the correct software (prevents false positives from PID reuse after restart)
             const isAlive = await SessionService.checkProcessAliveForSoftware(session.pid, session.software);
-            console.log(`[TimeTrackingStore] 🔍 Process check for ${session.software} (PID: ${session.pid}): ${isAlive ? '✅ ALIVE' : '❌ DEAD'}`);
+            if (import.meta.env.DEV) console.log(`[TimeTrackingStore] 🔍 Process check for ${session.software} (PID: ${session.pid}): ${isAlive ? '✅ ALIVE' : '❌ DEAD'}`);
 
             if (!isAlive) {
               console.log(`[TimeTrackingStore] ❌ Process died for ${session.software}, auto-stopping restored session`);

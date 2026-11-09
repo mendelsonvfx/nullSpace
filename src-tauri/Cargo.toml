@@ -1,6 +1,6 @@
 [package]
 name = "nullspace"
-version = "1.9.57"
+version = "1.9.58"
 edition = "2021"
 
 [dependencies]
@@ -15,18 +15,21 @@ scraper = "0.18"
 url = "2.5"
 notify = "6.1"
 notify-debouncer-mini = "0.7"
-sysinfo = "0.30"
+sysinfo = { version = "0.30", default-features = false }  # no rayon: a small refresh must not wake a thread per core
 lazy_static = "1.4"
 parking_lot = "0.12"
 regex = "1.10"
 arboard = { version = "3.3", features = ["image-data"] }
 base64 = "0.21"
-image = "0.24"
+# No default features: they pull in rayon (jpeg_rayon, openexr), a thread pool per core on every decode.
+# EXR is read through `exr` directly, single-threaded and with a header check first
+image = { version = "0.24", default-features = false, features = ["png", "jpeg", "gif", "bmp", "tga", "tiff", "hdr"] }
+exr = { version = "1.74", default-features = false }
 walkdir = "2.4"
 zstd = "0.13"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_System_DataExchange", "Win32_UI_Shell", "Win32_System_Threading", "Win32_Security"] }
+windows = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_System_DataExchange", "Win32_UI_Shell", "Win32_System_Threading", "Win32_Security", "Win32_System_Com", "Win32_System_Ole", "Win32_UI_Shell_Common", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_HiDpi", "Win32_Storage_FileSystem"] }
 winreg = "0.52"
 
 [build-dependencies]
@@ -44,6 +47,54 @@ codegen-units = 1
 lto = true
 opt-level = "z"
 strip = true
+
+# Image decoders (Project Structure thumbnails): pixel loops are many times slower under "z",
+# and unoptimized in dev a 4K image takes seconds
+[profile.release.package.image]
+opt-level = 3
+[profile.release.package.png]
+opt-level = 3
+[profile.release.package.fdeflate]
+opt-level = 3
+[profile.release.package.miniz_oxide]
+opt-level = 3
+[profile.release.package.jpeg-decoder]
+opt-level = 3
+[profile.release.package.exr]
+opt-level = 3
+[profile.release.package.zune-inflate]
+opt-level = 3
+[profile.release.package.tiff]
+opt-level = 3
+[profile.release.package.weezl]
+opt-level = 3
+[profile.release.package.half]
+opt-level = 3
+[profile.release.package.gif]
+opt-level = 3
+
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.jpeg-decoder]
+opt-level = 3
+[profile.dev.package.exr]
+opt-level = 3
+[profile.dev.package.zune-inflate]
+opt-level = 3
+[profile.dev.package.tiff]
+opt-level = 3
+[profile.dev.package.weezl]
+opt-level = 3
+[profile.dev.package.half]
+opt-level = 3
+[profile.dev.package.gif]
+opt-level = 3
 
 [[bin]]
 name = "nullspace"

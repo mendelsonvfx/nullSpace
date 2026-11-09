@@ -16,6 +16,8 @@ const LOCAL_STORAGE_KEYS = [
   'animationsEnabled',
   'modalBlurEnabled',
   'blendPreviewsEnabled',
+  'taskAttachmentPreview',
+  'treeImagePreviews',
   'showTagIcons',
   'showCategoryBar',
   'baseCurrency',

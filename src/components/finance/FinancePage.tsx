@@ -37,9 +37,6 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
     [projects, archivedBackups]
   );
 
-  const renderStart = performance.now();
-  const renderCountRef = React.useRef(0);
-  renderCountRef.current += 1;
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const timelineContainerRef = React.useRef<HTMLDivElement>(null);
   const lockedFolderPathRef = React.useRef<string>('');
@@ -47,14 +44,6 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
 
   // Context menu using centralized hook
   const { isOpen: isTimelineMenuOpen, position: timelineMenuPosition, openMenu: openTimelineMenu, closeMenu: closeTimelineMenu } = useContextMenu();
-
-  console.log('[FinancePage] RENDER START', {
-    renderCount: renderCountRef.current,
-    projectsCount: projects.length,
-    projectsReference: projects,
-    selectedProjectId,
-    time: renderStart
-  });
 
   const [baseCurrency, setBaseCurrency] = useState(() => {
     const saved = localStorage.getItem('baseCurrency');
@@ -558,9 +547,6 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   })).filter(item => item.value > 0)
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
-
-  const renderEnd = performance.now();
-  console.log('[FinancePage] RENDER END', { duration: (renderEnd - renderStart).toFixed(2) + 'ms' });
 
   return (
     <div className="h-full flex flex-col bg-app-bg overflow-hidden animate-fade-in">
