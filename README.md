@@ -16,6 +16,11 @@ Shots, versions, renders, time and money — in one place, wired into the tools 
 ![Rust](https://img.shields.io/badge/Rust-stable-dea584?style=flat-square&logo=rust&logoColor=black)
 ![License](https://img.shields.io/badge/license-proprietary-555?style=flat-square)
 
+[![International](https://img.shields.io/badge/Support-International-7c3aed?style=for-the-badge&logo=kofi&logoColor=white)](https://ko-fi.com/mendelsonvfx)
+[![Russian Cards](https://img.shields.io/badge/Support-Russian%20Cards-7c3aed?style=for-the-badge&logo=boosty&logoColor=white)](https://boosty.to/mendelsonvfx/donate)
+
+<sub>International via Ko-fi • Russian cards via Boosty</sub>
+
 </div>
 
 ---
@@ -78,16 +83,18 @@ No cloud, no account. Projects are plain, human-readable folders that make sense
 
 Every app below gets launch-from-shot, versioned file naming and automatic time tracking. On top of that:
 
-| | Software | Extra integration |
-|:-:|---|---|
-| <img src="public/logos/blender.png" width="20"> | **Blender** | Relative paths set up on file creation · `.blend` thumbnails |
-| <img src="public/logos/houdini.png" width="20"> | **Houdini** | `.hip` / `.hiplc` / `.hipnc` picked by edition (FX / Indie / Apprentice) |
-| <img src="public/logos/cinema4d.png" width="20"> | **Cinema 4D** | Render path and frame range set up on file creation · `.c4d` thumbnails |
-| <img src="public/logos/substance.png" width="20"> | **Substance Painter** | New projects auto-saved under the version name |
-| <img src="public/logos/unreal.png" width="20"> | **Unreal Engine** | `.uproject` created on first launch |
-| <img src="public/logos/after-effects.png" width="20"> | **After Effects** | Starts from a clean template · Global Compose |
-| <img src="public/logos/davinci.png" width="20"> | **DaVinci Resolve** | Open Project / Save Version scripts, `.drp` versions · Global Compose |
-| <img src="public/logos/photoshop.png" width="20"> | **Photoshop** | `.psd` / `.psb` thumbnails |
+| Software | Extra integration |
+|---|---|
+| **Blender** | Relative paths set up on file creation · `.blend` thumbnails |
+| **Houdini** | `.hip` / `.hiplc` / `.hipnc` picked by edition (FX / Indie / Apprentice) |
+| **Cinema 4D** | Render path and frame range set up on file creation · `.c4d` thumbnails |
+| **Substance Painter** | New projects auto-saved under the version name |
+| **Unreal Engine** | `.uproject` created on first launch |
+| **After Effects** | Starts from a clean template · Global Compose |
+| **DaVinci Resolve** | Open Project / Save Version scripts, `.drp` versions · Global Compose |
+| **Photoshop** | `.psd` / `.psb` thumbnails |
+
+> All product names and trademarks are the property of their respective owners. nullSpace is an independent project and is not affiliated with, sponsored by, or endorsed by the Blender Foundation, SideFX, Maxon, Adobe, Epic Games or Blackmagic Design.
 
 ## Build from source
 
