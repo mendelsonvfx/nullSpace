@@ -8,7 +8,7 @@
 
 Shots, versions, renders, time and money — in one place, wired into the tools you already use.
 
-![Version](https://img.shields.io/badge/version-1.9.45-7c3aed?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.9.58-7c3aed?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&logo=windows&logoColor=white)
 ![Tauri](https://img.shields.io/badge/Tauri-1-24c8db?style=flat-square&logo=tauri&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=black)
