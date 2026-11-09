@@ -16,8 +16,13 @@ Shots, versions, renders, time and money — in one place, wired into the tools 
 ![Rust](https://img.shields.io/badge/Rust-stable-dea584?style=flat-square&logo=rust&logoColor=black)
 ![License](https://img.shields.io/badge/license-proprietary-555?style=flat-square)
 
-[![International](https://img.shields.io/badge/Support-International-7c3aed?style=for-the-badge&logo=kofi&logoColor=white)](https://ko-fi.com/mendelsonvfx)
-[![Russian Cards](https://img.shields.io/badge/Support-Russian%20Cards-7c3aed?style=for-the-badge&logo=boosty&logoColor=white)](https://boosty.to/mendelsonvfx/donate)
+<br>
+
+**Support development**
+
+[![International](https://img.shields.io/badge/International-FF5E5B?style=for-the-badge&logo=kofi&logoColor=white)](https://ko-fi.com/mendelsonvfx)
+&nbsp;
+[![Russian Cards](https://img.shields.io/badge/Russian%20Cards-F15F2C?style=for-the-badge&logo=boosty&logoColor=white)](https://boosty.to/mendelsonvfx/donate)
 
 <sub>International via Ko-fi • Russian cards via Boosty</sub>
 
