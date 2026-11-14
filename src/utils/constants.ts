@@ -9,6 +9,8 @@ export const SUPPORT_LINKS = {
   international: 'https://ko-fi.com/mendelsonvfx',
   russianCards: 'https://boosty.to/mendelsonvfx/donate',
 } as const;
+// All releases with their notes (the updater reads the same public repository)
+export const RELEASES_PAGE = 'https://github.com/mendelsonvfx/nullSpace/releases';
 
 export const STATUS_COLORS = {
   active: 'bg-green-500',

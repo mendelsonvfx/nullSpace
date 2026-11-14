@@ -2259,7 +2259,7 @@ dependencies = [
 
 [[package]]
 name = "nullspace"
-version = "1.9.58"
+version = "1.9.59"
 dependencies = [
  "arboard",
  "base64 0.21.7",

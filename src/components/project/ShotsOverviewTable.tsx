@@ -106,7 +106,8 @@ export function ShotsOverviewTable({ projectId, projectPath, projectName, curren
           Shots overview
         </h3>
         {/* Table Header */}
-        <div className="grid grid-cols-[140px_120px_120px_1fr_120px] gap-4 pb-3 px-4">
+        {/* minmax(0,1fr): the Notes column never grows past the row for a long unbroken path */}
+        <div className="grid grid-cols-[140px_120px_120px_minmax(0,1fr)_120px] gap-4 pb-3 px-4">
           <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Preview</div>
           <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Number</div>
           <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Tasks</div>
@@ -203,7 +204,7 @@ function ShotRow({ shot, projectId: _projectId, projectPath, blendPath, psdPath,
     : '';
 
   return (
-    <div className="grid grid-cols-[140px_120px_120px_1fr_120px] gap-4 px-4 py-3.5 bg-[#0f0f0f] border border-border-primary rounded-xl hover:border-border-secondary transition-colors cursor-pointer" onClick={onClick}>
+    <div className="grid grid-cols-[140px_120px_120px_minmax(0,1fr)_120px] gap-4 px-4 py-3.5 bg-[#0f0f0f] border border-border-primary rounded-xl hover:border-border-secondary transition-colors cursor-pointer" onClick={onClick}>
       {/* Preview */}
       <div className="flex items-center">
         <div className="relative w-32 h-20 rounded-lg overflow-hidden bg-zinc-900 flex items-center justify-center border border-zinc-800">
@@ -243,9 +244,10 @@ function ShotRow({ shot, projectId: _projectId, projectPath, blendPath, psdPath,
       </div>
 
       {/* Notes */}
-      <div className="flex items-center justify-start">
+      <div className="flex items-center justify-start min-w-0">
         {allNotesText ? (
-          <div className="prose prose-invert prose-xs max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 text-xs text-text-secondary">
+          // overflow-wrap:anywhere: paths and links without spaces wrap inside the column
+          <div className="prose prose-invert prose-xs max-w-none min-w-0 [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 text-xs text-text-secondary">
             <ReactMarkdown
               components={{
                 p: ({ children }) => <p className="mb-1 last:mb-0 text-xs">{children}</p>,
@@ -255,7 +257,7 @@ function ShotRow({ shot, projectId: _projectId, projectPath, blendPath, psdPath,
                 h1: ({ children }) => <h1 className="text-sm font-bold mb-1">{children}</h1>,
                 h2: ({ children }) => <h2 className="text-sm font-semibold mb-1">{children}</h2>,
                 h3: ({ children }) => <h3 className="text-xs font-semibold mb-1">{children}</h3>,
-                code: ({ children }) => <code className="bg-zinc-800 px-1 rounded text-xs">{children}</code>,
+                code: ({ children }) => <code className="bg-zinc-800 px-1 rounded text-xs break-all">{children}</code>,
                 pre: ({ children }) => <pre className="bg-zinc-800 p-2 rounded mb-1 text-xs overflow-x-auto">{children}</pre>,
               }}
             >

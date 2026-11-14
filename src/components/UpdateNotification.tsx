@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/api/shell';
 import ReactMarkdown from 'react-markdown';
+import { RELEASES_PAGE } from '../utils/constants';
 
 type Phase = 'available' | 'installing';
 
@@ -136,7 +137,7 @@ export function UpdateNotification({ version, downloadUrl, notes, pubDate, onDis
 
               {/* View Full Changelog */}
               <button
-                onClick={() => open('https://mendelsonvfx.com/').catch(() => {})}
+                onClick={() => open(RELEASES_PAGE).catch(() => {})}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-button bg-sidebar-bg border border-border-primary text-text-muted hover:text-white hover:border-border-secondary text-sm font-medium transition-colors mb-2"
               >
                 <ExternalLink className="w-4 h-4" />
