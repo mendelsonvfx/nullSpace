@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import { useContextMenuStore } from '../../../store/contextMenuStore';
+import { useEscapeLayer } from '../../../utils/escapeLayers';
 import { ContextMenuProps } from './types';
 
 export const ContextMenu = forwardRef<HTMLDivElement, ContextMenuProps>(({
@@ -69,24 +70,19 @@ export const ContextMenu = forwardRef<HTMLDivElement, ContextMenuProps>(({
       }
     };
 
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
     // Small delay to prevent immediate close on the same click that opened the menu
     const timeoutId = setTimeout(() => {
       document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscape);
     }, 0);
 
     return () => {
       clearTimeout(timeoutId);
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
     };
   }, [isOpen, onClose]);
+
+  // Escape closes only this menu, not the dialog or project behind it
+  useEscapeLayer(isOpen, onClose);
 
   // Set active menu in store
   useEffect(() => {

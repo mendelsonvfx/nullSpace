@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 
 interface AddCategoryModalProps {
   isOpen: boolean;
@@ -10,6 +11,9 @@ interface AddCategoryModalProps {
 export function AddCategoryModal({ isOpen, onClose, onAdd }: AddCategoryModalProps) {
   const [categoryName, setCategoryName] = useState('');
   const blurClass = useModalBlur();
+
+  // Escape closes the dialog from anywhere in it (also when focus left the field)
+  useEscapeLayer(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -56,7 +60,6 @@ export function AddCategoryModal({ isOpen, onClose, onAdd }: AddCategoryModalPro
           onChange={(e) => setCategoryName(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleAdd();
-            if (e.key === 'Escape') onClose();
           }}
           placeholder="Category name..."
           className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 mb-4 text-sm focus:outline-none focus:border-accent"

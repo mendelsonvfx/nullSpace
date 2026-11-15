@@ -10,6 +10,8 @@ import { SoftwareAppIcon } from '../shared/SoftwareAppIcon';
 import type { CustomLauncherItem } from '../../types/launcher';
 import type { SoftwareName } from '../../types/project';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
+import { useMediaToolsStatus, clearMediaPreviewMemory, mediaPreviewMemoryEntries } from '../../utils/mediaPreview';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 import { CustomSelect } from '../ui/CustomSelect';
 import { ColorPickerPopup } from '../ui/ColorPickerPopup';
 import { getVersion } from '@tauri-apps/api/app';
@@ -505,6 +507,85 @@ function GeneralSettings() {
   );
 }
 
+const FFMPEG_SOURCE_LABELS = { nullspace: 'nullSpace', nullconverter: 'NullConverter', path: 'PATH' } as const;
+const FFMPEG_BUILD_NOTE = 'gyan.dev build, GPLv3, ~110 MB from GitHub';
+
+/** Settings → Data: ffmpeg used for video/sequence previews. Status and progress come from Rust (media_tools.rs) */
+function FfmpegSettingsRow() {
+  const status = useMediaToolsStatus();
+  // A failed invoke itself (not a failed download, which arrives in status.last_error)
+  const [invokeError, setInvokeError] = useState<string | null>(null);
+
+  const tools = status?.tools ?? null;
+  const phase = status?.phase ?? 'idle';
+  const checking = !status || !status.checked;
+
+  const subtitle = checking
+    ? 'Media conversion engine · checking…'
+    : tools
+      ? `Media conversion engine · ${tools.version} · ${FFMPEG_SOURCE_LABELS[tools.source] ?? tools.source}`
+      : 'Media conversion engine · not installed';
+  const tooltip = tools ? `${tools.ffmpeg}\n${FFMPEG_BUILD_NOTE}` : FFMPEG_BUILD_NOTE;
+
+  const run = (command: 'download_ffmpeg' | 'cancel_ffmpeg_download') => {
+    setInvokeError(null);
+    invoke(command).catch(e => {
+      console.error(`${command} failed:`, e);
+      setInvokeError(String(e));
+    });
+  };
+
+  const buttonClass = 'px-3 py-1.5 bg-sidebar-bg hover:bg-hover-bg disabled:opacity-40 disabled:cursor-not-allowed rounded-button transition-colors flex items-center gap-2 text-sm font-medium animate-button';
+
+  let progressLabel = '';
+  if (status && phase === 'downloading') {
+    progressLabel = status.total > 0
+      ? `${Math.min(100, Math.floor((status.downloaded / status.total) * 100))}%`
+      : `${Math.round(status.downloaded / (1024 * 1024))} MB`;
+  }
+
+  const errorText = phase === 'error' ? (status?.last_error || 'Download failed') : invokeError;
+
+  return (
+    <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
+      <div className="min-w-0" title={tooltip}>
+        <div className="text-sm font-semibold mb-0.5">FFmpeg</div>
+        <p className="text-xs text-text-muted">{subtitle}</p>
+        {errorText && <p className="text-xs text-red-400 mt-1 break-words">{errorText}</p>}
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {checking ? (
+          <button disabled className={buttonClass}>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Checking…
+          </button>
+        ) : phase === 'downloading' ? (
+          <>
+            <span className="text-sm text-text-secondary tabular-nums flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {progressLabel}
+            </span>
+            <button onClick={() => run('cancel_ffmpeg_download')} className={buttonClass}>
+              <X className="w-4 h-4" />
+              Cancel
+            </button>
+          </>
+        ) : phase === 'verifying' || phase === 'installing' || phase === 'cancelling' ? (
+          <button disabled className={buttonClass}>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {phase === 'cancelling' ? 'Cancelling…' : 'Installing…'}
+          </button>
+        ) : (
+          <button onClick={() => run('download_ffmpeg')} className={buttonClass}>
+            {tools ? <RefreshCw className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+            {tools ? 'Reinstall' : 'Download'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DataSettings() {
   const { loadProjects } = useProjectStore();
   const { clearAllThumbnails, getCacheSize } = useThumbnailCache();
@@ -525,14 +606,19 @@ function DataSettings() {
   const [importExportError, setImportExportError] = useState<string | null>(null);
   const [showImportConfirm, setShowImportConfirm] = useState(false);
   const [pendingImportData, setPendingImportData] = useState<ExportData | null>(null);
+  // Escape cancels the confirmation, not the whole Settings window
+  useEscapeLayer(showClearTimeConfirm, () => setShowClearTimeConfirm(false));
+  useEscapeLayer(showImportConfirm, () => { setShowImportConfirm(false); setPendingImportData(null); });
 
   useEffect(() => {
-    getCacheSize().then(setCacheSize);
+    // Disk thumbnails (IndexedDB) + media previews held in memory (row thumbnails, scrub frames)
+    getCacheSize().then(size => setCacheSize(size + mediaPreviewMemoryEntries()));
   }, [getCacheSize]);
 
   const handleClearCache = async () => {
     if (cacheSize === 0) return;
     await clearAllThumbnails();
+    clearMediaPreviewMemory();
     setCacheSize(0);
     setCacheCleared(true);
     setTimeout(() => setCacheCleared(false), 3000);
@@ -608,6 +694,8 @@ function DataSettings() {
 
   return (
     <div>
+      <FfmpegSettingsRow />
+
       {/* Thumbnail Cache */}
       <div className="py-4 border-b border-border-primary">
         <div className="mb-3">
@@ -927,6 +1015,7 @@ function LauncherSettings() {
     JSON.parse(localStorage.getItem('toolLauncherEnabled') ?? 'false')
   );
   const [showLauncherWarning, setShowLauncherWarning] = useState(false);
+  useEscapeLayer(showLauncherWarning, () => setShowLauncherWarning(false));
 
   const handleLauncherToggle = () => {
     if (!launcherEnabled) {
@@ -1571,11 +1660,11 @@ function AppearanceSettings({ showTagIcons, setShowTagIcons }: { showTagIcons: b
         </button>
       </div>
 
-      {/* Project Structure image previews */}
+      {/* File previews (Project Structure + Render Output); key kept from the old image-only toggle */}
       <div className="flex items-center justify-between py-4 border-b border-border-primary gap-4">
         <div>
-          <div className="text-sm font-semibold mb-0.5">Project Structure Image Previews</div>
-          <p className="text-xs text-text-muted">Show image thumbnails and a preview on hover in Project Structure</p>
+          <div className="text-sm font-semibold mb-0.5">File Previews</div>
+          <p className="text-xs text-text-muted">Thumbnails and hover scrubbing for images, videos and image sequences in Project Structure and Render Output</p>
         </div>
         <button
           onClick={() => {

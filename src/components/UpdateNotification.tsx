@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/api/shell';
 import ReactMarkdown from 'react-markdown';
 import { RELEASES_PAGE } from '../utils/constants';
+import { useEscapeLayer } from '../utils/escapeLayers';
 
 type Phase = 'available' | 'installing';
 
@@ -41,6 +42,9 @@ export function UpdateNotification({ version, downloadUrl, notes, pubDate, onDis
     setIsVisible(false);
     setTimeout(onDismiss, 200);
   };
+
+  // Escape dismisses like a click outside; while installing it closes nothing
+  useEscapeLayer(isVisible, phase === 'available' ? dismiss : null);
 
   const formattedDate = pubDate
     ? new Date(pubDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })

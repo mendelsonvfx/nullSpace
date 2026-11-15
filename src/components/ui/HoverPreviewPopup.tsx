@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { HoverAnchor } from '../../hooks/useHoverPreview';
+import type { HoverAnchor } from '../../utils/mediaPreview';
 
 interface Props {
   anchor: HoverAnchor;
@@ -25,7 +25,7 @@ export function HoverPreviewPopup({ anchor, visible, width, height, children }: 
   const above = anchor.top > height + GAP + EDGE;
   const style = above
     ? { left, width, top: anchor.top - GAP, transform: 'translateY(-100%)' }
-    : { left, width, top: anchor.bottom + GAP };
+    : { left, width, top: Math.min(anchor.bottom + GAP, Math.max(EDGE, window.innerHeight - height - EDGE)) };
 
   return createPortal(
     <div

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 
 interface RenameCategoryModalProps {
   isOpen: boolean;
@@ -15,6 +16,9 @@ export function RenameCategoryModal({ isOpen, categoryName, onClose, onRename }:
   useEffect(() => {
     setEditedName(categoryName);
   }, [categoryName]);
+
+  // Escape closes the dialog from anywhere in it (also when focus left the field)
+  useEscapeLayer(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -60,7 +64,6 @@ export function RenameCategoryModal({ isOpen, categoryName, onClose, onRename }:
           onChange={(e) => setEditedName(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleRename();
-            if (e.key === 'Escape') onClose();
           }}
           className="w-full bg-sidebar-bg border border-border-primary rounded-button px-3 py-2 mb-4 text-sm focus:outline-none focus:border-accent"
           autoFocus

@@ -10,6 +10,8 @@ mod nullconverter;
 mod single_instance;
 mod file_drag;
 mod image_thumbnail;
+mod media_preview;
+mod media_tools;
 mod exe_icon;
 
 use serde::{Deserialize, Serialize};
@@ -5342,7 +5344,31 @@ struct OutputFile {
     frame_range: Option<String>, // e.g., "0001-0008"
     frame_count: Option<u32>,
     missing_frames: Option<String>, // e.g., "(0002-0004), 0007"
+    /// Stable row key: a file's path; for a sequence its grouping key (folder, prefix, suffix, extension,
+    /// software, render type) joined with '\0' — the name holds the frame range and changes while rendering
+    #[serde(default)]
+    id: String,
+    /// Last modification, ms since the epoch (sequence: newest frame)
+    #[serde(default)]
+    modified: Option<u64>,
+    /// Sequences: up to 16 frames spread evenly by frame number, for hover scrubbing
+    #[serde(default)]
+    preview_frames: Option<Vec<PreviewFrame>>,
 }
+
+/// One frame of a sequence; `name` is relative to the sequence folder (`OutputFile::path`)
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+struct PreviewFrame {
+    name: String,
+    frame: u32,
+    /// ms since the epoch (0 if unknown)
+    modified: u64,
+}
+
+/// Frames offered for scrubbing a sequence
+const PREVIEW_FRAME_COUNT: usize = 16;
+/// Missing ranges listed before the text ends with "…"
+const MISSING_RANGES_SHOWN: usize = 10;
 
 // Regex for frame number extraction - compiled once at first use
 lazy_static! {
@@ -5398,47 +5424,69 @@ fn extract_frame_number(filename: &str) -> Option<(String, u32, String, String)>
     None
 }
 
-// Helper function to detect missing frames in a sequence
-fn detect_missing_frames(frames: &[u32], first_frame: u32, last_frame: u32) -> Option<String> {
-    let mut missing = Vec::new();
-
-    for frame_num in first_frame..=last_frame {
-        if !frames.contains(&frame_num) {
-            missing.push(frame_num);
+/// Missing frames of a sequence from its sorted, deduplicated frame numbers, in one pass:
+/// "0003, (0005-0008)". Stops after `MISSING_RANGES_SHOWN` ranges with ", …" (a gap of millions of
+/// frames is still one range; nothing is allocated per missing frame)
+fn detect_missing_frames(sorted_unique: &[u32]) -> Option<String> {
+    let mut text = String::new();
+    let mut ranges = 0usize;
+    for pair in sorted_unique.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        if b <= a.saturating_add(1) {
+            continue;
         }
-    }
-
-    if missing.is_empty() {
-        return None;
-    }
-
-    // Group consecutive missing frames
-    let mut groups = Vec::new();
-    let mut start = missing[0];
-    let mut prev = missing[0];
-
-    for &frame in &missing[1..] {
-        if frame == prev + 1 {
-            prev = frame;
+        if ranges == MISSING_RANGES_SHOWN {
+            text.push_str(", …");
+            break;
+        }
+        if ranges > 0 {
+            text.push_str(", ");
+        }
+        let (start, end) = (a + 1, b - 1);
+        if start == end {
+            text.push_str(&format!("{:04}", start));
         } else {
-            if start == prev {
-                groups.push(format!("{:04}", start));
-            } else {
-                groups.push(format!("({:04}-{:04})", start, prev));
-            }
-            start = frame;
-            prev = frame;
+            text.push_str(&format!("({:04}-{:04})", start, end));
+        }
+        ranges += 1;
+    }
+    if text.is_empty() { None } else { Some(text) }
+}
+
+/// Indices into `frames` (sorted, unique) of up to `PREVIEW_FRAME_COUNT` frames: targets
+/// first + (last − first)·i/15, each taken as the nearest existing frame; all of them when there are fewer
+fn pick_preview_frames(frames: &[u32]) -> Vec<usize> {
+    let n = frames.len();
+    if n <= PREVIEW_FRAME_COUNT {
+        return (0..n).collect();
+    }
+    let first = frames[0] as u64;
+    let last = frames[n - 1] as u64;
+    let steps = (PREVIEW_FRAME_COUNT - 1) as u64;
+    let mut picked: Vec<usize> = Vec::with_capacity(PREVIEW_FRAME_COUNT);
+    for i in 0..PREVIEW_FRAME_COUNT as u64 {
+        let target = first + (last - first) * i / steps;
+        // First index with frame >= target, compared with the one before it (ties go to the lower frame)
+        let upper = frames.partition_point(|&f| (f as u64) < target);
+        let index = if upper == 0 {
+            0
+        } else if upper == n {
+            n - 1
+        } else if target - frames[upper - 1] as u64 <= frames[upper] as u64 - target {
+            upper - 1
+        } else {
+            upper
+        };
+        // Targets only grow, so a repeat can only be the previous pick (sparse frames around a big gap)
+        if picked.last() != Some(&index) {
+            picked.push(index);
         }
     }
+    picked
+}
 
-    // Add the last group
-    if start == prev {
-        groups.push(format!("{:04}", start));
-    } else {
-        groups.push(format!("({:04}-{:04})", start, prev));
-    }
-
-    Some(groups.join(", "))
+fn system_time_ms(time: std::time::SystemTime) -> Option<u64> {
+    time.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_millis() as u64)
 }
 
 // Helper function to check if file extension is an image format
@@ -5450,113 +5498,114 @@ fn is_image_format(ext: &str) -> bool {
     image_formats.contains(&ext.to_lowercase().as_str())
 }
 
-// Helper function to group image sequences
+/// Groups numbered image files into sequences. Each name is parsed once; files with the same frame
+/// number (shot.001.exr + shot_0001.exr) count as one frame
 fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
     use std::collections::HashMap;
 
-    let mut sequences: HashMap<String, Vec<OutputFile>> = HashMap::new();
+    /// (folder, prefix, suffix, extension, software, render type)
+    type SeqKey = (String, String, String, String, String, String);
+
+    let mut sequences: HashMap<SeqKey, Vec<(u32, OutputFile)>> = HashMap::new();
     let mut standalone_files = Vec::new();
 
-    // Group files by prefix, extension, software, and render_type (to keep Preview and Final separate)
+    // Group by folder, prefix, suffix, extension, software and render type (Preview and Final stay apart)
     for file in files {
-        if let Some((prefix, _frame_num, suffix, ext)) = extract_frame_number(&file.name) {
-            // Only group image formats into sequences
-            if is_image_format(&ext) {
-                // Include parent directory in key to separate sequences from different folders
+        match extract_frame_number(&file.name) {
+            // Only image formats form sequences
+            Some((prefix, frame, suffix, ext)) if is_image_format(&ext) => {
                 let parent_dir = std::path::Path::new(&file.path)
                     .parent()
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();
-                let key = format!("{}_{}_{}_{}_{}_{}", prefix, suffix, ext, file.software, file.render_type, parent_dir);
-                sequences.entry(key).or_insert_with(Vec::new).push(file);
-            } else {
-                // Non-image files are treated as standalone
-                standalone_files.push(file);
+                let key = (parent_dir, prefix, suffix, ext, file.software.clone(), file.render_type.clone());
+                sequences.entry(key).or_default().push((frame, file));
             }
-        } else {
-            standalone_files.push(file);
+            _ => standalone_files.push(file),
         }
     }
 
     let mut result = Vec::new();
 
-    // Process sequences
-    for (_key, mut seq_files) in sequences {
-        if seq_files.len() > 1 {
-            // Sort by frame number
-            seq_files.sort_by(|a, b| {
-                let frame_a = extract_frame_number(&a.name).map(|(_, n, _, _)| n).unwrap_or(0);
-                let frame_b = extract_frame_number(&b.name).map(|(_, n, _, _)| n).unwrap_or(0);
-                frame_a.cmp(&frame_b)
-            });
+    for (key, mut seq_files) in sequences {
+        // Stable: among files with the same number the scan order decides which comes first
+        seq_files.sort_by_key(|(frame, _)| *frame);
 
-            let first = seq_files.first().unwrap();
-            let last = seq_files.last().unwrap();
-
-            let first_frame = extract_frame_number(&first.name).map(|(_, n, _, _)| n).unwrap_or(0);
-            let last_frame = extract_frame_number(&last.name).map(|(_, n, _, _)| n).unwrap_or(0);
-
-            // Get the directory path
-            let dir_path = std::path::Path::new(&first.path)
-                .parent()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default();
-
-            // Extract prefix and extension directly from the first file's name
-            let (prefix, _, suffix, ext) = extract_frame_number(&first.name)
-                .unwrap_or((String::new(), 0, String::new(), String::new()));
-
-            // Create display name with frame range (only prefix + frame range + suffix + ext)
-            // Ignore prefix if it's empty or consists only of digits (e.g., "0" from "0002.exr")
-            let use_prefix = !prefix.is_empty() && !prefix.chars().all(|c| c.is_ascii_digit());
-            let has_suffix = !suffix.is_empty();
-            let display_name = match (use_prefix, has_suffix) {
-                (true, true) => format!("{}.{:04}-{:04}_{}.{}", &prefix, first_frame, last_frame, &suffix, &ext),
-                (true, false) => format!("{}.{:04}-{:04}.{}", &prefix, first_frame, last_frame, &ext),
-                (false, true) => format!("{:04}-{:04}_{}.{}", first_frame, last_frame, &suffix, &ext),
-                (false, false) => format!("{:04}-{:04}.{}", first_frame, last_frame, &ext),
-            };
-
-            // Sum up total size
-            let total_size: u64 = seq_files.iter().map(|f| f.size).sum();
-
-            // Detect missing frames
-            let existing_frames: Vec<u32> = seq_files.iter()
-                .filter_map(|f| extract_frame_number(&f.name).map(|(_, n, _, _)| n))
-                .collect();
-            let missing = detect_missing_frames(&existing_frames, first_frame, last_frame);
-
-            result.push(OutputFile {
-                name: display_name,
-                path: dir_path,
-                software: first.software.clone(),
-                render_type: first.render_type.clone(),
-                created_at: first.created_at,
-                size: total_size,
-                is_sequence: true,
-                frame_range: Some(format!("{:04}-{:04}", first_frame, last_frame)),
-                frame_count: Some(seq_files.len() as u32),
-                missing_frames: missing,
-            });
-        } else if let Some(file) = seq_files.into_iter().next() {
-            // Single file, treat as standalone
-            standalone_files.push(file);
+        // One entry per frame number; the newest file stands for a duplicated number
+        let mut frames: Vec<u32> = Vec::with_capacity(seq_files.len());
+        let mut frame_files: Vec<usize> = Vec::with_capacity(seq_files.len());
+        for (index, (frame, file)) in seq_files.iter().enumerate() {
+            if frames.last() == Some(frame) {
+                if let Some(slot) = frame_files.last_mut() {
+                    if file.modified > seq_files[*slot].1.modified {
+                        *slot = index;
+                    }
+                }
+            } else {
+                frames.push(*frame);
+                frame_files.push(index);
+            }
         }
+
+        // A single frame number (even held by several files) is not a sequence
+        if frames.len() < 2 {
+            standalone_files.extend(seq_files.into_iter().map(|(_, file)| file));
+            continue;
+        }
+
+        let (dir_path, prefix, suffix, ext, software, render_type) = key;
+        let first_frame = frames[0];
+        let last_frame = frames[frames.len() - 1];
+
+        // Display name: prefix + frame range + suffix + ext. A prefix of only digits ("0" from "0002.exr") is dropped
+        let use_prefix = !prefix.is_empty() && !prefix.chars().all(|c| c.is_ascii_digit());
+        let has_suffix = !suffix.is_empty();
+        let display_name = match (use_prefix, has_suffix) {
+            (true, true) => format!("{}.{:04}-{:04}_{}.{}", &prefix, first_frame, last_frame, &suffix, &ext),
+            (true, false) => format!("{}.{:04}-{:04}.{}", &prefix, first_frame, last_frame, &ext),
+            (false, true) => format!("{:04}-{:04}_{}.{}", first_frame, last_frame, &suffix, &ext),
+            (false, false) => format!("{:04}-{:04}.{}", first_frame, last_frame, &ext),
+        };
+
+        // Every file is on disk, duplicates included
+        let total_size: u64 = seq_files.iter().map(|(_, f)| f.size).sum();
+        let modified = seq_files.iter().filter_map(|(_, f)| f.modified).max();
+        let preview_frames: Vec<PreviewFrame> = pick_preview_frames(&frames)
+            .into_iter()
+            .map(|i| {
+                let file = &seq_files[frame_files[i]].1;
+                PreviewFrame { name: file.name.clone(), frame: frames[i], modified: file.modified.unwrap_or(0) }
+            })
+            .collect();
+        let id = [dir_path.as_str(), &prefix, &suffix, &ext, &software, &render_type].join("\0");
+        let created_at = seq_files[0].1.created_at;
+
+        result.push(OutputFile {
+            name: display_name,
+            path: dir_path,
+            software,
+            render_type,
+            created_at,
+            size: total_size,
+            is_sequence: true,
+            frame_range: Some(format!("{:04}-{:04}", first_frame, last_frame)),
+            frame_count: Some(frames.len() as u32),
+            missing_frames: detect_missing_frames(&frames),
+            id,
+            modified,
+            preview_frames: Some(preview_frames),
+        });
     }
 
-    // Add standalone files
     for file in standalone_files {
         result.push(OutputFile {
-            name: file.name,
-            path: file.path,
-            software: file.software,
-            render_type: file.render_type,
-            created_at: file.created_at,
-            size: file.size,
+            id: file.path.clone(),
             is_sequence: false,
             frame_range: None,
             frame_count: None,
             missing_frames: None,
+            preview_frames: None,
+            ..file
         });
     }
 
@@ -5688,6 +5737,9 @@ fn scan_output_dir_recursive(
                                     frame_range: None,
                                     frame_count: None,
                                     missing_frames: None,
+                                    id: path.to_string_lossy().to_string(),
+                                    modified: metadata.modified().ok().and_then(system_time_ms),
+                                    preview_frames: None,
                                 });
                             }
                         }
@@ -6800,6 +6852,15 @@ fn main() {
             let is_maximized = window.is_maximized().unwrap_or(false);
             set_window_corners_internal(&window, !is_maximized);
 
+            // ffmpeg for media previews: cleanup of interrupted installs + first search, both off this thread;
+            // search again whenever the window gets focus (ffmpeg installed or removed meanwhile)
+            media_tools::startup(&app.handle());
+            let focus_handle = app.handle();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Focused(true) = event {
+                    media_tools::refresh_in_background(&focus_handle);
+                }
+            });
 
             // Don't show window here - let JS call show_main_window when ready
             // This prevents the white flash while WebView content loads
@@ -6810,6 +6871,14 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             file_drag::start_file_drag,
             image_thumbnail::get_image_thumbnail,
+            media_preview::get_video_thumbnail,
+            media_preview::start_scrub,
+            media_preview::cancel_scrub,
+            media_preview::clear_media_preview_cache,
+            media_tools::get_media_tools_status,
+            media_tools::refresh_media_tools,
+            media_tools::download_ffmpeg,
+            media_tools::cancel_ffmpeg_download,
             create_project,
             add_software_to_project,
             remove_software_from_project,
@@ -6940,5 +7009,178 @@ mod perf_tests {
                 println!("[PERF]   {:<24} versions {:?} {} ms | outputs {:?} {} ms", p.name, versions, tv, outputs, to);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+
+    fn file(dir: &str, name: &str, modified: u64) -> OutputFile {
+        let path = format!(r"{}\{}", dir, name);
+        OutputFile {
+            name: name.to_string(),
+            path: path.clone(),
+            software: "blender".to_string(),
+            render_type: "preview".to_string(),
+            created_at: 1,
+            size: 10,
+            is_sequence: false,
+            frame_range: None,
+            frame_count: None,
+            missing_frames: None,
+            id: path,
+            modified: Some(modified),
+            preview_frames: None,
+        }
+    }
+
+    fn sequences(out: &[OutputFile]) -> Vec<&OutputFile> {
+        out.iter().filter(|f| f.is_sequence).collect()
+    }
+
+    #[test]
+    fn groups_sequence_with_id_modified_and_preview_frames() {
+        let dir = r"C:\p\Render\Preview";
+        let files: Vec<OutputFile> = (1..=40u32)
+            .map(|n| file(dir, &format!("shot_{:04}.png", n), 1000 + n as u64))
+            .chain(std::iter::once(file(dir, "movie.mp4", 5)))
+            .collect();
+        let out = group_sequences(files);
+        assert_eq!(out.len(), 2);
+        let seq = sequences(&out)[0];
+        assert_eq!(seq.name, "shot.0001-0040.png");
+        assert_eq!(seq.path, dir);
+        assert_eq!(seq.frame_range.as_deref(), Some("0001-0040"));
+        assert_eq!(seq.frame_count, Some(40));
+        assert_eq!(seq.missing_frames, None);
+        assert_eq!(seq.size, 400);
+        assert_eq!(seq.modified, Some(1040));
+        assert_eq!(seq.id, format!("{}\0shot\0\0png\0blender\0preview", dir));
+        let frames = seq.preview_frames.as_ref().expect("preview frames");
+        assert_eq!(frames.len(), 16);
+        assert_eq!(frames[0], PreviewFrame { name: "shot_0001.png".into(), frame: 1, modified: 1001 });
+        assert_eq!(frames[15].frame, 40);
+        assert!(frames.windows(2).all(|w| w[0].frame < w[1].frame));
+
+        let movie = out.iter().find(|f| !f.is_sequence).expect("movie");
+        assert_eq!(movie.id, format!(r"{}\movie.mp4", dir));
+        assert_eq!(movie.modified, Some(5));
+        assert!(movie.preview_frames.is_none());
+    }
+
+    #[test]
+    fn id_is_stable_while_rendering() {
+        let dir = r"C:\p\Render\Final";
+        let a = group_sequences((1..=3).map(|n| file(dir, &format!("beauty.{:04}.exr", n), 1)).collect());
+        let b = group_sequences((1..=9).map(|n| file(dir, &format!("beauty.{:04}.exr", n), 1)).collect());
+        assert_ne!(a[0].name, b[0].name);
+        assert_eq!(a[0].id, b[0].id);
+    }
+
+    #[test]
+    fn duplicate_frame_numbers_count_once() {
+        let dir = r"C:\p\out";
+        let files = vec![
+            file(dir, "shot_001.png", 1),
+            file(dir, "shot_0001.png", 9),
+            file(dir, "shot_002.png", 2),
+            file(dir, "shot_003.png", 3),
+        ];
+        let out = group_sequences(files);
+        assert_eq!(out.len(), 1);
+        let seq = &out[0];
+        assert_eq!(seq.frame_count, Some(3));
+        assert_eq!(seq.size, 40);
+        let frames = seq.preview_frames.as_ref().expect("frames");
+        assert_eq!(frames.len(), 3);
+        // The newest file stands for the duplicated number
+        assert_eq!(frames[0].name, "shot_0001.png");
+
+        // Two files with one number are not a sequence
+        let out = group_sequences(vec![file(dir, "a_001.png", 1), file(dir, "a_0001.png", 2)]);
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|f| !f.is_sequence));
+    }
+
+    #[test]
+    fn single_numbered_file_and_videos_stay_standalone() {
+        let dir = r"C:\p\out";
+        let out = group_sequences(vec![file(dir, "solo_0001.png", 1), file(dir, "clip_0001.mp4", 1), file(dir, "clip_0002.mp4", 1)]);
+        assert_eq!(out.len(), 3);
+        assert!(out.iter().all(|f| !f.is_sequence && f.id == f.path));
+    }
+
+    #[test]
+    fn missing_frames_ranges() {
+        assert_eq!(detect_missing_frames(&[1, 2, 3]), None);
+        assert_eq!(detect_missing_frames(&[1, 3, 4, 9]), Some("0002, (0005-0008)".to_string()));
+        assert_eq!(detect_missing_frames(&[]), None);
+        assert_eq!(detect_missing_frames(&[5]), None);
+        // Capped after 10 ranges
+        let frames: Vec<u32> = (0..30).map(|i| i * 2).collect();
+        let text = detect_missing_frames(&frames).expect("missing");
+        assert_eq!(text.matches(", ").count(), 10);
+        assert!(text.starts_with("0001, 0003"));
+        assert!(text.ends_with(", …"));
+        // Edge of u32
+        assert_eq!(detect_missing_frames(&[u32::MAX - 2, u32::MAX]), Some(format!("{:04}", u32::MAX - 1)));
+    }
+
+    #[test]
+    fn huge_frame_range_is_cheap() {
+        let dir = r"C:\p\out";
+        let out = group_sequences(vec![file(dir, "shot_001.png", 1), file(dir, "shot_002.png", 1), file(dir, "shot_20241115.png", 1)]);
+        assert_eq!(out.len(), 1);
+        let seq = &out[0];
+        assert_eq!(seq.frame_range.as_deref(), Some("0001-20241115"));
+        assert_eq!(seq.frame_count, Some(3));
+        assert_eq!(seq.missing_frames.as_deref(), Some("(0003-20241114)"));
+        let frames: Vec<u32> = seq.preview_frames.as_ref().expect("frames").iter().map(|f| f.frame).collect();
+        assert_eq!(frames, vec![1, 2, 20241115]);
+    }
+
+    #[test]
+    fn preview_frame_picking() {
+        let all: Vec<u32> = (0..10).collect();
+        assert_eq!(pick_preview_frames(&all), (0..10).collect::<Vec<_>>());
+        assert!(pick_preview_frames(&[]).is_empty());
+
+        // 1..=151: targets 1, 11, 21, … exactly
+        let frames: Vec<u32> = (1..=151).collect();
+        let picked: Vec<u32> = pick_preview_frames(&frames).into_iter().map(|i| frames[i]).collect();
+        assert_eq!(picked, (0..16).map(|i| 1 + 10 * i).collect::<Vec<u32>>());
+
+        // With gaps the nearest existing frame is taken, never twice
+        let frames: Vec<u32> = (0..100).filter(|n| n % 7 != 3).collect();
+        let picked = pick_preview_frames(&frames);
+        assert_eq!(picked.len(), 16);
+        assert_eq!(picked[0], 0);
+        assert_eq!(picked[15], frames.len() - 1);
+        assert!(picked.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn scan_fills_id_and_modified() {
+        let dir = std::env::temp_dir().join(format!("nullspace_outputs_test_{}", uuid::Uuid::new_v4().simple()));
+        fs::create_dir_all(&dir).expect("dir");
+        for n in 1..=3 {
+            fs::write(dir.join(format!("comp_{:04}.jpg", n)), b"x").expect("write");
+        }
+        fs::write(dir.join("final.mov"), b"xx").expect("write");
+        let mut outputs = Vec::new();
+        scan_output_dir_recursive(&dir, "AfterEffects", "final", &mut outputs, 0, &None, &None);
+        assert_eq!(outputs.len(), 4);
+        assert!(outputs.iter().all(|f| f.id == f.path && f.modified.map_or(false, |m| m > 0)));
+
+        let grouped = group_sequences(outputs);
+        assert_eq!(grouped.len(), 2);
+        let seq = grouped.iter().find(|f| f.is_sequence).expect("sequence");
+        assert_eq!(seq.software, "after-effects");
+        assert_eq!(seq.path, dir.to_string_lossy());
+        let frames = seq.preview_frames.as_ref().expect("frames");
+        assert_eq!(frames.len(), 3);
+        assert!(frames.iter().all(|f| dir.join(&f.name).is_file() && f.modified > 0));
+        let _ = fs::remove_dir_all(&dir);
     }
 }

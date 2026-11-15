@@ -9,25 +9,25 @@ import {
   IconFolderOpen,
   IconPalette,
   IconFolder,
-  IconBrandPython,
-  IconBrandReact,
-  IconTerminal2,
-  IconPackage,
-  IconPhoto,
-  IconMovie,
-  IconFileZip,
-  IconFileText,
-  IconPdf
+
+
+
+
+
+
+
+
+
 } from '@tabler/icons-react';
 import { RefreshCw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api';
 import { listen } from '@tauri-apps/api/event';
 import { useProjectStore } from '../../store/projectStore';
 import { useFileDragOut } from '../../hooks/useFileDragOut';
-import { getCachedThumbnail, isThumbnailImage } from '../../hooks/useImageThumbnail';
-import { useHoverPreview } from '../../hooks/useHoverPreview';
-import { HoverPreviewPopup } from '../ui/HoverPreviewPopup';
-import { ThumbObserverProvider, TreeThumb } from './TreeThumb';
+import { getExtensionIcon, isPreviewImage, isPreviewVideo } from '../../utils/fileIcons';
+import { useFilePreviewsEnabled } from '../../utils/mediaPreview';
+import type { MediaItem, MediaThumb } from '../../utils/mediaPreview';
+import { TreeMediaRow, TreeThumb } from './TreeThumb';
 import { useContextMenuStore } from '../../store/contextMenuStore';
 import { SoftwareIcon } from '../SoftwareIcon';
 import { getSoftwareMeta, SOFTWARE_BADGE } from '../../utils/softwareMeta';
@@ -210,45 +210,6 @@ const getSoftwareDirName = (software: string): string => {
 
 const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
 
-const EXTENSION_ICONS: Record<string, React.ReactNode> = {
-  py:   <IconBrandPython className="w-4 h-4 text-blue-400 flex-shrink-0" stroke={1.5} />,
-  jsx:  <IconBrandReact  className="w-4 h-4 text-cyan-400 flex-shrink-0" stroke={1.5} />,
-  tsx:  <IconBrandReact  className="w-4 h-4 text-cyan-400 flex-shrink-0" stroke={1.5} />,
-  bat:  <IconTerminal2   className="w-4 h-4 text-yellow-400 flex-shrink-0" stroke={1.5} />,
-  sh:   <IconTerminal2   className="w-4 h-4 text-yellow-400 flex-shrink-0" stroke={1.5} />,
-  exe:  <IconPackage     className="w-4 h-4 text-zinc-400 flex-shrink-0" stroke={1.5} />,
-  zip:  <IconFileZip     className="w-4 h-4 text-amber-400 flex-shrink-0" stroke={1.5} />,
-  rar:  <IconFileZip     className="w-4 h-4 text-amber-400 flex-shrink-0" stroke={1.5} />,
-  '7z': <IconFileZip     className="w-4 h-4 text-amber-400 flex-shrink-0" stroke={1.5} />,
-  tar:  <IconFileZip     className="w-4 h-4 text-amber-400 flex-shrink-0" stroke={1.5} />,
-  gz:   <IconFileZip     className="w-4 h-4 text-amber-400 flex-shrink-0" stroke={1.5} />,
-  txt:  <IconFileText    className="w-4 h-4 text-zinc-400 flex-shrink-0" stroke={1.5} />,
-  pdf:  <IconPdf         className="w-4 h-4 text-red-400 flex-shrink-0" stroke={1.5} />,
-  jpg:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
-  jpeg: <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
-  png:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
-  gif:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
-  webp: <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
-  bmp:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
-  svg:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
-  tiff: <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
-  tif:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
-  ico:  <IconPhoto       className="w-4 h-4 text-emerald-400 flex-shrink-0" stroke={1.5} />,
-  mp4:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
-  mov:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
-  avi:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
-  mkv:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
-  webm: <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
-  flv:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
-  wmv:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
-  m4v:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
-};
-
-function getExtensionIcon(fileName: string): React.ReactNode | null {
-  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
-  return EXTENSION_ICONS[ext] ?? null;
-}
-
 export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps) {
   const { activeMenu, setActiveMenu } = useContextMenuStore();
   // Drag a file out into Explorer, Discord, … (files only, not folders)
@@ -356,40 +317,14 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     }
   }, [folderColors, project.path]);
 
-  // Image thumbnails in place of the file icon + a preview on hover (Settings > Appearance)
-  const [treeImagePreviews, setTreeImagePreviews] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('treeImagePreviews');
-      return saved !== null ? JSON.parse(saved) : true;
-    } catch {
-      return true;
-    }
-  });
-  const imagePreview = useHoverPreview<{ name: string; path: string; modified?: number }>();
-  const hideImagePreview = imagePreview.hide;
-  useEffect(() => {
-    if (!treeImagePreviews) hideImagePreview();
-  }, [treeImagePreviews, hideImagePreview]);
-
-  // Thumbnails load only for rows on screen: observed against the tree's own scroll element
-  const simpleBarRef = useRef<any>(null);
-  const [thumbRoot, setThumbRoot] = useState<Element | null>(null);
-  useEffect(() => {
-    const element: Element | null = simpleBarRef.current?.getScrollElement?.() ?? null;
-    setThumbRoot(prev => (prev === element ? prev : element));
-  });
+  // Image and video thumbnails in place of the file icon, hover popup, video scrubbing (Settings > Appearance)
+  const filePreviews = useFilePreviewsEnabled();
 
   // Sync settings from SettingsPanel
   useEffect(() => {
     const handler = () => {
       const saved = localStorage.getItem('autoHideProjectFiles');
       setAutoHideProjectFiles(saved !== null ? JSON.parse(saved) : true);
-      try {
-        const previews = localStorage.getItem('treeImagePreviews');
-        setTreeImagePreviews(previews !== null ? JSON.parse(previews) : true);
-      } catch {
-        setTreeImagePreviews(true);
-      }
     };
     window.addEventListener('storage', handler);
     return () => window.removeEventListener('storage', handler);
@@ -1117,21 +1052,16 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
     });
   };
 
-  /** Icon slot of a file: the image's thumbnail when previews are on, the usual icon otherwise / until ready */
-  const fileIconSlot = (file: FileNode, active: boolean, icon: React.ReactNode) =>
-    treeImagePreviews && isThumbnailImage(file.name)
-      ? <TreeThumb path={file.path} modified={file.modified} active={active} fallback={icon} />
-      : icon;
+  /** What a file row previews (thumbnail, hover popup, video scrubbing); null: just the icon */
+  const mediaItemOf = (file: FileNode | undefined): MediaItem | null => {
+    if (!file || file.is_dir || !filePreviews) return null;
+    const kind = isPreviewVideo(file.name) ? 'video' : isPreviewImage(file.name) ? 'image' : null;
+    return kind ? { kind, path: file.path, name: file.name, modified: file.modified } : null;
+  };
 
-  /** Hover preview of an image file row */
-  const imagePreviewHandlers = (file: FileNode | undefined) =>
-    file && treeImagePreviews && isThumbnailImage(file.name)
-      ? {
-          onMouseEnter: (e: React.MouseEvent<HTMLElement>) =>
-            imagePreview.show(e.currentTarget, { name: file.name, path: file.path, modified: file.modified }),
-          onMouseLeave: imagePreview.hide,
-        }
-      : {};
+  /** Icon slot of a file: its thumbnail once the row has one, the usual icon otherwise */
+  const fileIconSlot = (thumb: MediaThumb | null, icon: React.ReactNode) =>
+    thumb ? <TreeThumb thumb={thumb} fallback={icon} /> : icon;
 
   const renderVersionGroup = (node: FileNode, depth: number = 0, ancestorsOpen: boolean = true) => {
     const isExpanded = expandedVersionGroups.has(node.path);
@@ -1176,25 +1106,30 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           {/* All versions as cards */}
           <div className="space-y-1">
             {node.versions?.map((version) => (
-              <div
+              <TreeMediaRow
                 key={version.path}
+                item={mediaItemOf(version)}
+                active={ancestorsOpen}
                 className="h-[36px] flex items-center gap-2 px-2.5 text-xs select-none bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary cursor-pointer"
                 onDoubleClick={(e) => handleDoubleClick(e, version)}
                 onContextMenu={(e) => handleContextMenu(e, version)}
                 onMouseDown={(e) => startFileDrag(e, version.path)}
-                {...imagePreviewHandlers(version)}
               >
-                <div className="w-[18px] flex items-center justify-center flex-shrink-0">
-                  {fileIconSlot(version, ancestorsOpen, getFileIcon(version.name) ? (
-                    <SoftwareIcon name={getFileIcon(version.name)!} className="w-4 h-4 flex-shrink-0" />
-                  ) : (
-                    getExtensionIcon(version.name) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
-                  ))}
-                </div>
-                <span className="text-text-primary font-medium flex-1">
-                  {version.name.substring(0, version.name.lastIndexOf('.'))}
-                </span>
-              </div>
+                {(thumb) => (
+                  <>
+                    <div className="w-[18px] flex items-center justify-center flex-shrink-0">
+                      {fileIconSlot(thumb, getFileIcon(version.name) ? (
+                        <SoftwareIcon name={getFileIcon(version.name)!} className="w-4 h-4 flex-shrink-0" />
+                      ) : (
+                        getExtensionIcon(version.name) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
+                      ))}
+                    </div>
+                    <span className="text-text-primary font-medium flex-1">
+                      {version.name.substring(0, version.name.lastIndexOf('.'))}
+                    </span>
+                  </>
+                )}
+              </TreeMediaRow>
             ))}
           </div>
           {/* Collapse button */}
@@ -1289,22 +1224,21 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           </div>
         )}
 
-        {/* Card 1 (top - newest) */}
-        <div
+        {/* Card 1 (top - newest): previews the newest version, the group's own path is the oldest one */}
+        <TreeMediaRow
+          item={mediaItemOf(topThree[0])}
+          active={ancestorsOpen}
           className="relative h-[36px] flex items-center gap-2 px-2.5 text-xs select-none bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary shadow-lg"
           style={{ zIndex: 10 }}
-          {...imagePreviewHandlers(topThree[0])}
         >
+          {(thumb) => (
+          <>
           <div className="w-[18px] flex items-center justify-center flex-shrink-0">
-            {(() => {
-              const icon = topThree[0] && getFileIcon(topThree[0].name) ? (
-                <SoftwareIcon name={getFileIcon(topThree[0].name)!} className="w-4 h-4 flex-shrink-0" />
-              ) : (
-                (topThree[0] && getExtensionIcon(topThree[0].name)) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
-              );
-              // The newest version: the group's own path is the oldest one
-              return topThree[0] ? fileIconSlot(topThree[0], ancestorsOpen, icon) : icon;
-            })()}
+            {fileIconSlot(thumb, topThree[0] && getFileIcon(topThree[0].name) ? (
+              <SoftwareIcon name={getFileIcon(topThree[0].name)!} className="w-4 h-4 flex-shrink-0" />
+            ) : (
+              (topThree[0] && getExtensionIcon(topThree[0].name)) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
+            ))}
           </div>
           <span className="text-text-primary font-medium flex-1">
             {getVersionRange()}
@@ -1328,7 +1262,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
               )}
             </button>
           </div>
-        </div>
+          </>
+          )}
+        </TreeMediaRow>
       </div>
     );
   };
@@ -1384,7 +1320,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         style={{ marginLeft: depth > 0 ? '12px' : '0' }}
         className={`transition-opacity duration-150 ${isHidden ? 'opacity-40' : 'opacity-100'}`}
       >
-        <div
+        <TreeMediaRow
+          item={mediaItemOf(node)}
+          active={ancestorsOpen}
           className={`flex items-center gap-2 px-2.5 py-2 text-xs select-none group transition-all cursor-pointer ${node.is_dir
               ? `bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary ${isExpanded ? 'bg-hover-bg border-border-secondary' : ''} ${isHighlighted ? 'folder-highlighted' : isFadingOut ? 'folder-highlighted-out' : ''}`
               : 'bg-card-bg border border-border-primary rounded-badge hover:bg-hover-bg hover:border-border-secondary'
@@ -1392,8 +1330,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
           onDoubleClick={(e) => handleDoubleClick(e, node)}
           onContextMenu={(e) => handleContextMenu(e, node)}
           onMouseDown={node.is_dir ? undefined : (e) => startFileDrag(e, node.path)}
-          {...(node.is_dir ? {} : imagePreviewHandlers(node))}
         >
+          {(thumb) => (
+          <>
           {/* Icon */}
           {node.is_dir ? (
             softwareFolderKey ? (
@@ -1409,7 +1348,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             )
           ) : (
             <div className="w-[18px] flex items-center justify-center flex-shrink-0">
-              {fileIconSlot(node, ancestorsOpen, fileIcon ? (
+              {fileIconSlot(thumb, fileIcon ? (
                 <SoftwareIcon name={fileIcon} className="w-4 h-4 flex-shrink-0" />
               ) : (
                 getExtensionIcon(node.name) ?? <IconFile className="w-4 h-4 text-text-secondary flex-shrink-0" stroke={1.5} />
@@ -1451,7 +1390,9 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
               </button>
             )}
           </div>
-        </div>
+          </>
+          )}
+        </TreeMediaRow>
         {node.is_dir && node.children && (
           <div
             className={`grid grid-cols-[minmax(0,1fr)] transition-[grid-template-rows,opacity] duration-150 ease-out motion-reduce:transition-none ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
@@ -1503,8 +1444,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
         </button>
       </div>
 
-      <SimpleBar ref={simpleBarRef} className="custom-scrollbar" autoHide={false} style={{ height: 'calc(100% - 40px)', paddingBottom: '45px' }}>
-        <ThumbObserverProvider root={thumbRoot}>
+      <SimpleBar className="custom-scrollbar" autoHide={false} style={{ height: 'calc(100% - 40px)', paddingBottom: '45px' }}>
         <div className="flex flex-col pr-2">
           {tree.length > 0 ? (
             <>
@@ -1530,39 +1470,7 @@ export function TreeView({ project, showHidden, onToggleHidden }: TreeViewProps)
             <p className="text-xs text-text-muted">No files found</p>
           )}
         </div>
-        </ThumbObserverProvider>
       </SimpleBar>
-
-      {/* Image preview on hover: only once the row's thumbnail is loaded */}
-      {imagePreview.shown && (() => {
-        const { item, anchor } = imagePreview.shown;
-        const thumb = getCachedThumbnail(item.path, item.modified);
-        if (!thumb) return null;
-        // The picture keeps the image's proportions (no bars): up to 224 wide or 224 tall;
-        // the popup is never narrower than its caption needs
-        const MAX_SIDE = 224;
-        const ratio = thumb.width > 0 && thumb.height > 0 ? thumb.width / thumb.height : 1;
-        const imageW = Math.round(ratio >= 1 ? MAX_SIDE : MAX_SIDE * ratio);
-        const imageH = Math.round(ratio >= 1 ? MAX_SIDE / ratio : MAX_SIDE);
-        const popupW = Math.max(imageW, 184) + 16; // p-2 on both sides
-        return (
-          <HoverPreviewPopup anchor={anchor} visible={imagePreview.visible} width={popupW} height={imageH + 16 + 22}>
-            <img
-              src={thumb.data_url}
-              alt=""
-              draggable={false}
-              className="block mx-auto rounded-[7px] object-cover"
-              style={{ width: imageW, height: imageH }}
-            />
-            <div className="flex items-center justify-between gap-2 mt-1.5 px-0.5">
-              <span className="text-[10px] font-mono text-text-secondary truncate">{item.name}</span>
-              <span className="text-[10px] text-text-muted flex-shrink-0">
-                {thumb.width}×{thumb.height} · {formatSize(thumb.size)}
-              </span>
-            </div>
-          </HoverPreviewPopup>
-        );
-      })()}
 
       {/* Project Size Info Bar - Absolute positioned */}
       <div className="absolute -bottom-1 left-0 right-0 pt-2.5">

@@ -1,7 +1,8 @@
 import { thumbnailCache } from '../utils/thumbnailCache';
 import { indexedDBThumbnailCache } from '../utils/indexedDBCache';
 import { clearThumbnailMemoryCache } from './useThumbnail';
-import { clearTreeThumbMemory } from './useImageThumbnail';
+import { invoke } from '@tauri-apps/api/tauri';
+import { clearMediaPreviewMemory } from '../utils/mediaPreview';
 
 // Feature flag - should match useThumbnail.ts
 const USE_INDEXED_DB = true;
@@ -34,7 +35,9 @@ export function useThumbnailCache() {
     // Clear entire cache
     clearAllThumbnails: async () => {
       clearThumbnailMemoryCache();
-      clearTreeThumbMemory();
+      // Media previews (row thumbnails, scrub frames) live in memory here and in Rust
+      clearMediaPreviewMemory();
+      invoke('clear_media_preview_cache').catch(() => {});
       if (USE_INDEXED_DB) {
         await indexedDBThumbnailCache.clearAll();
       } else {

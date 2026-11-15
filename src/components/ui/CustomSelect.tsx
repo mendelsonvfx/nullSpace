@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 
 export interface CustomSelectOption {
   value: string;
@@ -47,6 +48,9 @@ export function CustomSelect({
       setIsOpen(false);
     }
   }, []);
+
+  // Escape closes only the dropdown, not the dialog it sits in
+  useEscapeLayer(isOpen, () => setIsOpen(false));
 
   const open = () => {
     if (!triggerRef.current) return;

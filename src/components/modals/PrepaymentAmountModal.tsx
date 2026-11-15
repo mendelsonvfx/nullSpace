@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 import type { Currency } from '../../types/project';
 
 const currencySymbols: Record<string, string> = {
@@ -36,6 +37,9 @@ export function PrepaymentAmountModal({
       setAmount('');
     }
   }, [isOpen]);
+
+  // Escape closes the dialog from anywhere in it (also when focus left the field)
+  useEscapeLayer(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -86,7 +90,6 @@ export function PrepaymentAmountModal({
             onChange={(e) => setAmount(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && isValid) handleConfirm();
-              if (e.key === 'Escape') onClose();
             }}
             placeholder="0"
             min="0"

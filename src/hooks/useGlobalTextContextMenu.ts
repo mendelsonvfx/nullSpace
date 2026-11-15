@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useEscapeLayer } from '../utils/escapeLayers';
 
 type TargetType = 'input' | 'contenteditable' | 'selection' | null;
 
@@ -39,6 +40,9 @@ export function useGlobalTextContextMenu(): UseGlobalTextContextMenuReturn {
   const closeMenu = useCallback(() => {
     setState(prev => ({ ...prev, isOpen: false }));
   }, []);
+
+  // Escape closes only this menu; the text being edited and anything behind it stay
+  useEscapeLayer(state.isOpen, closeMenu);
 
   const handleCut = useCallback(() => {
     if (state.targetType === 'input' && inputRef.current) {
@@ -239,20 +243,12 @@ export function useGlobalTextContextMenu(): UseGlobalTextContextMenuReturn {
       closeMenu();
     };
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        closeMenu();
-      }
-    };
-
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('click', handleClick);
-    document.addEventListener('keydown', handleKeyDown);
 
     return () => {
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('click', handleClick);
-      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [closeMenu]);
 

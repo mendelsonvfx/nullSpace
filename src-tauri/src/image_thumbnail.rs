@@ -1,23 +1,27 @@
 //! Small thumbnails of image files for Project Structure: png, jpg, gif, bmp, tga, tiff, hdr, exr, webp,
 //! psd/psb. One thumbnail (up to 256 px) serves both the tree row and the hover preview.
+//! Also decodes the frames of image sequences for hover scrubbing (always JPEG over #0f0f0f).
 //!
 //! Safety first, because release builds abort on panic and a failed allocation aborts in any build:
 //! - every size comes from the header and is checked before anything is decoded;
-//! - EXR pixels are averaged straight into a thumbnail-sized buffer, never a full frame;
-//! - WebP isn't decoded here at all (image 0.24's decoder is old and can panic on bad data):
-//!   a small file is handed to WebView as is;
-//! - decoding runs on two dedicated worker threads, so a folder of images never runs more than two
-//!   decodes at once, and none on the async runtime.
+//! - EXR pixels are averaged straight into a thumbnail-sized buffer, never a full frame; DWAA/DWAB
+//!   (not supported by the decoder) are rejected right after the header;
+//! - WebP isn't decoded in process (image 0.24's decoder is old and can panic on bad data): ffmpeg
+//!   decodes it out of process when available, else a small file is handed to WebView as is;
+//! - decoding runs on two dedicated worker threads (scrub frames first), so a folder of images never
+//!   runs more than two decodes at once, and none on the async runtime. Decodes in flight reserve
+//!   their estimated memory from a shared 192 MB budget.
 
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use image::{DynamicImage, ImageOutputFormat};
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 use serde::Serialize;
 
 /// Thumbnail side, px
@@ -29,9 +33,14 @@ const MAX_SIDE: u32 = 16_384;
 const MAX_PIXELS: u64 = 64 * 1024 * 1024;
 /// Decoder memory cap for formats read through image::io::Reader
 const MAX_DECODE_ALLOC: u64 = 256 * 1024 * 1024;
-/// WebP is passed to WebView unchanged, so only small ones
-const MAX_WEBP_BYTES: u64 = 4 * 1024 * 1024;
+/// Without ffmpeg WebP is passed to WebView unchanged, so only small ones
+const MAX_WEBP_BYTES: u64 = 512 * 1024;
 const WORKERS: usize = 2;
+/// Estimated memory of all decodes in flight
+const DECODE_BUDGET: u64 = 192 * 1024 * 1024;
+/// Scrub frames: background under transparency and letterbox bars, JPEG quality
+const SCRUB_BG: u8 = 0x0f;
+const SCRUB_QUALITY: u8 = 80;
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct ImageThumb {
@@ -46,54 +55,179 @@ pub struct ImageThumb {
 
 type Reply = tauri::async_runtime::Sender<Result<Option<ImageThumb>, String>>;
 
-struct Job {
+struct ThumbJob {
     path: PathBuf,
     reply: Reply,
 }
 
-fn queue() -> &'static mpsc::Sender<Job> {
-    static QUEUE: OnceLock<mpsc::Sender<Job>> = OnceLock::new();
-    QUEUE.get_or_init(|| {
-        let (tx, rx) = mpsc::channel::<Job>();
-        let rx = Arc::new(Mutex::new(rx));
-        for i in 0..WORKERS {
-            let rx = rx.clone();
-            let spawned = std::thread::Builder::new().name(format!("image-thumb-{}", i)).spawn(move || loop {
-                let job = match rx.lock().recv() {
-                    Ok(job) => job,
-                    Err(_) => break,
+/// One sequence frame for hover scrubbing (queued ahead of thumbnails)
+pub struct ScrubJob {
+    pub path: PathBuf,
+    /// Longest side of the frame, px
+    pub max_side: u32,
+    /// Letterbox into this size (the first frame's) instead of fitting `max_side`
+    pub fit_box: Option<(u32, u32)>,
+    /// Set when the request is cancelled: queued jobs are dropped unread
+    pub cancelled: Arc<AtomicBool>,
+    pub done: Box<dyn FnOnce(Option<ScrubImage>) + Send>,
+}
+
+/// A decoded scrub frame: JPEG data URL, its size and the source size
+#[derive(Debug, Clone)]
+pub struct ScrubImage {
+    pub data_url: String,
+    pub width: u32,
+    pub height: u32,
+    pub src_width: u32,
+    pub src_height: u32,
+}
+
+struct Lanes {
+    scrub: VecDeque<ScrubJob>,
+    thumbs: VecDeque<ThumbJob>,
+    /// Bytes reserved by decodes in flight
+    in_flight: u64,
+}
+
+struct Pool {
+    lanes: Mutex<Lanes>,
+    cv: Condvar,
+}
+
+static POOL: Pool = Pool {
+    lanes: Mutex::new(Lanes { scrub: VecDeque::new(), thumbs: VecDeque::new(), in_flight: 0 }),
+    cv: Condvar::new(),
+};
+
+enum Work {
+    Scrub(ScrubJob),
+    Thumb(ThumbJob),
+}
+
+/// Starts the workers once; false when none could be started
+fn workers_running() -> bool {
+    static STARTED: OnceLock<usize> = OnceLock::new();
+    *STARTED.get_or_init(|| {
+        (0..WORKERS)
+            .filter(|i| {
+                let spawned = std::thread::Builder::new().name(format!("image-thumb-{}", i)).spawn(worker);
+                if let Err(e) = &spawned {
+                    println!("[ImageThumb] Worker not started: {}", e);
+                }
+                spawned.is_ok()
+            })
+            .count()
+    }) > 0
+}
+
+fn worker() {
+    loop {
+        let work = {
+            let mut lanes = POOL.lanes.lock();
+            loop {
+                if let Some(job) = lanes.scrub.pop_front() {
+                    break Work::Scrub(job);
+                }
+                if let Some(job) = lanes.thumbs.pop_front() {
+                    break Work::Thumb(job);
+                }
+                POOL.cv.wait(&mut lanes);
+            }
+        };
+        // Release aborts on panic anyway; in dev this keeps the worker alive
+        match work {
+            Work::Scrub(job) => {
+                let image = if job.cancelled.load(Ordering::Relaxed) {
+                    None
+                } else {
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| scrub_frame(&job.path, job.max_side, job.fit_box)))
+                        .unwrap_or(None)
                 };
-                // Release aborts on panic anyway; in dev this keeps the worker alive
+                (job.done)(image);
+            }
+            Work::Thumb(job) => {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| thumbnail_for(&job.path)))
                     .unwrap_or(Ok(None));
                 let _ = job.reply.try_send(result);
-            });
-            if let Err(e) = spawned {
-                println!("[ImageThumb] Worker not started: {}", e);
             }
         }
-        tx
-    })
+    }
+}
+
+/// Queue a sequence frame for scrubbing; `done` is always called (None: failed or cancelled)
+pub fn submit_scrub(job: ScrubJob) {
+    if !workers_running() {
+        (job.done)(None);
+        return;
+    }
+    POOL.lanes.lock().scrub.push_back(job);
+    POOL.cv.notify_all();
+}
+
+/// Memory reserved from DECODE_BUDGET until dropped. Waits while other decodes hold too much;
+/// a single decode larger than the budget still runs, alone
+struct Reservation(u64);
+
+fn reserve(bytes: u64) -> Reservation {
+    let bytes = bytes.min(DECODE_BUDGET);
+    let mut lanes = POOL.lanes.lock();
+    while lanes.in_flight > 0 && lanes.in_flight + bytes > DECODE_BUDGET {
+        POOL.cv.wait(&mut lanes);
+    }
+    lanes.in_flight += bytes;
+    Reservation(bytes)
+}
+
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        let mut lanes = POOL.lanes.lock();
+        lanes.in_flight = lanes.in_flight.saturating_sub(self.0);
+        drop(lanes);
+        POOL.cv.notify_all();
+    }
+}
+
+/// Decoder memory estimated from the header: pixels × bytes per pixel of the decoded buffer
+fn decode_estimate(path: &Path, ext: &str) -> u64 {
+    let dims = match ext {
+        "exr" => exr::meta::MetaData::read_from_file(path, false).ok().and_then(|meta| {
+            let header = meta.headers.iter().find(|h| !h.deep)?;
+            Some((header.layer_size.width() as u64, header.layer_size.height() as u64))
+        }),
+        _ => image::image_dimensions(path).ok().map(|(w, h)| (w as u64, h as u64)),
+    };
+    let Some((w, h)) = dims else { return 0 };
+    let bytes_per_px = match ext {
+        "jpg" | "jpeg" => 3,
+        // Read block by block into a thumbnail-sized accumulator
+        "exr" => 1,
+        // Up to 16-bit RGBA
+        _ => 8,
+    };
+    w.saturating_mul(h).saturating_mul(bytes_per_px)
 }
 
 /// Thumbnail of an image file: None when the format isn't supported or the file can't be read
 /// (the tree then keeps the file type icon).
 #[tauri::command]
 pub async fn get_image_thumbnail(path: String) -> Result<Option<ImageThumb>, String> {
-    let path = crate::file_drag::normalize_drag_path(&path)?;
+    let path = crate::media_preview::normalize_media_path(&path)?;
+    if !workers_running() {
+        return Err("Thumbnail workers aren't running".to_string());
+    }
     let (tx, mut rx) = tauri::async_runtime::channel(1);
-    queue()
-        .send(Job { path, reply: tx })
-        .map_err(|_| "Thumbnail workers aren't running".to_string())?;
+    POOL.lanes.lock().thumbs.push_back(ThumbJob { path, reply: tx });
+    POOL.cv.notify_all();
     rx.recv().await.unwrap_or(Ok(None))
 }
 
 /// Blocking: decode and shrink one file
 pub fn thumbnail_for(path: &Path) -> Result<Option<ImageThumb>, String> {
-    let size = match std::fs::metadata(path) {
-        Ok(meta) if meta.is_file() => meta.len(),
+    let meta = match std::fs::metadata(path) {
+        Ok(meta) if meta.is_file() => meta,
         _ => return Ok(None),
     };
+    let size = meta.len();
     if size == 0 || size > MAX_FILE_BYTES {
         return Ok(None);
     }
@@ -103,10 +237,16 @@ pub fn thumbnail_for(path: &Path) -> Result<Option<ImageThumb>, String> {
     let started = std::time::Instant::now();
 
     let result = match ext.as_str() {
-        "jpg" | "jpeg" => jpeg(path),
-        "png" | "gif" | "bmp" | "tga" | "tif" | "tiff" | "hdr" => generic(path),
-        "exr" => exr_thumb::thumbnail(path),
-        "webp" => return webp(path, size),
+        "jpg" | "jpeg" | "png" | "gif" | "bmp" | "tga" | "tif" | "tiff" | "hdr" | "exr" => {
+            let _budget = reserve(decode_estimate(path, &ext));
+            decode(path, &ext, THUMB_SIDE)
+        }
+        "webp" => {
+            let modified = meta.modified().ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_millis() as u64);
+            return webp(path, modified, size);
+        }
         "psd" | "psb" => return psd(path, size),
         _ => return Ok(None),
     };
@@ -120,15 +260,25 @@ pub fn thumbnail_for(path: &Path) -> Result<Option<ImageThumb>, String> {
     Ok(encode(&image).map(|data_url| ImageThumb { data_url, width, height, size }))
 }
 
+/// Decode a format read in process, shrunk to fit `side`
+fn decode(path: &Path, ext: &str, side: u32) -> Result<(DynamicImage, u32, u32), String> {
+    match ext {
+        "jpg" | "jpeg" => jpeg(path, side),
+        "png" | "gif" | "bmp" | "tga" | "tif" | "tiff" | "hdr" => generic(path, side),
+        "exr" => exr_thumb::thumbnail(path, side),
+        _ => Err("unsupported format".to_string()),
+    }
+}
+
 fn dimensions_ok(width: u32, height: u32) -> bool {
     width > 0 && height > 0 && width <= MAX_SIDE && height <= MAX_SIDE
         && (width as u64) * (height as u64) <= MAX_PIXELS
 }
 
-/// Shrink to fit THUMB_SIDE; smaller images stay as they are
-fn shrink(image: DynamicImage) -> DynamicImage {
-    if image.width() > THUMB_SIDE || image.height() > THUMB_SIDE {
-        image.thumbnail(THUMB_SIDE, THUMB_SIDE)
+/// Shrink to fit `side`; smaller images stay as they are
+fn shrink(image: DynamicImage, side: u32) -> DynamicImage {
+    if image.width() > side || image.height() > side {
+        image.thumbnail(side, side)
     } else {
         image
     }
@@ -136,7 +286,7 @@ fn shrink(image: DynamicImage) -> DynamicImage {
 
 /// JPEG decodes straight at a reduced scale (1/2..1/8): a 4K photo takes milliseconds.
 /// image's Limits don't apply to a decoder used directly, so the header is checked here
-fn jpeg(path: &Path) -> Result<(DynamicImage, u32, u32), String> {
+fn jpeg(path: &Path, side: u32) -> Result<(DynamicImage, u32, u32), String> {
     use image::codecs::jpeg::JpegDecoder;
     use image::ImageDecoder;
 
@@ -146,13 +296,14 @@ fn jpeg(path: &Path) -> Result<(DynamicImage, u32, u32), String> {
     if !dimensions_ok(width, height) {
         return Err(format!("too large: {}x{}", width, height));
     }
-    decoder.scale(THUMB_SIDE as u16, THUMB_SIDE as u16).map_err(|e| e.to_string())?;
+    let side = side.min(u16::MAX as u32) as u16;
+    decoder.scale(side, side).map_err(|e| e.to_string())?;
     let image = DynamicImage::from_decoder(decoder).map_err(|e| e.to_string())?;
-    Ok((shrink(image), width, height))
+    Ok((shrink(image, side as u32), width, height))
 }
 
 /// Formats image reads with its Limits: the size is checked against them before decoding
-fn generic(path: &Path) -> Result<(DynamicImage, u32, u32), String> {
+fn generic(path: &Path, side: u32) -> Result<(DynamicImage, u32, u32), String> {
     let mut limits = image::io::Limits::default();
     limits.max_image_width = Some(MAX_SIDE);
     limits.max_image_height = Some(MAX_SIDE);
@@ -165,7 +316,7 @@ fn generic(path: &Path) -> Result<(DynamicImage, u32, u32), String> {
     if !dimensions_ok(width, height) {
         return Err(format!("too large: {}x{}", width, height));
     }
-    Ok((shrink(image), width, height))
+    Ok((shrink(image, side), width, height))
 }
 
 /// JPEG when fully opaque (smaller), PNG when anything is transparent
@@ -183,11 +334,103 @@ fn encode(image: &DynamicImage) -> Option<String> {
     Some(format!("data:{};base64,{}", mime, STANDARD.encode(bytes.into_inner())))
 }
 
+/// Blocking: one sequence frame for scrubbing, as a JPEG composited over #0f0f0f.
+/// Sized to fit `max_side` (even sides, like video frames), or letterboxed into `fit_box`
+pub fn scrub_frame(path: &Path, max_side: u32, fit_box: Option<(u32, u32)>) -> Option<ScrubImage> {
+    match std::fs::metadata(path) {
+        Ok(meta) if meta.is_file() && meta.len() > 0 && meta.len() <= MAX_FILE_BYTES => {}
+        _ => return None,
+    }
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let side = fit_box.map_or(max_side, |(w, h)| w.max(h)).clamp(16, 1024);
+    let (image, src_width, src_height) = {
+        let _budget = reserve(decode_estimate(path, &ext));
+        decode(path, &ext, side).ok()?
+    };
+    let (width, height) = fit_box
+        .filter(|&(w, h)| w > 0 && h > 0)
+        .unwrap_or_else(|| crate::media_preview::fit_even(src_width, src_height, max_side));
+    let (inner_w, inner_h) = fit_within(src_width, src_height, width, height);
+    let picture = if (image.width(), image.height()) == (inner_w, inner_h) {
+        image.to_rgba8()
+    } else {
+        image.resize_exact(inner_w, inner_h, image::imageops::FilterType::Triangle).to_rgba8()
+    };
+    let mut canvas = image::RgbImage::from_pixel(width, height, image::Rgb([SCRUB_BG; 3]));
+    let (ox, oy) = ((width - inner_w) / 2, (height - inner_h) / 2);
+    for (x, y, p) in picture.enumerate_pixels() {
+        let a = p.0[3] as u32;
+        let blend = |c: u8| ((c as u32 * a + SCRUB_BG as u32 * (255 - a) + 127) / 255) as u8;
+        canvas.put_pixel(ox + x, oy + y, image::Rgb([blend(p.0[0]), blend(p.0[1]), blend(p.0[2])]));
+    }
+    let mut bytes = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, SCRUB_QUALITY).encode_image(&canvas).ok()?;
+    Some(ScrubImage {
+        data_url: format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)),
+        width,
+        height,
+        src_width,
+        src_height,
+    })
+}
+
+/// Largest size with the source's proportions inside `box_w`×`box_h` (at least 1 px)
+fn fit_within(src_w: u32, src_h: u32, box_w: u32, box_h: u32) -> (u32, u32) {
+    if src_w == 0 || src_h == 0 {
+        return (box_w.max(1), box_h.max(1));
+    }
+    let by_width = (box_w as u64 * src_h as u64 / src_w as u64) as u32;
+    if by_width <= box_h {
+        (box_w.max(1), by_width.clamp(1, box_h.max(1)))
+    } else {
+        ((box_h as u64 * src_w as u64 / src_h as u64).clamp(1, box_w.max(1) as u64) as u32, box_h.max(1))
+    }
+}
+
 /// Read the first `n` bytes (fewer if the file is shorter)
 fn read_head(path: &Path, n: usize) -> Option<Vec<u8>> {
     let mut head = Vec::with_capacity(n);
     File::open(path).ok()?.take(n as u64).read_to_end(&mut head).ok()?;
     Some(head)
+}
+
+/// Size of the formats ffmpeg decodes for us (WebP, DPX, SGI, Softimage PIC), from the header
+pub fn header_dimensions(path: &Path) -> Option<(u32, u32)> {
+    let head = read_head(path, 800)?;
+    let (w, h) = webp_dimensions(&head)
+        .or_else(|| dpx_dimensions(&head))
+        .or_else(|| sgi_dimensions(&head))
+        .or_else(|| pic_dimensions(&head))?;
+    dimensions_ok(w, h).then_some((w, h))
+}
+
+/// DPX: magic "SDPX" (big-endian) or "XPDS" (little-endian); pixels per line and lines at 772/776
+fn dpx_dimensions(head: &[u8]) -> Option<(u32, u32)> {
+    if head.len() < 780 {
+        return None;
+    }
+    let field = |i: usize| -> [u8; 4] { [head[i], head[i + 1], head[i + 2], head[i + 3]] };
+    match &head[0..4] {
+        b"SDPX" => Some((u32::from_be_bytes(field(772)), u32::from_be_bytes(field(776)))),
+        b"XPDS" => Some((u32::from_le_bytes(field(772)), u32::from_le_bytes(field(776)))),
+        _ => None,
+    }
+}
+
+/// SGI (.sgi/.rgb/.bw): magic 474, then dimension, xsize, ysize (big-endian u16)
+fn sgi_dimensions(head: &[u8]) -> Option<(u32, u32)> {
+    if head.len() < 10 || head[0..2] != [0x01, 0xda] {
+        return None;
+    }
+    Some((u16::from_be_bytes([head[6], head[7]]) as u32, u16::from_be_bytes([head[8], head[9]]) as u32))
+}
+
+/// Softimage PIC: magic 0x5380F634, width and height (big-endian u16) at 88/90
+fn pic_dimensions(head: &[u8]) -> Option<(u32, u32)> {
+    if head.len() < 92 || head[0..4] != [0x53, 0x80, 0xf6, 0x34] {
+        return None;
+    }
+    Some((u16::from_be_bytes([head[88], head[89]]) as u32, u16::from_be_bytes([head[90], head[91]]) as u32))
 }
 
 /// Width and height from a WebP header (VP8, VP8L or VP8X), without decoding
@@ -220,13 +463,22 @@ fn webp_dimensions(head: &[u8]) -> Option<(u32, u32)> {
     }
 }
 
-/// WebP: WebView draws it; small files only, since the whole file goes to the page
-fn webp(path: &Path, size: u64) -> Result<Option<ImageThumb>, String> {
-    if size > MAX_WEBP_BYTES {
-        return Ok(None);
-    }
+/// WebP: decoded by ffmpeg out of process when available; otherwise (or when ffmpeg can't,
+/// e.g. animated WebP) WebView draws it, small files only, since the whole file goes to the page
+fn webp(path: &Path, modified: u64, size: u64) -> Result<Option<ImageThumb>, String> {
     let Some((width, height)) = read_head(path, 30).as_deref().and_then(webp_dimensions) else { return Ok(None) };
     if !dimensions_ok(width, height) {
+        return Ok(None);
+    }
+    if crate::media_preview::tools_available() {
+        let decoded = crate::media_preview::ffmpeg_still_png(path, modified, size, THUMB_SIDE)
+            .and_then(|png| image::load_from_memory_with_format(&png, image::ImageFormat::Png).ok())
+            .and_then(|image| encode(&image));
+        if let Some(data_url) = decoded {
+            return Ok(Some(ImageThumb { data_url, width, height, size }));
+        }
+    }
+    if size > MAX_WEBP_BYTES {
         return Ok(None);
     }
     let Ok(bytes) = std::fs::read(path) else { return Ok(None) };
@@ -281,8 +533,13 @@ mod exr_thumb {
     }
 
     impl Accumulator {
+        #[cfg(test)]
         pub(super) fn new(width: usize, height: usize) -> Self {
-            let (thumb_w, thumb_h) = fit(width, height, THUMB_SIDE as usize);
+            Self::with_side(width, height, THUMB_SIDE as usize)
+        }
+
+        pub(super) fn with_side(width: usize, height: usize, side: usize) -> Self {
+            let (thumb_w, thumb_h) = fit(width, height, side);
             Accumulator { width, height, thumb_w, thumb_h, sum: vec![[0.0; 4]; thumb_w * thumb_h], count: vec![0; thumb_w * thumb_h] }
         }
 
@@ -334,6 +591,11 @@ mod exr_thumb {
         }
     }
 
+    /// DWAA/DWAB and HTJ2K: the header reads fine, the pixels don't
+    pub(super) fn unsupported_compression(compression: Compression) -> bool {
+        matches!(compression, Compression::DWAA(_) | Compression::DWAB(_) | Compression::HTJ2K32 | Compression::HTJ2K256)
+    }
+
     /// Which channels make the picture
     enum Pick {
         /// R, G, B (+ A), with the file's own names: plain "R" or a layer like "ViewLayer.Combined.R"
@@ -376,9 +638,14 @@ mod exr_thumb {
         None
     }
 
-    pub(super) fn thumbnail(path: &Path) -> std::result::Result<(DynamicImage, u32, u32), String> {
+    pub(super) fn thumbnail(path: &Path, side: u32) -> std::result::Result<(DynamicImage, u32, u32), String> {
         // Header first: size and channel layout are checked before any pixel buffer exists
         let meta = MetaData::read_from_file(path, false).map_err(|e| e.to_string())?;
+        // Lossy codecs the decoder doesn't support: refuse now instead of failing after reading the file
+        if let Some(header) = meta.headers.iter().find(|h| unsupported_compression(h.compression)) {
+            return Err(format!("unsupported {}", header.compression));
+        }
+        let side = side as usize;
         let header = meta.headers.iter().find(|h| !h.deep).ok_or("deep data only")?;
         let (width, height) = (header.layer_size.width(), header.layer_size.height());
         let (w32, h32) = (u32::try_from(width).unwrap_or(u32::MAX), u32::try_from(height).unwrap_or(u32::MAX));
@@ -392,7 +659,7 @@ mod exr_thumb {
             Pick::Color { r, g, b, a: Some(a) } => reader
                 .required(r).required(g).required(b).required(a)
                 .collect_pixels(
-                    |size, _| Accumulator::new(size.width(), size.height()),
+                    |size, _| Accumulator::with_side(size.width(), size.height(), side),
                     |acc: &mut Accumulator, pos, (r, g, b, a): (f32, f32, f32, f32)| acc.add(pos.x(), pos.y(), [r, g, b, a]),
                 )
                 .first_valid_layer().all_attributes().non_parallel()
@@ -401,7 +668,7 @@ mod exr_thumb {
             Pick::Color { r, g, b, a: None } => reader
                 .required(r).required(g).required(b)
                 .collect_pixels(
-                    |size, _| Accumulator::new(size.width(), size.height()),
+                    |size, _| Accumulator::with_side(size.width(), size.height(), side),
                     |acc: &mut Accumulator, pos, (r, g, b): (f32, f32, f32)| acc.add(pos.x(), pos.y(), [r, g, b, 1.0]),
                 )
                 .first_valid_layer().all_attributes().non_parallel()
@@ -410,7 +677,7 @@ mod exr_thumb {
             Pick::Gray(y) => reader
                 .required(y)
                 .collect_pixels(
-                    |size, _| Accumulator::new(size.width(), size.height()),
+                    |size, _| Accumulator::with_side(size.width(), size.height(), side),
                     |acc: &mut Accumulator, pos, (y,): (f32,)| acc.add(pos.x(), pos.y(), [y, y, y, 1.0]),
                 )
                 .first_valid_layer().all_attributes().non_parallel()
@@ -421,6 +688,7 @@ mod exr_thumb {
         Ok((image, w32, h32))
     }
 }
+
 
 #[cfg(test)]
 mod tests {

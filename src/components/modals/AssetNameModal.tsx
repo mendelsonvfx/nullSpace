@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 import { AlertCircle } from 'lucide-react';
 import { SoftwareIcon } from '../SoftwareIcon';
 
@@ -35,6 +36,9 @@ export function AssetNameModal({ isOpen, onClose, onConfirm, softwareName, softw
       setSelectedSoftware(hasSoftwareList ? softwareList![0] : null);
     }
   }, [isOpen]);
+
+  // Escape closes the dialog from anywhere in it (also when focus left the field)
+  useEscapeLayer(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -113,7 +117,6 @@ export function AssetNameModal({ isOpen, onClose, onConfirm, softwareName, softw
             onChange={handleInputChange}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !hasError) handleConfirm();
-              if (e.key === 'Escape') onClose();
             }}
             placeholder="Name 01"
             className={`w-full bg-sidebar-bg rounded-button px-3 py-2 text-sm focus:outline-none pr-9 transition-colors ${

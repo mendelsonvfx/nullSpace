@@ -198,6 +198,31 @@ class IndexedDBThumbnailCache {
     }
   }
 
+  /**
+   * Removes every entry of one type (keys ending in `::<type>`) in a single transaction; resolves when it
+   * committed, rejects on failure (callers retry later)
+   */
+  async clearType(type: string): Promise<void> {
+    const db = await this.ensureDB();
+    const suffix = `::${type}`;
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.openKeyCursor();
+
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        if (String(cursor.primaryKey).endsWith(suffix)) store.delete(cursor.primaryKey);
+        cursor.continue();
+      };
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  }
+
   async getSize(): Promise<number> {
     try {
       const db = await this.ensureDB();

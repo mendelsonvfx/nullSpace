@@ -6,6 +6,7 @@ import { CustomSelect } from '../ui/CustomSelect';
 import { useProjectStore } from '../../store/projectStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useContextMenuStore } from '../../store/contextMenuStore';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 import { ProjectBreakdownCard } from './ProjectBreakdownCard';
 import { FinanceProjectDetails } from './FinanceProjectDetails';
 import { PieChart } from '../shared';
@@ -26,9 +27,11 @@ interface FinancePageProps {
   projects: any[];
   selectedProjectId: string | null;
   onClose: () => void;
+  /** Finance is on screen (the page stays mounted while hidden) */
+  isActive: boolean;
 }
 
-export const FinancePage = React.memo(function FinancePage({ projects, selectedProjectId, onClose }: FinancePageProps) {
+export const FinancePage = React.memo(function FinancePage({ projects, selectedProjectId, onClose, isActive }: FinancePageProps) {
   // Include orphaned backup projects in financial calculations
   const archivedBackups = useProjectStore(state => state.archivedBackups);
   // Prepaid projects whose prepayment covers the cost count as paid — also orphaned backups, which are never re-saved
@@ -119,6 +122,9 @@ export const FinancePage = React.memo(function FinancePage({ projects, selectedP
   const currentCategoryTransactions = otherProjectTransactions[currentFolderPath] || [];
   const { setActiveMenu } = useContextMenuStore();
   const timeTrackingEnabled = useTimeTrackingFeature();
+
+  // The page stays mounted while hidden: its dialog takes Escape only while Finance is on screen
+  useEscapeLayer(showManualTransactionModal && isActive, () => setShowManualTransactionModal(false));
 
   // Handle adding manual transaction
   const handleAddTransaction = async (

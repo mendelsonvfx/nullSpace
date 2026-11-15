@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { SoftwareIcon } from '../SoftwareIcon';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 import { COMPOSE_SOFTWARE_OPTIONS } from '../../utils';
 import { useModalBlur } from '../../hooks/useModalBlur';
 import { normalizeSoftwareName } from '../../features/time-tracking/utils/softwareUtils';
@@ -28,11 +29,8 @@ export function ComposeSoftwareModal({
   const [submitting, setSubmitting] = useState(false);
   const blurClass = useModalBlur();
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
+  // Mounted only while open; Escape closes the dialog, not the project behind it
+  useEscapeLayer(true, onClose);
 
   return (
     <div

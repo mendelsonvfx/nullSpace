@@ -7,6 +7,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { invoke } from '@tauri-apps/api';
 import appIcon from '../../appIcon';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -25,6 +26,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, proje
   const [exportSuccess, setExportSuccess] = useState(false);
   const [exportedFilename, setExportedFilename] = useState<string>('');
   const [mouseDownOnBackdrop, setMouseDownOnBackdrop] = useState(false);
+
+  // Escape closes the dialog, not the project behind it
+  useEscapeLayer(isOpen, onClose);
 
   if (!isOpen) return null;
 

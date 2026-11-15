@@ -2,17 +2,29 @@
 // Cache persists in memory and localStorage with TTL
 
 import type { SoftwareName } from '../types/project';
+import type { PreviewFrame } from './mediaPreview';
 
+/** Mirror of main.rs OutputFile (get_project_outputs). Newer fields are optional: old cached entries lack them */
 export interface OutputFile {
   name: string;
+  /** File path; for an image sequence, its folder */
   path: string;
   software: SoftwareName;
   render_type: 'preview' | 'final';
+  /** s */
   created_at: number;
   size: number;
   is_sequence: boolean;
   frame_range?: string;
   frame_count?: number;
+  /** e.g. "(0002-0004), 0007" */
+  missing_frames?: string;
+  /** Stable row key (a sequence's name changes with its frame range while it renders) */
+  id?: string;
+  /** ms: file time, or the newest frame of a sequence */
+  modified?: number;
+  /** Sequence: up to 16 frames for previews, names relative to `path` */
+  preview_frames?: PreviewFrame[];
 }
 
 interface CacheEntry {

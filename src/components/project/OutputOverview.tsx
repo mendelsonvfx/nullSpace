@@ -2,9 +2,12 @@ import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } fr
 import { invoke } from '@tauri-apps/api/tauri';
 import { SoftwareIcon } from '../SoftwareIcon';
 import type { SoftwareName } from '../../types/project';
-import { Film, Eye, FolderOpen, Copy, ChevronDown, RefreshCw } from 'lucide-react';
+import { FolderOpen, Copy, RefreshCw } from 'lucide-react';
 import { writeText } from '@tauri-apps/api/clipboard';
-import { outputsCache } from '../../utils/outputsCache';
+import { outputsCache, type OutputFile } from '../../utils/outputsCache';
+import { useFilePreviewsEnabled } from '../../utils/mediaPreview';
+import { OutputColumn } from './OutputColumn';
+import { outputRowId } from './OutputRow';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { useFileDragOut } from '../../hooks/useFileDragOut';
@@ -13,24 +16,10 @@ import { NullConverterMenuItem } from '../ui/NullConverterMenuItem';
 // Output labels are folder names ("AfterEffects", "UnrealEngine"); the shared helper maps them to display names
 import { formatSoftwareName } from '../../features/time-tracking/utils/softwareUtils';
 
-interface OutputFile {
-  name: string;
-  path: string;
-  software: SoftwareName;
-  render_type: 'preview' | 'final';
-  created_at: number;
-  size: number;
-  is_sequence: boolean;
-  frame_range?: string;
-  frame_count?: number;
-  missing_frames?: string;
-}
-
-// Image sequence formats that should be checked for missing frames
-const IMAGE_SEQUENCE_FORMATS = [
-  'png', 'jpg', 'jpeg', 'exr', 'dpx', 'tif', 'tiff',
-  'tga', 'bmp', 'hdr', 'pic', 'psd', 'sgi', 'rgb'
-];
+// Extensions NullConverter registers its file context menu for (NullConverter registry.rs VIDEO_EXTS);
+// its file modes take videos only, sequences go through the folder modes
+const NULLCONVERTER_FILE_EXTENSIONS = new Set(['mp4', 'mov', 'avi', 'mkv', 'mxf', 'webm']);
+const isNullConverterFile = (name: string) => NULLCONVERTER_FILE_EXTENSIONS.has(name.split('.').pop()?.toLowerCase() || '');
 
 interface OutputOverviewProps {
   project: any;
@@ -42,6 +31,8 @@ interface OutputOverviewProps {
 
 export function OutputOverview({ project, currentScene, currentShot, specialContextType, showNotification }: OutputOverviewProps) {
   const nullConverter = useNullConverter();
+  // Settings → Appearance → File Previews (shared with Project Structure): off = icons only
+  const previewsEnabled = useFilePreviewsEnabled();
   // Drag a render out into Explorer, Discord, … (an image sequence goes as its folder)
   const startFileDrag = useFileDragOut(
     showNotification ? (message) => showNotification('error', message, "Couldn't drag the file") : undefined
@@ -283,18 +274,6 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
   }, [filteredOutputs]);
 
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-  };
-
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
   const getFolderName = (path: string, isSequence: boolean): string | null => {
     // Extract the full path from Final/Preview folder to the file
     const parts = path.replace(/\\/g, '/').split('/').filter(p => p.length > 0);
@@ -392,6 +371,13 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     return '';
   };
 
+  // Muted path shown before a row's name (a primitive string, so memoized rows compare it cheaply)
+  const prefixOf = (output: OutputFile, groupPath?: string): string => {
+    if (groupPath) return getRelativePathInGroup(output, groupPath);
+    const folder = getFolderName(output.path, output.is_sequence);
+    return folder ? `${folder} / ` : '';
+  };
+
   // Toggle group expanded/collapsed state
   const toggleGroup = useCallback((groupPath: string, renderType: 'preview' | 'final') => {
     const key = `${renderType}:${groupPath}`;
@@ -479,13 +465,25 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     return result;
   }, [groupedOutputs, groupOutputsByPath, currentSceneFilter, currentShotFilter]);
 
-  const handleOutputClick = useCallback(async (output: OutputFile) => {
+  // Rows get stable handlers taking their id and look up the current object here (rows memo by primitives)
+  const outputsById = useMemo(() => new Map(outputs.map(o => [outputRowId(o), o])), [outputs]);
+  const outputsByIdRef = useRef(outputsById);
+  outputsByIdRef.current = outputsById;
+
+  const handleOutputOpen = useCallback(async (id: string) => {
+    const output = outputsByIdRef.current.get(id);
+    if (!output) return;
     try {
       await invoke('open_file', { filePath: output.path });
     } catch (error) {
       console.error('Failed to open output:', error);
     }
   }, []);
+
+  const handleOutputDragStart = useCallback((e: React.MouseEvent<HTMLElement>, id: string) => {
+    const output = outputsByIdRef.current.get(id);
+    if (output) startFileDrag(e, output.path);
+  }, [startFileDrag]);
 
   const handleRevealInExplorer = useCallback(async (outputPath: string) => {
     try {
@@ -505,8 +503,9 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     }
   }, [closeFileMenu]);
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, output: OutputFile) => {
-    openFileMenu(e, output);
+  const handleContextMenu = useCallback((e: React.MouseEvent, id: string) => {
+    const output = outputsByIdRef.current.get(id);
+    if (output) openFileMenu(e, output);
   }, [openFileMenu]);
 
   const handleGroupContextMenu = useCallback((e: React.MouseEvent, groupPath: string, renderType: 'preview' | 'final') => {
@@ -517,26 +516,21 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
     const typeFolder = renderType === 'preview' ? 'Preview' : 'Final';
     const relativePath = groupPath.replace(/\s*\/\s*/g, '\\'); // Convert to backslashes and remove spaces
 
-    // Get the software from outputs to find the correct folder
-    const firstOutput = filteredOutputs.find(o => {
-      const pathParts = getPathParts(o.path, o.is_sequence);
-      const outputPrefix = pathParts.slice(0, Math.min(pathParts.length - 1, 5)).join(' / ');
-      return outputPrefix === groupPath || pathParts.join(' / ').startsWith(groupPath);
-    });
+    // A group is the first folder under Preview/Final (scene/shot folders skipped, see groupOutputsByPath):
+    // take any output of this column in it and cut its path right after that folder
+    const firstOutput = filteredOutputs.find(o =>
+      o.render_type === renderType && getPathParts(o.path, o.is_sequence)[0] === groupPath
+    );
 
     if (firstOutput) {
-      // Extract the actual folder path from the first file in the group
       const parts = firstOutput.path.replace(/\\/g, '/').split('/');
       const finalIndex = parts.findIndex(p => p.toLowerCase() === 'final');
       const previewIndex = parts.findIndex(p => p.toLowerCase() === 'preview');
       const startIndex = finalIndex !== -1 ? finalIndex : previewIndex;
+      const groupIndex = startIndex !== -1 ? parts.indexOf(groupPath, startIndex + 1) : -1;
 
-      if (startIndex !== -1) {
-        // For sequences, the path IS the folder
-        // For files, get the parent directory
-        const endIndex = firstOutput.is_sequence ? parts.length : parts.length - 1;
-        const folderPath = parts.slice(0, endIndex).join('\\');
-        return folderPath;
+      if (groupIndex !== -1) {
+        return parts.slice(0, groupIndex + 1).join('\\');
       }
     }
 
@@ -746,209 +740,26 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
 
             {/* Two Column Layout with Divider (Headers + Content) */}
             <div className="grid grid-cols-2 divide-x divide-card-bg bg-[#0f0f0f] rounded-lg">
-              {/* Preview Column */}
-              <div className="flex flex-col">
-                {/* Preview Header */}
-                <div className="flex items-center gap-2 px-5 pt-3 pb-2">
-                  <Eye className="w-3.5 h-3.5 text-text-secondary" />
-                  <span className="text-xs font-medium text-text-secondary">Preview ({types.preview.length})</span>
-                </div>
-                {/* Preview Content - Scrollable */}
-                <div className="px-3 pb-3 space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar">
-                  {(() => {
-                    const { grouped, ungrouped } = groupedByPath[software]?.preview || { grouped: [], ungrouped: [] };
-
-                    const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
-                      <button
-                        key={output.path}
-                        onDoubleClick={() => handleOutputClick(output)}
-                        onContextMenu={(e) => handleContextMenu(e, output)}
-                        onMouseDown={(e) => startFileDrag(e, output.path)}
-                        className="w-full text-left px-3 py-3 rounded-lg bg-[#181818] hover:bg-[#1e1e1e] transition-colors group"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm text-text-primary group-hover:text-white transition-colors truncate block">
-                              {groupPrefix ? (
-                                <span className="text-text-muted">{getRelativePathInGroup(output, groupPrefix)}</span>
-                              ) : (
-                                getFolderName(output.path, output.is_sequence) && (
-                                  <span className="text-text-muted">{getFolderName(output.path, output.is_sequence)} / </span>
-                                )
-                              )}
-                              {output.name}
-                            </span>
-                            {output.is_sequence && output.frame_count && (() => {
-                              // Check if this is an image sequence format
-                              const ext = output.name.split('.').pop()?.toLowerCase() || '';
-                              const isImageSequence = IMAGE_SEQUENCE_FORMATS.includes(ext);
-
-                              // Only show frame info for image sequences
-                              if (!isImageSequence) return null;
-
-                              return (
-                                <span className="text-xs text-text-muted">
-                                  {output.frame_count} frames
-                                  {output.missing_frames && (
-                                    <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
-                                  )}
-                                </span>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-text-muted flex-shrink-0">
-                            <span>{formatFileSize(output.size)}</span>
-                            <span>{formatDate(output.created_at)}</span>
-                          </div>
-                        </div>
-                      </button>
-                    );
-
-                    return (
-                      <div className="space-y-2">
-                        {/* Grouped files */}
-                        {grouped.map(group => {
-                          const isExpanded = expandedGroups.has(`preview:${group.path}`);
-                          return (
-                            <div key={group.path}>
-                              {/* Group header */}
-                              <button
-                                onClick={() => toggleGroup(group.path, 'preview')}
-                                onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'preview')}
-                                className="w-full text-left px-3 py-2 rounded bg-[#181818] hover:bg-[#1e1e1e] transition-colors flex items-center gap-2"
-                              >
-                                <ChevronDown
-                                  className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
-                                />
-                                <span className="text-sm text-text-secondary">{group.path} /</span>
-                                <span className="text-xs text-text-muted ml-auto">({group.files.length})</span>
-                              </button>
-
-                              {/* Group files */}
-                              <div
-                                className={`overflow-hidden transition-[max-height] duration-200 ease-in-out ${isExpanded ? 'max-h-[2000px]' : 'max-h-0'
-                                  }`}
-                              >
-                                <div className="pl-6 space-y-2 pt-2">
-                                  {group.files.map(output => renderOutputButton(output, group.path))}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {/* Ungrouped files */}
-                        {ungrouped.map(output => renderOutputButton(output))}
-                      </div>
-                    );
-                  })()}
-                  {types.preview.length === 0 && (
-                    <div className="p-4 text-center text-xs text-text-muted">No preview outputs</div>
-                  )}
-                </div>
-              </div>
-
-              {/* Final Column */}
-              <div className="flex flex-col">
-                {/* Final Header */}
-                <div className="flex items-center gap-2 px-5 pt-3 pb-2">
-                  <Film className="w-3.5 h-3.5 text-text-secondary" />
-                  <span className="text-xs font-medium text-text-secondary">Final ({types.final.length})</span>
-                </div>
-                {/* Final Content - Scrollable */}
-                <div className="px-3 pb-3 space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar">
-                  {(() => {
-                    const { grouped, ungrouped } = groupedByPath[software]?.final || { grouped: [], ungrouped: [] };
-
-                    const renderOutputButton = (output: OutputFile, groupPrefix?: string) => (
-                      <button
-                        key={output.path}
-                        onDoubleClick={() => handleOutputClick(output)}
-                        onContextMenu={(e) => handleContextMenu(e, output)}
-                        onMouseDown={(e) => startFileDrag(e, output.path)}
-                        className="w-full text-left px-3 py-3 rounded-lg bg-[#181818] hover:bg-[#1e1e1e] transition-colors group"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm text-text-primary group-hover:text-white transition-colors truncate block">
-                              {groupPrefix ? (
-                                <span className="text-text-muted">{getRelativePathInGroup(output, groupPrefix)}</span>
-                              ) : (
-                                getFolderName(output.path, output.is_sequence) && (
-                                  <span className="text-text-muted">{getFolderName(output.path, output.is_sequence)} / </span>
-                                )
-                              )}
-                              {output.name}
-                            </span>
-                            {output.is_sequence && output.frame_count && (() => {
-                              // Check if this is an image sequence format
-                              const ext = output.name.split('.').pop()?.toLowerCase() || '';
-                              const isImageSequence = IMAGE_SEQUENCE_FORMATS.includes(ext);
-
-                              // Only show frame info for image sequences
-                              if (!isImageSequence) return null;
-
-                              return (
-                                <span className="text-xs text-text-muted">
-                                  {output.frame_count} frames
-                                  {output.missing_frames && (
-                                    <> | <span className="text-amber-500">Missing: {output.missing_frames}</span></>
-                                  )}
-                                </span>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-text-muted flex-shrink-0">
-                            <span>{formatFileSize(output.size)}</span>
-                            <span>{formatDate(output.created_at)}</span>
-                          </div>
-                        </div>
-                      </button>
-                    );
-
-                    return (
-                      <div className="space-y-2">
-                        {/* Grouped files */}
-                        {grouped.map(group => {
-                          const isExpanded = expandedGroups.has(`final:${group.path}`);
-                          return (
-                            <div key={group.path}>
-                              {/* Group header */}
-                              <button
-                                onClick={() => toggleGroup(group.path, 'final')}
-                                onContextMenu={(e) => handleGroupContextMenu(e, group.path, 'final')}
-                                className="w-full text-left px-3 py-2 rounded bg-[#181818] hover:bg-[#1e1e1e] transition-colors flex items-center gap-2"
-                              >
-                                <ChevronDown
-                                  className={`w-4 h-4 text-text-secondary transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`}
-                                />
-                                <span className="text-sm text-text-secondary">{group.path} /</span>
-                                <span className="text-xs text-text-muted ml-auto">({group.files.length})</span>
-                              </button>
-
-                              {/* Group files */}
-                              <div
-                                className={`overflow-hidden transition-[max-height] duration-200 ease-in-out ${isExpanded ? 'max-h-[2000px]' : 'max-h-0'
-                                  }`}
-                              >
-                                <div className="pl-6 space-y-2 pt-2">
-                                  {group.files.map(output => renderOutputButton(output, group.path))}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {/* Ungrouped files */}
-                        {ungrouped.map(output => renderOutputButton(output))}
-                      </div>
-                    );
-                  })()}
-                  {types.final.length === 0 && (
-                    <div className="p-4 text-center text-xs text-text-muted">No final outputs</div>
-                  )}
-                </div>
-              </div>
+              {(['preview', 'final'] as const).map(renderType => {
+                const { grouped, ungrouped } = groupedByPath[software]?.[renderType] || { grouped: [], ungrouped: [] };
+                return (
+                  <OutputColumn
+                    key={renderType}
+                    renderType={renderType}
+                    total={types[renderType].length}
+                    grouped={grouped}
+                    ungrouped={ungrouped}
+                    expandedGroups={expandedGroups}
+                    previewsEnabled={previewsEnabled}
+                    prefixOf={prefixOf}
+                    onToggleGroup={toggleGroup}
+                    onGroupContextMenu={handleGroupContextMenu}
+                    onOpen={handleOutputOpen}
+                    onContextMenu={handleContextMenu}
+                    onDragStart={handleOutputDragStart}
+                  />
+                );
+              })}
             </div>
           </div>
         ))}
@@ -986,7 +797,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
             <NullConverterMenuItem items={nullConverter.folder_items} exe={nullConverter.exe} input={fileMenuData.path} onClose={closeFileMenu} />
           </>
         )}
-        {fileMenuData && !fileMenuData.is_sequence && nullConverter && nullConverter.file_items.length > 0 && (
+        {fileMenuData && !fileMenuData.is_sequence && isNullConverterFile(fileMenuData.name) && nullConverter && nullConverter.file_items.length > 0 && (
           <>
             <ContextMenuDivider />
             <NullConverterMenuItem items={nullConverter.file_items} exe={nullConverter.exe} input={fileMenuData.path} onClose={closeFileMenu} />
@@ -1016,7 +827,7 @@ export function OutputOverview({ project, currentScene, currentShot, specialCont
         {groupMenuData && nullConverter && nullConverter.folder_items.length > 0 && (
           <>
             <ContextMenuDivider />
-            <NullConverterMenuItem items={nullConverter.folder_items} exe={nullConverter.exe} input={groupMenuData.groupPath} onClose={closeGroupMenu} />
+            <NullConverterMenuItem items={nullConverter.folder_items} exe={nullConverter.exe} input={getGroupFolderPath(groupMenuData.groupPath, groupMenuData.renderType)} onClose={closeGroupMenu} />
           </>
         )}
       </ContextMenu>

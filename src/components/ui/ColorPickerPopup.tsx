@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, RefObject } from 'react';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 
 // HSV ↔ RGB helpers
 function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: number } {
@@ -84,6 +85,9 @@ export function ColorPickerPopup({ isOpen, color, position, triggerRef, onChange
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [isOpen, onCancel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Escape cancels like a click outside, without closing the dialog behind the picker
+  useEscapeLayer(isOpen, onCancel);
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     const update = (clientX: number, clientY: number) => {

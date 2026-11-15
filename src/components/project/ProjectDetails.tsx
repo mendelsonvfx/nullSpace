@@ -27,6 +27,7 @@ import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { CustomSelect } from '../ui/CustomSelect';
 import { CollapsibleHint } from '../ui/CollapsibleHint';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 import { useDraftField, numberDraft, parseNumberDraft } from '../../hooks/useDraftField';
 import { getPaymentStatusUpdate } from '../../utils/financeService';
 import { useTasks } from '../../hooks/useTasks';
@@ -127,22 +128,11 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
   // Context menu using centralized hook
   const { isOpen: isContextMenuOpen, position: contextMenuPosition, data: contextMenuData, openMenu: openContextMenu, closeMenu: closeContextMenu } = useContextMenu<{ software: any; executablePath: string }>();
 
-  // Handle ESC to close Project Settings modal (capture phase to run before App.tsx handler)
-  useEffect(() => {
-    if (!showProjectSettings) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation(); // Stop all other handlers
-        setShowProjectSettings(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown, true); // capture: true
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [showProjectSettings]);
+  // Escape closes the topmost of these layers, never the project behind them (utils/escapeLayers)
+  useEscapeLayer(showProjectSettings, () => setShowProjectSettings(false));
+  useEscapeLayer(showPaymentModal, () => setShowPaymentModal(false));
+  useEscapeLayer(shotToDelete !== null, () => setShotToDelete(null));
+  useEscapeLayer(softwareToRemove !== null, () => setSoftwareToRemove(null));
 
   // Sync description value when project changes
   useEffect(() => {
@@ -449,6 +439,8 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
     setToolEditorClosing(true);
     setTimeout(() => setToolEditorClosing(false), 260);
   };
+
+  useEscapeLayer(toolEditorOpen, closeToolEditor);
 
   const leaveEditMode = () => {
     setToolEditMode(false);
@@ -1957,7 +1949,6 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
                             onChange={(e) => { setToolWorkingPath(e.target.value); setToolSavedFlash(false); }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') saveToolPath();
-                              if (e.key === 'Escape') closeToolEditor();
                             }}
                             placeholder="Path to executable..."
                             autoFocus

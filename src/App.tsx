@@ -29,6 +29,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import type { Currency } from './types/project';
 import { useProjectStore } from './store/projectStore';
 import { useContextMenuStore } from './store/contextMenuStore';
+import { useEscapeLayer } from './utils/escapeLayers';
 import { useShallow } from 'zustand/react/shallow';
 import { SettingsPanel } from './components/modals/SettingsPanel';
 import { FeedbackPanel } from './components/modals/FeedbackPanel';
@@ -69,6 +70,7 @@ import { darkenColor, STATUS_COLORS, STATUS_LABELS, hslStringToHex, isNewerVersi
 import { getVersion } from '@tauri-apps/api/app';
 import { PostUpdateNotification } from './components/modals/PostUpdateNotification';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider, GlobalTextContextMenu } from './components/ui/ContextMenu';
+import { MediaPreviewHost } from './components/ui/MediaPreviewHost';
 import { useContextMenu } from './hooks/useContextMenu';
 import { getPaymentStatusUpdate } from './utils/financeService';
 
@@ -603,46 +605,11 @@ function App() {
         return;
       }
 
-      // Escape - Close any open modal/menu (except WelcomeSetup)
+      // Escape - close the open project. Menus, dropdowns and dialogs are Escape layers
+      // (utils/escapeLayers): while one is open, Escape never reaches this handler.
       if (e.code === 'Escape') {
-        // Don't allow closing WelcomeSetup with Escape - it's required setup
-        if (showWelcomeSetup) {
-          return;
-        }
-        if (showPostUpdateModal) {
-          setShowPostUpdateModal(false);
-          return;
-        }
-
-        if (showCreateModal) {
-          e.preventDefault();
-          setShowCreateModal(false);
-          return;
-        }
-        if (showSettings) {
-          e.preventDefault();
-          setShowSettings(false);
-          return;
-        }
-        if (showFeedback) {
-          e.preventDefault();
-          setShowFeedback(false);
-          return;
-        }
-        if (showAbout) {
-          e.preventDefault();
-          setShowAbout(false);
-          return;
-        }
-        if (deleteConfirm) {
-          e.preventDefault();
-          setDeleteConfirm(null);
-          return;
-        }
-        if (sceneRenameConfirm) {
-          e.preventDefault();
-          sceneRenameConfirm.onCancel();
-          setSceneRenameConfirm(null);
+        // Auto-repeat, or Escape already handled elsewhere (e.g. the Notes editor's own popups)
+        if (e.repeat || e.defaultPrevented) {
           return;
         }
         if (selectedProjectId) {
@@ -714,7 +681,25 @@ function App() {
 
     window.addEventListener('keydown', handleGlobalHotkeys);
     return () => window.removeEventListener('keydown', handleGlobalHotkeys);
-  }, [viewMode, selectedProjectId, previousProjectId, showCreateModal, showSettings, showFeedback, showAbout, showWelcomeSetup, showPostUpdateModal, deleteConfirm, sceneRenameConfirm]);
+  }, [viewMode, selectedProjectId, previousProjectId, deleteConfirm]);
+
+  // Escape layers owned by App (see utils/escapeLayers): Escape closes the topmost one
+  useEscapeLayer(showWelcomeSetup, null); // required setup: Escape never closes it
+  useEscapeLayer(showPostUpdateModal, () => setShowPostUpdateModal(false));
+  useEscapeLayer(showCreateModal, () => setShowCreateModal(false));
+  useEscapeLayer(showSettings, () => setShowSettings(false));
+  useEscapeLayer(showFeedback, () => setShowFeedback(false));
+  useEscapeLayer(showAbout, () => setShowAbout(false));
+  useEscapeLayer(deleteConfirm !== null, () => setDeleteConfirm(null));
+  useEscapeLayer(sceneRenameConfirm !== null, isRenaming ? null : () => {
+    sceneRenameConfirm?.onCancel();
+    setSceneRenameConfirm(null);
+  });
+  useEscapeLayer(showFilterMenu, () => {
+    setShowFilterMenu(false);
+    setShowClientSubmenu(false);
+    setActiveMenu(null);
+  });
 
   // Break reminders - check active sessions every minute
   useEffect(() => {
@@ -1994,7 +1979,7 @@ function App() {
           {/* Lazy load FinancePage - only mount after first use, then keep mounted but hidden */}
           {financePageMounted && (
             <div style={{ display: viewMode === 'finance' ? 'flex' : 'none', height: '100%' }} className="flex flex-col">
-              <FinancePage projects={projects} selectedProjectId={selectedProjectId} onClose={handleCloseFinance} />
+              <FinancePage projects={projects} selectedProjectId={selectedProjectId} onClose={handleCloseFinance} isActive={viewMode === 'finance'} />
             </div>
           )}
 
@@ -2523,6 +2508,8 @@ function App() {
       </div>
       {/* Global Text Context Menu for all inputs/textareas */}
       <GlobalTextContextMenu />
+      {/* Hover preview of images, videos and sequences (Project Structure, Render Output) */}
+      <MediaPreviewHost />
       {import.meta.env.DEV && <DevPerfPanel />}
     </div>
   );

@@ -6,6 +6,7 @@ import { readBinaryFile, removeFile, removeDir, readTextFile } from '@tauri-apps
 import { selectAttachmentFile } from '../../utils/tauri';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 import type { TodoItem, TaskAttachment, AttachmentFileType } from '../../types/project';
 
 interface TaskItemProps {
@@ -145,6 +146,8 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
   const [isHovered, setIsHovered]       = useState(false);
   const [attachHover, setAttachHover]   = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Escape cancels the delete, not the project behind it
+  useEscapeLayer(showDeleteConfirm, () => setShowDeleteConfirm(false));
   const [hoveredAttId,    setHoveredAttId]    = useState<string | null>(null);
   const [popupBaseStyle,  setPopupBaseStyle]  = useState<CSSProperties>({ position: 'fixed', top: 0, left: -9999 });
   const [hoveredFileSize, setHoveredFileSize] = useState<string | null>(null);

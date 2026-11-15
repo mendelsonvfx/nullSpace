@@ -30,6 +30,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { ComposeSoftwareModal, composeKeyOf } from '../modals/ComposeSoftwareModal';
 import { COMPOSE_ONLY_SOFTWARE } from '../../utils/constants';
 import { useContextMenuStore } from '../../store/contextMenuStore';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 import { useThumbnail } from '../../hooks/useThumbnail';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
@@ -1656,15 +1657,16 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
     }
   }, [isContextMenuOpen]);
 
-  // Handle keyboard shortcuts for delete confirmation
+  // Escape cancels the delete confirmation / closes the sort menu, not the project (utils/escapeLayers)
+  useEscapeLayer(deleteConfirm !== null, () => setDeleteConfirm(null));
+  useEscapeLayer(showSortMenu, () => setShowSortMenu(false));
+
+  // Enter confirms the delete
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!deleteConfirm) return;
 
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setDeleteConfirm(null);
-      } else if (e.key === 'Enter') {
+      if (e.key === 'Enter') {
         e.preventDefault();
         if (deleteConfirm.type === 'shot') {
           removeShot(projectId, deleteConfirm.id);

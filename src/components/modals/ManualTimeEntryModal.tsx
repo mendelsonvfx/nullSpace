@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Project, SoftwareName } from '../../types/project';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { useEscapeLayer } from '../../utils/escapeLayers';
 import { TimeEntryForm } from '../../features/time-tracking/components/ManualTimeEntry/TimeEntryForm';
 import { TimeEntryHistory } from '../../features/time-tracking/components/ManualTimeEntry/TimeEntryHistory';
 
@@ -33,6 +34,9 @@ export const ManualTimeEntryModal: React.FC<ManualTimeEntryModalProps> = ({
 }) => {
   const blurClass = useModalBlur();
   const [isAnimating, setIsAnimating] = useState(false);
+
+  // Escape closes the dialog (also when focus is not in a field), not the project behind it
+  useEscapeLayer(isOpen, onClose);
 
   // Animation effect
   useEffect(() => {

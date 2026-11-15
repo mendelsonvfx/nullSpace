@@ -2259,7 +2259,7 @@ dependencies = [
 
 [[package]]
 name = "nullspace"
-version = "1.9.59"
+version = "1.9.62"
 dependencies = [
  "arboard",
  "base64 0.21.7",
@@ -2268,6 +2268,7 @@ dependencies = [
  "exr",
  "image 0.24.9",
  "lazy_static",
+ "miniz_oxide",
  "notify 6.1.1",
  "notify-debouncer-mini",
  "parking_lot",
@@ -2276,6 +2277,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
+ "sha2",
  "sysinfo",
  "tauri",
  "tauri-build",
