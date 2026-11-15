@@ -4066,7 +4066,10 @@ fn classify_watch_path(project_dir: &Path, path: &Path) -> (bool, bool) {
         part == "Render" || part == "Output"
     });
     if is_output {
-        return (false, true);
+        // Output lists only media. Existing non-media files under Render/Output (an .aep autosave, a script,
+        // temp files) don't change it; a path that is gone or a folder may have held media, so it counts
+        let is_media = path.file_name().and_then(|n| n.to_str()).map_or(false, is_output_media);
+        return (false, is_media || !path.is_file());
     }
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let is_blend1 = path.extension().and_then(|e| e.to_str()).map_or(false, |e| e.eq_ignore_ascii_case("blend1"));
@@ -4089,6 +4092,26 @@ mod watch_tests {
     fn render_frames_are_outputs_not_versions() {
         assert_eq!(classify(r"E:\P\Proj\Blender\SC01\Render\Preview\PROJ_SC01_v001_0001.png"), (false, true));
         assert_eq!(classify(r"E:\P\Proj\AfterEffects\Output\PROJ_v003.mp4"), (false, true));
+    }
+
+    #[test]
+    fn existing_non_media_under_render_does_not_reload_outputs() {
+        let project = std::env::temp_dir().join(format!("nullspace_watch_test_{}", uuid::Uuid::new_v4().simple()));
+        let render = project.join("Blender").join("Render").join("Final").join("BREAKDOWN");
+        std::fs::create_dir_all(&render).expect("dir");
+        for name in ["comp.aep", "comp_v2_build.jsx", "shot.0001.exr"] {
+            std::fs::write(render.join(name), b"x").expect("write");
+        }
+        let classify_in = |p: &Path| classify_watch_path(&project, p);
+
+        // Existing project file / script: neither an output nor a version (despite "_v2" in the name)
+        assert_eq!(classify_in(&render.join("comp.aep")), (false, false));
+        assert_eq!(classify_in(&render.join("comp_v2_build.jsx")), (false, false));
+        // Media, a deleted file and a folder still reload Output
+        assert_eq!(classify_in(&render.join("shot.0001.exr")), (false, true));
+        assert_eq!(classify_in(&render.join("deleted.aep")), (false, true));
+        assert_eq!(classify_in(&render), (false, true));
+        let _ = std::fs::remove_dir_all(&project);
     }
 
     #[test]
@@ -5498,6 +5521,25 @@ fn is_image_format(ext: &str) -> bool {
     image_formats.contains(&ext.to_lowercase().as_str())
 }
 
+/// Render Output lists only media (images, video, audio): project files, scripts and other files
+/// that end up in render folders are skipped. The extension is the part after the last dot
+fn is_output_media(name: &str) -> bool {
+    const OTHER_MEDIA: &[&str] = &[
+        // images beyond the sequence formats
+        "webp", "gif", "psb", "avif", "cin", "jp2",
+        // video
+        "mp4", "mov", "m4v", "avi", "mkv", "webm", "mxf", "wmv", "flv", "mpg", "mpeg", "ogv",
+        // audio
+        "wav", "mp3", "aac", "flac", "ogg", "opus", "m4a", "aif", "aiff",
+    ];
+    let Some((_, ext)) = name.rsplit_once('.') else { return false };
+    if ext.is_empty() {
+        return false;
+    }
+    let ext = ext.to_ascii_lowercase();
+    is_image_format(&ext) || OTHER_MEDIA.contains(&ext.as_str())
+}
+
 /// Groups numbered image files into sequences. Each name is parsed once; files with the same frame
 /// number (shot.001.exr + shot_0001.exr) count as one frame
 fn group_sequences(files: Vec<OutputFile>) -> Vec<OutputFile> {
@@ -5640,6 +5682,11 @@ fn scan_output_dir_recursive(
 
                     // Skip hidden files and system files
                     if file_name.starts_with('.') || file_name.starts_with('~') {
+                        continue;
+                    }
+
+                    // Only media: no .aep / .jsx / .blend / sidecar files in the list
+                    if !is_output_media(&file_name) {
                         continue;
                     }
 
@@ -7158,6 +7205,40 @@ mod output_tests {
         assert_eq!(picked[0], 0);
         assert_eq!(picked[15], frames.len() - 1);
         assert!(picked.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn scan_lists_only_media() {
+        let dir = std::env::temp_dir().join(format!("nullspace_outputs_media_{}", uuid::Uuid::new_v4().simple()));
+        fs::create_dir_all(dir.join("sub")).expect("dir");
+        for name in [
+            "comp.aep", "build.jsx", "notes.txt", "Thumbs.db", "README", "render.exr.tmp", ".hidden.png",
+            "final.MOV", "shot_0001.exr", "shot_0002.exr", "mix.wav",
+        ] {
+            fs::write(dir.join(name), b"x").expect("write");
+        }
+        fs::write(dir.join("sub").join("ref.webp"), b"x").expect("write");
+
+        let mut outputs = Vec::new();
+        scan_output_dir_recursive(&dir, "AfterEffects", "final", &mut outputs, 0, &None, &None);
+        let mut names: Vec<&str> = outputs.iter().map(|f| f.name.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["final.MOV", "mix.wav", "ref.webp", "shot_0001.exr", "shot_0002.exr"]);
+
+        let grouped = group_sequences(outputs);
+        assert_eq!(grouped.len(), 4);
+        assert_eq!(grouped.iter().filter(|f| f.is_sequence).count(), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn output_media_by_extension() {
+        assert!(is_output_media("image_ref.png.jpg"));
+        assert!(is_output_media("SHOT.EXR"));
+        assert!(!is_output_media("render.exr.tmp"));
+        assert!(!is_output_media("README"));
+        assert!(!is_output_media("trailing."));
+        assert!(!is_output_media("scene.blend"));
     }
 
     #[test]

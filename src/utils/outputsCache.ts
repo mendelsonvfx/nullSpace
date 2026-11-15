@@ -47,7 +47,9 @@ class OutputsCache {
   private cache: Map<string, CacheEntry> = new Map();
   private expandedGroupsCache: Map<string, ExpandedGroupsEntry> = new Map();
   private outputStateCache: Map<string, OutputStateEntry> = new Map();
-  private readonly STORAGE_PREFIX = 'outputs_cache_';
+  /** Versioned: bumped when the backend's list changes (v2: media files only), older entries are dropped on load */
+  private readonly STORAGE_PREFIX = 'outputs_cache_v2_';
+  private readonly LEGACY_STORAGE_PREFIX = 'outputs_cache_';
   private readonly EXPANDED_GROUPS_PREFIX = 'outputs_expanded_groups_';
   private readonly OUTPUT_STATE_PREFIX = 'outputs_state_';
   private readonly TTL_MS = 5 * 60 * 1000; // 5 minutes cache lifetime
@@ -63,9 +65,17 @@ class OutputsCache {
   private loadFromStorage(): void {
     if (typeof window === 'undefined') return;
 
+    let keys: string[];
     try {
-      const keys = Object.keys(localStorage);
-      for (const key of keys) {
+      keys = Object.keys(localStorage);
+    } catch (error) {
+      console.error('Failed to load outputs cache from storage:', error);
+      return;
+    }
+
+    // One unreadable entry must not stop the rest from loading (or old entries from being dropped)
+    for (const key of keys) {
+      try {
         if (key.startsWith(this.STORAGE_PREFIX)) {
           const projectPath = key.substring(this.STORAGE_PREFIX.length);
           const value = localStorage.getItem(key);
@@ -73,6 +83,9 @@ class OutputsCache {
             const entry: CacheEntry = JSON.parse(value);
             this.cache.set(projectPath, entry);
           }
+        } else if (key.startsWith(this.LEGACY_STORAGE_PREFIX)) {
+          // Lists cached before the current version (e.g. with .aep/.jsx files): never shown
+          localStorage.removeItem(key);
         } else if (key.startsWith(this.EXPANDED_GROUPS_PREFIX)) {
           const projectPath = key.substring(this.EXPANDED_GROUPS_PREFIX.length);
           const value = localStorage.getItem(key);
@@ -88,9 +101,10 @@ class OutputsCache {
             this.outputStateCache.set(projectPath, entry);
           }
         }
+      } catch (error) {
+        console.error(`Dropping unreadable outputs cache entry ${key}:`, error);
+        try { localStorage.removeItem(key); } catch { /* storage unavailable */ }
       }
-    } catch (error) {
-      console.error('Failed to load outputs cache from storage:', error);
     }
   }
 
