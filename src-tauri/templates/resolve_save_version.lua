@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
+-- Copyright (C) 2025-2026 Oleg Mendelson - part of nullSpace, https://github.com/mendelsonvfx/nullSpace
 -- nullSpace - Save Version: export the working Resolve project as the next .drp version
 -- (PROJECT_COMP_vNNN.drp) into the project's _GlobalCompose folder.
 

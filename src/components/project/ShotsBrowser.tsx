@@ -2662,10 +2662,10 @@ const ShotsBrowser: React.FC<ShotsBrowserProps> = ({ projectId, className = '', 
             <h3 className="text-lg font-semibold mb-2">Confirm Delete</h3>
             <p className="text-zinc-400 mb-6">
               {deleteConfirm.type === 'scene' && deleteConfirm.shotCount
-                ? `Are you sure you want to delete scene "${deleteConfirm.name}" and its ${deleteConfirm.shotCount} shot(s)? This action cannot be undone.`
+                ? `Are you sure you want to delete scene "${deleteConfirm.name}" and its ${deleteConfirm.shotCount} shot(s)? Their files will be moved to the Recycle Bin.`
                 : deleteConfirm.type === 'shot'
-                  ? `Are you sure you want to delete "${deleteConfirm.name}" and its version files? This action cannot be undone.`
-                  : `Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone.`
+                  ? `Are you sure you want to delete "${deleteConfirm.name}"? Its version files and render folders will be moved to the Recycle Bin.`
+                  : `Are you sure you want to delete "${deleteConfirm.name}"? Its files will be moved to the Recycle Bin.`
               }
             </p>
             <div className="flex gap-3 justify-end">

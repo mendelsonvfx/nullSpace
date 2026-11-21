@@ -33,6 +33,7 @@ import { getPaymentStatusUpdate } from '../../utils/financeService';
 import { useTasks } from '../../hooks/useTasks';
 import { TaskItem } from '../tasks/TaskItem';
 import type { TaskContext, Project } from '../../types/project';
+import { isTrashCancelled } from '../../utils/trash';
 
 type ProjectStatus = 'active' | 'archived' | 'completed' | 'paused';
 
@@ -553,7 +554,11 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
       // Trigger tree refresh
       window.dispatchEvent(new CustomEvent('tree-refresh'));
     } catch (error) {
-      console.error('Failed to remove software:', error);
+      // Declined Windows prompt: the software stays, nothing to report
+      if (!isTrashCancelled(error)) {
+        console.error('Failed to remove software:', error);
+        (window as any).showNotification?.('error', String(error), `Couldn't remove ${softwareToRemove}`);
+      }
     }
 
     setSoftwareToRemove(null);
@@ -2039,7 +2044,7 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
           >
             <h3 className="text-lg font-semibold mb-2">Delete Shot</h3>
             <p className="text-text-muted mb-6">
-              Are you sure you want to delete "{shotToDelete.name}" and its version files? This action cannot be undone.
+              Are you sure you want to delete "{shotToDelete.name}"? Its version files and render folders will be moved to the Recycle Bin.
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -2087,15 +2092,15 @@ export function ProjectDetails({ project, launchingStatus, onClose, onOpenFolder
             <h3 className="text-lg font-semibold mb-2">Remove {softwareToRemove}?</h3>
             <div className="text-text-muted mb-6">
               <p className="mb-3">
-                This will permanently remove <span className="font-medium text-text-primary">{softwareToRemove}</span> from this project.
+                This will remove <span className="font-medium text-text-primary">{softwareToRemove}</span> from this project.
               </p>
               <div className="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-3">
                 <p className="text-sm text-yellow-200/90">
-                  <strong>Warning:</strong> Removing software will delete its folder and all contents from the project directory. This action cannot be undone.
+                  <strong>Warning:</strong> Its folder and all contents will be moved from the project directory to the Recycle Bin.
                 </p>
                 {(normalizeSoftwareName(softwareToRemove)) === 'unreal' && (
                   <p className="text-sm text-red-400 mt-2">
-                    The Unreal Engine project (UnrealEngine/_Project) with all levels and assets will be deleted too.
+                    The Unreal Engine project (UnrealEngine/_Project) with all levels and assets goes to the Recycle Bin too.
                   </p>
                 )}
               </div>

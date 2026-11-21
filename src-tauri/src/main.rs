@@ -13,6 +13,7 @@ mod image_thumbnail;
 mod media_preview;
 mod media_tools;
 mod exe_icon;
+mod trash;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -776,8 +777,34 @@ async fn add_software_to_project(project_path: String, software_name: String) ->
     Ok(())
 }
 
+/// Window that owns the shell's prompts while moving to the Recycle Bin (0 = no owner)
+fn owner_hwnd(window: &tauri::Window) -> isize {
+    #[cfg(windows)]
+    {
+        window.hwnd().map(|h| h.0 as isize).unwrap_or(0)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window;
+        0
+    }
+}
+
+/// Moves user files to the Recycle Bin in one shell operation, off the async runtime threads.
+/// Err(trash::CANCELLED) when the user declined a Windows prompt: the caller must change nothing.
+async fn trash_paths(paths: Vec<PathBuf>, owner: isize) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || trash::move_to_trash(paths, owner))
+        .await
+        .map_err(|e| format!("Moving to the Recycle Bin failed: {}", e))?
+        .map_err(String::from)
+}
+
 #[tauri::command]
-async fn remove_software_from_project(project_path: String, software_name: String) -> Result<(), String> {
+async fn remove_software_from_project(window: tauri::Window, project_path: String, software_name: String) -> Result<(), String> {
+    remove_software_folder(project_path, software_name, owner_hwnd(&window)).await
+}
+
+async fn remove_software_folder(project_path: String, software_name: String, owner: isize) -> Result<(), String> {
     let project_path_buf = PathBuf::from(&project_path);
 
     // Check if project exists
@@ -785,17 +812,32 @@ async fn remove_software_from_project(project_path: String, software_name: Strin
         return Err("Project path does not exist".to_string());
     }
 
-    // Get software folder name
+    // Get software folder name. An empty name would point at the project folder itself
     let folder_name = get_software_folder_name(&software_name);
+    if folder_name.trim().is_empty() {
+        return Err("Unknown software".to_string());
+    }
     let software_path = project_path_buf.join(folder_name);
 
-    // Delete software folder if it exists
-    if software_path.exists() {
-        fs::remove_dir_all(&software_path)
-            .map_err(|e| format!("Failed to delete software folder: {}", e))?;
-    }
+    // Move the software folder to the Recycle Bin; paths_inside refuses the project root itself
+    let paths = trash::paths_inside(&project_path_buf, &[software_path])?;
+    trash_paths(paths, owner).await?;
 
     Ok(())
+}
+
+/// Task attachments (copies inside the project's _attachments folder) to the Recycle Bin.
+/// Anything outside that folder is refused, so a stale or edited path can't reach the user's originals
+#[tauri::command]
+async fn trash_attachments(window: tauri::Window, project_path: String, paths: Vec<String>) -> Result<usize, String> {
+    trash_attachment_files(project_path, paths, owner_hwnd(&window)).await
+}
+
+async fn trash_attachment_files(project_path: String, paths: Vec<String>, owner: isize) -> Result<usize, String> {
+    let attachments_dir = PathBuf::from(&project_path).join("_attachments");
+    let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+    let paths = trash::paths_inside(&attachments_dir, &paths)?;
+    trash_paths(paths, owner).await
 }
 
 #[tauri::command]
@@ -871,10 +913,21 @@ async fn rename_project_folder(old_path: String, new_path: String) -> Result<Str
 }
 
 #[tauri::command]
-async fn delete_project(project_path: String) -> Result<(), String> {
-    let path = PathBuf::from(&project_path);
-    fs::remove_dir_all(&path)
-        .map_err(|e| format!("Failed to delete project: {}", e))?;
+async fn delete_project(window: tauri::Window, project_path: String) -> Result<(), String> {
+    trash_project_folder(project_path, owner_hwnd(&window)).await
+}
+
+async fn trash_project_folder(project_path: String, owner: isize) -> Result<(), String> {
+    let path = trash::normalize(Path::new(&project_path))?;
+    // Already gone (deleted in Explorer): nothing to do, the app just forgets the project
+    if !path.exists() {
+        return Ok(());
+    }
+    // Only a nullSpace project folder: a wrong path must never take a whole drive or category with it
+    if !path.join(".project-metadata.json").is_file() {
+        return Err(format!("Not a nullSpace project folder: {}", path.display()));
+    }
+    trash_paths(vec![path], owner).await?;
     Ok(())
 }
 
@@ -3481,12 +3534,18 @@ async fn cleanup_backup_files(project_path: String) -> Result<u32, String> {
 
 #[tauri::command]
 async fn delete_shot_files(
+    window: tauri::Window,
     project_path: String,
     shot_number: u32,
     scene_number: u32,
 ) -> Result<u32, String> {
+    trash_shot_files(project_path, shot_number, scene_number, owner_hwnd(&window)).await
+}
+
+async fn trash_shot_files(project_path: String, shot_number: u32, scene_number: u32, owner: isize) -> Result<u32, String> {
     let project_dir = PathBuf::from(&project_path);
-    let mut deleted_count = 0u32;
+    // User files (versions, render folders) go to the Recycle Bin in one operation at the end
+    let mut to_trash: Vec<PathBuf> = Vec::new();
 
     // Get project name and scene name from metadata
     let metadata_path = project_dir.join(".project-metadata.json");
@@ -3510,13 +3569,52 @@ async fn delete_shot_files(
 
     // Version files of the shot: same search as shot renumbering — versions live in Software/SCENE/,
     // so a scan of the software folder root alone found nothing
-    for file_path in find_shot_files(&project_dir, &project_name, &scene_name, shot_number)? {
-        if fs::remove_file(&file_path).is_ok() {
-            deleted_count += 1;
+    let version_files = find_shot_files(&project_dir, &project_name, &scene_name, shot_number)?;
+    let deleted_count = version_files.len() as u32;
+    to_trash.extend(version_files);
+
+    // Shot folders: name is just the number, e.g. "001", not "SH001"; scene folders use the sanitized
+    // scene name. An empty sanitized name would point at the software folder itself — skip folders then
+    let shot_folder_name = format!("{:03}", shot_number);
+    let scene_code = if scene_number > 0 {
+        Some(file_naming::sanitize_folder_name(&scene_name))
+    } else {
+        None // shots-only mode
+    };
+    let folders_allowed = scene_code.as_deref() != Some("");
+
+    if folders_allowed {
+        for (software, folders) in SOFTWARE_RENDER_FOLDERS {
+            let software_path = project_dir.join(software);
+            if !software_path.exists() {
+                continue;
+            }
+            for folder in folders {
+                let shot_folder = if let Some(ref sc) = scene_code {
+                    // Scene mode: {Software}/{scene}/{Render|Output}/{Preview|Final}/{shot}
+                    // e.g. Blender/HUSKY/Render/Preview/001
+                    software_path.join(sc).join(folder).join(&shot_folder_name)
+                } else {
+                    // Shots-only mode: {Software}/{Render|Output}/{Preview|Final}/{shot}
+                    software_path.join(folder).join(&shot_folder_name)
+                };
+                to_trash.push(shot_folder);
+            }
+        }
+
+        // Compose render folders of the shot: _GlobalCompose/{scene}/Output/{Preview|Final}/{shot}
+        if let Some(ref sc) = scene_code {
+            let compose_output = project_dir.join("_GlobalCompose").join(sc).join("Output");
+            to_trash.push(compose_output.join("Preview").join(&shot_folder_name));
+            to_trash.push(compose_output.join("Final").join(&shot_folder_name));
         }
     }
 
-    // Delete all thumbnails for the shot (files matching shot{:03}_*.*)
+    // One Recycle Bin operation; on "cancelled" nothing below runs and the frontend keeps the shot
+    let to_trash = trash::paths_inside(&project_dir, &to_trash)?;
+    trash_paths(to_trash, owner).await?;
+
+    // Thumbnails are a cache: deleted for good (files matching shot{:03}_*.*)
     let scene_thumbnails_dir = project_dir
         .join(".thumbnails")
         .join(format!("scene{:03}", scene_number));
@@ -3535,48 +3633,19 @@ async fn delete_shot_files(
         }
     }
 
-    // Delete shot folders from software directories
-    // Shot folder name is just the number, e.g. "001", not "SH001"
-    let shot_folder_name = format!("{:03}", shot_number);
-    // Use sanitized scene name instead of SC{number} to match folder creation
-    let scene_code = if scene_number > 0 {
-        Some(file_naming::sanitize_folder_name(&scene_name))
-    } else {
-        None // shots-only mode
-    };
-
-    let software_configs = SOFTWARE_RENDER_FOLDERS;
-
-    for (software, folders) in software_configs {
-        let software_path = project_dir.join(software);
-
-        if !software_path.exists() {
-            continue;
-        }
-
-        for folder in folders {
-            let shot_folder = if let Some(ref sc) = scene_code {
-                // Scene mode: {Software}/{scene}/{Render|Output}/{Preview|Final}/{shot}
-                // e.g. Blender/HUSKY/Render/Preview/001
-                software_path.join(sc).join(folder).join(&shot_folder_name)
-            } else {
-                // Shots-only mode: {Software}/{Render|Output}/{Preview|Final}/{shot}
-                software_path.join(folder).join(&shot_folder_name)
-            };
-
-            if shot_folder.exists() {
-                let _ = fs::remove_dir_all(&shot_folder);
-            }
-        }
-    }
-
     Ok(deleted_count)
 }
 
 #[tauri::command]
-async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u32, String> {
+async fn delete_scene_files(window: tauri::Window, project_path: String, scene_number: u32) -> Result<u32, String> {
+    trash_scene_files(project_path, scene_number, owner_hwnd(&window)).await
+}
+
+async fn trash_scene_files(project_path: String, scene_number: u32, owner: isize) -> Result<u32, String> {
     let project_dir = PathBuf::from(&project_path);
     let mut deleted_count = 0u32;
+    // User files go to the Recycle Bin in one operation at the end
+    let mut to_trash: Vec<PathBuf> = Vec::new();
 
     // Get project name and scene name from metadata
     let metadata_path = project_dir.join(".project-metadata.json");
@@ -3621,9 +3690,8 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
 
                         // Check if file matches scene pattern (PROJECT_SCENE_)
                         if file_name_str.contains(&scene_pattern) {
-                            if fs::remove_file(&file_path).is_ok() {
-                                deleted_count += 1;
-                            }
+                            to_trash.push(file_path);
+                            deleted_count += 1;
                         }
                     }
                 }
@@ -3631,35 +3699,36 @@ async fn delete_scene_files(project_path: String, scene_number: u32) -> Result<u
         }
     }
 
-    // Delete thumbnail directory for the scene (removes all shot thumbnails in this scene)
+    // Scene folders use the sanitized scene name, as on creation. An empty name would point at
+    // the whole software folder (and the whole _GlobalCompose) — never delete folders then
+    let scene_code = file_naming::sanitize_folder_name(&scene_name);
+    if !scene_code.is_empty() {
+        for software in SCENE_SOFTWARE_FOLDERS {
+            let scene_folder = project_dir.join(software).join(&scene_code);
+            if scene_folder.exists() {
+                to_trash.push(scene_folder);
+                deleted_count += 1;
+            }
+        }
+
+        let global_compose_scene = project_dir.join("_GlobalCompose").join(&scene_code);
+        if global_compose_scene.exists() {
+            to_trash.push(global_compose_scene);
+            deleted_count += 1;
+        }
+    }
+
+    // One Recycle Bin operation; on "cancelled" nothing below runs and the frontend keeps the scene
+    let to_trash = trash::paths_inside(&project_dir, &to_trash)?;
+    trash_paths(to_trash, owner).await?;
+
+    // Thumbnails are a cache: deleted for good (all shot thumbnails of this scene)
     let scene_thumbnail_dir = project_dir
         .join(".thumbnails")
         .join(format!("scene{:03}", scene_number));
 
     if scene_thumbnail_dir.exists() {
         let _ = fs::remove_dir_all(&scene_thumbnail_dir);
-    }
-
-    // Delete scene folders from software directories
-    // Use sanitized scene name instead of SC{number} to match folder creation
-    let scene_code = file_naming::sanitize_folder_name(&scene_name);
-
-    // Delete entire scene folder from each software directory
-    let all_software_folders = SCENE_SOFTWARE_FOLDERS;
-
-    for software in all_software_folders {
-        let scene_folder = project_dir.join(software).join(&scene_code);
-        if scene_folder.exists() {
-            let _ = fs::remove_dir_all(&scene_folder);
-            deleted_count += 1;
-        }
-    }
-
-    // Delete scene folder from _GlobalCompose
-    let global_compose_scene = project_dir.join("_GlobalCompose").join(&scene_code);
-    if global_compose_scene.exists() {
-        let _ = fs::remove_dir_all(&global_compose_scene);
-        deleted_count += 1;
     }
 
     Ok(deleted_count)
@@ -5020,14 +5089,19 @@ async fn count_asset_files(
 
 #[tauri::command]
 async fn delete_asset_files(
+    window: tauri::Window,
     project_path: String,
     asset_name: String,
 ) -> Result<u32, String> {
+    trash_asset_files(project_path, asset_name, owner_hwnd(&window)).await
+}
+
+async fn trash_asset_files(project_path: String, asset_name: String, owner: isize) -> Result<u32, String> {
     let project_dir = Path::new(&project_path);
     let asset_dir = project_dir.join("_GlobalAssets");
     let thumbnails_dir = project_dir.join(".thumbnails");
     let pattern = format!("_ASSET_{}_", asset_name.to_uppercase());
-    let mut deleted_count = 0u32;
+    let mut to_trash: Vec<PathBuf> = Vec::new();
 
     if asset_dir.exists() {
         if let Ok(entries) = fs::read_dir(&asset_dir) {
@@ -5036,15 +5110,18 @@ async fn delete_asset_files(
                     if ft.is_file() {
                         let name = entry.file_name().to_string_lossy().to_string();
                         if name.contains(&pattern) {
-                            if fs::remove_file(entry.path()).is_ok() {
-                                deleted_count += 1;
-                            }
+                            to_trash.push(entry.path());
                         }
                     }
                 }
             }
         }
     }
+
+    // Asset versions go to the Recycle Bin in one operation; thumbnails below are a cache
+    let deleted_count = to_trash.len() as u32;
+    let to_trash = trash::paths_inside(project_dir, &to_trash)?;
+    trash_paths(to_trash, owner).await?;
 
     if thumbnails_dir.exists() {
         for entry in WalkDir::new(&thumbnails_dir).into_iter().flatten() {
@@ -6059,20 +6136,6 @@ fn create_global_compose_shot_folders(
     Ok(())
 }
 
-#[tauri::command]
-fn delete_global_compose_shot_folders(
-    project_path: String,
-    scene_code: String,
-    shot_code: String,
-) -> Result<(), String> {
-    let base = PathBuf::from(&project_path)
-        .join("_GlobalCompose")
-        .join(file_naming::sanitize_folder_name(&scene_code))
-        .join("Output");
-    let _ = fs::remove_dir_all(base.join("Preview").join(file_naming::sanitize_folder_name(&shot_code)));
-    let _ = fs::remove_dir_all(base.join("Final").join(file_naming::sanitize_folder_name(&shot_code)));
-    Ok(())
-}
 
 /// Called when Compose-only software (DaVinci Resolve) is chosen in Compose: its media folder and the
 /// whole-project compose render folders. Also makes sure _GlobalCompose exists before the watcher restarts,
@@ -6986,7 +7049,7 @@ fn main() {
             create_scene_folders,
             create_shot_folders,
             create_global_compose_shot_folders,
-            delete_global_compose_shot_folders,
+            trash_attachments,
             rename_scene_folders,
             rename_shot_folders,
             time_tracking::start_time_tracking,
@@ -7263,5 +7326,133 @@ mod output_tests {
         assert_eq!(frames.len(), 3);
         assert!(frames.iter().all(|f| dir.join(&f.name).is_file() && f.modified > 0));
         let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+/// Real Recycle Bin round trip on a throwaway project in %TEMP% — never on user data.
+/// Ignored by default (it puts items into the Recycle Bin): `cargo test recycle_bin -- --ignored --nocapture`.
+/// Prints the test root; the items it moved to the Recycle Bin all come from under that root.
+#[cfg(test)]
+mod recycle_bin_tests {
+    use super::*;
+
+    fn write(path: &Path) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, b"nullspace recycle bin test").unwrap();
+    }
+
+    fn metadata(project_dir: &Path, scenes: &[(u32, &str)]) {
+        let scenes: Vec<serde_json::Value> = scenes
+            .iter()
+            .map(|(n, name)| serde_json::json!({
+                "id": format!("scene-{}", n), "number": n, "name": name,
+                "todos": [], "notes": [], "browserTabs": [], "links": []
+            }))
+            .collect();
+        let project = serde_json::json!({
+            "id": "test-project", "name": "Lion", "description": "",
+            "path": project_dir.to_string_lossy(), "createdAt": "2026-01-01T00:00:00Z",
+            "updatedAt": "2026-01-01T00:00:00Z", "status": "active", "tags": [], "software": [],
+            "notes": [], "browserTabs": [], "folderStructure": [],
+            "hasScenes": true, "hasShots": true, "scenes": scenes
+        });
+        fs::create_dir_all(project_dir).unwrap();
+        fs::write(project_dir.join(".project-metadata.json"), serde_json::to_string(&project).unwrap()).unwrap();
+    }
+
+    #[test]
+    #[ignore]
+    fn recycle_bin_round_trip_on_temp_project() {
+        let root = std::env::temp_dir().join(format!("nullspace_bin_test_{}", uuid::Uuid::new_v4().simple()));
+        let proj = root.join("Lion");
+        // Same layout and the same file names outside the project: must never be touched
+        let neighbour = root.join("Neighbour");
+        println!("TEST ROOT: {}", root.display());
+
+        metadata(&proj, &[(1, "RUNB"), (2, "???")]);
+        let shot10_v1 = proj.join("Blender/RUNB/LION_RUNB_SH010_v001.blend");
+        let shot10_v2 = proj.join("Houdini/RUNB/LION_RUNB_SH010_v002.hip");
+        let shot20_v1 = proj.join("Blender/RUNB/LION_RUNB_SH020_v001.blend");
+        let shot10_render = proj.join("Blender/RUNB/Render/Preview/010/frame_0001.png");
+        let shot20_render = proj.join("Blender/RUNB/Render/Preview/020/frame_0001.png");
+        let compose10 = proj.join("_GlobalCompose/RUNB/Output/Final/010/comp_0001.png");
+        let thumb10 = proj.join(".thumbnails/scene001/shot010_x.png");
+        let asset = proj.join("_GlobalAssets/LION_ASSET_TREE_v001.blend");
+        let other_asset = proj.join("_GlobalAssets/LION_ASSET_ROCK_v001.blend");
+        let attachment = proj.join("_attachments/task1/img/ref.png");
+        let houdini_scene = proj.join("Houdini/RUNB/other.txt");
+        for f in [&shot10_v1, &shot10_v2, &shot20_v1, &shot10_render, &shot20_render, &compose10, &thumb10,
+                  &asset, &other_asset, &attachment, &houdini_scene] {
+            write(f);
+        }
+        let neighbour_file = neighbour.join("Blender/RUNB/LION_RUNB_SH010_v001.blend");
+        let neighbour_attachment = neighbour.join("_attachments/task1/img/ref.png");
+        write(&neighbour_file);
+        write(&neighbour_attachment);
+
+        let run = |f: std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send>>| {
+            tauri::async_runtime::block_on(f)
+        };
+        let p = proj.to_string_lossy().to_string();
+
+        // 1. Shot 10: versions, render folder and compose folder go; shot 20, thumbnails cache and neighbour stay
+        let pp = p.clone();
+        let n = run(Box::pin(async move { trash_shot_files(pp, 10, 1, 0).await.map(|n| n.to_string()) })).unwrap();
+        assert_eq!(n, "2");
+        assert!(!shot10_v1.exists() && !shot10_v2.exists(), "shot 10 versions must be gone");
+        assert!(!shot10_render.parent().unwrap().exists(), "shot 10 render folder must be gone");
+        assert!(!compose10.parent().unwrap().exists(), "shot 10 compose folder must be gone");
+        assert!(!thumb10.exists(), "thumbnail cache is deleted for good");
+        assert!(shot20_v1.exists() && shot20_render.exists(), "shot 20 must stay");
+        assert!(neighbour_file.exists(), "files outside the project must stay");
+
+        // 2. Asset TREE goes, ROCK stays
+        let pp = p.clone();
+        run(Box::pin(async move { trash_asset_files(pp, "tree".into(), 0).await.map(|n| n.to_string()) })).unwrap();
+        assert!(!asset.exists() && other_asset.exists());
+
+        // 3. Attachments: a path outside the project's _attachments is refused and left alone
+        let pp = p.clone();
+        let outside = neighbour_attachment.to_string_lossy().to_string();
+        let r = run(Box::pin(async move { trash_attachment_files(pp, vec![outside], 0).await.map(|n| n.to_string()) }));
+        assert!(r.is_err() && neighbour_attachment.exists(), "outside attachment must be refused: {:?}", r);
+        let pp = p.clone();
+        // Forward slashes, as the frontend stores attachment paths
+        let inside = attachment.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+        run(Box::pin(async move { trash_attachment_files(pp, vec![inside], 0).await.map(|n| n.to_string()) })).unwrap();
+        assert!(!attachment.exists());
+
+        // 4. Software: an empty name is refused (it would be the project folder); Houdini goes
+        let pp = p.clone();
+        let r = run(Box::pin(async move { remove_software_folder(pp, String::new(), 0).await.map(|_| String::new()) }));
+        assert!(r.is_err() && proj.join(".project-metadata.json").exists(), "empty software name must be refused");
+        let pp = p.clone();
+        run(Box::pin(async move { remove_software_folder(pp, "houdini".into(), 0).await.map(|_| String::new()) })).unwrap();
+        assert!(!proj.join("Houdini").exists() && proj.join("Blender").exists());
+
+        // 5. A scene whose folder name sanitizes to "" must not take the software folders with it
+        let pp = p.clone();
+        run(Box::pin(async move { trash_scene_files(pp, 2, 0).await.map(|n| n.to_string()) })).unwrap();
+        assert!(proj.join("Blender/RUNB").exists() && proj.join("_GlobalCompose").exists(), "empty scene name must not delete folders");
+
+        // 6. Scene RUNB: its folders go
+        let pp = p.clone();
+        run(Box::pin(async move { trash_scene_files(pp, 1, 0).await.map(|n| n.to_string()) })).unwrap();
+        assert!(!proj.join("Blender/RUNB").exists() && !proj.join("_GlobalCompose/RUNB").exists());
+        assert!(proj.join("Blender").exists(), "the software folder itself stays");
+
+        // 7. Project: a folder without metadata is refused; a missing one is fine; the project goes
+        let nb = neighbour.to_string_lossy().to_string();
+        let r = run(Box::pin(async move { trash_project_folder(nb, 0).await.map(|_| String::new()) }));
+        assert!(r.is_err() && neighbour.exists(), "a folder without .project-metadata.json must be refused");
+        let missing = root.join("Missing").to_string_lossy().to_string();
+        run(Box::pin(async move { trash_project_folder(missing, 0).await.map(|_| String::new()) })).unwrap();
+        let pp = p.clone();
+        run(Box::pin(async move { trash_project_folder(pp, 0).await.map(|_| String::new()) })).unwrap();
+        assert!(!proj.exists());
+        assert!(neighbour_file.exists() && neighbour_attachment.exists(), "neighbour must be untouched at the end");
+
+        // The neighbour is ordinary test data: delete it normally; the Recycle Bin items are checked outside
+        fs::remove_dir_all(&root).unwrap();
     }
 }

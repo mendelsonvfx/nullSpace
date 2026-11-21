@@ -17,6 +17,7 @@ import {
 import { davinciProjectName } from '../utils/davinciProjectName';
 import { isComposeOnlySoftware } from '../utils/constants';
 import { settlePrepaidIfCovered } from '../utils/financeService';
+import { isTrashCancelled } from '../utils/trash';
 
 // Sanitize for _attachments subfolder names — matches ProjectDetails.tsx sanitizeDirName
 const sanitizeDirName = (name: string): string => {
@@ -66,7 +67,8 @@ interface ProjectStore {
   // A project of the open category or of one left earlier
   getProjectById: (projectId: string) => Project | undefined;
   renameProject: (project: Project, newName: string) => Promise<void>;
-  deleteProject: (projectPath: string) => Promise<void>;
+  /** false when the user declined the Windows prompt and nothing was deleted */
+  deleteProject: (projectPath: string) => Promise<boolean>;
   selectProject: (project: Project | null) => void;
   launchSoftware: (input: LaunchSoftwareCommand) => Promise<void>;
   launchSoftwareWithoutProject: (executablePath: string, software: string) => Promise<void>;
@@ -758,9 +760,17 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   // Delete project
   deleteProject: (projectPath: string) => {
-    const run = async () => {
+    const run = async (): Promise<boolean> => {
       set({ error: null });
       try {
+        // The project folder goes to the Recycle Bin. Declined Windows prompt: nothing changes
+        try {
+          await invoke('delete_project', { projectPath });
+        } catch (err) {
+          if (isTrashCancelled(err)) return false;
+          throw err;
+        }
+
         // Clear all thumbnails for this project from cache
         thumbnailCache.clearProject(projectPath);
         try {
@@ -768,8 +778,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         } catch (cacheErr) {
           console.warn('[Cache] Failed to clear IndexedDB cache:', cacheErr);
         }
-
-        await invoke('delete_project', { projectPath });
 
         // Deleting from RayHub is intentional — drop the archive backup too, otherwise the project
         // comes back as an orphaned "folder deleted" entry (and in Finance) after the next reload
@@ -788,6 +796,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             ? null
             : state.selectedProject
         }));
+        return true;
       } catch (error) {
         set({ error: String(error) });
         throw error;
@@ -795,7 +804,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     };
     // In queue order, so a category scan that started earlier can't bring the project back
     const step = updateQueue.then(run);
-    updateQueue = step.catch(() => {});
+    updateQueue = step.then(() => {}, () => {});
     return step;
   },
 
@@ -1407,34 +1416,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Find scene to get its number
       const scene = project.scenes?.find(s => s.id === sceneId);
       if (scene) {
-        // Delete all version files for this scene
+        // Move the scene's files to the Recycle Bin: versions, scene folders and _GlobalCompose/<scene>
+        // (which holds the compose render folders of all its shots)
         try {
           const { invoke } = await import('@tauri-apps/api/tauri');
           const deletedCount = await invoke<number>('delete_scene_files', {
             projectPath: project.path,
             sceneNumber: scene.number
           });
-          console.log(`Deleted ${deletedCount} files for scene ${scene.number}`);
+          console.log(`Moved ${deletedCount} items of scene ${scene.number} to the Recycle Bin`);
         } catch (error) {
+          // The user declined a Windows prompt: keep the scene exactly as it was
+          if (isTrashCancelled(error)) return;
           console.error('Failed to delete scene files:', error);
-        }
-
-        if (project.composeSoftware?.length) {
-          const sceneCode = sanitizeFolderName(scene.name);
-          const shotsInScene = (project.shots || []).filter(s => s.sceneId === sceneId);
-          if (shotsInScene.length > 0) {
-            try {
-              const { invoke: invokeCmd } = await import('@tauri-apps/api/tauri');
-              for (const shot of shotsInScene) {
-                const shotCode = shot.number.toString().padStart(3, '0');
-                await invokeCmd('delete_global_compose_shot_folders', {
-                  projectPath: project.path,
-                  sceneCode,
-                  shotCode,
-                });
-              }
-            } catch (e) { console.error('Failed to delete GlobalCompose shot folders:', e); }
-          }
         }
       }
 
@@ -2043,7 +2037,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         return;
       }
 
-      // Delete all version files for this shot
+      // Move the shot's files to the Recycle Bin in one operation: versions, render folders
+      // and its compose render folders
       try {
         const { invoke } = await import('@tauri-apps/api/tauri');
         const deletedCount = await invoke<number>('delete_shot_files', {
@@ -2051,22 +2046,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           shotNumber: shotToRemove.number,
           sceneNumber: scene?.number || 0
         });
-        console.log(`Deleted ${deletedCount} files for shot ${shotToRemove.number}`);
+        console.log(`Moved ${deletedCount} version files of shot ${shotToRemove.number} to the Recycle Bin`);
       } catch (error) {
+        // The user declined a Windows prompt: keep the shot exactly as it was
+        if (isTrashCancelled(error)) return;
         console.error('Failed to delete shot files:', error);
-      }
-
-      if (project.hasScenes && project.composeSoftware?.length && scene) {
-        try {
-          const { invoke: invokeCmd } = await import('@tauri-apps/api/tauri');
-          const sceneCode = sanitizeFolderName(scene.name);
-          const shotCode = shotToRemove.number.toString().padStart(3, '0');
-          await invokeCmd('delete_global_compose_shot_folders', {
-            projectPath: project.path,
-            sceneCode,
-            shotCode,
-          });
-        } catch (e) { console.error('Failed to delete GlobalCompose shot folders:', e); }
       }
 
       const updated = {
@@ -2985,9 +2969,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       window.dispatchEvent(new CustomEvent('version-created', { detail: { projectPath: project.path } }));
 
       if (typeof (window as any).showNotification === 'function') {
-        (window as any).showNotification('success', `Asset "${assetName}" deleted.`);
+        (window as any).showNotification('success', `Asset "${assetName}" moved to the Recycle Bin.`);
       }
     } catch (error) {
+      // Declined Windows prompt: the asset stays, nothing to report
+      if (isTrashCancelled(error)) return;
       if (typeof (window as any).showNotification === 'function') {
         (window as any).showNotification('error', String(error), 'Failed to delete asset', 10000);
       }

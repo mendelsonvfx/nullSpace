@@ -105,7 +105,7 @@ export const RenameSceneConfirmModal: React.FC<RenameSceneConfirmModalProps> = (
         <div className="flex gap-3 justify-between items-center">
           {!isRenaming && (
             <p className={`text-sm ${isDeleting ? 'text-red-400' : 'text-orange-400'}`}>
-              This action cannot be undone.
+              {isDeleting ? 'Files will be moved to the Recycle Bin.' : 'This action cannot be undone.'}
             </p>
           )}
           {isRenaming && <div />}

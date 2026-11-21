@@ -219,6 +219,26 @@ function App() {
     return saved !== null ? JSON.parse(saved) : true;
   });
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'project' | 'client' | 'category'; name: string; id: string; path?: string; projectCount?: number } | null>(null);
+
+  // Runs the confirmed delete (Delete button and Enter). The dialog always closes, also when the
+  // project folder couldn't be moved to the Recycle Bin or the user declined the Windows prompt
+  const runDeleteConfirm = async (confirm: NonNullable<typeof deleteConfirm>) => {
+    try {
+      if (confirm.type === 'project' && confirm.path) {
+        await deleteProject(confirm.path);
+      } else if (confirm.type === 'client') {
+        deleteClient(confirm.id);
+      } else if (confirm.type === 'category') {
+        const { removeCategory } = useProjectStore.getState();
+        await removeCategory(confirm.id);
+      }
+    } catch (error) {
+      console.error('Delete failed:', error);
+      addGeneralNotification('error', String(error), `Couldn't delete "${confirm.name}"`);
+    } finally {
+      setDeleteConfirm(null);
+    }
+  };
   const [previousProjectId, setPreviousProjectId] = useState<string | null>(null);
   const [deadlineNotifications, setDeadlineNotifications] = useState<Array<{ id: string; projectName: string; daysRemaining: number }>>([]);
   const [notificationsShown, setNotificationsShown] = useState(false); // Track if notifications were shown this session
@@ -633,18 +653,7 @@ function App() {
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         if (deleteConfirm) {
           e.preventDefault();
-          // Execute delete action
-          (async () => {
-            if (deleteConfirm.type === 'project' && deleteConfirm.path) {
-              await deleteProject(deleteConfirm.path);
-            } else if (deleteConfirm.type === 'client') {
-              deleteClient(deleteConfirm.id);
-            } else if (deleteConfirm.type === 'category') {
-              const { removeCategory } = useProjectStore.getState();
-              await removeCategory(deleteConfirm.id);
-            }
-            setDeleteConfirm(null);
-          })();
+          runDeleteConfirm(deleteConfirm);
           return;
         }
       }
@@ -884,8 +893,11 @@ function App() {
     };
     preloadExchangeRates();
 
-    loadProjects().then(() => {
-      console.log('[App] Projects loaded');
+    // First run: no projects folder chosen yet. WelcomeSetup loads the projects once the user picks one;
+    // loading now would create the category folders inside the store's fallback path (E:\Projects\Personal)
+    const setupDone = !!localStorage.getItem('setupCompleted') && !!localStorage.getItem('defaultProjectsPath');
+    (setupDone ? loadProjects() : Promise.resolve()).then(() => {
+      console.log(setupDone ? '[App] Projects loaded' : '[App] First run: projects load after setup');
       // NOTE: Global statistics are persisted in localStorage via timeStatsStore
       // No need to sync from timeEntries - stats are incremented in real-time
 
@@ -2188,7 +2200,9 @@ function App() {
                   ? `Are you sure you want to delete category "${deleteConfirm.name}" and move its ${deleteConfirm.projectCount} project(s) to "Personal"? This action cannot be undone.`
                   : deleteConfirm.type === 'category'
                     ? `Are you sure you want to delete the "${deleteConfirm.name}" category?`
-                    : `Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone.`
+                    : deleteConfirm.type === 'project'
+                      ? `Are you sure you want to delete "${deleteConfirm.name}"? The project folder will be moved to the Recycle Bin.`
+                      : `Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone.`
                 }
               </p>
               <div className="flex gap-3 justify-end">
@@ -2199,17 +2213,7 @@ function App() {
                   Cancel
                 </button>
                 <button
-                  onClick={async () => {
-                    if (deleteConfirm.type === 'project' && deleteConfirm.path) {
-                      await deleteProject(deleteConfirm.path);
-                    } else if (deleteConfirm.type === 'client') {
-                      deleteClient(deleteConfirm.id);
-                    } else if (deleteConfirm.type === 'category') {
-                      const { removeCategory } = useProjectStore.getState();
-                      await removeCategory(deleteConfirm.id);
-                    }
-                    setDeleteConfirm(null);
-                  }}
+                  onClick={() => runDeleteConfirm(deleteConfirm)}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium animate-button"
                 >
                   Delete

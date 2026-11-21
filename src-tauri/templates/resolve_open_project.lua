@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
+-- Copyright (C) 2025-2026 Oleg Mendelson - part of nullSpace, https://github.com/mendelsonvfx/nullSpace
 -- nullSpace - Open Project: open (or create) the Resolve project of the nullSpace project (Compose)
 -- and point Deliver at the compose render folder. Timelines are left to the user.
 -- After a double-click on a .drp version in nullSpace: import that version as a separate project instead.

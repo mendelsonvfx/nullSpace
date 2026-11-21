@@ -1,7 +1,10 @@
 [package]
 name = "nullspace"
-version = "1.9.63"
+version = "1.9.65"
 edition = "2021"
+authors = ["Oleg Mendelson"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/mendelsonvfx/nullSpace"
 
 [dependencies]
 tauri = { version = "1.5", features = [ "fs-remove-file", "fs-read-dir", "fs-read-file", "fs-copy-file", "fs-create-dir", "fs-remove-dir", "fs-write-file", "clipboard-read-text", "clipboard-write-text", "window-hide", "window-set-resizable", "window-unminimize", "window-set-title", "window-set-fullscreen", "window-show", "window-unmaximize", "window-close", "window-minimize", "window-maximize", "window-start-dragging", "dialog-all", "path-all", "shell-open"] }

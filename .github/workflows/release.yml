@@ -42,7 +42,8 @@ jobs:
           $exeName = "nullSpace.exe"
 
           Copy-Item $exePath $exeName
-          Compress-Archive -Path $exeName -DestinationPath $zipName
+          # GPL-3.0: the license, copyright and third-party notices travel with the binary
+          Compress-Archive -Path $exeName, LICENSE, COPYRIGHT, dist/THIRD-PARTY-NOTICES.txt -DestinationPath $zipName
 
       - name: Create GitHub Release (also the auto-updater source)
         uses: softprops/action-gh-release@v2

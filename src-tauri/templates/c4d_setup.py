@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025-2026 Oleg Mendelson - part of nullSpace, https://github.com/mendelsonvfx/nullSpace
 """
 Cinema 4D Project Setup Script for nullSpace
 Run with c4dpy: c4dpy c4d_setup.py <c4d_file_path> [shot_code]

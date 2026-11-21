@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
+-- Copyright (C) 2025-2026 Oleg Mendelson - part of nullSpace, https://github.com/mendelsonvfx/nullSpace
 -- nullSpace: shared part of the DaVinci Resolve menu scripts (Workspace > Scripts).
 -- nullSpace rewrites these files on every launch; `ctx` above holds the launch context.
 

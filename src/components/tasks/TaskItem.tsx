@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback, type CSSProperties, type Reac
 import { Paperclip, X, Plus, Image, ChevronDown } from 'lucide-react';
 import { IconCheck, IconFolderOpen, IconCopy, IconClipboard, IconTrash, IconPdf, IconFileText, IconMovie } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { readBinaryFile, removeFile, removeDir, readTextFile } from '@tauri-apps/api/fs';
+import { readBinaryFile, readTextFile } from '@tauri-apps/api/fs';
+import { isTrashCancelled, trashAttachments } from '../../utils/trash';
 import { selectAttachmentFile } from '../../utils/tauri';
 import { ContextMenu, ContextMenuItem, ContextMenuDivider } from '../ui/ContextMenu';
 import { useContextMenu } from '../../hooks/useContextMenu';
@@ -313,7 +314,16 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
     justRemovedRef.current = true;
     setTimeout(() => { justRemovedRef.current = false; }, 400);
     const att = attachments.find(a => a.id === id);
-    if (att) { try { await removeFile(att.path); } catch {} }
+    if (att) {
+      // The copy inside the project goes to the Recycle Bin. A path outside _attachments is refused
+      // by the backend: then only the reference is dropped and the file itself is left alone
+      try {
+        await trashAttachments(projectPath, [att.path]);
+      } catch (err) {
+        if (isTrashCancelled(err)) return;
+        console.warn('Attachment not moved to the Recycle Bin:', err);
+      }
+    }
     const newAttachments = attachments.filter(a => a.id !== id);
     const isLast = newAttachments.length === 0;
     if (isLast) setExpanded(false);
@@ -322,11 +332,16 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
 
   const handleDeleteConfirmed = async () => {
     setShowDeleteConfirm(false);
-    if (isLastTaskWithAttachments && attachmentSubdir) {
-      try { await removeDir(`${projectPath}/_attachments/${attachmentSubdir}`, { recursive: true }); } catch {}
-    } else {
-      for (const att of attachments) {
-        try { await removeFile(att.path); } catch {}
+    // Attachments go to the Recycle Bin in one operation; a declined Windows prompt keeps the task
+    const paths = isLastTaskWithAttachments && attachmentSubdir
+      ? [`${projectPath}/_attachments/${attachmentSubdir}`]
+      : attachments.map(att => att.path);
+    if (paths.length > 0) {
+      try {
+        await trashAttachments(projectPath, paths);
+      } catch (err) {
+        if (isTrashCancelled(err)) return;
+        console.warn('Attachments not moved to the Recycle Bin:', err);
       }
     }
     onRemove();
@@ -735,7 +750,7 @@ export function TaskItem({ todo, onToggle, onRemove, onUpdate, projectPath, atta
           <div className="bg-zinc-900 border border-red-700 rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-2">Delete Task</h3>
             <p className="text-zinc-400 mb-6">
-              This task has {attachments.length} attachment{attachments.length > 1 ? 's' : ''}. Deleting it will permanently remove all attached files. This cannot be undone.
+              This task has {attachments.length} attachment{attachments.length > 1 ? 's' : ''}. Deleting it will move all attached files to the Recycle Bin.
             </p>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors">

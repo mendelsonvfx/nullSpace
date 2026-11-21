@@ -14,7 +14,7 @@ Shots, versions, renders, time and money — in one place, wired into the tools 
 ![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6?style=flat-square&logo=typescript&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-stable-dea584?style=flat-square&logo=rust&logoColor=black)
-![License](https://img.shields.io/badge/license-proprietary-555?style=flat-square)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
 
 <br>
 
@@ -116,4 +116,8 @@ npm run tauri build    # MSI / NSIS installers in src-tauri/target/release/bundl
 
 ## License
 
-Proprietary. All rights reserved.
+nullSpace is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License v3](LICENSE) or (at your option) any later version. It is provided as is, without any warranty.
+
+Copyright © 2025-2026 Oleg Mendelson. The nullSpace name and logo are not covered by the license: modified versions must not be distributed under that name or with that logo (see [COPYRIGHT](COPYRIGHT)).
+
+Third-party components and their licenses are listed in `THIRD-PARTY-NOTICES.txt`, which ships with every release and is shown in the app under **About → Third-party notices**.

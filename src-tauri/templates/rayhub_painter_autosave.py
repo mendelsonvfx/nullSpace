@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025-2026 Oleg Mendelson - part of nullSpace, https://github.com/mendelsonvfx/nullSpace
 """
 nullSpace: saves a new Substance Painter project under the nullSpace version name.
 

@@ -6,6 +6,7 @@ import {
   IconPackage,
   IconPhoto,
   IconMovie,
+  IconMusic,
   IconFileZip,
   IconFileText,
   IconPdf,
@@ -49,6 +50,16 @@ export const EXTENSION_ICONS: Record<string, React.ReactNode> = {
   wmv:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
   m4v:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
   mxf:  <IconMovie       className="w-4 h-4 text-purple-400 flex-shrink-0" stroke={1.5} />,
+  wav:  <IconMusic       className="w-4 h-4 text-pink-400 flex-shrink-0" stroke={1.5} />,
+  mp3:  <IconMusic       className="w-4 h-4 text-pink-400 flex-shrink-0" stroke={1.5} />,
+  aac:  <IconMusic       className="w-4 h-4 text-pink-400 flex-shrink-0" stroke={1.5} />,
+  flac: <IconMusic       className="w-4 h-4 text-pink-400 flex-shrink-0" stroke={1.5} />,
+  ogg:  <IconMusic       className="w-4 h-4 text-pink-400 flex-shrink-0" stroke={1.5} />,
+  opus: <IconMusic       className="w-4 h-4 text-pink-400 flex-shrink-0" stroke={1.5} />,
+  m4a:  <IconMusic       className="w-4 h-4 text-pink-400 flex-shrink-0" stroke={1.5} />,
+  aif:  <IconMusic       className="w-4 h-4 text-pink-400 flex-shrink-0" stroke={1.5} />,
+  aiff: <IconMusic       className="w-4 h-4 text-pink-400 flex-shrink-0" stroke={1.5} />,
+  wma:  <IconMusic       className="w-4 h-4 text-pink-400 flex-shrink-0" stroke={1.5} />,
 };
 
 const extOf = (name: string) => {

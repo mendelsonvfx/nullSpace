@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025-2026 Oleg Mendelson - part of nullSpace, https://github.com/mendelsonvfx/nullSpace
 """
 Blender Project Setup Script for nullSpace
 This script ONLY configures relative paths - all other settings remain user's defaults
